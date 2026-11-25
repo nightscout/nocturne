@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.API.Controllers.V4.Admin;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
@@ -172,12 +173,14 @@ public class DemoAdminProvisionCacheTests : IDisposable
 
         var demoTenantService = new DemoTenantService(
             dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+            Mock.Of<ISubjectDeletion>(),
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             tenantService.Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
-            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off);
+            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         return new DemoAdminController(
             tenantService.Object, demoTenantService,

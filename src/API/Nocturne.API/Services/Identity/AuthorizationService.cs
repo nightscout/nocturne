@@ -543,7 +543,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         }
 
         var definitions = (await _roleService.GetAllRolesAsync())
-            .ToDictionary(r => r.Name, r => r.Permissions ?? [], StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(r => r.Name, r => r.Permissions ?? [], StringComparer.Ordinal);
 
         var permissions = roleNames.SelectMany(name =>
             definitions.TryGetValue(name, out var defined) ? defined : [name]);

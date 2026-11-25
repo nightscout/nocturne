@@ -7,7 +7,7 @@ import { remarkVars } from '@nocturne/cms/remark/vars';
 import { rehypeInstallSteps } from './src/lib/markdown/rehype-install-steps.js';
 import tailwindcss from '@tailwindcss/vite';
 import { wuchale } from 'wuchale/vite';
-import { privateDevCatalogue } from '../app/wuchale.dev.js';
+import { privateDevCatalogue, WUCHALE_CONFIG_PATH } from '../app/wuchale.dev.js';
 import lingo from 'vite-plugin-lingo';
 import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve, sep } from 'node:path';
@@ -158,7 +158,7 @@ export default defineConfig({
     // runs, and wuchale reads references relative to its config's directory. Loaded from here,
     // no portal reference matched, so every portal string compiled to empty.
     privateDevCatalogue('portal'),
-    wuchale({ configPath: '../app/wuchale.config.js' }),
+    wuchale({ configPath: WUCHALE_CONFIG_PATH }),
     lingo({
       route: '/_translations',
       localesDir: '../../locales',

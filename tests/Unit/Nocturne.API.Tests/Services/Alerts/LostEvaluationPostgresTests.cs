@@ -63,11 +63,6 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     /// <summary>
     /// An engine that can fail the next evaluation, or hold every evaluation until released, as a
     /// pass still running or cut off does.
@@ -180,7 +175,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         }
 
         public async Task<EvaluatedReading?> RecordedAsync() =>
-            await new AlertEvaluatedReadingRepository(new Factory(Context)).GetAsync(CancellationToken.None);
+            await new AlertEvaluatedReadingRepository(new SuppliedContextFactory(Context)).GetAsync(CancellationToken.None);
 
         public async Task<DateTime?> HeldSinceAsync()
         {
@@ -215,7 +210,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         public Process(Tenant tenant)
         {
             _tenant = tenant;
-            var factory = new Factory(tenant.Context);
+            var factory = new SuppliedContextFactory(tenant.Context);
             var opened = new Mock<IExcursionOpenedHandler>();
             opened
                 .Setup(h => h.HandleOpenedAsync(
@@ -270,7 +265,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             var context = new TenantContext(_tenant.Id, "slug", "Slug", true, IsDemo: false);
             await using var scope = TenantJobScope.Open(_services, context, AlertFactEvaluationScheduler.AuditEndpoint);
             await scope.ServiceProvider.GetRequiredService<ICanonicalAlertEvaluator>()
-                .EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }), ct);
+                .EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }), ct: ct);
         }
 
         public Task SweepAsync(DateTime at)
@@ -470,7 +465,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         await WaitForPassAsync(tenant, low);
         tenant.Hold = null;
         await abandon.CancelAsync();
-        await write;
+        await write.Awaiting(t => t).Should().ThrowAsync<OperationCanceledException>("the shutdown stops the pass");
         (await tenant.RecordedAsync()).Should().BeNull();
 
         await process.SweepAsync(Stored + PastGrace);
@@ -737,14 +732,6 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         Warnings(tenant).Should().Be(0, "a tenant with no record has lost nothing it can name");
     }
 
-    private static async Task WaitForPassAsync(Tenant tenant, SensorGlucose reading)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (tenant.PassesOf(reading) == 0)
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The write's pass never began.");
-            await Task.Delay(10);
-        }
-    }
+    private static Task WaitForPassAsync(Tenant tenant, SensorGlucose reading) =>
+        Eventually.UntilAsync("the write's pass to begin", () => tenant.PassesOf(reading) > 0);
 }

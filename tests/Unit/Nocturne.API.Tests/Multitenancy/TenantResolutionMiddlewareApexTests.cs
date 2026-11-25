@@ -82,6 +82,7 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/v4/me/teams", "GET")]
     [InlineData("/api/v4/me/teams", "POST")]
     [InlineData("/api/v4/me/teams/invites/a-token/accept", "POST")]
+    [InlineData("/api/v4/me/teams/staff-invites/a-token/accept", "POST")]
     [InlineData("/api/v4/me/teams/access-links/a-token", "GET")]
     [InlineData("/api/v4/me/teams/access-links/a-token/approve", "POST")]
     [InlineData("/api/v4/admin/tenants", "GET")]

@@ -11,13 +11,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
-  import ArrowRightLeft from "@lucide/svelte/icons/arrow-right-left";
-  import Activity from "@lucide/svelte/icons/activity";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import Database from "@lucide/svelte/icons/database";
+  import ArrowRightLeft from "@lucide/svelte/icons/arrow-right-left";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import Clock from "@lucide/svelte/icons/clock";
@@ -92,11 +90,8 @@
   <div class="space-y-6">
     <Card>
       <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle class="flex items-center gap-2">
-            <Database class="h-5 w-5" />
-            Migration status
-          </CardTitle>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Migration status</CardTitle>
           <Badge variant={status.migration?.isComplete ? "default" : "secondary"}>
             {#if status.migration?.isComplete}
               <CheckCircle2 class="h-3 w-3" />
@@ -113,14 +108,14 @@
       </CardHeader>
       <CardContent class="space-y-4">
         {#if Object.keys(status.migration?.recordCounts ?? {}).length > 0}
-          <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4 @sm:grid-cols-3">
             {#each Object.entries(status.migration?.recordCounts ?? {}) as [dataType, count] (dataType)}
-              <div class="rounded-lg border p-3">
-                <p class="text-sm text-muted-foreground capitalize">{dataType}</p>
-                <p class="text-xl font-semibold tabular-nums">{formatNumber(count)}</p>
+              <div>
+                <dt class="text-sm text-muted-foreground capitalize">{dataType}</dt>
+                <dd class="text-xl font-semibold tabular-nums">{formatNumber(count)}</dd>
               </div>
             {/each}
-          </div>
+          </dl>
         {:else}
           <EmptyState
             art={databaseArtwork}
@@ -140,11 +135,8 @@
 
     <Card>
       <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle class="flex items-center gap-2">
-            <Activity class="h-5 w-5" />
-            Write-back health (last 24 hours)
-          </CardTitle>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Write-back health (last 24 hours)</CardTitle>
           <Badge variant={status.writeBack?.circuitBreakerOpen ? "destructive" : "default"}>
             {#if status.writeBack?.circuitBreakerOpen}
               <ShieldAlert class="h-3 w-3" />
@@ -160,26 +152,26 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid grid-cols-3 gap-3">
-          <div class="rounded-lg border p-3">
-            <p class="text-sm text-muted-foreground">Requests</p>
-            <p class="text-xl font-semibold tabular-nums">
+        <dl class="grid grid-cols-3 gap-x-6 gap-y-4">
+          <div>
+            <dt class="text-sm text-muted-foreground">Requests</dt>
+            <dd class="text-xl font-semibold tabular-nums">
               {formatNumber(status.writeBack?.requestsLast24h)}
-            </p>
+            </dd>
           </div>
-          <div class="rounded-lg border p-3">
-            <p class="text-sm text-muted-foreground">Succeeded</p>
-            <p class="text-xl font-semibold tabular-nums text-success">
+          <div>
+            <dt class="text-sm text-muted-foreground">Succeeded</dt>
+            <dd class="text-xl font-semibold tabular-nums text-success">
               {formatNumber(status.writeBack?.successesLast24h)}
-            </p>
+            </dd>
           </div>
-          <div class="rounded-lg border p-3">
-            <p class="text-sm text-muted-foreground">Failed</p>
-            <p class="text-xl font-semibold tabular-nums text-destructive">
+          <div>
+            <dt class="text-sm text-muted-foreground">Failed</dt>
+            <dd class="text-xl font-semibold tabular-nums text-destructive">
               {formatNumber(status.writeBack?.failuresLast24h)}
-            </p>
+            </dd>
           </div>
-        </div>
+        </dl>
 
         <Separator />
 
@@ -195,11 +187,8 @@
     {#if status.compatibility}
       <Card>
         <CardHeader>
-          <div class="flex items-center justify-between">
-            <CardTitle class="flex items-center gap-2">
-              <ShieldCheck class="h-5 w-5" />
-              API compatibility
-            </CardTitle>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>API compatibility</CardTitle>
             <Badge variant={compatibilityBadgeVariant}>
               {#if compatibilityBadgeVariant === "default"}
                 <CheckCircle2 class="h-3 w-3" />
@@ -216,38 +205,35 @@
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
-          <div class="grid grid-cols-3 gap-3">
-            <div class="rounded-lg border p-3">
-              <p class="text-sm text-muted-foreground">Score</p>
-              <p class="text-2xl font-semibold tabular-nums">
+          <dl class="grid grid-cols-3 gap-x-6 gap-y-4">
+            <div>
+              <dt class="text-sm text-muted-foreground">Score</dt>
+              <dd class="text-2xl font-semibold tabular-nums">
                 {status.compatibility.compatibilityScore != null
                   ? `${status.compatibility.compatibilityScore.toFixed(1)}%`
                   : "--"}
-              </p>
+              </dd>
             </div>
-            <div class="rounded-lg border p-3">
-              <p class="text-sm text-muted-foreground">Comparisons</p>
-              <p class="text-xl font-semibold tabular-nums">
+            <div>
+              <dt class="text-sm text-muted-foreground">Comparisons</dt>
+              <dd class="text-xl font-semibold tabular-nums">
                 {formatNumber(status.compatibility.totalComparisons)}
-              </p>
+              </dd>
             </div>
-            <div class="rounded-lg border p-3">
-              <p class="text-sm text-muted-foreground">Discrepancies</p>
-              <p class="text-xl font-semibold tabular-nums text-destructive">
+            <div>
+              <dt class="text-sm text-muted-foreground">Discrepancies</dt>
+              <dd class="text-xl font-semibold tabular-nums text-destructive">
                 {formatNumber(status.compatibility.discrepancies)}
-              </p>
+              </dd>
             </div>
-          </div>
+          </dl>
         </CardContent>
       </Card>
     {/if}
 
     <Card>
       <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <ArrowRightLeft class="h-5 w-5" />
-          Safe to disconnect
-        </CardTitle>
+        <CardTitle>Safe to disconnect</CardTitle>
         <CardDescription>
           Shows if you can safely stop using your Nightscout site.
         </CardDescription>

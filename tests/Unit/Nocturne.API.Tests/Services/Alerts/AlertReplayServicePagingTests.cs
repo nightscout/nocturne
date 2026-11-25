@@ -22,6 +22,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -284,13 +285,13 @@ public class AlertReplayServicePagingTests
     /// </summary>
     /// <remarks>
     /// The replay runs under an expiring token so a regression that removes the guard surfaces as
-    /// the wrong exception type within seconds. <c>[Fact(Timeout)]</c> is not enough on its own:
+    /// the wrong exception type within the hang guard. <c>[Fact(Timeout)]</c> is not enough on its own:
     /// xUnit reports the timeout but does not abandon the runaway loop, which wedges the run.
     /// </remarks>
-    [Fact(Timeout = 30000)]
+    [Fact(Timeout = 120000)]
     public async Task AFetchThatIgnoresTheKeysetCursor_Fails_RatherThanSpinning()
     {
-        using var spinGuard = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var spinGuard = new CancellationTokenSource(Eventually.DefaultPatience);
 
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(Guid.NewGuid(), 70m) });

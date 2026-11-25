@@ -10,6 +10,10 @@
       "default": "./dist/index.js"
     },
     "./package.json": "./package.json",
+    "./alert-text": {
+      "types": "./dist/alert-text.d.ts",
+      "default": "./dist/alert-text.js"
+    },
     "./parse-dispatch": {
       "types": "./dist/alerts/parse-dispatch.d.ts",
       "default": "./dist/alerts/parse-dispatch.js"
@@ -24,7 +28,7 @@
     "test:watch": "vitest",
     "bot:register-discord-commands": "node dist/scripts/register-discord-commands.js",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error && tsc -b tsconfig.test.json"
   },
   "author": "Nocturne Project",
   "license": "AGPL-3.0-only",

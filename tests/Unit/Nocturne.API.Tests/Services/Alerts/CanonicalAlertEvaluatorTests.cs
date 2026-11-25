@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Nocturne.API.Tests.TestDoubles;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Alerts.Corpus;
@@ -60,7 +62,8 @@ public class CanonicalAlertEvaluatorTests
     private static SensorGlucose Latest(DateTime timestamp, double mgdl = 120, double? trendRate = 0.5) =>
         new() { Timestamp = timestamp, CreatedAt = timestamp, Mgdl = mgdl, TrendRate = trendRate };
 
-    private CanonicalAlertEvaluator Evaluator(Guid tenantId, AlertRuleDecisions? decisions = null) =>
+    private CanonicalAlertEvaluator Evaluator(
+        Guid tenantId, AlertRuleDecisions? decisions = null, ILogger<CanonicalAlertEvaluator>? logger = null) =>
         new(_canonical.Object,
             _orchestrator.Object,
             _rules.Object,
@@ -69,7 +72,7 @@ public class CanonicalAlertEvaluatorTests
             decisions ?? _decisions,
             _evaluated.Object,
             _notice.Object,
-            NullLogger<CanonicalAlertEvaluator>.Instance);
+            logger ?? NullLogger<CanonicalAlertEvaluator>.Instance);
 
     private void LatestIs(params SensorGlucose?[] readings)
     {
@@ -248,14 +251,20 @@ public class CanonicalAlertEvaluatorTests
     }
 
     [Fact]
-    public async Task EvaluateAsync_EvaluatesNothingAndRemembersNothingWithNoTenantInScope()
+    public async Task EvaluateAsync_EvaluatesNothingWithNoTenantInScope()
     {
         LatestIs(Latest(Reading));
 
         await Evaluator(Guid.Empty).EvaluateAsync(GlucoseMoved);
 
         VerifyPasses(0);
-        _watermark.AlreadyEvaluated(Guid.Empty, Latest(Reading)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryClaim_RemembersNothingWithNoTenant()
+    {
+        _watermark.TryClaim(Guid.Empty, Latest(Reading)).Should().BeTrue();
+        _watermark.TryClaim(Guid.Empty, Latest(Reading)).Should().BeTrue("no claim is kept under no tenant");
     }
 
     /// <summary>
@@ -323,6 +332,21 @@ public class CanonicalAlertEvaluatorTests
         var act = () => Evaluator(Tenant).EvaluateAsync(GlucoseMoved);
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_LogsATimeoutInsideThePassRatherThanPassingItOnAsACancellation()
+    {
+        LatestIs(Latest(Reading));
+        _orchestrator
+            .Setup(o => o.EvaluateRulesAsync(It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(), It.IsAny<IReadOnlySet<Guid>>(), It.IsAny<SensorContext>(), It.IsAny<long?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TaskCanceledException("The store did not answer in time"));
+        var logger = new ListLogger<CanonicalAlertEvaluator>();
+
+        var act = () => Evaluator(Tenant, logger: logger).EvaluateAsync(GlucoseMoved);
+
+        await act.Should().NotThrowAsync();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception is TaskCanceledException);
     }
 
     /// <summary>
@@ -443,7 +467,7 @@ public class CanonicalAlertEvaluatorTests
         await Evaluator(Tenant).EvaluateAsync(GlucoseMoved);
 
         VerifyPasses(1);
-        _watermark.AlreadyEvaluated(Tenant, Latest(Reading)).Should().BeTrue("the pass completed");
+        _watermark.TryClaim(Tenant, Latest(Reading)).Should().BeFalse("the pass completed, so its claim stands");
     }
 
     [Fact]
@@ -579,6 +603,70 @@ public class CanonicalAlertEvaluatorTests
         await evaluator.EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }, GlucoseWithoutReading: true));
 
         EvaluatedRules().Should().Equal(LowRule, bucket);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleIsEvaluatedAloneOnAReadingAlreadyEvaluated()
+    {
+        LatestIs(Latest(Reading, mgdl: 55));
+        RulesAre(LowRule, ReservoirRule, LoopRule);
+        var evaluator = Evaluator(Tenant);
+        await evaluator.EvaluateAsync(GlucoseMoved);
+        _orchestrator.Invocations.Clear();
+
+        var ran = await evaluator.EvaluateAsync(MovedFacts.Saved([LowRule.Id]));
+
+        EvaluatedRules().Should().Equal(LowRule);
+        ran.Should().BeFalse("a save claims no reading, so the sweep's record of it is untouched");
+        var context = (SensorContext)_orchestrator.Invocations.Single().Arguments[2]!;
+        context.LatestValue.Should().Be(55, "the saved rule is judged against the current reading");
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleAndAWriteEvaluateTheSavedRuleAndTheRulesTheWriteMoved()
+    {
+        LatestIs(Latest(Reading));
+        RulesAre(LowRule, ReservoirRule, LoopRule);
+
+        await Evaluator(Tenant).EvaluateAsync(Moved(ContextFactWrites.Pump) with { Rules = new HashSet<Guid> { LowRule.Id } });
+
+        EvaluatedRules().Should().Equal(LowRule, ReservoirRule);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleThatIsNotEnabledEvaluatesNothing()
+    {
+        LatestIs(Latest(Reading));
+        RulesAre(LowRule, ReservoirRule);
+
+        await Evaluator(Tenant).EvaluateAsync(MovedFacts.Saved([Guid.NewGuid()]));
+
+        VerifyPasses(0);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASaveDoesNotSelectARuleTheEngineCannotRead()
+    {
+        var unreadable = Rule(AlertConditionType.Threshold, """{"direction":"below","value":69}""") with { OnUnknown = "no such policy" };
+        LatestIs(Latest(Reading));
+        RulesAre(LowRule, unreadable);
+        await Evaluator(Tenant).EvaluateAsync(Moved(ContextFactWrites.Pump));
+        EvaluatedRules().Should().Equal([unreadable], "a write selects a rule whose facts the engine cannot read");
+        _orchestrator.Invocations.Clear();
+
+        await Evaluator(Tenant).EvaluateAsync(MovedFacts.Saved([LowRule.Id]));
+
+        EvaluatedRules().Should().Equal(LowRule);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleWithNoReadingEvaluatesNothing()
+    {
+        LatestIs((SensorGlucose?)null);
+
+        await Evaluator(Tenant).EvaluateAsync(MovedFacts.Saved([LowRule.Id]));
+
+        VerifyPasses(0);
     }
 
     [Fact]

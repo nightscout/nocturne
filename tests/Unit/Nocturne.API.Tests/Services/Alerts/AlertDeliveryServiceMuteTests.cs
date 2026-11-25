@@ -134,14 +134,17 @@ public class AlertDeliveryServiceMuteTests
         const string othersDiscord = "222222222222222222";
         var excursionId = Guid.NewGuid();
         var muter = Guid.NewGuid();
+        var other = Guid.NewGuid();
         await using (var seed = NewContext())
         {
+            seed.Subjects.AddRange(
+                new SubjectEntity { Id = muter, Name = "Muter" }, new SubjectEntity { Id = other, Name = "Other" });
             seed.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
             {
                 Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = muter, AlertExcursionId = excursionId,
             });
             seed.ChatIdentityDirectory.AddRange(
-                DiscordLink(mutersDiscord, muter), DiscordLink(othersDiscord, Guid.NewGuid()));
+                DiscordLink(mutersDiscord, muter), DiscordLink(othersDiscord, other));
             await seed.SaveChangesAsync();
         }
 
@@ -152,6 +155,33 @@ public class AlertDeliveryServiceMuteTests
         await using var db = NewContext();
         (await db.AlertDeliveries.Select(d => d.Destination).ToListAsync())
             .Should().Equal(othersDiscord);
+    }
+
+    [Fact]
+    public async Task A_deactivated_subjects_linked_chat_gets_no_alert_and_an_active_ones_still_does()
+    {
+        const string deactivatedDiscord = "333333333333333333";
+        const string activeDiscord = "444444444444444444";
+        var deactivated = Guid.NewGuid();
+        var active = Guid.NewGuid();
+        await using (var seed = NewContext())
+        {
+            AddMembers(seed, deactivated, active);
+            seed.Subjects.Local.Single(s => s.Id == deactivated).IsActive = false;
+            seed.ChatIdentityDirectory.AddRange(
+                DiscordLink(deactivatedDiscord, deactivated), DiscordLink(activeDiscord, active));
+            await seed.SaveChangesAsync();
+        }
+
+        await CreateService().DispatchAsync(
+            Guid.NewGuid(), [DiscordDm(deactivatedDiscord), DiscordDm(activeDiscord)], Payload(Guid.NewGuid()),
+            CancellationToken.None);
+
+        await using var db = NewContext();
+        var deliveries = await db.AlertDeliveries.ToDictionaryAsync(d => d.Destination);
+        deliveries[deactivatedDiscord].Status.Should().Be("failed");
+        deliveries[deactivatedDiscord].LastError.Should().Contain("no member of this site has linked");
+        deliveries[activeDiscord].LastError.Should().BeNull();
     }
 
     [Fact]

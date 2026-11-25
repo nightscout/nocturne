@@ -114,15 +114,14 @@ public class TreatmentServiceBulkDeleteTests
     public async Task DeleteTreatmentsAsync_BareRegexLiteralOnEventType_DeletesExactlyTheRegexMatches()
     {
         var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment>
+        projection.SetupWindowRead(
+            new List<Treatment>
             {
                 new() { Id = "note-1", Mills = 3000, EventType = "Note" },
                 new() { Id = "bolus-1", Mills = 2000, EventType = "Meal Bolus" },
                 new() { Id = "note-2", Mills = 1000, EventType = "NOTE" },
-            });
+            },
+            range => !range.IncludeDeleted);
         var readService = new TreatmentReadService(
             projection.Object,
             new Mock<ITreatmentDecomposer>().Object,
@@ -149,5 +148,43 @@ public class TreatmentServiceBulkDeleteTests
         _store.Verify(s => s.DeleteAsync("note-1", It.IsAny<CancellationToken>()), Times.Once);
         _store.Verify(s => s.DeleteAsync("note-2", It.IsAny<CancellationToken>()), Times.Once);
         _store.Verify(s => s.DeleteAsync("bolus-1", It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteTreatmentsAsync_IsValidFalse_DeletesNothingBecauseTheMatchesAreAlreadyDeleted()
+    {
+        var projection = new Mock<IV4ToLegacyProjectionService>();
+        projection.SetupWindowRead(
+            new List<Treatment>
+            {
+                new() { Id = "live", Mills = 3000, EventType = "Meal Bolus" },
+                new() { Id = "deleted", Mills = 2000, EventType = "Meal Bolus", IsValid = false },
+            },
+            range => range.IncludeDeleted);
+        var readService = new TreatmentReadService(
+            projection.Object,
+            new Mock<ITreatmentDecomposer>().Object,
+            new Mock<ITempBasalRepository>().Object,
+            new Mock<IBolusRepository>().Object,
+            new Mock<ICarbIntakeRepository>().Object,
+            new Mock<IBGCheckRepository>().Object,
+            new Mock<INoteRepository>().Object,
+            new Mock<IDeviceEventRepository>().Object,
+            new Mock<IBolusCalculationRepository>().Object,
+            Mock.Of<IProfileActivationRepository>(),
+            Mock.Of<IStateSpanService>(),
+            NullLogger<TreatmentReadService>.Instance);
+        _store
+            .Setup(s => s.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .Returns((TreatmentQuery q, CancellationToken ct) => readService.QueryAsync(q, ct));
+        _store
+            .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TreatmentDeletion(null));
+
+        var deleted = await _service.DeleteTreatmentsAsync("find[isValid]=false");
+
+        deleted.Should().Be(0);
+        _store.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _events.Verify(e => e.OnDeletedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

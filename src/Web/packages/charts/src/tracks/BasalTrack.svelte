@@ -20,9 +20,25 @@
 
   interface Props {
     onPointClick?: (time: Date) => void;
+    /**
+     * "nightscout" draws basal as cgm-remote-monitor does: one basal colour, faint on the
+     * profile rate and stronger under a temp basal, the profile rate as a solid dashed line,
+     * and no axis, track name or temp basal strips.
+     */
+    variant?: "default" | "nightscout";
   }
 
-  let { onPointClick }: Props = $props();
+  let { onPointClick, variant = "default" }: Props = $props();
+
+  const SCHEDULED_LINE = {
+    default: "stroke-muted-foreground/50 stroke-1 fill-none print:stroke-foreground/70",
+    nightscout: "stroke-basal stroke-1 fill-none print:stroke-foreground/70",
+  } as const;
+
+  /** renderer.js addBasals: the basal area at 0.1 opacity, a temp basal's at 0.2. */
+  function nightscoutFillOpacity(origin: BasalDeliveryOrigin): number {
+    return origin === BasalDeliveryOrigin.Scheduled ? 0.1 : 0.2;
+  }
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
@@ -120,7 +136,7 @@
 
   <!-- The spans repeat the delivered rate the area already draws, and their
        rate labels are too small to read on paper. -->
-  {#if !ctx.printing}
+  {#if !ctx.printing && variant === "default"}
   <ChartClipPath>
     <!-- Temp basal span indicators (shown in basal track when basal is visible) -->
     {#each tempBasalSpans as span, i (markerKey(span.id, span.startTime, i))}
@@ -206,14 +222,16 @@
         x={(d) => new Date(d.timestamp ?? 0)}
         y={(d) => basalScale(d.rate ?? 0)}
         curve={curveStepAfter}
-        class="stroke-muted-foreground/50 stroke-1 fill-none print:stroke-foreground/70"
+        class={SCHEDULED_LINE[variant]}
         stroke-dasharray={dashOf("insulin-scheduled-basal")}
       />
     </ChartClipPath>
   {/if}
 
-  <TrackAxis scale={basalAxisScale} unit={ctx.labels.unitsPerHour} />
-  <TrackLabel label={ctx.labels.basal} top={basalLayout.top} bottom={basalLayout.bottom} />
+  {#if variant === "default"}
+    <TrackAxis scale={basalAxisScale} unit={ctx.labels.unitsPerHour} />
+    <TrackLabel label={ctx.labels.basal} top={basalLayout.top} bottom={basalLayout.bottom} />
+  {/if}
 
   <!-- Basal area - render each segment by origin with actual delivered rate -->
   {#if basalData.length > 0}
@@ -223,7 +241,19 @@
         {@const opacity = getBasalOpacity(segment.origin)}
         {@const fillColor = segment.points[0].fillColor}
         {@const strokeColor = segment.points[0].strokeColor}
-        {#if pattern}
+        {#if variant === "nightscout" && !pattern}
+          <Area
+            data={segment.points}
+            x={(d) => new Date(d.timestamp ?? 0)}
+            y0={() => basalZero}
+            y1={(d) => basalScale(d.rate ?? 0)}
+            curve={curveStepAfter}
+            fill="var(--basal)"
+            fillOpacity={nightscoutFillOpacity(segment.origin)}
+            stroke="var(--basal)"
+            class="stroke-1"
+          />
+        {:else if pattern}
           <!-- Hatched step rects for segments with patterns (Inferred) -->
           <Pattern size={pattern.size} lines={pattern.lines}>
             {#snippet children({ pattern: patternFill }: { pattern: string })}

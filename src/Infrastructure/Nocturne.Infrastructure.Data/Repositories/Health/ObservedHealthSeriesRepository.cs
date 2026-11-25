@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.Health;
@@ -37,11 +38,7 @@ public abstract class ObservedHealthSeriesRepository<TModel, TEntity>
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
-        var query = Set(db).AsNoTracking();
-        if (from is { } fromValue)
-            query = query.Where(e => e.Timestamp >= fromValue);
-        if (to is { } toValue)
-            query = query.Where(e => e.Timestamp <= toValue);
+        var query = Set(db).AsNoTracking().InWindow(from, to);
 
         var entities = await NewestFirst(query)
             .Skip(skip)

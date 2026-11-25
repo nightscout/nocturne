@@ -15,6 +15,7 @@
   } from "#lib/utils/formatting.js";
   import { conditionIssueSentence } from "./conditionIssues.svelte";
   import { alertWeekdayLabel } from "./summarizeCondition.svelte";
+  import { valueStep } from "./valueStep";
   import {
     ALERT_STATES,
     alertStateLabel,
@@ -114,26 +115,6 @@
         return convertRateFromDisplayUnits(entered, glucoseUnits.current);
       default:
         return entered;
-    }
-  }
-
-  /** The step of a leaf's value input and of its clear margin input, which are the same. */
-  function valueStep(kind: string): string {
-    switch (kind) {
-      case "threshold":
-      case "predicted":
-      case "eventual_glucose":
-        return glucoseUnits.current === "mmol" ? "0.1" : "1";
-      case "carbs_required":
-        return "1";
-      case "rate_of_change":
-        return glucoseUnits.current === "mmol" ? "0.01" : "0.1";
-      case "sensitivity_ratio":
-        return "0.01";
-      case "transmitter_battery":
-        return "1";
-      default:
-        return "0.1";
     }
   }
 

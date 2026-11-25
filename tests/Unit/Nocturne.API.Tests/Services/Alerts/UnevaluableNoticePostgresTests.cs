@@ -43,11 +43,6 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
@@ -55,10 +50,10 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
             .Options) { TenantId = tenant };
 
     /// <summary>A repository on connections of its own, as one instance of the API has.</summary>
-    private AlertRepository Instance(Guid tenant) => new(new Factory(() => Context(tenant)));
+    private AlertRepository Instance(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
 
     /// <summary>A repository read by a member whose history is clamped to the last 24 hours.</summary>
-    private AlertRepository ClampedMember(Guid tenant) => new(new Factory(() =>
+    private AlertRepository ClampedMember(Guid tenant) => new(new SuppliedContextFactory(() =>
     {
         var reader = new CategoryReadContext();
         reader.ClampMemberHistory();

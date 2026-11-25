@@ -117,6 +117,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         (await client.GetFromJsonAsync<JsonArray>("/api/v1/treatments"))!.Should().BeEmpty(
             "AAPS imports every Profile Switch it reads on the treatments feed");
         (await client.GetFromJsonAsync<JsonNode>("/api/v3/treatments"))!["result"]!.AsArray().Should().BeEmpty();
+        await SettleHistoryAsync();
         (await client.GetFromJsonAsync<JsonNode>("/api/v3/treatments/history/0"))!["result"]!.AsArray().Should().BeEmpty();
     }
 

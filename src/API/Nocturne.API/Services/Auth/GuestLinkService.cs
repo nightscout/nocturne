@@ -190,7 +190,8 @@ public class GuestLinkService : IGuestLinkService
 
         var grant = await FindGuestAsync(_grants, grantId, ct);
 
-        if (grant is null || grant.IsRevoked || !(grant.ExpiresAt > now) || grant.ActivatedAt is null)
+        if (grant is null || grant.IsRevoked || grant.ExpiresAt is null
+            || OAuthGrantState.IsExpiredAt(grant.ExpiresAt, now) || grant.ActivatedAt is null)
             return null;
 
         return ToSession(grant);
@@ -249,7 +250,7 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        var isTerminal = grant.RevokedAt.HasValue || grant.ExpiresAt <= now;
+        var isTerminal = grant.RevokedAt.HasValue || OAuthGrantState.IsExpiredAt(grant.ExpiresAt, now);
         if (!isTerminal)
         {
             _logger.LogWarning(
@@ -305,7 +306,7 @@ public class GuestLinkService : IGuestLinkService
         var now = Now();
         var status = grant.RevokedAt.HasValue
             ? GuestLinkStatus.Revoked
-            : grant.ExpiresAt <= now
+            : OAuthGrantState.IsExpiredAt(grant.ExpiresAt, now)
                 ? GuestLinkStatus.Expired
                 : grant.ActivatedAt.HasValue
                     ? GuestLinkStatus.Active

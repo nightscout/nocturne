@@ -8,9 +8,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -98,6 +100,53 @@ public class GuestLinkControllerTests : IDisposable
         problem.Value.Should().BeOfType<ProblemDetails>()
             .Which.Title.Should().Be(GrantCeilingViolation.ExceedsGranter);
         (await _dbContext.OAuthGrants.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+    }
+
+    private void BuildMixedContext(GrantCeiling? ceiling)
+    {
+        BuildContext(new HashSet<string>(StringComparer.Ordinal) { Scope.GlucoseRead, Scope.TreatmentsRead, Scope.SharingGuest });
+        _controller.HttpContext.SetGrantCeiling(ceiling);
+    }
+
+    [Fact]
+    public async Task CreateGuestLink_ByAMixedMember_RefusesACategoryOnlyTheTeamGives()
+    {
+        BuildMixedContext(new GrantCeiling(new HashSet<string> { Scope.GlucoseRead, Scope.SharingGuest }, null, false));
+
+        var result = await _controller.CreateGuestLink(
+            new CreateGuestLinkRequest("Team only", [Scope.TreatmentsRead]), CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        (await _dbContext.OAuthGrants.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        _controller.GetGuestLinkScopeOptions().Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<GuestLinkScopeOptions>().Which.Available.Should().NotContain(Scope.TreatmentsRead);
+    }
+
+    [Fact]
+    public async Task CreateGuestLink_ByAMixedMember_GivesTheDirectReasonsLimitAndEnd()
+    {
+        var directEnd = DateTime.UtcNow.AddDays(2);
+        BuildMixedContext(new GrantCeiling(new HashSet<string> { Scope.GlucoseRead, Scope.SharingGuest }, directEnd, true));
+
+        var result = await _controller.CreateGuestLink(
+            new CreateGuestLinkRequest("Direct", [Scope.GlucoseRead]), CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        var grant = await _dbContext.OAuthGrants.IgnoreQueryFilters().SingleAsync();
+        grant.LimitTo24Hours.Should().BeTrue();
+        grant.ExpiresAt.Should().NotBeNull().And.BeOnOrBefore(directEnd);
+    }
+
+    [Fact]
+    public async Task CreateGuestLink_ByATeamOnlyMember_GivesNothing()
+    {
+        BuildMixedContext(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await _controller.CreateGuestLink(
+            new CreateGuestLinkRequest("Team", [Scope.GlucoseRead]), CancellationToken.None));
+        (await _dbContext.OAuthGrants.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        _controller.GetGuestLinkScopeOptions().Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<GuestLinkScopeOptions>().Which.Available.Should().BeEmpty();
     }
 
     public void Dispose() => _dbContext.Dispose();

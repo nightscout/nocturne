@@ -63,7 +63,7 @@ public class AlertInvitesController : ControllerBase
     public async Task<ActionResult<AlertInviteResponse>> CreateInvite(
         [FromBody] CreateAlertInviteRequest request, CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (!await _alertRules.ChannelExistsAsync(request.AlertRuleChannelId, ct))

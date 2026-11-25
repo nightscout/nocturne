@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -14,17 +15,18 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
 /// A role given to or taken from a subject across every tenant, recorded by <see cref="SubjectService"/>
 /// on a tenant's address, never reads as a change to that tenant's members, and a tenant member's own
-/// role change always does, before and after deleting the subject clears the details of both.
+/// role change always does, before and after deleting the subject (<see cref="SubjectDeletion"/>)
+/// clears the details of both.
 /// </summary>
 [Trait("Category", "Integration")]
 public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgresTests.Database database)
@@ -47,28 +49,8 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    internal sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Scenario(
-        Guid Tenant, Guid Person, string Role, SubjectService Service, MemberHistoryReader History);
+        Guid Tenant, Guid Person, string Role, SubjectService Service, SubjectDeletion Deletion, MemberHistoryReader History);
 
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -100,7 +82,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
             await db.SaveChangesAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, Ct);
         var owner = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, Ct))!.Value;
@@ -118,7 +100,11 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
             subjects, audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
-        return new Scenario(tenant, person, role, service, new MemberHistoryReader(contexts));
+        var deletion = new SubjectDeletion(
+            contexts, subjects, members,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            audit, TimeProvider.System, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
+        return new Scenario(tenant, person, role, service, deletion, new MemberHistoryReader(contexts));
     }
 
     private async Task<List<AuthAuditLogEntity>> RoleRowsAsync(Scenario s, Func<AuthAuditLogEntity, bool> where)
@@ -154,7 +140,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
 
         (await HistoryIdsAsync(s)).Should().NotIntersectWith(instanceWide);
 
-        (await s.Service.DeleteSubjectAsync(s.Person)).Should().BeOfType<SubjectChange.Changed>();
+        (await s.Deletion.DeleteAsync(s.Person, evenLastOwner: false, Ct)).Change.Should().BeOfType<SubjectChange.Changed>();
 
         (await RoleRowsAsync(s, row => instanceWide.Contains(row.Id))).Should().OnlyContain(r => r.DetailsJson == null);
         (await HistoryIdsAsync(s)).Should().NotIntersectWith(instanceWide);
@@ -186,7 +172,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         (await s.History.GetAsync(s.Tenant, s.Person, 100, 0, DateTime.UtcNow, Ct)).Data
             .Should().ContainSingle(e => e.Id == member[0]).Which.Kind.Should().Be(MemberHistoryKind.RoleGiven);
 
-        (await s.Service.DeleteSubjectAsync(s.Person)).Should().BeOfType<SubjectChange.Changed>();
+        (await s.Deletion.DeleteAsync(s.Person, evenLastOwner: false, Ct)).Change.Should().BeOfType<SubjectChange.Changed>();
 
         (await HistoryIdsAsync(s)).Should().Contain(member);
     }

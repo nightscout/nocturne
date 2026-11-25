@@ -10,6 +10,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.RateLimiting;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.RateLimiting;
@@ -48,14 +49,12 @@ public class GuestActivationLimiterTests : IDisposable
         var refused = await RunAsync(tenant);
 
         refused.Should().NotBeNull();
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.Response.Body = new MemoryStream();
         await refused!.ExecuteResultAsync(new ActionContext(http, new RouteData(), new ActionDescriptor()));
-        http.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
         int.Parse(http.Response.Headers.RetryAfter.ToString())
             .Should().BeInRange(1, (int)GuestActivationLimiter.Window.TotalSeconds);
-        http.Response.Body.Position = 0;
-        (await new StreamReader(http.Response.Body).ReadToEndAsync()).Should().Contain("rate_limit_exceeded");
+        await http.Response.ShouldBeTheRateLimitProblemAsync();
     }
 
     [Fact]

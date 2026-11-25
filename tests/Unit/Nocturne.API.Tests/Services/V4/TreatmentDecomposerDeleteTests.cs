@@ -1,8 +1,6 @@
-using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Treatments;
@@ -14,13 +12,11 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -86,26 +82,10 @@ public class TreatmentDecomposerDeleteTests : IDisposable
     private TreatmentDecomposer CreateDecomposer(
         NocturneDbContext context,
         IAuditContext auditContext,
-        Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>? logger = null) => new(
-        context.AsFactory(), new DecomposedTreatmentKeys(context.AsFactory()),
-        Mock.Of<IBolusRepository>(),
-        Mock.Of<ITempBasalRepository>(),
-        Mock.Of<ICarbIntakeRepository>(),
-        Mock.Of<IBGCheckRepository>(),
-        Mock.Of<INoteRepository>(),
-        Mock.Of<IDeviceEventRepository>(),
-        Mock.Of<IBolusCalculationRepository>(),
-        Mock.Of<IStateSpanService>(),
-        ProfileActivationTestDeps.Repository(context),
-        ProfileActivationTestDeps.Writer(context),
-        Mock.Of<ITreatmentFoodService>(),
-        new UnresolvedDevices(),
-        Mock.Of<IPatientDeviceStamper>(),
-        new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-        Mock.Of<IPatientInsulinRepository>(),
-        TempBasalTestDeps.Unscheduled(),
-        auditContext,
-        logger ?? NullLogger<TreatmentDecomposer>.Instance,
+        Microsoft.Extensions.Logging.ILogger<TreatmentDecomposer>? logger = null) => TreatmentDecomposerDoubles.Build(
+        context.AsFactory(),
+        audit: auditContext,
+        logger: logger,
         changes: _legacyReads.AsRecordChanges(_published));
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>

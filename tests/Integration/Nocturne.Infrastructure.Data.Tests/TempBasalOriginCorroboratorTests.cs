@@ -1,3 +1,5 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -99,10 +101,11 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
 
         CrossTenantWritten = await CorroborateAsync(pinnedTo: TenantA, tenant: TenantB);
 
-        using (var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+        using (var cancel = new CancellationTokenSource(Eventually.DefaultPatience))
         {
             var interrupted = async () => await CorroborateAsync(
-                TenantA, TenantA, pageSize: 1, pauseAfterWrite: TimeSpan.FromMinutes(1), ct: cancel.Token);
+                TenantA, TenantA, pageSize: 1, pauseAfterWrite: TimeSpan.FromMinutes(1), ct: cancel.Token,
+                interceptors: new CancelAfterFirstCommit(cancel));
             await interrupted.Should().ThrowAsync<OperationCanceledException>();
         }
 
@@ -113,7 +116,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
         AfterRerun = await ReadAsync();
 
         LateBeforeSnapshot = AfterRerun[Late];
-        var beforeSnapshot = DateTime.UtcNow.AddSeconds(-1);
+        var beforeSnapshot = await LatestSnapshotWriteAsync();
         await SeedLateSnapshotAsync();
         LateReopened = await ReopenAsync(TenantA, beforeSnapshot);
         await CorroborateAsync(TenantA, TenantA);
@@ -126,11 +129,31 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
         return (await TempBasalOriginCorroborator.ReopenNearNewSnapshotsAsync(db, tenant, since, 500, CancellationToken.None)).Reopened;
     }
 
-    private NocturneDbContext Context(Guid pinnedTo) =>
+    private NocturneDbContext Context(Guid pinnedTo, params IInterceptor[] interceptors) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(_database.AppConnectionString)
             .AddInterceptors(new TenantConnectionInterceptor())
+            .AddInterceptors(interceptors)
             .Options) { TenantId = pinnedTo };
+
+    /// <summary>Cancels the run once its first page has committed, so the run stops on that event and not on a clock.</summary>
+    private sealed class CancelAfterFirstCommit(CancellationTokenSource run) : DbTransactionInterceptor
+    {
+        public override async Task TransactionCommittedAsync(
+            DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            await run.CancelAsync();
+        }
+    }
+
+    /// <summary>The newest snapshot write so far, read on the database's clock, which the late snapshot is stamped on.</summary>
+    private async Task<DateTime> LatestSnapshotWriteAsync()
+    {
+        await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand("SELECT max(sys_updated_at) FROM aps_snapshots", conn);
+        return (DateTime)(await cmd.ExecuteScalarAsync())!;
+    }
 
     private async Task SeedLateSnapshotAsync()
     {
@@ -148,9 +171,10 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     private async Task<int> CorroborateAsync(
-        Guid pinnedTo, Guid tenant, int pageSize = 500, TimeSpan pauseAfterWrite = default, CancellationToken ct = default)
+        Guid pinnedTo, Guid tenant, int pageSize = 500, TimeSpan pauseAfterWrite = default, CancellationToken ct = default,
+        params IInterceptor[] interceptors)
     {
-        await using var db = Context(pinnedTo);
+        await using var db = Context(pinnedTo, interceptors);
         return await TempBasalOriginCorroborator.CorroborateTenantAsync(
             db, tenant, DateTime.UtcNow.AddMinutes(-30), pageSize, pauseAfterWrite, TimeSpan.Zero, ct);
     }

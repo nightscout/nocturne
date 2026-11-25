@@ -11,7 +11,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.DeviceEvent
 /// </summary>
 [Table("device_events")]
-public class DeviceEventEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
+public class DeviceEventEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackSent
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -22,6 +22,11 @@ public class DeviceEventEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevice
     [AuditIgnored]
     [Column("written_live")]
     public bool WrittenLive { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("write_back_sent_fingerprint")]
+    public string? WriteBackSentFingerprint { get; set; }
 
     /// <inheritdoc />
     [AuditIgnored]

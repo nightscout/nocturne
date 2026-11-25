@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Caching;
 
@@ -19,8 +20,6 @@ public sealed class TenantCacheTests : IDisposable
     private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(1);
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
-
     private readonly MemoryCache _local = new(new MemoryCacheOptions());
     private readonly ICacheService _distributed;
     private readonly CacheFlights _flights = new();
@@ -306,9 +305,9 @@ public sealed class TenantCacheTests : IDisposable
         joinerRuns.Should().Be(0);
         ownerCts.Cancel();
 
-        var ownerRead = () => owner.WaitAsync(Bound);
+        var ownerRead = () => owner.WaitAsync(Eventually.DefaultPatience);
         await ownerRead.Should().ThrowAsync<OperationCanceledException>();
-        (await joiner.WaitAsync(Bound)).Value.Should().Be("joiner");
+        (await joiner.WaitAsync(Eventually.DefaultPatience)).Value.Should().Be("joiner");
         ownerRuns.Should().Be(1);
         joinerRuns.Should().Be(1);
     }
@@ -360,7 +359,7 @@ public sealed class TenantCacheTests : IDisposable
 
         var owner = Cache(Owner()).GetOrSetAsync("family:key", Held(held, () => { }), Ttl);
         var share = await Cache(Share(Scope.GlucoseRead)).GetOrSetAsync(
-            "family:key", () => { shareRuns++; return Task.FromResult(new Box("share")); }, Ttl).WaitAsync(Bound);
+            "family:key", () => { shareRuns++; return Task.FromResult(new Box("share")); }, Ttl).WaitAsync(Eventually.DefaultPatience);
 
         share.Value.Should().Be("share");
         shareRuns.Should().Be(1);
@@ -376,7 +375,7 @@ public sealed class TenantCacheTests : IDisposable
         await failed.Should().ThrowAsync<InvalidOperationException>();
 
         var next = await Cache(Owner()).GetOrSetAsync(
-            "family:key", () => Task.FromResult(new Box("loaded")), Ttl).WaitAsync(Bound);
+            "family:key", () => Task.FromResult(new Box("loaded")), Ttl).WaitAsync(Eventually.DefaultPatience);
 
         next.Value.Should().Be("loaded");
     }
@@ -388,7 +387,7 @@ public sealed class TenantCacheTests : IDisposable
         await Cache(Owner()).RemoveFamilyAsync("family");
 
         var next = await Cache(Owner()).GetOrSetAsync(
-            "family:key", () => Task.FromResult(new Box("new")), Ttl).WaitAsync(Bound);
+            "family:key", () => Task.FromResult(new Box("new")), Ttl).WaitAsync(Eventually.DefaultPatience);
 
         next.Value.Should().Be("new");
     }

@@ -111,29 +111,39 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
         allPotentialMatches.AddRange(unlinked.Values);
 
         // 3. One query: the criteria and soft-deleted status behind every candidate link, read by
-        //    both the tight matcher below and the wide pass.
+        //    both the tight matcher below and the wide pass, and the ids of the chunk's own records,
+        //    read by the source guard.
+        var trackSources = wideEligible || TracksTightSources(recordType);
         var referencedIds = allPotentialMatches.Select(m => m.RecordId).ToHashSet();
-        var info = await LinkedRecordTypes.LoadRecordInfoAsync(db, recordType, referencedIds, ct);
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(
+            db, recordType, trackSources ? [.. referencedIds, .. inputIdSet] : referencedIds, ct);
 
         bool Matches(Guid recordId, MatchCriteria criteria) =>
             info.TryGetValue(recordId, out var candidate)
             && !candidate.IsDeleted
             && CriteriaMatch(recordType, candidate.Criteria, criteria);
 
-        // 3b. The data sources behind each candidate group, read by the tight source guard and the
+        // 3b. The members behind each candidate group, read by the tight source guard and the
         //     wide pass. Mutated as this chunk assigns records, so a second record of the same
         //     source sees the group its predecessor just joined.
-        var trackSources = wideEligible || TracksTightSources(recordType);
-        Dictionary<Guid, HashSet<string>> groupSources = new();
+        Dictionary<Guid, List<LinkedRecordTypes.GroupMember>> groupMembers = new();
         if (trackSources)
         {
-            groupSources = await LinkedRecordTypes.LoadGroupSourcesAsync(
+            groupMembers = await LinkedRecordTypes.LoadGroupMembersAsync(
                 db,
                 recordTypeStr, allPotentialMatches.Select(m => m.CanonicalId).Distinct().ToList(), unlinked, ct);
         }
 
-        bool Refused(Guid canonical, string source) =>
-            RefusesTightJoin(recordType, source, groupSources.GetValueOrDefault(canonical));
+        // A member outside the window is not in info, so it always holds its source.
+        HashSet<string>? HeldAgainst(Guid canonical, DeduplicationInput record) =>
+            groupMembers.TryGetValue(canonical, out var members)
+                ? SourcesHeldAgainst(members, new LinkedRecordTypes.GroupMember(record.RecordId, record.DataSource), info)
+                : null;
+
+        bool Refused(Guid canonical, DeduplicationInput record) =>
+            RefusesTightJoin(
+                recordType, new LinkedRecordTypes.GroupMember(record.RecordId, record.DataSource),
+                groupMembers.GetValueOrDefault(canonical), info);
 
         // 4. One query: which input records are already linked?
         var inputIds = records.Select(r => r.RecordId).ToList();
@@ -197,7 +207,7 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
             for (int i = lo; i < hi; i++)
             {
                 var m = allPotentialMatches[i];
-                if (Matches(m.RecordId, record.Criteria) && !Refused(m.CanonicalId, record.DataSource))
+                if (Matches(m.RecordId, record.Criteria) && !Refused(m.CanonicalId, record))
                 {
                     canonicalId = m.CanonicalId;
                     duplicateGroups++;
@@ -216,7 +226,7 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
                 {
                     if (Math.Abs(priorMills - record.Mills) <= MatchingWindowMillis
                         && CriteriaMatch(recordType, priorCriteria, record.Criteria)
-                        && !Refused(priorCanonical, record.DataSource))
+                        && !Refused(priorCanonical, record))
                     {
                         canonicalId = priorCanonical;
                         duplicateGroups++;
@@ -227,10 +237,10 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
                 }
             }
 
-            // Wide fallback: exactly one exact-value candidate group in the wide window, holding
-            // no record of this record's own source. Records assigned earlier in this chunk are
-            // candidates too, so a wide pair split across a batch resolves the same way it would
-            // across two batches.
+            // Wide fallback: exactly one exact-value candidate group in the wide window, with no
+            // member that holds this record's source against it (HoldsSourceAgainst). Records
+            // assigned earlier in this chunk are candidates too, so a wide pair split across a batch
+            // resolves the same way it would across two batches.
             if (canonicalId == null && wideEligible && CanEstablishCrossSource(record.DataSource))
             {
                 var wideLo = LowerBoundTimestamp(sortedTimestamps, record.Mills - WideMatchingWindowMillis);
@@ -259,11 +269,11 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
 
                 var wideCanonical = SingleCandidateCanonical(wideCandidates.Select(c => c.CanonicalId));
 
-                // groupSources reflects only this context's view. A concurrent ingest of the same
+                // groupMembers reflects only this context's view. A concurrent ingest of the same
                 // source into the same group can still slip past between this read and the write;
                 // that race is pre-existing and self-corrects on the next reconcile pass.
                 if (wideCanonical is not null
-                    && groupSources.TryGetValue(wideCanonical.Value, out var candidateSources)
+                    && HeldAgainst(wideCanonical.Value, record) is { } candidateSources
                     && CanEstablishCrossSource(candidateSources)
                     && !candidateSources.Contains(record.DataSource))
                 {
@@ -323,17 +333,17 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
 
             chunkAssignments.Add((record.Mills, canonicalId.Value, record.Criteria, record.DataSource));
 
-            // Keep the group's source set current within this chunk so a later same-source record
+            // Keep the group's members current within this chunk so a later same-source record
             // sees the group it just joined and refuses to join it.
             if (trackSources)
             {
-                if (!groupSources.TryGetValue(canonicalId.Value, out var assignedSources))
+                if (!groupMembers.TryGetValue(canonicalId.Value, out var assignedMembers))
                 {
-                    assignedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    groupSources[canonicalId.Value] = assignedSources;
+                    assignedMembers = [];
+                    groupMembers[canonicalId.Value] = assignedMembers;
                 }
 
-                assignedSources.Add(record.DataSource);
+                assignedMembers.Add(new LinkedRecordTypes.GroupMember(record.RecordId, record.DataSource));
             }
         }
 

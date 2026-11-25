@@ -9,9 +9,9 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -53,11 +53,6 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private sealed record Setup(
         EntryService Service,
         EntriesController Controller,
@@ -96,7 +91,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var factory = new Factory(() => Context(tenant));
+        var factory = new SuppliedContextFactory(() => Context(tenant));
         var audit = _audit;
         var events = new Mock<IDataEventSink<Entry>>();
         var sensorGlucose = new SensorGlucoseRepository(
@@ -113,9 +108,8 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         config.Setup(c => c.GetPreferredProcessingAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync((GlucoseProcessing?)null);
 
-        var decomposer = new EntryDecomposer(
-            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
-            Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
+        var decomposer = EntryDecomposerDoubles.Build(
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object), audit: audit);
         var store = new EntryReadService(
             sensorGlucose, meterGlucose, calibration, Mock.Of<IDemoModeService>(), NullLogger<EntryReadService>.Instance);
         var service = new EntryService(

@@ -85,20 +85,13 @@ internal sealed class AlertAcknowledgementService(
 
         await db.SaveChangesAsync(ct);
 
-        try
+        await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
         {
-            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
-            {
-                TenantId = tenantId,
-                ExcursionIds = excursions.Select(e => e.Id).ToList(),
-                AcknowledgedBy = acknowledgedBy,
-                AcknowledgedAt = now,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for tenant {TenantId}", tenantId);
-        }
+            TenantId = tenantId,
+            ExcursionIds = excursions.Select(e => e.Id).ToList(),
+            AcknowledgedBy = acknowledgedBy,
+            AcknowledgedAt = now,
+        });
 
         await alarmRelay.ClearIfQuietAsync(excursionIds, ct);
 
@@ -159,20 +152,13 @@ internal sealed class AlertAcknowledgementService(
 
         if (broadcast)
         {
-            try
+            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
             {
-                await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
-                {
-                    TenantId = excursion.TenantId,
-                    ExcursionIds = [excursionId],
-                    AcknowledgedBy = acknowledgedBy,
-                    AcknowledgedAt = now,
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for excursion {ExcursionId}", excursionId);
-            }
+                TenantId = excursion.TenantId,
+                ExcursionIds = [excursionId],
+                AcknowledgedBy = acknowledgedBy,
+                AcknowledgedAt = now,
+            });
         }
 
         logger.LogInformation(

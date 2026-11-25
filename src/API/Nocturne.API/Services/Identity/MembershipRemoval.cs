@@ -6,7 +6,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -17,36 +16,37 @@ namespace Nocturne.API.Services.Identity;
 /// Removes a membership's direct reason with what it leaves behind: its roles and their audit rows,
 /// the subject's chat links to the tenant, every live grant of the subject on it, every live guest
 /// link the subject made, whoever the link's data owner is, and every live member invite the subject
-/// made. A direct reason with an end date also stops, at once, what the subject made
-/// (<see cref="MemberCreations"/>); one without keeps it, as a member who never had an end date made
-/// it to last. A member whose only reason is direct loses the membership; one who also holds a
-/// team's reason keeps it for that reason, and loses the rest all the same, since it was made under
-/// the direct membership.
+/// made. A member whose only reason is direct loses the membership; one who also holds a team's
+/// reason keeps it for that reason, and loses the rest all the same, since it was made under the
+/// direct membership. What the subject made and does not lose (<see cref="MemberCreations"/>) lasts
+/// as long as their access: a kept membership caps it at the end it keeps, and a membership that
+/// goes stops it at once when its direct reason had an end date, and leaves it otherwise, as a member
+/// who never had an end date made it to last.
 /// </summary>
 /// <remarks>
 /// Chat identity directory rows are global and carry no membership join, so a link left behind
 /// would keep answering bot commands for the tenant; the same subject's links to tenants they still
 /// belong to survive. Grants carry no membership join either, so left live every one would work
-/// again the moment the subject joins again. A guest link's grant belongs to its data owner, so it is
-/// found by the member who made it, and each one revoked is audited, as is each invite, before the
-/// membership's own rows so its removed row follows them. All of it goes in one save on the caller's
-/// unit, so the pieces cannot come apart. A membership whose end date passes is not removed, so the
-/// invites its member made are refused at accept instead (<see cref="IMemberInviteRepository.TryClaimUseAsync"/>);
-/// deleting the account removes them with the subject.
+/// again the moment the subject joins again. What the member made is stopped through
+/// <see cref="MadeByStop"/>, its audit rows staged before the membership's own rows so its removed row
+/// follows them. All of it goes in one save on the caller's unit, so the pieces cannot come apart. A
+/// membership whose end date passes is not removed, so the invites its member made are refused at
+/// accept instead (<see cref="IMemberInviteRepository.TryClaimUseAsync"/>); deleting the account
+/// revokes them (<see cref="SubjectDeletion"/>).
 /// </remarks>
 internal static class MembershipRemoval
 {
     /// <summary>
     /// Stages and saves the removal on <paramref name="unit"/>, inside its commit, and returns the
-    /// grants it revoked for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
-    /// Nothing is staged when <see cref="ITenantMembershipRepository.RemoveMemberUnlessLastOwnerAsync"/>
+    /// grants it revoked or capped for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
+    /// Nothing is staged when <see cref="TenantMembershipRepository.RemoveMemberUnlessLastOwnerAsync"/>
     /// refuses, which it does with <see cref="OwnerGuardedChange.FromTeam"/> for a member with no
     /// direct reason. <paramref name="members"/> is a repository over <paramref name="unit"/>. The
     /// removed row records <paramref name="how"/>.
     /// </summary>
     public static async Task<(OwnerGuardedChange Outcome, IReadOnlyList<OAuthGrantRecord> Grants)> StageAsync(
         DbUnitOfWork unit,
-        ITenantMembershipRepository members,
+        TenantMembershipRepository members,
         GrantRevocationService grantRevocation,
         Guid tenantId,
         TenantMemberRecord member,
@@ -55,42 +55,49 @@ internal static class MembershipRemoval
         CancellationToken ct)
     {
         var context = unit.Context;
-        var grants = new OAuthGrantRepository(unit);
-        var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(member.SubjectId, now, ct);
-        var before = AddedAuditRows(context);
-        grants.StageMemberRemovalGuestLinkAudit(handedOut, member.SubjectId);
-        var invites = new MemberInviteRepository(unit);
-        var revokedInvites = await invites.StageRevokeLiveMadeByAsync(tenantId, member.SubjectId, now, ct);
-        var stagedRows = AddedAuditRows(context).Except(before).ToList();
+        var made = await MadeByStop.StageAsync(unit, tenantId, member.SubjectId, now, ct);
 
         var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, how, now, ct);
-        if (removal != OwnerGuardedChange.Changed)
+        if (removal.Outcome != OwnerGuardedChange.Changed)
         {
-            foreach (var row in stagedRows)
-                context.Entry(row).State = EntityState.Detached;
-            invites.UnstageRevokeLiveMadeBy(revokedInvites.ToHashSet());
-            return (removal, []);
+            made.Unstage();
+            return (removal.Outcome, []);
         }
 
-        var chatLinks = await context.ChatIdentityDirectory
-            .Where(d => d.TenantId == tenantId && d.NocturneUserId == member.SubjectId)
-            .ToListAsync(ct);
-        var owned = await grants.GetActiveForSubjectAsync(member.SubjectId, ct);
-        var revoked = owned.Concat(handedOut.ExceptBy(owned.Select(g => g.Id), g => g.Id)).ToList();
-
-        var directHadEnd = member.DirectReason?.AccessEndsAt is not null;
-        context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await grantRevocation.StageAsync(unit, revoked, now, ct);
-        if (directHadEnd)
-            await MemberCreations.CapAsync(unit, member.SubjectId, now, now, ct);
+        var capAt = removal.MembershipKept
+            ? removal.KeptAccessEndsAt
+            : member.DirectReason?.AccessEndsAt is not null ? now : null;
+        var revoked = await StageLossAsync(unit, made, grantRevocation, tenantId, member.SubjectId, capAt, ct);
         await context.SaveChangesAsync(ct);
-        return (removal, revoked);
+        return (removal.Outcome, revoked);
     }
 
-    /// <summary>The audit rows staged on <paramref name="context"/> and not yet saved.</summary>
-    private static List<AuthAuditLogEntity> AddedAuditRows(NocturneDbContext context) =>
-        context.ChangeTracker.Entries<AuthAuditLogEntity>()
-            .Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+    /// <summary>
+    /// Stages on <paramref name="unit"/>, without saving, what <paramref name="subjectId"/> loses with
+    /// access on <paramref name="tenantId"/> beside its roles: their chat links to the tenant, every live
+    /// grant of theirs on it, and the rest of <paramref name="made"/>, capped at <paramref name="capAt"/>
+    /// (<see cref="MadeByStop.FinishAsync"/>). The unit must be pinned to the tenant.
+    /// </summary>
+    /// <returns>
+    /// The grants it revoked or capped, for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
+    /// </returns>
+    public static async Task<IReadOnlyList<OAuthGrantRecord>> StageLossAsync(
+        DbUnitOfWork unit,
+        MadeByStop made,
+        GrantRevocationService grantRevocation,
+        Guid tenantId,
+        Guid subjectId,
+        DateTime? capAt,
+        CancellationToken ct)
+    {
+        var context = unit.Context;
+        var chatLinks = await context.ChatIdentityDirectory
+            .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
+            .ToListAsync(ct);
+        var owned = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(subjectId, ct);
+        context.ChatIdentityDirectory.RemoveRange(chatLinks);
+        return await made.FinishAsync(grantRevocation, owned, capAt, ct);
+    }
 
     /// <summary>
     /// Removes <paramref name="subjectId"/>'s direct reason on <paramref name="tenantId"/> when it has
@@ -105,7 +112,7 @@ internal static class MembershipRemoval
     /// </remarks>
     public static async Task<IReadOnlyList<OAuthGrantRecord>?> ReplaceEndedAsync(
         DbUnitOfWork unit,
-        ITenantMembershipRepository members,
+        TenantMembershipRepository members,
         GrantRevocationService grantRevocation,
         Guid tenantId,
         Guid subjectId,
@@ -119,7 +126,7 @@ internal static class MembershipRemoval
 
         if (existing.HeldReasons.Any(r => r.Kind != MembershipReasonKind.Direct && !MembershipLiveness.HasEnded(r.AccessEndsAt, now)))
         {
-            if (await members.RemoveMemberUnlessLastOwnerAsync(tenantId, existing.Id, MembershipEndHow.Replaced, now, ct)
+            if ((await members.RemoveMemberUnlessLastOwnerAsync(tenantId, existing.Id, MembershipEndHow.Replaced, now, ct)).Outcome
                 != OwnerGuardedChange.Changed)
                 return null;
             await unit.Context.SaveChangesAsync(ct);

@@ -110,11 +110,13 @@ public sealed record OAuthGrantState(
     bool LimitTo24Hours,
     Guid? CreatedBySubjectId)
 {
+    public static bool IsExpiredAt(DateTime? expiresAt, DateTime now) => expiresAt <= now;
+
     /// <summary>
     /// Whether the grant authorizes at <paramref name="now"/>: not revoked, and open-ended or short of
     /// its expiry, the rule <see cref="OAuthGrantRecord.IsLiveDirectGrantAt"/> applies to a direct grant.
     /// </summary>
-    public bool IsLiveAt(DateTime now) => RevokedAt is null && (ExpiresAt is null || ExpiresAt > now);
+    public bool IsLiveAt(DateTime now) => RevokedAt is null && !IsExpiredAt(ExpiresAt, now);
 }
 
 /// <summary>

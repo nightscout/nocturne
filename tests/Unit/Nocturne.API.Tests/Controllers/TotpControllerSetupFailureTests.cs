@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -20,7 +21,8 @@ namespace Nocturne.API.Tests.Controllers;
 /// <summary>
 /// Tests the channel a refused setup travels on: <c>detail</c> carries the
 /// <see cref="TotpSetupFailure"/> value, because the generated remote wrapper forwards that field
-/// and drops the rest of the body, and the web app owns the wording.
+/// and drops the rest of the body, and the web app owns the wording. A caller whose session has
+/// ended is challenged and sets nothing up.
 /// </summary>
 public class TotpControllerSetupFailureTests
 {
@@ -31,13 +33,18 @@ public class TotpControllerSetupFailureTests
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
 
-    private TotpController CreateController()
+    private TotpController CreateController(string sessionId = LiveSession.Id)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = TestRequestServices.Build(clamped: false, s => s.AddActiveSubjects()),
+        };
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
             SubjectId = Guid.CreateVersion7(),
+            SessionId = sessionId,
         };
 
         return new TotpController(
@@ -55,6 +62,33 @@ public class TotpControllerSetupFailureTests
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Setup_FromAnEndedSession_IsChallengedAndGeneratesNoSecret()
+    {
+        var result = await CreateController(sessionId: "ended-session").Setup();
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        _totpService.Verify(s => s.GenerateSetupAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+        _subjectService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task VerifySetup_FromAnEndedSession_IsChallengedAndStoresNoAuthenticator()
+    {
+        var result = await CreateController(sessionId: "ended-session").VerifySetup(new TotpVerifySetupRequest
+        {
+            Code = "123456",
+            Label = "Label",
+            ChallengeToken = "token",
+        });
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        _totpService.Verify(
+            s => s.CompleteSetupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
     [Theory]

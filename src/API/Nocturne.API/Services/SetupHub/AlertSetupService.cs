@@ -230,7 +230,7 @@ public class AlertSetupService(
             var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
             if (rule is null)
             {
-                await writer.CreateAsync(
+                rearmed.Add(await writer.CreateAsync(
                     new NewAlertRule(
                         new AlertRuleWrite(
                             name, null, conditionType, conditionParams,
@@ -240,7 +240,7 @@ public class AlertSetupService(
                             ClientConfiguration: "{}"),
                         channelWrites,
                         StarterKind: kind),
-                    ct);
+                    ct));
                 continue;
             }
 
@@ -291,10 +291,10 @@ public class AlertSetupService(
             ?? throw new InvalidOperationException("No starter alert is switched on.");
 
         var channels = PrimaryChannels(rule, callerId).ToList();
-        var instanceId = await delivery.TestFireAsync(
+        var fired = await delivery.TestFireAsync(
             rule.Rule.Id, channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, db.TenantId, time.GetUtcNow().UtcDateTime), ct);
 
-        return await GetTestAsync(instanceId, ct);
+        return await GetTestAsync(fired.InstanceId, ct);
     }
 
     /// <exception cref="KeyNotFoundException">No test of a starter rule has this id.</exception>

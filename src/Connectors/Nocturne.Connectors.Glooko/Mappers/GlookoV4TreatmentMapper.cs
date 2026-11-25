@@ -241,15 +241,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     }
 
     /// <summary>
-    /// Maps standalone V2 Food records to CarbIntake records.
-    /// Used alongside <see cref="MapFoodsToConnectorEntries"/> — this creates the carb event
-    /// for the timeline, while the connector entries store the rich nutritional detail.
-    /// Filters out soft-deleted items.
-    /// </summary>
-    public List<CarbIntake> MapFoodsToCarbIntakes(GlookoBatchData batchData) =>
-        [.. MappableFoods(batchData).Select(ToCarbIntake)];
-
-    /// <summary>
     /// Maps standalone V2 Food records to connector food entry imports for the food catalog pipeline.
     /// Each import (with its Food catalog upsert payload) flows through the existing
     /// ConnectorFoodEntryService, and comes with the legacy id of its carb intake.
@@ -286,7 +277,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                         Energy = ToKilojoules(food.Calories),
                         Servings = portions.ToDecimal(),
                         ServingDescription = BuildServingDescription(food),
-                        Food = BuildFoodImport(food, externalFoodId),
+                        Food = BuildFoodImport(food, externalFoodId, carbValue),
                     },
                     FoodCarbIntakeLegacyId(food.Guid, foodDate, carbValue, occurrence)));
             }
@@ -302,12 +293,10 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// <summary>
     /// Builds a ConnectorFoodImport for upserting the food catalog record.
     /// </summary>
-    private static ConnectorFoodImport? BuildFoodImport(GlookoFood food, string externalFoodId)
+    private static ConnectorFoodImport? BuildFoodImport(GlookoFood food, string externalFoodId, double carbValue)
     {
         if (string.IsNullOrEmpty(externalFoodId) && string.IsNullOrEmpty(food.Name))
             return null;
-
-        var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
 
         return new ConnectorFoodImport
         {

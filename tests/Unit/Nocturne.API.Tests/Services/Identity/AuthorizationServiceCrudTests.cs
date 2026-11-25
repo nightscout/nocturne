@@ -395,6 +395,153 @@ public class AuthorizationServiceCrudTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CreateSubjectAsync_WithRolesThatDifferOnlyByCase_GrantsTheScopesOfTheNamesGiven()
+    {
+        ReturnsRolesDifferingByCase();
+        IReadOnlyCollection<string>? minted = null;
+
+        _mockDirectGrantService
+            .Setup(d => d.CreateAsync(
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid?, Guid, string, IReadOnlyCollection<string>, DateTime?, bool, string?, string?, Guid?, AuthAuditActor?, CancellationToken>(
+                (_, _, _, scopes, _, _, _, _, _, _, _) => minted = scopes)
+            .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
+            {
+                Id = Guid.CreateVersion7(),
+                Token = "noc_generated-token",
+                Label = "Cased",
+                Scopes = [Scope.GlucoseRead],
+                CreatedAt = DateTime.UtcNow,
+            }));
+
+        await _authorizationService.CreateSubjectAsync(
+            new LegacySubject { Name = "Cased", Roles = ["Foo"] }, maker: null);
+        minted.Should().Equal(Scope.TreatmentsRead);
+
+        await _authorizationService.CreateSubjectAsync(
+            new LegacySubject { Name = "Cased", Roles = ["foo"] }, maker: null);
+        minted.Should().Equal(Scope.GlucoseRead);
+
+        await _authorizationService.CreateSubjectAsync(
+            new LegacySubject { Name = "Cased", Roles = ["Foo", "foo"] }, maker: null);
+        minted.Should().BeEquivalentTo(Scope.TreatmentsRead, Scope.GlucoseRead);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task UpdateSubjectAsync_WithRolesThatDifferOnlyByCase_GrantsTheScopesOfTheNamesGiven()
+    {
+        var grant = await SeedGrantAsync("Cased", [Scope.GlucoseRead]);
+        ReturnsRolesDifferingByCase();
+
+        await _authorizationService.UpdateSubjectAsync(new LegacySubject
+        {
+            Id = grant.Id.ToString(),
+            Roles = ["Foo"],
+        });
+        (await StoredScopesAsync(grant.Id)).Should().Equal(Scope.TreatmentsRead);
+
+        await _authorizationService.UpdateSubjectAsync(new LegacySubject
+        {
+            Id = grant.Id.ToString(),
+            Roles = ["foo"],
+        });
+        (await StoredScopesAsync(grant.Id)).Should().Equal(Scope.GlucoseRead);
+
+        await _authorizationService.UpdateSubjectAsync(new LegacySubject
+        {
+            Id = grant.Id.ToString(),
+            Roles = ["Foo", "foo"],
+        });
+        (await StoredScopesAsync(grant.Id)).Should().BeEquivalentTo(Scope.TreatmentsRead, Scope.GlucoseRead);
+    }
+
+    private void ReturnsRolesDifferingByCase() =>
+        _mockRoleService
+            .Setup(r => r.GetAllRolesAsync())
+            .ReturnsAsync(
+            [
+                new AuthRoleModel { Id = Guid.NewGuid(), Name = "Foo", Permissions = ["api:treatments:read"] },
+                new AuthRoleModel { Id = Guid.NewGuid(), Name = "foo", Permissions = ["api:entries:read"] },
+            ]);
+
+    private async Task<List<string>> StoredScopesAsync(Guid grantId) =>
+        (await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId)).Scopes;
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("ADMIN")]
+    [InlineData("Admin")]
+    [InlineData("READABLE")]
+    [InlineData("Readable")]
+    public async Task CreateSubjectAsync_WithASeededRoleNameInAnotherCase_IsRefusedAsAnUnknownRole(string name)
+    {
+        _mockRoleService
+            .Setup(r => r.GetAllRolesAsync())
+            .ReturnsAsync(
+            [
+                new AuthRoleModel { Id = Guid.NewGuid(), Name = "admin", Permissions = ["*"] },
+                new AuthRoleModel { Id = Guid.NewGuid(), Name = "readable", Permissions = ["*:*:read"] },
+            ]);
+
+        var create = () => _authorizationService.CreateSubjectAsync(
+            new LegacySubject { Name = "Cased", Roles = [name] }, maker: null);
+
+        await create.Should().ThrowAsync<ArgumentException>();
+        _mockDirectGrantService.Verify(
+            d => d.CreateAsync(
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("admin", Scope.FullAccess)]
+    [InlineData("readable", Scope.GlucoseRead)]
+    public async Task CreateSubjectAsync_WithASeededRoleNameNotStored_ResolvesItExactly(string name, string expected)
+    {
+        _mockRoleService.Setup(r => r.GetAllRolesAsync()).ReturnsAsync([]);
+        IReadOnlyCollection<string>? minted = null;
+
+        _mockDirectGrantService
+            .Setup(d => d.CreateAsync(
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid?, Guid, string, IReadOnlyCollection<string>, DateTime?, bool, string?, string?, Guid?, AuthAuditActor?, CancellationToken>(
+                (_, _, _, scopes, _, _, _, _, _, _, _) => minted = scopes)
+            .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
+            {
+                Id = Guid.CreateVersion7(),
+                Token = "noc_generated-token",
+                Label = "Seeded",
+                Scopes = [Scope.GlucoseRead],
+                CreatedAt = DateTime.UtcNow,
+            }));
+
+        await _authorizationService.CreateSubjectAsync(
+            new LegacySubject { Name = "Seeded", Roles = [name] }, maker: null);
+
+        minted.Should().Contain(expected);
+        if (expected == Scope.FullAccess)
+        {
+            minted.Should().Contain(Scope.AllScopes);
+        }
+        else
+        {
+            minted.Should().NotContain(Scope.FullAccess);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task UpdateSubjectAsync_ReadingBackAFullAccessGrant_DoesNotFreezeItsScopes()
     {
         var grant = await SeedGrantAsync("Boss", [Scope.FullAccess]);

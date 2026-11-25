@@ -13,6 +13,7 @@ using Xunit;
 using Nocturne.Core.Contracts.V4;
 using SyncDataType = Nocturne.Connectors.Core.Models.SyncDataType;
 using SyncRequest = Nocturne.Connectors.Core.Models.SyncRequest;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -53,6 +54,9 @@ public class NightscoutConnectorPaginationTests
                 .ReturnsAsync(true);
 
             var treatmentMock = new Mock<ITreatmentPublisher>();
+            treatmentMock.Setup(p => p.GetOpenSpanTreatmentsAsync(
+                    It.IsAny<string>(), It.IsAny<StoredTreatmentKey?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
             treatmentMock.Setup(p => p.PublishTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>(
@@ -73,6 +77,8 @@ public class NightscoutConnectorPaginationTests
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisher);
     }
 
@@ -385,6 +391,8 @@ public class NightscoutConnectorPaginationTests
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisherMock.Object);
 
         var request = new Nocturne.Connectors.Core.Models.SyncRequest
@@ -619,6 +627,8 @@ public class NightscoutConnectorPaginationTests
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisherMock.Object);
 
         var request = new Nocturne.Connectors.Core.Models.SyncRequest

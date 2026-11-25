@@ -7,6 +7,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -81,6 +82,31 @@ public class EntryReadServiceHistoryTests
         });
 
         result.Select(e => e.Id).Should().Equal(second.Id.ToString(), third.Id.ToString());
+    }
+
+    [Fact]
+    public async Task SearchBySrvModified_ServesALiveMeterReading_WhoseIdALaterDeletedSensorReadingShares()
+    {
+        var live = Mg(Cursor.AddHours(-2), written: Cursor.AddMinutes(1), legacyId: "shared-id");
+        var deleted = Sg(Cursor.AddHours(-1), written: Cursor.AddMinutes(2), source: "cgm", legacyId: "shared-id");
+        ServeHistory(_mgRepo, new[] { live });
+        ServeGlucoseHistory(new[] { deleted }, deleted: [deleted.Id]);
+
+        var result = await SearchBySrvModified();
+
+        result.Select(e => (e.Type, e.Id)).Should().Equal(("mbg", "shared-id"));
+    }
+
+    [Fact]
+    public async Task SearchBySrvModified_HidesALiveSensorReading_ThatALaterDeleteOfTheSameReadingSupersedes()
+    {
+        var live = Sg(Cursor.AddHours(-1), written: Cursor.AddMinutes(1), source: "cgm", legacyId: "shared-id");
+        var deleted = Sg(Cursor.AddHours(-1), written: Cursor.AddMinutes(2), source: "cgm", legacyId: "shared-id");
+        ServeGlucoseHistory(new[] { live, deleted }, deleted: [deleted.Id]);
+
+        var result = await SearchBySrvModified();
+
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -219,6 +245,15 @@ public class EntryReadServiceHistoryTests
         return after.Where((r, i) => i < limit || Mills(r.ModifiedAt) == lastMills).Select(Row).ToList();
     }
 
+    private async Task<IReadOnlyList<Entry>> SearchBySrvModified() =>
+        await CreateSut().QueryAsync(new EntryQuery
+        {
+            Find = $"find[srvModified][$gt]={CursorMills}",
+            Count = 10,
+            ReverseResults = true,
+            SortField = ReadSortField.SrvModified,
+        });
+
     private EntryReadService CreateSut() =>
         new(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, _demoMode.Object,
             NullLogger<EntryReadService>.Instance);
@@ -227,9 +262,10 @@ public class EntryReadServiceHistoryTests
 
     private static long Mills(DateTime value) => new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-    private static SensorGlucose Sg(DateTime at, DateTime written, string source) => new()
+    private static SensorGlucose Sg(DateTime at, DateTime written, string source, string? legacyId = null) => new()
     {
         Id = Guid.CreateVersion7(),
+        LegacyId = legacyId,
         Timestamp = at,
         Mgdl = 120,
         Device = "sensor",
@@ -247,9 +283,10 @@ public class EntryReadServiceHistoryTests
         ModifiedAt = written,
     };
 
-    private static MeterGlucose Mg(DateTime at, DateTime written) => new()
+    private static MeterGlucose Mg(DateTime at, DateTime written, string? legacyId = null) => new()
     {
         Id = Guid.CreateVersion7(),
+        LegacyId = legacyId,
         Timestamp = at,
         Mgdl = 140,
         Device = "meter",

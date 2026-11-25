@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.ProfileActivations;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -903,9 +904,14 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <remarks>
-    /// The connector's crawl state goes with its data: a resume point it kept would answer the next
+    /// The connector's resume state goes with its data: a resume point it kept would answer the next
     /// sync's re-import with only what arrived since, and report that as a success. It is cleared
-    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import.
+    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import. A
+    /// purge that allows re-import clears the vendor state too, for the same reason: a vendor cursor
+    /// or a fingerprint of what was published (Glooko's SSV2 positions, Tandem's profiles) would
+    /// answer the re-import with only what changed since. A purge that keeps the data out clears
+    /// what the connector's registration declares
+    /// (<see cref="ConnectorRegistrationAttribute.KeptOutPurgeClears"/>).
     /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
@@ -913,7 +919,8 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken
     )
     {
-        await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
+        await _configurations.ClearStateAsync(
+            metadata.ConnectorName, PurgeClears(metadata, allowReimport), cancellationToken);
 
         var deletedCounts = await DeleteAllAsync(RecordSelector.ForSource(metadata.DataSourceId), allowReimport, cancellationToken);
         foreach (var purge in PurgesOf(metadata))
@@ -924,6 +931,9 @@ public class DataSourceService : IDataSourceService
 
         return deletedCounts;
     }
+
+    internal static ConnectorStateSlots PurgeClears(ConnectorMetadataService.ConnectorDisplayInfo metadata, bool allowReimport) =>
+        allowReimport ? ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor : metadata.KeptOutPurgeClears;
 
     private IEnumerable<IConnectorDataPurge> PurgesOf(ConnectorMetadataService.ConnectorDisplayInfo metadata) =>
         _dataPurges.Where(p => p.ConnectorName.Equals(metadata.ConnectorName, StringComparison.OrdinalIgnoreCase));
@@ -1122,6 +1132,10 @@ public class DataSourceService : IDataSourceService
                 "Failed to delete demo data");
         }
     }
+
+    /// <inheritdoc />
+    public Task<bool> HoldsDemoDataAsync(CancellationToken cancellationToken = default) =>
+        _demoPurge.HoldsDataAsync(cancellationToken);
 
     /// <inheritdoc />
     public async Task<DataSourceStats> GetDataSourceStatsAsync(

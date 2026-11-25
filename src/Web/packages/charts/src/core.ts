@@ -15,6 +15,7 @@ export * from "./print/patterns.js";
 export * from "./icons/marker-shapes.js";
 export type { IconProps } from "./icons/types.js";
 export * from "./view/track-layout.js";
+export * from "./view/nightscout-sizing.js";
 export * from "./view/axis-ticks.js";
 export * from "./view/basal-presentation.js";
 export * from "./view/marker-label-layout.js";

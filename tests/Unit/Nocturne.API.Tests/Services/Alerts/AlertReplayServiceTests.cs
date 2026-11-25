@@ -704,18 +704,19 @@ public class AlertReplayServiceTests
             .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
                 asOf is null ? null : new PumpSnapshot { Timestamp = asOf.Value.AddMinutes(-1), BatteryPercent = 80 });
 
-        _stateSpanService.Setup(s => s.GetActiveAtAsync(
-                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
-                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpanCategory _, string? _, DateTime at, CancellationToken _) =>
-                at >= spanStart
-                    ? new StateSpan
-                    {
-                        Category = StateSpanCategory.PumpMode,
-                        State = PumpModeState.Suspended.ToString(),
-                        StartTimestamp = spanStart,
-                    }
-                    : null);
+        var suspension = new StateSpan
+        {
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = spanStart,
+        };
+        _stateSpanService.Setup(s => s.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpanCategory? _, string? _, DateTime? _, DateTime? to, string? _, bool? _,
+                    int _, int _, bool _, CancellationToken _) =>
+                to is null || suspension.StartTimestamp <= to ? [suspension] : Array.Empty<StateSpan>());
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 

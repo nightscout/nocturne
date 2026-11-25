@@ -51,7 +51,7 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         _clock,
-        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     /// <param name="role">A role seed slug, as every membership an invite creates carries one.</param>
     private void SeedMembership(

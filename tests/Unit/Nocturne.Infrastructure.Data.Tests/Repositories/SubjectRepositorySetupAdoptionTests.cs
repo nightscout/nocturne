@@ -315,6 +315,8 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
             .Select(i => $"identity {i.Id} {i.SubjectId} {i.Email}"));
         lines.AddRange((await db.RefreshTokens.AsNoTracking().ToListAsync())
             .Select(t => $"token {t.Id} {t.RevokedAt}"));
+        lines.AddRange((await db.Tenants.AsNoTracking().ToListAsync())
+            .Select(t => $"tenant {t.Id} {t.SetupOwnerSubjectId}"));
         lines.Sort(StringComparer.Ordinal);
         return string.Join('\n', lines);
     }
@@ -331,12 +333,20 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
         var created = NewSubject("Owner Name", s => s.Username = "owner");
         if (createdIsOwnerOfSetup)
             Member(_tenant, created, owner: true);
+        RecordSetupOwner(created);
         GlobalRole(created, _adminRole);
         var holder = NewSubject("Holder", s => s.Username = null);
         var identity = Link(holder, "ext-holder");
         shapeHolder?.Invoke(holder, identity);
         shapeCreated?.Invoke(created);
         return (created, holder, identity);
+    }
+
+    private void RecordSetupOwner(Guid? subject)
+    {
+        using var db = _db.CreateContext();
+        db.Tenants.Single(t => t.Id == _tenant).SetupOwnerSubjectId = subject;
+        db.SaveChanges();
     }
 
     private async Task AssertAdoptionRefusedAsync(Guid created, Guid holder, Guid identity, string slug = Slug)
@@ -353,17 +363,12 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
     public async Task TheSubjectHoldingTheIdentityBecomesTheOwnerAndTheOwnerStepSubjectGoes()
     {
         var (created, holder, identity) = Adoption(shapeHolder: (h, _) => NameSubjectInATable("refresh token", h));
-        using (var recording = _db.CreateContext())
-        {
-            recording.Tenants.Single(t => t.Id == _tenant).SetupOwnerSubjectId = created;
-            recording.SaveChanges();
-        }
 
         (await Subjects().AdoptForSetupAsync(created, holder, identity, Slug, CancellationToken.None)).Should().BeTrue();
 
         await using var db = _db.CreateContext();
         (await db.Tenants.AsNoTracking().SingleAsync(t => t.Id == _tenant)).SetupOwnerSubjectId
-            .Should().BeNull("discarding the owner-step subject ends the setup owner record");
+            .Should().BeNull("the adoption is the first credential store, which claims the setup");
         var adopted = await db.Subjects.AsNoTracking().SingleAsync(s => s.Id == holder);
         adopted.Should().BeEquivalentTo(new { Name = "Owner Name", Username = "owner", IsActive = true });
         (await db.TenantMembers.AsNoTracking().Where(m => m.TenantId == _tenant).Select(m => m.SubjectId).ToListAsync())
@@ -420,6 +425,17 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
         var elsewhere = Link(NewSubject("Elsewhere"), "ext-elsewhere");
 
         await AssertAdoptionRefusedAsync(created, holder, elsewhere);
+    }
+
+    [Theory]
+    [InlineData("another subject")]
+    [InlineData("no subject")]
+    public async Task AdoptionRefusesAnOwnerStepSubjectTheSetupOwnerRecordNamesNot(string recorded)
+    {
+        var (created, holder, identity) = Adoption();
+        RecordSetupOwner(recorded == "another subject" ? NewSubject("Other") : null);
+
+        await AssertAdoptionRefusedAsync(created, holder, identity);
     }
 
     [Fact]

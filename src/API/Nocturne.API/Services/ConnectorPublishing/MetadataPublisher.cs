@@ -38,7 +38,6 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly IHeartRateService _heartRateService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly IActivityDedupRepository _activityDedup;
-    private readonly IConnectorConfigurationRepository _configurations;
     private readonly IProfileActivationRepository _profileActivations;
     private readonly ProfileActivationWriter _profileActivationWriter;
 
@@ -56,7 +55,6 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
         IActivityDedupRepository activityDedup,
-        IConnectorConfigurationRepository configurations,
         IProfileActivationRepository profileActivations,
         ProfileActivationWriter profileActivationWriter,
         IAuditContext auditContext,
@@ -78,7 +76,6 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         _heartRateService = heartRateService ?? throw new ArgumentNullException(nameof(heartRateService));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
         _activityDedup = activityDedup ?? throw new ArgumentNullException(nameof(activityDedup));
-        _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
     }
 
     /// <summary>
@@ -428,29 +425,4 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken = default)
         => _stateSpanService.GetLatestNonActivityTimestampAsync(source, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
-        string source,
-        CancellationToken cancellationToken = default)
-        => _configurations.GetBackfillLowWaterMarksAsync(source, cancellationToken);
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Same-key races (a manual sync or cursor-reset job racing the background sync) stay
-    /// last-writer-wins per key; keys a write does not name keep their values; see
-    /// <see cref="Infrastructure.Data.Repositories.ConnectorConfigurationRepository"/>.
-    /// </remarks>
-    public async Task SetBackfillLowWaterMarksAsync(
-        string source,
-        IReadOnlyDictionary<string, DateTime?> changes,
-        CancellationToken cancellationToken = default)
-    {
-        if (!await _configurations.SetBackfillLowWaterMarksAsync(source, changes, cancellationToken))
-        {
-            Logger.LogWarning(
-                "No connector configuration found for {Source}; cannot persist backfill low-water mark",
-                source);
-        }
-    }
 }

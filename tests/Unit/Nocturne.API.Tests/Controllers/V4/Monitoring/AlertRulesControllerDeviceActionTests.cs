@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Alerts;
@@ -43,14 +44,14 @@ public class AlertRulesControllerDeviceActionTests
             new TenantMembershipRepository(factory, AccountLinkRoutes.Off),
             new SubjectRepository(factory, AccountLinkRoutes.Off),
             new AlertRepository(factory),
-            new AlertRuleRepository(factory),
+            new AlertRuleRepository(factory, TimeProvider.System),
             MockTenantAccessor.Create(Tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
     }

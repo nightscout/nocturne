@@ -56,7 +56,7 @@ public class MigrationJobServiceTests
         var (service, _) = CreateService();
         var tenant = Tenant(Guid.NewGuid());
 
-        var job = await service.StartMigrationAsync(ApiRequest(), tenant);
+        var job = await service.StartMigrationAsync(ApiRequest(), tenant, starter: null);
 
         var status = await service.GetStatusAsync(tenant.TenantId, job.Id);
 
@@ -70,7 +70,7 @@ public class MigrationJobServiceTests
         var owner = Tenant(Guid.NewGuid());
         var other = Tenant(Guid.NewGuid());
 
-        var job = await service.StartMigrationAsync(ApiRequest(), owner);
+        var job = await service.StartMigrationAsync(ApiRequest(), owner, starter: null);
 
         // A different tenant must not be able to read the job, even with the correct id.
         await Assert.ThrowsAsync<KeyNotFoundException>(
@@ -84,7 +84,7 @@ public class MigrationJobServiceTests
         var owner = Tenant(Guid.NewGuid());
         var other = Tenant(Guid.NewGuid());
 
-        var job = await service.StartMigrationAsync(ApiRequest(), owner);
+        var job = await service.StartMigrationAsync(ApiRequest(), owner, starter: null);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.CancelAsync(other.TenantId, job.Id));
@@ -100,8 +100,8 @@ public class MigrationJobServiceTests
         var tenantA = Tenant(Guid.NewGuid());
         var tenantB = Tenant(Guid.NewGuid());
 
-        var jobA = await service.StartMigrationAsync(ApiRequest(), tenantA);
-        await service.StartMigrationAsync(ApiRequest(), tenantB);
+        var jobA = await service.StartMigrationAsync(ApiRequest(), tenantA, starter: null);
+        await service.StartMigrationAsync(ApiRequest(), tenantB, starter: null);
 
         var historyA = await service.GetHistoryAsync(tenantA.TenantId);
 
@@ -117,7 +117,7 @@ public class MigrationJobServiceTests
         // The detached migration task writes under whatever tenant it is given, so it refuses to
         // start without one.
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.StartMigrationAsync(ApiRequest(), tenantContext: null));
+            () => service.StartMigrationAsync(ApiRequest(), tenantContext: null, starter: null));
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public class MigrationJobServiceTests
         var (service, _) = CreateService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.StartMigrationAsync(ApiRequest(), Tenant(Guid.Empty)));
+            () => service.StartMigrationAsync(ApiRequest(), Tenant(Guid.Empty), starter: null));
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class MigrationJobServiceTests
     {
         var (service, provider) = CreateService();
         var tenant = Tenant(Guid.NewGuid());
-        var job = await service.StartMigrationAsync(ApiRequest(), tenant);
+        var job = await service.StartMigrationAsync(ApiRequest(), tenant, starter: null);
 
         // A fresh service over the same store models the post-restart process.
         var (restarted, _) = CreateService(provider);
@@ -155,12 +155,12 @@ public class MigrationJobServiceTests
         var tenantA = Tenant(Guid.NewGuid());
         var tenantB = Tenant(Guid.NewGuid());
 
-        await service.StartMigrationAsync(ApiRequest(), tenantA);
-        await service.StartMigrationAsync(ApiRequest(), tenantB);
+        await service.StartMigrationAsync(ApiRequest(), tenantA, starter: null);
+        await service.StartMigrationAsync(ApiRequest(), tenantB, starter: null);
 
         var sourcesA = await service.GetSourcesAsync(tenantA.TenantId);
 
-        sourcesA.Should().ContainSingle(s => s.NightscoutUrl == "https://example-nightscout.invalid");
+        sourcesA.Should().ContainSingle(s => s.NightscoutUrl == "example-nightscout.invalid");
 
         var sourcesC = await service.GetSourcesAsync(Guid.NewGuid());
         sourcesC.Should().BeEmpty();
@@ -176,10 +176,10 @@ public class MigrationJobServiceTests
         var (service, _) = CreateService();
         var tenant = Tenant(Guid.NewGuid());
 
-        var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+        var first = await service.StartMigrationAsync(ApiRequest(), tenant, starter: null);
 
         var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
-            () => service.StartMigrationAsync(ApiRequest(), tenant));
+            () => service.StartMigrationAsync(ApiRequest(), tenant, starter: null));
 
         refused.JobId.Should().Be(first.Id, "the conflict points at the job that holds the slot");
     }
@@ -189,10 +189,10 @@ public class MigrationJobServiceTests
     {
         var (service, _) = CreateService();
         var tenant = Tenant(Guid.NewGuid());
-        var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+        var first = await service.StartMigrationAsync(ApiRequest(), tenant, starter: null);
         await service.CancelAsync(tenant.TenantId, first.Id);
 
-        var second = await service.StartMigrationAsync(ApiRequest(), tenant);
+        var second = await service.StartMigrationAsync(ApiRequest(), tenant, starter: null);
 
         second.Id.Should().NotBe(first.Id);
         (await service.GetStatusAsync(tenant.TenantId, first.Id)).State.Should().Be(MigrationJobState.Cancelled);
@@ -204,8 +204,8 @@ public class MigrationJobServiceTests
     {
         var (service, _) = CreateService();
 
-        var first = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
-        var second = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
+        var first = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()), starter: null);
+        var second = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()), starter: null);
 
         second.Id.Should().NotBe(first.Id);
     }
@@ -244,11 +244,11 @@ public class MigrationJobServiceTests
         using var http = new HttpClient(new StallingHandler(counting)) { BaseAddress = new Uri("https://example-nightscout.invalid/") };
 
         var count = job.FetchCollectionCountAsync(http, "entries", CancellationToken.None);
-        await counting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await counting.Task.WaitAsync(Eventually.DefaultPatience);
         count.IsCompleted.Should().BeFalse();
         clock.Advance(TimeSpan.FromSeconds(30));
 
-        (await count.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull("the run goes on without a total");
+        (await count.WaitAsync(Eventually.DefaultPatience)).Should().BeNull("the run goes on without a total");
     }
 
     [Fact]

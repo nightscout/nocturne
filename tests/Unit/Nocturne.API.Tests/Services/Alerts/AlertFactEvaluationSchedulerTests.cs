@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -26,8 +27,6 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
 {
     private static readonly TenantContext TenantA = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"), "a", "A", true, false);
     private static readonly TenantContext TenantB = new(Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002"), "b", "B", true, false);
-
-    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(10);
 
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly RecordingEvaluator _evaluator = new();
@@ -51,7 +50,8 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         _services.Dispose();
     }
 
-    private sealed record Evaluation(Guid TenantId, IReadOnlySet<string> Facts, DateTimeOffset At, string? Ambient);
+    private sealed record Evaluation(
+        Guid TenantId, IReadOnlySet<string> Facts, IReadOnlySet<Guid> Rules, DateTimeOffset At, string? Ambient);
 
     private static readonly AsyncLocal<string?> RequestAmbient = new();
 
@@ -65,9 +65,9 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         public int Cancelled;
 
         /// <summary>Stands for an evaluation pass; <see cref="Hold"/> keeps it inside its delivery.</summary>
-        public async Task RunAsync(Guid tenantId, IReadOnlySet<string> facts, CancellationToken ct)
+        public async Task RunAsync(Guid tenantId, MovedFacts moved, CancellationToken ct)
         {
-            var evaluation = new Evaluation(tenantId, facts, Clock!.GetUtcNow(), RequestAmbient.Value);
+            var evaluation = new Evaluation(tenantId, moved.Facts, moved.Rules, Clock!.GetUtcNow(), RequestAmbient.Value);
             lock (Started) Started.Add(evaluation);
             _started.Writer.TryWrite(evaluation);
             try
@@ -83,7 +83,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
             }
         }
 
-        public async Task<Evaluation> NextAsync() => await _started.Reader.ReadAsync().AsTask().WaitAsync(Guard);
+        public async Task<Evaluation> NextAsync() => await _started.Reader.ReadAsync().AsTask().WaitAsync(Eventually.DefaultPatience);
 
         public int Count
         {
@@ -93,9 +93,10 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
 
     private sealed class ScopedEvaluator(RecordingEvaluator recording, ITenantAccessor tenant) : ICanonicalAlertEvaluator
     {
-        public async Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+        public async Task<bool> EvaluateAsync(
+            MovedFacts moved, ReadingReport report = ReadingReport.Here, CancellationToken ct = default)
         {
-            await recording.RunAsync(tenant.TenantId, moved.Facts, ct);
+            await recording.RunAsync(tenant.TenantId, moved, ct);
             return true;
         }
     }
@@ -185,7 +186,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         stopping.IsCompleted.Should().BeFalse("the host waits for the running evaluation");
 
         _evaluator.Hold.SetResult();
-        await stopping.WaitAsync(Guard);
+        await stopping.WaitAsync(Eventually.DefaultPatience);
         _evaluator.Finished.Should().Be(1);
     }
 
@@ -200,7 +201,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         stopping.IsCompleted.Should().BeFalse();
 
         _evaluator.Hold.SetResult();
-        await stopping.WaitAsync(Guard);
+        await stopping.WaitAsync(Eventually.DefaultPatience);
         _evaluator.Finished.Should().Be(1);
         _evaluator.Cancelled.Should().Be(0, "stopping alone cancels nothing");
     }
@@ -216,16 +217,9 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         var stopping = _scheduler.StoppedAsync(timeout.Token);
         timeout.Cancel();
 
-        await stopping.WaitAsync(Guard);
-        await WaitUntilAsync(() => Volatile.Read(ref _evaluator.Cancelled) == 1);
+        await stopping.WaitAsync(Eventually.DefaultPatience);
+        await Eventually.UntilAsync("the running evaluation to be cancelled", () => Volatile.Read(ref _evaluator.Cancelled) == 1);
         _evaluator.Finished.Should().Be(0);
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var guard = new CancellationTokenSource(Guard);
-        while (!condition())
-            await Task.Delay(TimeSpan.FromMilliseconds(5), guard.Token);
     }
 
     [Fact]
@@ -331,6 +325,81 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         _scheduler.Dispose();
         _time.Advance(AlertFactEvaluationScheduler.MaxWait);
         await WriteAsync(TenantA, Change(typeof(SensorGlucose)));
+
+        _evaluator.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ASavedRuleIsEvaluatedAfterTheDebounceWithNoFactMoved()
+    {
+        var rule = Guid.CreateVersion7();
+        var saved = _time.GetUtcNow();
+
+        _scheduler.Moved(TenantA, MovedFacts.Saved([rule]));
+        _evaluator.Count.Should().Be(0);
+        _time.Advance(AlertFactEvaluationScheduler.Debounce);
+
+        var evaluation = await _evaluator.NextAsync();
+        evaluation.At.Should().Be(saved + AlertFactEvaluationScheduler.Debounce);
+        evaluation.Rules.Should().Equal(rule);
+        evaluation.Facts.Should().BeEmpty();
+        evaluation.TenantId.Should().Be(TenantA.TenantId);
+    }
+
+    [Fact]
+    public async Task SavedRulesAndWritesPendingTogetherAreOneEvaluation()
+    {
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+
+        _scheduler.Moved(TenantA, MovedFacts.Saved([first]));
+        await WriteAsync(TenantA, Change(typeof(PumpSnapshot)));
+        _scheduler.Moved(TenantA, MovedFacts.Saved([second]));
+        _time.Advance(AlertFactEvaluationScheduler.Debounce);
+        var evaluation = await _evaluator.NextAsync();
+        _time.Advance(TimeSpan.FromMinutes(1));
+
+        _evaluator.Count.Should().Be(1);
+        evaluation.Rules.Should().BeEquivalentTo([first, second]);
+        evaluation.Facts.Should().Contain(ContextFactWrites.Pump);
+    }
+
+    [Fact]
+    public async Task ASavedRuleJoinsAGlucoseEvaluationThatHasNotBegun()
+    {
+        var rule = Guid.CreateVersion7();
+        var before = _time.GetUtcNow();
+        _scheduler.Moved(TenantA, MovedFacts.Saved([rule]));
+
+        await WriteAsync(TenantA, Change(typeof(SensorGlucose)));
+
+        var evaluation = await _evaluator.NextAsync();
+        evaluation.At.Should().Be(before, "the reading waits for no debounce and takes the save with it");
+        evaluation.Rules.Should().Equal(rule);
+        evaluation.Facts.Should().Contain(ContextFactWrites.Glucose);
+    }
+
+    [Fact]
+    public async Task StoppingStartsAPendingRuleEvaluationAtOnce()
+    {
+        var rule = Guid.CreateVersion7();
+        var saved = _time.GetUtcNow();
+        _scheduler.Moved(TenantA, MovedFacts.Saved([rule]));
+
+        await _scheduler.StoppedAsync(CancellationToken.None).WaitAsync(Eventually.DefaultPatience);
+
+        var evaluation = await _evaluator.NextAsync();
+        evaluation.At.Should().Be(saved, "a stopping host waits for no debounce");
+        evaluation.Rules.Should().Equal(rule);
+        _evaluator.Finished.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ASaveOfNoRuleEvaluatesNothing()
+    {
+        _scheduler.Moved(TenantA, MovedFacts.Saved([]));
+
+        _time.Advance(AlertFactEvaluationScheduler.MaxWait);
 
         _evaluator.Count.Should().Be(0);
     }

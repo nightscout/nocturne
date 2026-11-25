@@ -58,11 +58,6 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
@@ -86,13 +81,13 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public readonly Mock<IAlertRuleRepository> Rules = new();
         public readonly FakeTimeProvider Time = new(Opened);
 
-        public AlertRepository Repository() => new(new Factory(Context));
+        public AlertRepository Repository() => new(new SuppliedContextFactory(Context));
 
         /// <summary>A repository that runs a hook at a chosen step, to interleave two processes.</summary>
-        public HookedRepository Hooked() => new(new Factory(Context));
+        public HookedRepository Hooked() => new(new SuppliedContextFactory(Context));
 
         public IAlertAcknowledgementService RealAcknowledgements() => new AlertAcknowledgementService(
-            new Factory(Context), Mock.Of<ISignalRBroadcastService>(), Mock.Of<ITenantMemberService>(),
+            new SuppliedContextFactory(Context), Mock.Of<ISignalRBroadcastService>(), Mock.Of<ITenantMemberService>(),
             Mock.Of<IEngineAlarmRelay>(), NullLogger<AlertAcknowledgementService>.Instance, Time);
 
         public async Task UnsettleOpeningAsync(Guid excursion)
@@ -103,7 +98,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             await db.SaveChangesAsync();
         }
 
-        public AlertTrackerRepository Tracker() => new(new Factory(Context));
+        public AlertTrackerRepository Tracker() => new(new SuppliedContextFactory(Context));
 
         public IServiceProvider Process(AlertRepository? repository = null)
         {
@@ -128,7 +123,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
                 .AddSingleton<TimeProvider>(Time)
                 .AddSingleton(tenantAccessor)
-                .AddSingleton<INocturneDbContextFactory>(new Factory(Context))
+                .AddSingleton<INocturneDbContextFactory>(new SuppliedContextFactory(Context))
                 .AddSingleton<IAlertRepository>(repository ?? Repository())
                 .AddSingleton(Rules.Object)
                 .AddSingleton(Acknowledgements.Object)
@@ -632,8 +627,8 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
         var firstSweep = tenant.SweepAsync(tenant.Process(first), AfterLease);
         var secondSweep = tenant.SweepAsync(tenant.Process(second), AfterLease);
-        await secondSweep.ContinueWith(_ => secondDone.TrySetResult(), TaskScheduler.Default).WaitAsync(TimeSpan.FromSeconds(30));
-        await Task.WhenAll(firstSweep, secondSweep).WaitAsync(TimeSpan.FromSeconds(30));
+        await secondSweep.ContinueWith(_ => secondDone.TrySetResult(), TaskScheduler.Default).WaitAsync(Eventually.DefaultPatience);
+        await Task.WhenAll(firstSweep, secondSweep).WaitAsync(Eventually.DefaultPatience);
 
         tenant.Sends.Should().Be(1, "the second sweep's take-up compares the value it read, which the first changed");
     }

@@ -1,21 +1,25 @@
+import { AlertLimitFact, ForecastCurve } from "@nocturne/api-client";
 import type { MetPoint } from "../types.js";
 import { formatGlucose } from "./format.js";
 
 /** The words for each forecast curve. A curve this build does not know is shown as the engine sent it. */
-const CURVE_NAMES: Record<string, string> = {
-  default: "Forecast",
-  iob: "IOB forecast",
-  cob: "COB forecast",
-  uam: "UAM forecast",
-  zt: "Zero temp forecast",
+export const CURVE_NAMES: Record<ForecastCurve, string> = {
+  [ForecastCurve.Default]: "Default forecast",
+  [ForecastCurve.Iob]: "IOB forecast",
+  [ForecastCurve.Cob]: "COB forecast",
+  [ForecastCurve.Uam]: "UAM forecast",
+  [ForecastCurve.Zt]: "Zero temp forecast",
 };
 
 /** The words for each fact a limit can name. A fact this build does not know is shown as the engine sent it. */
-const LIMIT_FACT_NAMES: Record<string, string> = {
-  target_low: "target low",
-  target_high: "target high",
-  latest_glucose: "latest glucose",
+export const LIMIT_FACT_NAMES: Record<AlertLimitFact, string> = {
+  [AlertLimitFact.TargetLow]: "target low",
+  [AlertLimitFact.TargetHigh]: "target high",
+  [AlertLimitFact.LatestGlucose]: "latest glucose",
 };
+
+const isForecastCurve = (value: string): value is ForecastCurve => Object.values<string>(ForecastCurve).includes(value);
+const isLimitFact = (value: string): value is AlertLimitFact => Object.values<string>(AlertLimitFact).includes(value);
 
 function minutes(offset: number): string {
   return offset === 1 ? "1 minute" : `${offset} minutes`;
@@ -27,7 +31,7 @@ function minutes(offset: number): string {
  */
 function comparedWith(point: MetPoint, unit: "mg/dL" | "mmol/L"): string {
   if (point.limitFact === undefined || point.limit === undefined) return "";
-  const fact = LIMIT_FACT_NAMES[point.limitFact] ?? point.limitFact;
+  const fact = isLimitFact(point.limitFact) ? LIMIT_FACT_NAMES[point.limitFact] : point.limitFact;
   const offset = point.limitOffset ?? 0;
   const source =
     offset > 0
@@ -51,7 +55,8 @@ export function describeMetBy(points: MetPoint[] | undefined, unit: "mg/dL" | "m
       case "threshold":
         return [{ key, label: "Glucose", value: `${formatGlucose(point.value, unit)}${comparedWith(point, unit)}` }];
       case "predicted": {
-        const curve = point.curve === undefined ? "Forecast" : (CURVE_NAMES[point.curve] ?? point.curve);
+        const curve =
+          point.curve === undefined ? "Forecast" : isForecastCurve(point.curve) ? CURVE_NAMES[point.curve] : point.curve;
         const at = point.offsetMinutes === undefined ? "" : ` in ${minutes(point.offsetMinutes)}`;
         return [{ key, label: curve, value: `${formatGlucose(point.value, unit)}${at}${comparedWith(point, unit)}` }];
       }

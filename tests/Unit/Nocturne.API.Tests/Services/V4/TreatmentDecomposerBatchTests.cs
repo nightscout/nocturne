@@ -7,7 +7,6 @@ using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
@@ -45,11 +44,13 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
     private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new Mock<IBasalRateResolver>().AnswersBasalRates(_ => null);
     private readonly TreatmentDecomposer _decomposer;
+    private readonly SentRecordingKeys _keys;
 
     public TreatmentDecomposerBatchTests()
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        _keys = new SentRecordingKeys(new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System));
 
         _bolusRepoMock = new Mock<IBolusRepository>();
         _carbRepoMock = new Mock<ICarbIntakeRepository>();
@@ -118,26 +119,21 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
     private TreatmentDecomposer CreateDecomposer(IDeviceService deviceService)
     {
-        return new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            _bolusRepoMock.Object,
-            _tempBasalRepoMock.Object,
-            _carbRepoMock.Object,
-            _bgCheckRepoMock.Object,
-            _noteRepoMock.Object,
-            _deviceEventRepoMock.Object,
-            _bolusCalcRepoMock.Object,
-            _stateSpanServiceMock.Object,
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            _treatmentFoodServiceMock.Object,
-            deviceService,
-            Mock.Of<IPatientDeviceStamper>(),
-            _activeProfileResolverMock.Object,
-            _insulinRepoMock.Object,
-            TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
-            Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+        return TreatmentDecomposerDoubles.Build(
+            _context.AsFactory(), _keys,
+            bolus: _bolusRepoMock.Object,
+            tempBasal: _tempBasalRepoMock.Object,
+            carbIntake: _carbRepoMock.Object,
+            bgCheck: _bgCheckRepoMock.Object,
+            note: _noteRepoMock.Object,
+            deviceEvent: _deviceEventRepoMock.Object,
+            bolusCalculation: _bolusCalcRepoMock.Object,
+            stateSpans: _stateSpanServiceMock.Object,
+            foods: _treatmentFoodServiceMock.Object,
+            devices: deviceService,
+            activeProfiles: _activeProfileResolverMock.Object,
+            insulin: _insulinRepoMock.Object,
+            relativeTempBasalRates: TempBasalTestDeps.Rates(_basalRateResolverMock.Object));
     }
 
     public void Dispose()
@@ -944,7 +940,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _bolusRepoMock
             .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) => ids.Where(i => i == legacyId));
+            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) => ids.Where(i => i == legacyId).Select(i => new WriteBackSendable(i, null, null)));
         List<V4Models.Bolus>? written = null;
         _bolusRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -967,6 +963,156 @@ public class TreatmentDecomposerBatchTests : IDisposable
         echoes.Should().BeEquivalentTo([echo]);
         echo.Id.Should().Be(legacyId);
         written!.Select(b => b.LegacyId).Should().Equal("66f0a1b2c3d4e0f6a7b8c9d1");
+    }
+
+    /// <summary>
+    /// A bolus write-back sent, pulled back. The copy is its echo, and writes nothing, when it is the
+    /// document write-back sent, and when it is one half of a meal write-back split whatever it now
+    /// says: that half names the whole meal's record, which it cannot be written to alone.
+    /// </summary>
+    [Theory]
+    [InlineData(2.5, false)]
+    [InlineData(4.0, true)]
+    public async Task DecomposeBatchAsync_WritesNothingForTheCopyWriteBackSentOrForAChangedSplitHalf(double insulin, bool split)
+    {
+        const string legacyId = "loop-sync-3a7c";
+        var sent = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", legacyId);
+        _bolusRepoMock
+            .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { legacyId });
+        _bolusRepoMock
+            .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WriteBackSendable(
+                legacyId, "aaps", WriteBackFingerprint.Stored(split ? [WriteBackFingerprint.Of(sent), "carbs-half"] : [WriteBackFingerprint.Of(sent)]))]);
+        var bolusWrites = 0;
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(() => bolusWrites++)
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await _decomposer.DecomposeBatchAsync(
+            [PulledBolus("66f0a1b2c3d4e0f6a7b8c9d1", legacyId, insulin)], WriteOrigin.Live);
+
+        bolusWrites.Should().Be(0);
+    }
+
+    /// <summary>
+    /// A bolus sent whole, then being sent again, not yet confirmed. Each document of either send is an
+    /// echo. Any other copy is an edit made upstream, unless the send under way splits the meal: then it
+    /// may be one half of it, which cannot be written to the whole meal's record alone.
+    /// </summary>
+    [Theory]
+    [InlineData(2.5, false, false)]
+    [InlineData(3.0, false, false)]
+    [InlineData(3.0, true, false)]
+    [InlineData(4.0, false, true)]
+    [InlineData(4.0, true, false)]
+    public async Task DecomposeBatchAsync_ReadsEachDocumentOfASendUnderWayAsAnEcho(double insulin, bool sendingSplit, bool applied)
+    {
+        const string legacyId = "loop-sync-3a7c";
+        var sent = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", legacyId);
+        var sending = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", legacyId, 3.0);
+        _bolusRepoMock
+            .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { legacyId });
+        _bolusRepoMock
+            .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WriteBackSendable(legacyId, "aaps", WriteBackFingerprint.Sending(
+                WriteBackFingerprint.Of(sent),
+                sendingSplit ? [WriteBackFingerprint.Of(sending), "carbs-half"] : [WriteBackFingerprint.Of(sending)],
+                DateTimeOffset.UtcNow))]);
+        var bolusWrites = 0;
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(() => bolusWrites++)
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await _decomposer.DecomposeBatchAsync(
+            [PulledBolus("66f0a1b2c3d4e0f6a7b8c9d1", legacyId, insulin)], WriteOrigin.Live);
+
+        bolusWrites.Should().Be(applied ? 1 : 0);
+    }
+
+    /// <summary>
+    /// A record whose carb intake the user deleted keeps a tombstone that still holds the split meal an
+    /// earlier write-back sent. Its live bolus holds what write-back sent since, and governs: a pulled
+    /// copy that differs from it is an upstream edit of the record, applied and stamped, not a changed
+    /// half of a split meal.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_AppliesAnUpstreamEdit_WhenOnlyATombstoneHoldsAnOlderFingerprint()
+    {
+        const string legacyId = "loop-sync-3a7c";
+        var sent = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", legacyId);
+        _bolusRepoMock
+            .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { legacyId });
+        _bolusRepoMock
+            .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WriteBackSendable(legacyId, "aaps", WriteBackFingerprint.Of(sent))]);
+        _carbRepoMock
+            .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WriteBackSendable(legacyId, "aaps", WriteBackFingerprint.Stored(["bolus-half", "carbs-half"]), Live: false)]);
+        List<V4Models.Bolus>? written = null;
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        var edited = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d1", legacyId, 4.0);
+
+        await _decomposer.DecomposeBatchAsync([edited], WriteOrigin.Live);
+
+        written.Should().ContainSingle().Which.Insulin.Should().Be(4.0);
+        _keys.Sent.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new WriteBackSentRecord(legacyId, null, [WriteBackFingerprint.Of(edited)]));
+    }
+
+    /// <summary>The real keys, recording what is stamped as sent instead of writing it.</summary>
+    private sealed class SentRecordingKeys(IDecomposedTreatmentKeys keys) : IDecomposedTreatmentKeys
+    {
+        public List<WriteBackSentRecord> Sent { get; } = [];
+
+        public Task RecordSentAsync(IReadOnlyList<WriteBackSentRecord> records, CancellationToken ct = default)
+        {
+            Sent.AddRange(records);
+            return Task.CompletedTask;
+        }
+
+        public Task RecordSendingAsync(IReadOnlyList<WriteBackSentRecord> records, CancellationToken ct = default)
+            => keys.RecordSendingAsync(records, ct);
+
+        public Task<IReadOnlySet<string>> GetSentUpstreamAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+            => keys.GetSentUpstreamAsync(legacyIds, ct);
+
+        public Task<HeldLegacyIds> GetHeldLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+            => keys.GetHeldLegacyIdsAsync(legacyIds, ct);
+
+        public Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+            => keys.GetDeletedLegacyIdsAsync(legacyIds, ct);
+
+        public Task<IReadOnlyList<string>> GetLiveInvalidLegacyIdsAsync(CancellationToken ct = default)
+            => keys.GetLiveInvalidLegacyIdsAsync(ct);
+
+        public Task StoreDeletedAsync(
+            IReadOnlyCollection<V4Models.IV4Record> records, IReadOnlyCollection<StateSpan> spans, CancellationToken ct = default)
+            => keys.StoreDeletedAsync(records, spans, ct);
+
+        public Task<ClientIdRekey> RekeyClientIdsAsync(
+            string source, IReadOnlyList<ClientIdEquivalent> equivalents, CancellationToken ct = default)
+            => keys.RekeyClientIdsAsync(source, equivalents, ct);
+
+        public Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
+            string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+            => keys.GetFingerprintsFromSourceAsync(source, legacyIds, ct);
+
+        public Task StampUnfingerprintedAsync(
+            string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct = default)
+            => keys.StampUnfingerprintedAsync(source, fingerprints, ct);
     }
 
     private static readonly DateTime PulledAt = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime;
@@ -1019,7 +1165,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _bolusRepoMock
             .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) => ids.Where(i => i == legacyId));
+            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) => ids.Where(i => i == legacyId).Select(i => new WriteBackSendable(i, null, null)));
         var bolusWrites = 0;
         _bolusRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -1073,11 +1219,11 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         var selected = await _decomposer.SelectForRepublishAsync("nightscout-connector", [copy]);
         adopted.Should().Be(0);
-        await _decomposer.ResolveStoredIdentitiesAsync(selected);
+        await _decomposer.ResolveStoredIdentitiesAsync(selected.Decompose);
         adopted.Should().Be(1);
         await _decomposer.DecomposeBatchAsync([copy], WriteOrigin.Live);
 
-        selected.Should().Equal(copy);
+        selected.Decompose.Should().Equal(copy);
         copy.Id.Should().Be(wireId);
         adopted.Should().Be(1);
         _bolusRepoMock.Verify(

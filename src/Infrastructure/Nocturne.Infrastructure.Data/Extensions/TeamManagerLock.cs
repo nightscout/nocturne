@@ -22,6 +22,24 @@ internal static class TeamManagerLock
         db.LockForTransactionAsync(Class, teamId, ct);
 
     /// <summary>
+    /// Takes the manager lock of every team the subject belongs to, in ascending team id, and returns
+    /// those teams (<see cref="MembershipLock"/> gives the order).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task<IReadOnlyList<Guid>> LockTeamManagersOfSubjectAsync(
+        this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    {
+        var teamIds = await db.TeamMembers.AsNoTracking()
+            .Where(m => m.SubjectId == subjectId)
+            .OrderBy(m => m.TeamId)
+            .Select(m => m.TeamId)
+            .ToListAsync(ct);
+        foreach (var teamId in teamIds)
+            await db.LockTeamManagersAsync(teamId, ct);
+        return teamIds;
+    }
+
+    /// <summary>
     /// Takes the manager lock of every team the subject belongs to, then sorts them for the
     /// subject's deletion: the teams the subject is the only member of, which go with them, and the
     /// teams with other members whose last manager they are (<see cref="TeamManagerFilter.IsLastManagerAsync"/>),
@@ -31,13 +49,7 @@ internal static class TeamManagerLock
     internal static async Task<(IReadOnlyList<TeamEntity> SoleMemberOf, IReadOnlyList<LastManagerTeam> LastManagerOf)>
         LockTeamsOfSubjectAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
-        var teamIds = await db.TeamMembers.AsNoTracking()
-            .Where(m => m.SubjectId == subjectId)
-            .OrderBy(m => m.TeamId)
-            .Select(m => m.TeamId)
-            .ToListAsync(ct);
-        foreach (var teamId in teamIds)
-            await db.LockTeamManagersAsync(teamId, ct);
+        var teamIds = await db.LockTeamManagersOfSubjectAsync(subjectId, ct);
 
         var teams = await db.Teams
             .Where(t => teamIds.Contains(t.Id))

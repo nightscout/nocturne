@@ -1,13 +1,17 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -16,6 +20,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Services.Caching;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Demo;
 
@@ -48,14 +53,22 @@ public class DemoTenantServiceResetTests : IDisposable
             .Setup(t => t.SeedAfterResetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
+        var contexts = dbFactory.Object.AsNocturneFactory();
+        var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
+        var subjects = new SubjectRepository(contexts, AccountLinkRoutes.Off);
+        var deletion = new SubjectDeletion(
+            contexts, subjects, members,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            Mock.Of<IAuthAuditService>(), _time, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
         _service = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+            contexts, new TenantRepository(contexts), members, subjects, deletion,
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             _tenantService.Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             _time,
-            _logger.Object, AccountLinkRoutes.Off);
+            _logger.Object, AccountLinkRoutes.Off,
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
     }
 
     [Fact]
@@ -250,6 +263,40 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     [Fact]
+    public async Task ConfigureAccessAsync_WhenATeamHoldsTheDemoRole_LogsTheOutcomeOfTheEditThatDidNotChangeIt()
+    {
+        var tenantId = SeedDemoTenant();
+        await using (var db = _db.CreateContext())
+        {
+            var role = await db.TenantRoles.SingleAsync(r => r.TenantId == tenantId && r.Slug == "demo-visitor");
+            role.Permissions = [Scope.DemoVisitorPermissions.First()];
+            var team = new TeamEntity { Id = Guid.CreateVersion7(), Name = "Clinic" };
+            var access = new TeamTenantAccessEntity { Id = Guid.CreateVersion7(), TeamId = team.Id, TenantId = tenantId };
+            db.Teams.Add(team);
+            db.TeamTenantAccess.Add(access);
+            db.TeamTenantAccessRoles.Add(new TeamTenantAccessRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TeamTenantAccessId = access.Id, TenantRoleId = role.Id,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state!.ToString()!.Contains(tenantId.ToString())),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+        await using var read = _db.CreateContext();
+        (await read.TenantRoles.AsNoTracking().SingleAsync(r => r.TenantId == tenantId && r.Slug == "demo-visitor"))
+            .Permissions.Should().Equal([Scope.DemoVisitorPermissions.First()], "the refused edit left the role as it was");
+    }
+
+    [Fact]
     public async Task ConfigureAccessAsync_RunAgainOverAnUnchangedDemoRole_AuditsNothing()
     {
         var tenantId = SeedDemoTenant();
@@ -441,6 +488,42 @@ public class DemoTenantServiceResetTests : IDisposable
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once,
             "the tenant the retirement leaves without an owner is named in the log");
+    }
+
+    [Fact]
+    public async Task ResetAsync_RevokesTheGuestLinksTheRetiredDemoMemberMadeElsewhere()
+    {
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        var otherTenantId = Guid.CreateVersion7();
+        var dataOwnerId = Guid.CreateVersion7();
+        var linkId = Guid.CreateVersion7();
+        using (var db = _db.CreateContext())
+        {
+            db.Add(new TenantEntity { Id = otherTenantId, Slug = "alice", DisplayName = "Alice", IsActive = true });
+            db.Subjects.Add(new SubjectEntity { Id = dataOwnerId, Name = "Alice", IsActive = true });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = otherTenantId, SubjectId = subjectId });
+            db.OAuthGrants.Add(new OAuthGrantEntity
+            {
+                Id = linkId,
+                TenantId = otherTenantId,
+                SubjectId = dataOwnerId,
+                CreatedBySubjectId = subjectId,
+                GrantType = OAuthGrantTypes.Guest,
+                Scopes = [Scope.GlucoseRead],
+                TokenHash = linkId.ToString("N"),
+                ExpiresAt = _time.GetUtcNow().UtcDateTime.AddDays(7),
+            });
+            db.SaveChanges();
+        }
+
+        await _service.ResetAsync();
+
+        await using var check = _db.CreateContext();
+        var link = await check.OAuthGrants.IgnoreQueryFilters().SingleAsync(g => g.Id == linkId);
+        link.RevokedAt.Should().NotBeNull("a link the publicly-obtainable account handed out must not outlive it");
+        (await check.Subjects.AnyAsync(s => s.Id == subjectId)).Should().BeFalse();
     }
 
     [Fact]

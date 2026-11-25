@@ -56,14 +56,7 @@ internal class SignalREntryEventSink : IDataEventSink<Entry>
 
     public async Task OnCreatedAsync(IReadOnlyList<Entry> entries, CancellationToken ct = default)
     {
-        try
-        {
-            await _sideEffects.OnCreatedAsync(CollectionName, entries, BuildWriteOptions(), ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process create side effects for {Count} entries", entries.Count);
-        }
+        await _sideEffects.OnCreatedAsync(CollectionName, entries, BuildWriteOptions(), ct);
     }
 
     /// <summary>
@@ -94,37 +87,16 @@ internal class SignalREntryEventSink : IDataEventSink<Entry>
 
     public async Task OnUpdatedAsync(Entry entry, CancellationToken ct = default)
     {
-        try
-        {
-            await _sideEffects.OnUpdatedAsync(CollectionName, entry, BuildWriteOptionsNoBroadcastDataUpdate(), ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process update side effects for entry {Id}", entry.Id);
-        }
+        await _sideEffects.OnUpdatedAsync(CollectionName, entry, BuildWriteOptionsNoBroadcastDataUpdate(), ct);
     }
 
     public async Task OnDeletedAsync(Entry? entry, CancellationToken ct = default)
     {
-        try
-        {
-            await _sideEffects.OnDeletedAsync(CollectionName, entry, BuildWriteOptions(), ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process delete side effects for entry {Id}", entry?.Id);
-        }
+        await _sideEffects.OnDeletedAsync(CollectionName, entry, BuildWriteOptions(), ct);
     }
 
     public async Task OnBulkDeletedAsync(long deletedCount, CancellationToken ct = default)
     {
-        try
-        {
-            await _sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, BuildCacheOnlyOptions(), ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process bulk delete side effects for {Count} entries", deletedCount);
-        }
+        await _sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, BuildCacheOnlyOptions(), ct);
     }
 }

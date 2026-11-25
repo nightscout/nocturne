@@ -60,7 +60,8 @@ public class SubjectForeignKeyCoverageTests
         string[] team =
         [
             "teams.created_by_subject_id", "team_members.subject_id", "team_invites.created_by_subject_id",
-            "team_access_links.created_by_subject_id", "team_tenant_access.approved_by_subject_id",
+            "team_staff_invites.created_by_subject_id", "team_access_links.created_by_subject_id",
+            "team_tenant_access.approved_by_subject_id", "team_site_declines.subject_id",
         ];
         var keys = ForeignKeysToSubjects(db.Model).ToList();
 

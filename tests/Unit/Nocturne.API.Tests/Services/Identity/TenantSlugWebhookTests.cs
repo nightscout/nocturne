@@ -47,7 +47,7 @@ public class TenantSlugWebhookTests : IDisposable
             grantRevocation: null!,
             new FakeTimeProvider(),
             NullLogger<TenantService>.Instance,
-            AccountLinkRoutes.Off);
+            AccountLinkRoutes.Off, InertTeamStaff.Announcer());
     }
 
     private static Handler Silent(TaskCompletionSource? arrived = null) => new(async ct =>

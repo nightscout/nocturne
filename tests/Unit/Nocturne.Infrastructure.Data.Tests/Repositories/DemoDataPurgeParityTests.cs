@@ -260,6 +260,33 @@ public class DemoDataPurgeParityTests : IDisposable
     }
 
     [Fact]
+    public async Task HoldsData_IsTrueWhileThePurgeHasARowToDeleteAndFalseAfterIt()
+    {
+        SeedOneDemoRowOfEveryType();
+        (await ScopePurge().HoldsDataAsync(default)).Should().BeTrue();
+
+        await ScopePurge().PurgeAsync(default);
+
+        (await ScopePurge().HoldsDataAsync(default)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HoldsData_IgnoresDemoRowsInATableThePurgeDoesNotReach()
+    {
+        await using (var db = NewContext())
+        {
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = DateTime.UtcNow, Bpm = 70,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        (await ScopePurge().HoldsDataAsync(default)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ScopePurge_CountsEachGroupSeparately()
     {
         SeedOneDemoRowOfEveryType();

@@ -73,7 +73,7 @@ public sealed class AlertChannelStates
         if (linked)
         {
             await using var db = await contexts.CreatePlatformAsync(ct);
-            foreach (var link in await ChatIdentityDirectoryService.ActiveLinksOfTenant(db, tenantId)
+            foreach (var link in await ChatIdentityDirectoryService.ReachableLinksOfTenant(db, tenantId)
                          .AsNoTracking()
                          .Select(d => new { d.Platform, d.PlatformUserId, d.NocturneUserId })
                          .ToListAsync(ct))

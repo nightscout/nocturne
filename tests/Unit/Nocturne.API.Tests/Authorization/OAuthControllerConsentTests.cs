@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Extensions;
 using Nocturne.API.Models.OAuth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -36,6 +38,9 @@ public class OAuthControllerConsentTests
     /// <summary>Scopes the controller handed the token service, captured on issue.</summary>
     private readonly List<string> _issuedScopes = [];
 
+    /// <summary>The history limit the controller handed the token service, captured on issue.</summary>
+    private bool? _issuedLimitTo24Hours;
+
     public OAuthControllerConsentTests()
     {
         _clientService
@@ -60,7 +65,11 @@ public class OAuthControllerConsentTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
             .Callback<Guid, Guid, IEnumerable<string>, string, string, bool, CancellationToken>(
-                (_, _, scopes, _, _, _, _) => _issuedScopes.AddRange(scopes))
+                (_, _, scopes, _, _, limitTo24Hours, _) =>
+                {
+                    _issuedScopes.AddRange(scopes);
+                    _issuedLimitTo24Hours = limitTo24Hours;
+                })
             .ReturnsAsync("the-code");
     }
 
@@ -191,6 +200,31 @@ public class OAuthControllerConsentTests
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    // An app the approver consents to holds a credential of their own, so it follows what they read
+    // (the sum of their reasons), not what they may give: the limit is stamped on the grant and would
+    // outlive a team reason.
+    public static TheoryData<string, GrantCeiling?, bool, bool> OwnAppHistoryLimits => new()
+    {
+        { "mixed, direct reason limited, sum not", new GrantCeiling(new HashSet<string> { Scope.FullAccess }, null, true), false, false },
+        { "team only, sum not limited", null, false, false },
+        { "mixed, sum limited", new GrantCeiling(new HashSet<string> { Scope.FullAccess }, null, true), true, true },
+    };
+
+    [Theory]
+    [MemberData(nameof(OwnAppHistoryLimits))]
+    public async Task Approving_an_app_follows_the_sums_history_limit_not_the_grant_ceiling(
+        string approver, GrantCeiling? ceiling, bool sumClamped, bool expectedLimit)
+    {
+        var controller = CreateController();
+        controller.HttpContext.SetGrantCeiling(ceiling);
+        controller.HttpContext.RequestServices = TestRequestServices.Build(sumClamped);
+
+        var result = await controller.ApproveConsent(Consent(true, RegisteredRedirectUri));
+
+        result.Should().BeOfType<RedirectResult>(approver);
+        _issuedLimitTo24Hours.Should().Be(expectedLimit, approver);
     }
 
     [Theory]

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Moq;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -81,7 +82,7 @@ public class DeviceTrackerProvisionerTests
             });
 
         var writer = new ConsumableTrackerWriter(
-            _deviceEvents.Object, _ruleSync.Object, Mock.Of<IDeviceEventReactor>(), _broadcast.Object,
+            _deviceEvents.Object, _ruleSync.Object, Rearms.Unannounced(), Mock.Of<IDeviceEventReactor>(), _broadcast.Object,
             TimeProvider.System, NullLogger<ConsumableTrackerWriter>.Instance);
         _provisioner = new DeviceTrackerProvisioner(
             _trackers.Object, _lock.Object, writer, NullLogger<DeviceTrackerProvisioner>.Instance);

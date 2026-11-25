@@ -3,9 +3,12 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Connectors;
+using Nocturne.API.Middleware;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Core.Contracts.Auth;
@@ -64,7 +67,7 @@ public sealed class CareLinkConnectControllerTests
     };
 
     [Fact]
-    public void DesktopToken_mints_a_tenant_pinned_connect_scoped_token()
+    public async Task DesktopToken_mints_a_tenant_pinned_connect_scoped_token()
     {
         SubjectInfo? subject = null;
         IEnumerable<string>? scopes = null;
@@ -95,7 +98,7 @@ public sealed class CareLinkConnectControllerTests
             })
             .Returns("the-token");
 
-        var result = Build(Tenant(), Auth()).DesktopToken();
+        var result = await Build(Tenant(), Auth()).DesktopToken(CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var response = ok.Value.Should().BeOfType<CareLinkDesktopTokenResponse>().Subject;
@@ -113,7 +116,7 @@ public sealed class CareLinkConnectControllerTests
     }
 
     [Fact]
-    public void DesktopToken_uses_the_host_and_scheme_the_pipeline_resolved()
+    public async Task DesktopToken_uses_the_host_and_scheme_the_pipeline_resolved()
     {
         _jwtService
             .Setup(j => j.GenerateAccessToken(
@@ -127,24 +130,69 @@ public sealed class CareLinkConnectControllerTests
         controller.HttpContext.Request.Scheme = "https";
         controller.HttpContext.Request.Headers["X-Forwarded-Host"] = "nocturne-api:8080";
 
-        var result = controller.DesktopToken();
+        var result = await controller.DesktopToken(CancellationToken.None);
 
         var response = (CareLinkDesktopTokenResponse)((OkObjectResult)result.Result!).Value!;
         response.LinkCode.Should().Contain(Uri.EscapeDataString("https://acme.localhost:1612"));
     }
 
     [Fact]
-    public void DesktopToken_rejects_an_unauthenticated_caller()
+    public async Task DesktopToken_rejects_an_unauthenticated_caller()
     {
-        var result = Build(Tenant(), auth: null).DesktopToken();
+        var result = await Build(Tenant(), auth: null).DesktopToken(CancellationToken.None);
         result.Result.Should().BeOfType<UnauthorizedResult>();
     }
 
     [Fact]
-    public void DesktopToken_rejects_an_unresolved_tenant()
+    public async Task DesktopToken_rejects_an_unresolved_tenant()
     {
-        var result = Build(tenant: null, Auth()).DesktopToken();
+        var result = await Build(tenant: null, Auth()).DesktopToken(CancellationToken.None);
         result.Result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
+    public async Task DesktopToken_is_refused_to_an_inactive_caller_and_mints_nothing()
+    {
+        var auth = Auth();
+        auth.TenantId = TenantId;
+        var controller = Build(Tenant(), auth);
+        new RequestMembership(SubjectId, TenantId, null) { SubjectIsInactive = true }.StoreOn(controller.HttpContext);
+
+        var result = await controller.DesktopToken(CancellationToken.None);
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        _jwtService.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(LiveSession.Id, false)]
+    [InlineData("ended-session", true)]
+    public async Task DesktopToken_is_minted_only_for_a_caller_whose_session_is_live(string sessionId, bool refused)
+    {
+        var auth = Auth();
+        auth.TenantId = TenantId;
+        auth.AuthType = AuthType.SessionCookie;
+        auth.SessionId = sessionId;
+        var controller = Build(Tenant(), auth);
+        controller.HttpContext.RequestServices = new ServiceCollection().AddLiveSession().BuildServiceProvider();
+        new RequestMembership(SubjectId, TenantId, null).StoreOn(controller.HttpContext);
+        _jwtService.Setup(j => j.GenerateAccessToken(
+                It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+                It.IsAny<IEnumerable<string>>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<Guid?>()))
+            .Returns("token");
+
+        var result = await controller.DesktopToken(CancellationToken.None);
+
+        if (refused)
+        {
+            result.Result.Should().BeOfType<ChallengeResult>();
+            _jwtService.VerifyNoOtherCalls();
+        }
+        else
+        {
+            result.Result.Should().BeOfType<OkObjectResult>();
+        }
     }
 
     /// <summary>

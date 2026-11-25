@@ -8,6 +8,10 @@ using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Connectors.Tandem.Mappers;
 using Nocturne.Connectors.Tandem.Models;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Timezones;
+using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Tandem.Services;
@@ -24,7 +28,8 @@ public class TandemConnectorService
     : TokenConnectorService<TandemConnectorConfiguration, TandemAuthTokenProvider>
 {
     private readonly TandemSourceApiClient _apiClient;
-    private readonly IConnectorSyncCursorStore? _cursorStore;
+    private readonly ITherapySettingsResolver? _therapySettings;
+    private readonly ITimezoneTimelineService? _timezoneTimeline;
 
     public TandemConnectorService(
         HttpClient httpClient,
@@ -33,11 +38,13 @@ public class TandemConnectorService
         IRetryDelayStrategy retryDelayStrategy,
         TandemAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
-        IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ITherapySettingsResolver? therapySettings = null,
+        ITimezoneTimelineService? timezoneTimeline = null)
         : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _cursorStore = cursorStore;
+        _therapySettings = therapySettings;
+        _timezoneTimeline = timezoneTimeline;
         _apiClient = new TandemSourceApiClient(httpClient, logger);
     }
 
@@ -98,7 +105,7 @@ public class TandemConnectorService
                 return result;
             }
 
-            var time = new TandemTimeResolver(config.TimezoneOffset, config.TimeZoneId);
+            var time = await ResolveTimeAsync(config, cancellationToken);
 
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
@@ -124,6 +131,45 @@ public class TandemConnectorService
         return result;
     }
 
+    private async Task<TandemTimeResolver> ResolveTimeAsync(
+        TandemConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        string? tenantZoneId = null;
+        TimezoneTimeline? tenantTimeline = null;
+        if (TandemTimeResolver.NeedsTenantZone(config.TimezoneOffset, config.TimeZoneId))
+        {
+            if (_timezoneTimeline is not null)
+                tenantTimeline = await _timezoneTimeline.GetResolverAsync(null, cancellationToken);
+            if (_therapySettings is not null)
+                tenantZoneId = await _therapySettings.GetTimezoneAsync(ct: cancellationToken);
+        }
+
+        var time = new TandemTimeResolver(
+            config.TimezoneOffset, config.TimeZoneId, tenantZoneId, tenantTimeline, Clock.GetUtcNow().UtcDateTime);
+
+        if (time.ReadsAsUtc)
+            _logger.LogWarning(
+                "[{Source}] No time zone covers some pump times; reading them as UTC",
+                ConnectorSource);
+
+        await RememberTimeZoneAsync(time.ResolvedZone, cancellationToken);
+        return time;
+    }
+
+    /// <summary>Keeps the zone the run reads the pump's clock in where the connection list finds it.</summary>
+    private Task RememberTimeZoneAsync(ConnectorTimeZone zone, CancellationToken cancellationToken) =>
+        WriteStateBestEffortAsync(
+            "record the time zone in use",
+            async () =>
+            {
+                if (await VendorStateAsync<ConnectorTimeZone>(ConnectorTimeZone.VendorStateKey, cancellationToken) is { } known
+                    && known.Id == zone.Id && known.Source == zone.Source)
+                    return;
+
+                await SetVendorStateAsync(ConnectorTimeZone.VendorStateKey, zone, cancellationToken);
+            },
+            cancellationToken);
+
     private async Task SyncProfilesAsync(
         TandemBffPump device, HashSet<SyncDataType> activeTypes, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
@@ -135,19 +181,20 @@ public class TandemConnectorService
         if (profile == null)
             return;
 
-        var resource = ProfileCursorResource(device);
+        var key = PublishedProfileKey(device);
         var fingerprint = TandemProfileMapper.Fingerprint(profile);
-        var unchanged = await PublishedProfileFingerprintAsync(resource, cancellationToken) == fingerprint;
+        var unchanged = await PublishedProfileFingerprintAsync(key, cancellationToken) == fingerprint;
 
         var published = await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
             result, activeTypes, unchanged ? [] : [profile], config, cancellationToken);
 
         if (published)
-            await RememberPublishedProfileAsync(resource, fingerprint, cancellationToken);
+            await RememberPublishedProfileAsync(key, fingerprint, cancellationToken);
     }
 
     /// <summary>
-    /// Where the fingerprint of the profile last published for <paramref name="device"/> is kept.
+    /// The vendor-state key the fingerprint of the profile last published for <paramref name="device"/>
+    /// is kept under.
     /// </summary>
     /// <remarks>
     /// The pump's settings carry no time of their own, so <see cref="TandemProfileMapper.Map"/>
@@ -155,40 +202,20 @@ public class TandemConnectorService
     /// profile document. The fingerprint lets a sync publish only settings that differ from the
     /// last ones published, so a return to earlier settings is still a new document.
     /// </remarks>
-    private static string ProfileCursorResource(TandemBffPump device) => $"profile:{device.AssignmentId}";
+    private static string PublishedProfileKey(TandemBffPump device) => $"profile:{device.AssignmentId}";
 
-    private async Task<string?> PublishedProfileFingerprintAsync(string resource, CancellationToken cancellationToken)
-    {
-        if (_cursorStore is null)
-            return null;
+    private Task<string?> PublishedProfileFingerprintAsync(string key, CancellationToken cancellationToken) =>
+        ReadStateBestEffortAsync(
+            "read the published profile; publishing",
+            null,
+            () => VendorStateAsync<string>(key, cancellationToken),
+            cancellationToken);
 
-        try
-        {
-            return (await _cursorStore.GetAsync(TandemConstants.ConnectorName, resource, cancellationToken))?.LastGuid;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex, "[{Source}] Could not read the published profile; publishing", ConnectorSource);
-            return null;
-        }
-    }
-
-    private async Task RememberPublishedProfileAsync(
-        string resource, string fingerprint, CancellationToken cancellationToken)
-    {
-        if (_cursorStore is null)
-            return;
-
-        try
-        {
-            await _cursorStore.SetAsync(
-                TandemConstants.ConnectorName, resource, new ConnectorSyncCursor(null, fingerprint), cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex, "[{Source}] Could not record the published profile", ConnectorSource);
-        }
-    }
+    private Task RememberPublishedProfileAsync(string key, string fingerprint, CancellationToken cancellationToken) =>
+        WriteStateBestEffortAsync(
+            "record the published profile",
+            () => SetVendorStateAsync(key, fingerprint, cancellationToken),
+            cancellationToken);
 
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
     private async Task<string?> SyncEventsAsync(

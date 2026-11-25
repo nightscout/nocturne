@@ -4,11 +4,13 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
@@ -33,6 +35,8 @@ public class AlertChannelNoticeTests
     private readonly Mock<ITenantMembershipRepository> _members = new();
     private readonly Dictionary<string, List<InAppNotificationDto>> _active = Owners.ToDictionary(o => o, _ => new List<InAppNotificationDto>());
     private readonly List<(string Owner, string SourceId, string Title)> _created = [];
+    private readonly Dictionary<string, Dictionary<string, object>?> _metadata = [];
+    private readonly HashSet<Guid> _deleted = [];
     private readonly List<(string Owner, string SourceId)> _archived = [];
     private readonly AlertChannelNoticeLog _log;
     private readonly AlertRuleSnapshot _rule;
@@ -73,18 +77,19 @@ public class AlertChannelNoticeTests
         notifications.Setup(n => n.GetActiveNotificationsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string owner, CancellationToken _) => _active[owner].ToList());
         notifications.Setup(n => n.CreateNotificationUnlessActiveAsync(
-                It.IsAny<string>(), AlertChannelNotice.NotificationType, It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), NotificationSubjectNaming.AlertChannelNotSending, It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<NotificationCategory?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string owner, string type, string title, string sourceId, NotificationCategory? _, string? _,
-                string? _, Dictionary<string, object>? _, CancellationToken _) =>
+                string? _, Dictionary<string, object>? metadata, CancellationToken _) =>
             {
                 _created.Add((owner, sourceId, title));
+                _metadata[sourceId] = metadata;
                 _active[owner].Add(new InAppNotificationDto { Type = type, SourceId = sourceId, Title = title });
                 return true;
             });
         notifications.Setup(n => n.ArchiveBySourceAsync(
-                It.IsAny<string>(), AlertChannelNotice.NotificationType, It.IsAny<string>(),
+                It.IsAny<string>(), NotificationSubjectNaming.AlertChannelNotSending, It.IsAny<string>(),
                 NotificationArchiveReason.ConditionMet, It.IsAny<CancellationToken>()))
             .ReturnsAsync((string owner, string _, string sourceId, NotificationArchiveReason _, CancellationToken _) =>
             {
@@ -96,9 +101,15 @@ public class AlertChannelNoticeTests
         var owners = new Mock<ITenantOwnerResolver>();
         owners.Setup(o => o.GetOwnerSubjectIdsAsync(Tenant, It.IsAny<CancellationToken>())).ReturnsAsync(Owners);
 
+        var subjects = new Mock<ISubjectRepository>();
+        subjects.Setup(r => r.GetManyAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids, CancellationToken _) =>
+                ids.Where(id => !_deleted.Contains(id)).Select(Subject).ToList());
+
         return new AlertChannelNotice(
             _rules.Object,
             _members.Object,
+            subjects.Object,
             new TestNocturneDbContextFactory(TestDbContextFactory.CreateInMemoryContext($"channel_notice_{Guid.NewGuid()}")),
             owners.Object,
             notifications.Object,
@@ -106,6 +117,10 @@ public class AlertChannelNoticeTests
             _log,
             NullLogger<AlertChannelNotice>.Instance);
     }
+
+    private static SubjectRecord Subject(Guid id) => new(
+        id, "Sitter", null, null, null, null, IsActive: true, IsSystemSubject: false, IsDemoSubject: false,
+        IsPlatformAdmin: false, "Approved", null, null, null, null, Start.UtcDateTime, Start.UtcDateTime, null, []);
 
     private Task CheckAsync() => Notice().CheckAsync([_rule], _clock.GetUtcNow().UtcDateTime, CancellationToken.None);
 
@@ -160,6 +175,52 @@ public class AlertChannelNoticeTests
 
         _archived.Select(a => a.SourceId).Should().BeEquivalentTo(
             Owners.SelectMany(_ => new[] { _inAppToSitter.Id.ToString(), _stopped.Id.ToString() }));
+    }
+
+    [Fact]
+    public async Task A_member_or_adder_who_was_only_removed_is_still_named()
+    {
+        await CheckAsync();
+
+        _metadata[_inAppToSitter.Id.ToString()].Should()
+            .Contain(NotificationSubjectNaming.MemberSubjectIdKey, Sitter.ToString());
+        _metadata[_stopped.Id.ToString()].Should()
+            .Contain(NotificationSubjectNaming.AddedBySubjectIdKey, Sitter.ToString())
+            .And.Contain("destinationLabel", "Family");
+    }
+
+    [Fact]
+    public async Task A_notice_names_no_member_or_adder_whose_account_is_deleted_and_still_tells_the_owner()
+    {
+        _deleted.Add(Sitter);
+
+        await CheckAsync();
+
+        _created.Select(c => c.SourceId).Should().BeEquivalentTo(
+            Owners.SelectMany(_ => new[] { _inAppToSitter.Id.ToString(), _stopped.Id.ToString() }));
+        foreach (var metadata in _metadata.Values)
+        {
+            metadata.Should().NotContainKeys(
+                NotificationSubjectNaming.MemberSubjectIdKey, NotificationSubjectNaming.AddedBySubjectIdKey, "destinationLabel");
+            metadata!.Values.Select(v => v.ToString()).Should().NotContain(Sitter.ToString());
+        }
+    }
+
+    [Fact]
+    public async Task A_notice_the_deletion_removed_is_raised_again_within_freshness_without_the_name()
+    {
+        await CheckAsync();
+        _metadata.Clear();
+
+        _deleted.Add(Sitter);
+        foreach (var notices in _active.Values)
+            notices.Clear();
+        PastFreshness();
+        await CheckAsync();
+
+        _metadata.Keys.Should().BeEquivalentTo([_inAppToSitter.Id.ToString(), _stopped.Id.ToString()]);
+        _metadata.Values.Should().AllSatisfy(m => m.Should().NotContainKeys(
+            NotificationSubjectNaming.MemberSubjectIdKey, NotificationSubjectNaming.AddedBySubjectIdKey, "destinationLabel"));
     }
 
     [Fact]

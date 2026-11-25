@@ -72,6 +72,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new RecordingNotifications(sp.GetRequiredService<ITenantAccessor>(), this));
         services.AddTransient(_ => _key);
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddTransient<UndecryptableSecretScanner>();
         _provider = services.BuildServiceProvider();
@@ -143,7 +144,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var affected = _database.ContextFactory.AsNocturneFactory(Affected);
         var found = await new UndecryptableSecretScanner(
-            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected), _newKey).ScanTenantAsync(CancellationToken.None);
+            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected, TimeProvider.System), _newKey).ScanTenantAsync(CancellationToken.None);
 
         found.AlertChannels.Select(c => (c.RuleName, c.Destination)).Should().Equal(
             ("Bare", ""), ("Mixed", "a.example.com"));
@@ -214,7 +215,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await using (var db = _database.CreateContext(Affected))
             await db.AlertRuleChannels.ExecuteDeleteAsync();
         await StorePlatformSettingAsync("discord", enabled: true, _newKey);
-        await AdvanceUntilAsync(() => service.ExecuteTask!.IsCompleted);
+        await Eventually.UntilAsync("the service to finish", () => service.ExecuteTask!.IsCompleted, eachStep: AdvanceRescan);
         await service.ExecuteTask!;
 
         _archived.Should().BeEquivalentTo(
@@ -255,7 +256,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await StartAndAwaitPassAsync(first);
         var firstChange = (await CheckAsync())!.Generation.ToString();
         await StoreConnectorAsync(Affected, "dexcom", _newKey);
-        await AdvanceUntilAsync(() => _archived.Count == 2);
+        await Eventually.UntilAsync("the second check to be archived", () => _archived.Count == 2, eachStep: AdvanceRescan);
         await first.StopAsync(CancellationToken.None);
         _sent.Clear();
         _archived.Clear();
@@ -286,10 +287,11 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var service = CreateService(snapshotContexts: flaky.AsNocturneFactory());
         await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => flaky.Failed);
+        await Eventually.UntilAsync("the snapshot read to fail", () => flaky.Failed);
         service.ExecuteTask!.IsCompleted.Should().BeFalse();
 
-        await AdvanceUntilAsync(() => _sent.Count == OwnersOf(Affected).Length);
+        await Eventually.UntilAsync(
+            "a notice to reach every affected owner", () => _sent.Count == OwnersOf(Affected).Length, eachStep: AdvanceRescan);
         await service.StopAsync(CancellationToken.None);
 
         _log.Entries.Should().Contain(e => e.Level == LogLevel.Error);
@@ -377,7 +379,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     private static async Task RunAsync(InstanceKeyChangeService service)
     {
         await service.StartAsync(CancellationToken.None);
-        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.ExecuteTask!.WaitAsync(Eventually.DefaultPatience);
     }
 
     /// <summary>
@@ -388,27 +390,12 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     {
         var scans = _clock.Scans;
         await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _clock.Scans > scans || service.ExecuteTask!.IsCompleted);
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition())
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline);
-            await Task.Delay(10);
-        }
+        await Eventually.UntilAsync(
+            "the service to finish a pass", () => _clock.Scans > scans || service.ExecuteTask!.IsCompleted);
     }
 
     /// <summary>Moves the clock a scan at a time, since a scan may not yet be waiting when it moves.</summary>
-    private Task AdvanceUntilAsync(Func<bool> condition) => WaitUntilAsync(() =>
-    {
-        if (condition())
-            return true;
-        _clock.Advance(InstanceKeyChangeService.RescanInterval);
-        return false;
-    });
+    private void AdvanceRescan() => _clock.Advance(InstanceKeyChangeService.RescanInterval);
 
     private async Task WriteCheckAsync(ISecretEncryptionService key) =>
         (await new InstanceKeyCheck(_database.ContextFactory.AsNocturneFactory(), key)
@@ -596,7 +583,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         public Task<string?> GetNotificationTypeAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<bool> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
+        public Task<NotificationActionResult> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<bool> MarkAsReadAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>

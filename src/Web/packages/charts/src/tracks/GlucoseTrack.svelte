@@ -62,6 +62,19 @@
      * the readings either side of it.
      */
     visibleOnly?: boolean;
+    /** Draw the line (or area); off leaves only the points, as Nightscout draws readings. */
+    showLine?: boolean;
+    /** Point radius in pixels. */
+    pointRadius?: number;
+    /** Classes for the points. */
+    pointClass?: string;
+    /**
+     * Where the glucose axis sits: "left" in the gutter, or "inside-right" with its labels
+     * just inside the plot's right edge, as cgm-remote-monitor draws it.
+     */
+    axisPlacement?: "left" | "inside-right";
+    /** Fixed tick values in mg/dL, in place of the scale's own. */
+    axisTicks?: number[];
   }
 
   let {
@@ -75,6 +88,11 @@
     areaOpacity = 0.5,
     rangePalette,
     visibleOnly = false,
+    showLine = true,
+    pointRadius = 3,
+    pointClass = "opacity-90",
+    axisPlacement = "left",
+    axisTicks,
   }: Props = $props();
 
   const ctx = getGlucoseChartContext();
@@ -140,11 +158,21 @@
   });
 </script>
 
-{#if showAxis}
+{#if showAxis && axisPlacement === "inside-right"}
+  <!-- Whole mmol/L ticks print without their ".0", as Nightscout's do. -->
+  <Axis
+    placement="right"
+    scale={glucoseAxisScale}
+    ticks={axisTicks ?? 5}
+    format={(v) => String(glucoseValue(v, ctx.glucoseUnits)).replace(/\.0$/, "")}
+    tickLength={-6}
+    tickLabelProps={{ class: "fill-foreground", fontSize: 16, textAnchor: "end", dx: -10 }}
+  />
+{:else if showAxis}
   <Axis
     placement="left"
     scale={glucoseAxisScale}
-    ticks={ctx.printing ? printTicks : 5}
+    ticks={ctx.printing ? printTicks : (axisTicks ?? 5)}
     format={(v) => String(glucoseValue(v, ctx.glucoseUnits))}
     tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
   />
@@ -185,7 +213,9 @@
 {/snippet}
 
 <ChartClipPath>
-  {#if lineColorMode === "single"}
+  {#if !showLine}
+    <!-- Points only. -->
+  {:else if lineColorMode === "single"}
     {@render splineOrArea(lineColor)}
   {:else}
     <!-- A percentage extent resolves against the whole SVG, padding included,
@@ -214,9 +244,9 @@
       key={(d) => d.time.getTime()}
       cx={(d) => d.time}
       cy={(d) => glucoseScale(d.sgv)}
-      r={3}
+      r={pointRadius}
       fill={(d) => pointFill(d.sgv)}
-      class="opacity-90"
+      class={pointClass}
     />
   {/if}
 </ChartClipPath>

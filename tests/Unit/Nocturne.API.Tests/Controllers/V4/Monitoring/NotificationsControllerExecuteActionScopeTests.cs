@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
@@ -68,7 +69,34 @@ public class NotificationsControllerExecuteActionScopeTests
     private void ActionSucceeds(Guid id, string actionId) =>
         _notifications
             .Setup(s => s.ExecuteActionAsync(id, actionId, Subject.ToString(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(NotificationActionResult.Completed);
+
+    private void ActionReturns(Guid id, string actionId, NotificationActionResult result) =>
+        _notifications
+            .Setup(s => s.ExecuteActionAsync(id, actionId, Subject.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+    [Fact]
+    public async Task AHandlerRefusalForAScope_IsForbiddenNamingThatScope()
+    {
+        var id = Guid.CreateVersion7();
+        ActionReturns(id, "accept", NotificationActionResult.RefusedFor(Scope.TreatmentsReadWrite));
+
+        var result = await CreateController(AlertsWriter).ExecuteAction(id, "accept");
+
+        result.ShouldBeScopeRefusal(Scope.TreatmentsReadWrite);
+    }
+
+    [Fact]
+    public async Task ANotificationOrActionNoOneHandles_IsNotFound()
+    {
+        var id = Guid.CreateVersion7();
+        ActionReturns(id, "accept", NotificationActionResult.NotHandled);
+
+        var result = await CreateController(AlertsWriter).ExecuteAction(id, "accept");
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
 
     [Fact]
     public async Task DeviceNotifyOnly_OnANonAlertNotification_IsForbiddenWithoutDispatching()

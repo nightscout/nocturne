@@ -78,6 +78,7 @@ public class StateSpanWriteBackEchoIntegrationTests(ApiIntegrationTestFixture fi
             new HttpClient(upstream, disposeHandler: false),
             loader.Object,
             new NightscoutCircuitBreaker(),
+            scope.ServiceProvider.GetRequiredService<IWriteBackSentRecords>(),
             NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
         var service = ActivatorUtilities.CreateInstance<TreatmentService>(scope.ServiceProvider, (IDataEventSink<Treatment>)sink);

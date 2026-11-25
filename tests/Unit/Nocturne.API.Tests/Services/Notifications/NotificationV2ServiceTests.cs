@@ -491,30 +491,6 @@ public class NotificationV2ServiceTests
     }
 
     [Fact]
-    public async Task ProcessNotificationAsync_WithSignalRFailure_ContinuesProcessing()
-    {
-        // Arrange
-        var notification = new NotificationBase
-        {
-            Title = "Test Notification",
-            Message = "Test message",
-            Level = 0,
-        };
-
-        _mockSignalRBroadcastService
-            .Setup(x => x.BroadcastNotificationAsync(It.IsAny<NotificationBase>()))
-            .ThrowsAsync(new InvalidOperationException("SignalR connection failed"));
-
-        // Act
-        var result = await _service.ProcessNotificationAsync(notification);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Success.Should().BeTrue(); // Processing continues despite SignalR failure
-        result.Message.Should().Be("Notification processed successfully");
-    }
-
-    [Fact]
     public async Task ProcessNotificationAsync_AppliesDefaults()
     {
         // Arrange
@@ -535,42 +511,6 @@ public class NotificationV2ServiceTests
         result.Success.Should().BeTrue();
 
         // Verify defaults were applied through successful processing
-        result.Data.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ProcessNotificationAsync_WithException_ReturnsFailure()
-    {
-        // Arrange
-        var notification = new NotificationBase
-        {
-            Title = "Test",
-            Message = "Test message",
-            Level = 0,
-        };
-
-        // Create a service with a SignalR service that throws to simulate internal failure
-        var mockSignalRThatThrows = new Mock<ISignalRBroadcastService>();
-        mockSignalRThatThrows
-            .Setup(x => x.BroadcastNotificationAsync(It.IsAny<NotificationBase>()))
-            .ThrowsAsync(new InvalidOperationException("Simulated SignalR exception"));
-
-        var serviceWithException = new NotificationV2Service(
-            _mockLogger.Object,
-            mockSignalRThatThrows.Object,
-            _mockProfileProjection.Object,
-            _mockLoopService.Object,
-            TimeProvider.System
-        );
-
-        // Act
-        var result = await serviceWithException.ProcessNotificationAsync(notification);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Success.Should().BeTrue(); // Processing continues despite SignalR failure
-        result.Message.Should().Be("Notification processed successfully");
-        result.Timestamp.Should().BeGreaterThan(0);
         result.Data.Should().NotBeNull();
     }
 

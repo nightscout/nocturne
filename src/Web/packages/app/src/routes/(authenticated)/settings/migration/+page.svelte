@@ -71,6 +71,7 @@
   // Form state
   let mode = $state<MigrationMode>(MigrationMode.Api);
   let nightscoutUrl = $state("");
+  let changingUrl = $state(false);
   let nightscoutApiSecret = $state("");
   let mongoConnectionString = $state("");
   let mongoDatabaseName = $state("");
@@ -89,9 +90,16 @@
     source: string;
   } | null>(null);
 
+  /**
+   * The server's address, masked. The form sends no URL until the viewer presses "Change address",
+   * and the API then reads the server's own.
+   */
+  const configuredUrl = $derived(pendingConfig?.nightscoutUrl ?? "");
+  const usesConfiguredUrl = $derived(configuredUrl !== "" && !changingUrl);
+
   const sourceKey = $derived(
     mode === MigrationMode.Api
-      ? `api\n${nightscoutUrl}\n${nightscoutApiSecret}`
+      ? `api\n${usesConfiguredUrl}\n${nightscoutUrl}\n${nightscoutApiSecret}`
       : `mongo\n${mongoConnectionString}\n${mongoDatabaseName}`
   );
   const shownTestResult = $derived(
@@ -121,9 +129,6 @@
       if (configResult?.hasPendingConfig) {
         if (configResult.mode !== undefined && configResult.mode !== null) {
           mode = configResult.mode;
-        }
-        if (configResult.nightscoutUrl) {
-          nightscoutUrl = configResult.nightscoutUrl;
         }
         if (configResult.mongoDatabaseName) {
           mongoDatabaseName = configResult.mongoDatabaseName;
@@ -271,7 +276,7 @@
   // Nightscout can be readable without an API secret, so the secret is optional.
   const isFormValid = $derived(
     (mode === MigrationMode.Api
-      ? nightscoutUrl.trim() !== ""
+      ? usesConfiguredUrl || nightscoutUrl.trim() !== ""
       : mongoConnectionString.trim() !== "" && mongoDatabaseName.trim() !== "") && isRangeValid
   );
 </script>
@@ -311,9 +316,9 @@
     {#if pendingConfig?.hasPendingConfig}
       <Alert.Root class="mb-6">
         <Info class="h-4 w-4" />
-        <Alert.Title>Migration configuration detected</Alert.Title>
+        <Alert.Title>Migration settings found</Alert.Title>
         <Alert.Description>
-          Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready.
+          The server settings give a migration source, and the form shows them. Check them, then start the migration.
         </Alert.Description>
       </Alert.Root>
     {/if}
@@ -367,7 +372,7 @@
               <RadioGroup.Root
                 value={String(mode)}
                 onValueChange={(value) => (mode = Number(value))}
-                class="flex gap-4"
+                class="flex flex-wrap gap-4"
               >
                 <div class="flex items-center space-x-2">
                   <RadioGroup.Item value={String(MigrationMode.Api)} id="mode-api" />
@@ -390,15 +395,44 @@
             {#if mode === MigrationMode.Api}
               <div class="grid gap-4 @lg:grid-cols-2">
                 <div class="space-y-2">
-                  <Label for="nightscout-url">Nightscout URL</Label>
-                  <Input
-                    id="nightscout-url"
-                    placeholder="https://your-nightscout.herokuapp.com"
-                    bind:value={nightscoutUrl}
-                  />
+                  <Label for={usesConfiguredUrl ? undefined : "nightscout-url"}>Nightscout URL</Label>
+                  {#if usesConfiguredUrl}
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="min-w-0 break-all text-sm" data-testid="configured-nightscout-url">
+                        {configuredUrl}
+                      </span>
+                      <Button variant="outline" size="sm" onclick={() => (changingUrl = true)}>
+                        Change address
+                      </Button>
+                    </div>
+                  {:else}
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Input
+                        id="nightscout-url"
+                        placeholder="https://your-nightscout.herokuapp.com"
+                        class="min-w-0 flex-1"
+                        bind:value={nightscoutUrl}
+                      />
+                      {#if configuredUrl}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onclick={() => {
+                            changingUrl = false;
+                            nightscoutUrl = "";
+                          }}
+                        >
+                          Keep current address
+                        </Button>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
                 <div class="space-y-2">
-                  <Label for="api-secret">API secret</Label>
+                  <Label for="api-secret">
+                    API secret
+                    <span class="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
                   <Input
                     id="api-secret"
                     type="password"
@@ -436,8 +470,7 @@
             <div class="space-y-3">
               <Label>Date range (optional)</Label>
               <p class="text-sm text-muted-foreground">
-                Leave empty to import all data, or specify a range to import
-                partial data.
+                Leave the dates empty to import all data.
               </p>
               <div class="grid gap-4 @lg:grid-cols-2">
                 <div class="space-y-2">
@@ -514,7 +547,9 @@
               >
                 <input {...testConnectionForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {#if !usesConfiguredUrl}
+                    <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {/if}
                   <input {...testConnectionForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
                   <input {...testConnectionForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
@@ -557,7 +592,9 @@
               >
                 <input {...startMigrationForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {#if !usesConfiguredUrl}
+                    <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {/if}
                   <input {...startMigrationForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
                   <input {...startMigrationForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
@@ -601,9 +638,6 @@
                 <Badge variant="default" live>Running</Badge>
               {/if}
             </CardTitle>
-            <CardDescription>
-              Monitor the progress of your current migration.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {#if activeMigration && hasActiveMigration}
@@ -685,9 +719,6 @@
         <Card>
           <CardHeader>
             <CardTitle>Migration history</CardTitle>
-            <CardDescription>
-              View past migrations and their results.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {#if history.length === 0}
@@ -697,58 +728,52 @@
                 body="Completed migrations will appear here"
               />
             {:else}
-              <div class="space-y-3">
+              <ul class="-my-3 divide-y">
                 {#each history as job (job.id)}
                   {@const badge = getStateBadge(job.state)}
-                  <div
-                    class="flex items-center justify-between p-4 rounded-lg border"
-                  >
-                    <div class="flex items-center gap-3">
-                      <div class="p-2 rounded-lg bg-muted">
-                        {#if job.mode === MigrationMode.MongoDb}
-                          <Database class="h-5 w-5" />
-                        {:else}
-                          <Globe class="h-5 w-5" />
-                        {/if}
-                      </div>
-                      <div>
-                        <div class="font-medium flex items-center gap-2">
+                  <li class="flex items-start gap-3 py-3">
+                    {#if job.mode === MigrationMode.MongoDb}
+                      <Database class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {:else}
+                      <Globe class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {/if}
+                    <div class="min-w-0 flex-1 space-y-1">
+                      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span class="min-w-0 font-medium break-all">
                           {job.sourceDescription || "Unknown source"}
-                          <Badge variant={badge.variant}>
-                            {badge.label}
-                          </Badge>
-                        </div>
-                        <div class="text-sm text-muted-foreground">
-                          Started: {formatMediumDateTime(job.startedAt)}
-                        </div>
-                        {#if job.errorMessage}
-                          <div
-                            class="text-sm mt-1 {job.hasFailures ||
-                            job.state === MigrationJobState.Failed ||
-                            job.state === MigrationJobState.Interrupted ||
-                            job.state === MigrationJobState.Cancelled
-                              ? 'text-destructive'
-                              : 'text-muted-foreground'}"
-                          >
-                            {job.errorMessage}
-                          </div>
-                        {/if}
+                        </span>
+                        <Badge variant={badge.variant}>
+                          {badge.label}
+                        </Badge>
                       </div>
-                    </div>
-                    <div class="text-right text-sm text-muted-foreground">
+                      <p class="text-sm text-muted-foreground">
+                        Started: {formatMediumDateTime(job.startedAt)}
+                      </p>
                       {#if job.completedAt}
-                        <div>
+                        <p class="text-sm text-muted-foreground">
                           {#if job.state === MigrationJobState.Completed}
                             Completed: {formatMediumDateTime(job.completedAt)}
                           {:else}
                             Ended: {formatMediumDateTime(job.completedAt)}
                           {/if}
-                        </div>
+                        </p>
+                      {/if}
+                      {#if job.errorMessage}
+                        <p
+                          class="text-sm {job.hasFailures ||
+                          job.state === MigrationJobState.Failed ||
+                          job.state === MigrationJobState.Interrupted ||
+                          job.state === MigrationJobState.Cancelled
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'}"
+                        >
+                          {job.errorMessage}
+                        </p>
                       {/if}
                     </div>
-                  </div>
+                  </li>
                 {/each}
-              </div>
+              </ul>
             {/if}
           </CardContent>
         </Card>
@@ -758,39 +783,27 @@
           <Card class="mt-6">
             <CardHeader>
               <CardTitle>Known sources</CardTitle>
-              <CardDescription>
-                Previously used migration sources with their last sync
-                timestamps.
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div class="space-y-3">
+              <ul class="-my-3 divide-y">
                 {#each sources as source (source.id)}
-                  <div
-                    class="flex items-center justify-between p-4 rounded-lg border"
-                  >
-                    <div class="flex items-center gap-3">
-                      <div class="p-2 rounded-lg bg-muted">
-                        {#if source.mode === MigrationMode.MongoDb}
-                          <Database class="h-5 w-5" />
-                        {:else}
-                          <Globe class="h-5 w-5" />
-                        {/if}
-                      </div>
-                      <div>
-                        <div class="font-medium">
-                          {source.nightscoutUrl ||
-                            source.mongoDatabaseName ||
-                            "Unknown"}
-                        </div>
-                        <div class="text-sm text-muted-foreground">
-                          Last migration: {formatMediumDateTime(source.lastMigrationAt)}
-                        </div>
-                      </div>
+                  <li class="flex items-start gap-3 py-3">
+                    {#if source.mode === MigrationMode.MongoDb}
+                      <Database class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {:else}
+                      <Globe class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {/if}
+                    <div class="min-w-0 flex-1 space-y-1">
+                      <p class="font-medium break-all">
+                        {source.nightscoutUrl || source.mongoDatabaseName || "Unknown"}
+                      </p>
+                      <p class="text-sm text-muted-foreground">
+                        Last migration: {formatMediumDateTime(source.lastMigrationAt)}
+                      </p>
                     </div>
-                  </div>
+                  </li>
                 {/each}
-              </div>
+              </ul>
             </CardContent>
           </Card>
         {/if}

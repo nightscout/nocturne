@@ -112,6 +112,12 @@ internal sealed class AlertExcursionEntityConfiguration : IEntityTypeConfigurati
             .HasIndex(e => new { e.AlertRuleId, e.EndedAt })
             .HasDatabaseName("ix_alert_excursions_rule_ended_at");
 
+        // The sweep's owed-work read: a row holds a stamp only while work is owed
+        entity
+            .HasIndex(e => e.TenantId)
+            .HasFilter("opened_owed_at IS NOT NULL OR closed_owed_at IS NOT NULL")
+            .HasDatabaseName("ix_alert_excursions_tenant_owed");
+
         entity.ToTable("alert_excursions");
 
         entity.HasOne(e => e.AlertRule)

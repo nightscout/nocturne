@@ -8,6 +8,7 @@ import { toIsoString } from "#lib/utils/api-date.js";
 import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
 import { autoLoginEndpoint, autoLoginRedirect } from "#lib/server/auto-login.js";
 import { PILL_ROWS_COOKIE, parsePillRows } from "#lib/components/status-pills/pill-rows.js";
+import { SIDEBAR_COOKIE_NAME } from "#lib/components/ui/sidebar/constants.js";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [
@@ -201,5 +202,8 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     nextResetAt,
     onboardingComplete,
     pillRows: parsePillRows(cookies.get(PILL_ROWS_COOKIE)),
+    // The sidebar records its own open state in this cookie; reading it back here is what makes a
+    // collapsed sidebar stay collapsed across reloads instead of opening on every page load.
+    sidebarOpen: cookies.get(SIDEBAR_COOKIE_NAME) !== "false",
   };
 };

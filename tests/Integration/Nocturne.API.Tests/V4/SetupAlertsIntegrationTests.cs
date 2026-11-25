@@ -38,13 +38,8 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
 
     private async Task SqlAsync(string sql, params (string Name, object Value)[] parameters)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync(sql, parameters);
     }
 
     private Task RelationshipAsync(string relationship) =>

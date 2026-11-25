@@ -54,7 +54,7 @@ public sealed class RoleControllerGetRolesGateTests
         var result = await BuildController(Scope.MembersInvite, "glucose.read").GetRoles(Mock.Of<ITenantMembershipRepository>(), TimeProvider.System, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeEquivalentTo(new List<TenantRoleDto> { viewer });
+            .Which.Value.Should().BeEquivalentTo(new List<TenantRoleDto> { viewer with { CanGiveToTeam = true } });
         _roles.Verify(
             s => s.GetRolesAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
@@ -88,7 +88,8 @@ public sealed class RoleControllerGetRolesGateTests
 
         var result = await BuildController(Scope.RolesManage).GetRoles(Mock.Of<ITenantMembershipRepository>(), TimeProvider.System, CancellationToken.None);
 
-        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(all);
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(
+            new List<TenantRoleDto> { all[0], all[1] with { CanGiveToTeam = true } });
         _roles.Verify(
             s => s.GetAssignableRolesAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
@@ -193,5 +194,21 @@ public sealed class RoleControllerGetRolesGateTests
         var freeRole = roles.Single(r => r.Id == free.Id);
         freeRole.TeamRefusedPermissions.Should().BeEmpty();
         freeRole.CoveredPermissions.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetRoles_saysWhichRolesTheCallerMayGiveToATeam()
+    {
+        var data = Role("days", Scope.GlucoseRead, Scope.TreatmentsReadWrite);
+        var runsTheSite = Role("helpers", Scope.GlucoseRead, Scope.MembersInvite);
+        var empty = Role("nothing");
+        var beyondCaller = Role("nights", Scope.GlucoseRead) with { CanGrant = false };
+        _roles.Setup(s => s.GetRolesAsync(_tenantId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([data, runsTheSite, empty, beyondCaller]);
+
+        var result = await BuildController(Scope.RolesManage).GetRoles(Mock.Of<ITenantMembershipRepository>(), TimeProvider.System, CancellationToken.None);
+
+        var roles = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<List<TenantRoleDto>>().Subject;
+        roles.Where(r => r.CanGiveToTeam).Select(r => r.Id).Should().Equal(data.Id);
     }
 }

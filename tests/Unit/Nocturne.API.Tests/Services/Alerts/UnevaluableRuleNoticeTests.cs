@@ -361,15 +361,19 @@ public class UnevaluableRuleNoticeTests
     public async Task A_notice_whose_dispatch_was_cancelled_is_sent_after_a_restart()
     {
         var dispatches = 0;
+        using var shutdown = new CancellationTokenSource();
         _delivery
             .Setup(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
                 It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
             .Returns((Guid instanceId, IReadOnlyList<AlertRuleChannelSnapshot> _, AlertPayload _, CancellationToken ct) =>
-                ++dispatches == 1
-                    ? throw new OperationCanceledException("shutting down")
-                    : RecordDeliveryAsync(instanceId, ct));
+            {
+                if (++dispatches > 1)
+                    return RecordDeliveryAsync(instanceId, ct);
+                shutdown.Cancel();
+                throw new OperationCanceledException(shutdown.Token);
+            });
 
-        var cancelled = () => Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        var cancelled = () => Process().CheckAsync(Enabled(Rule(Broken)), shutdown.Token);
         await cancelled.Should().ThrowAsync<OperationCanceledException>();
 
         await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);

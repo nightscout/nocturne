@@ -10,6 +10,7 @@ using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
+using NightscoutAddress = Nocturne.Connectors.Nightscout.Services.NightscoutAddress;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Auth;
@@ -35,10 +36,18 @@ namespace Nocturne.API.Services.Migration;
 /// </summary>
 public interface IMigrationJobService
 {
+    /// <param name="request">What to import.</param>
+    /// <param name="tenantContext">The tenant the job imports into.</param>
+    /// <param name="starter">
+    /// Who starts it (<see cref="Extensions.HttpContextExtensions.CredentialMakerAsync"/>), the maker of
+    /// every token it adopts; null when no subject starts it, and the tokens then have no maker.
+    /// </param>
+    /// <param name="ct">Cancels the start.</param>
     /// <exception cref="MigrationAlreadyRunningException">Thrown when the tenant already has a job in flight.</exception>
     Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
+        CredentialMaker? starter,
         CancellationToken ct = default
     );
 
@@ -52,7 +61,22 @@ public interface IMigrationJobService
         TestMigrationConnectionRequest request,
         CancellationToken ct = default
     );
-    PendingMigrationConfig GetPendingConfig();
+    /// <summary>
+    /// The instance's configured migration source, with its URL masked, to a caller with
+    /// <paramref name="instanceStanding"/>; no pending source to any other.
+    /// </summary>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    PendingMigrationConfig GetPendingConfig(bool instanceStanding);
+
+    /// <summary>
+    /// The Nightscout URL an API-mode request reads: <paramref name="requested"/>, or the configured
+    /// source's when it is blank and the caller has <paramref name="instanceStanding"/>.
+    /// <see cref="GetPendingConfig"/> gives a form only the masked form of the configured URL, so a
+    /// form that keeps it sends none.
+    /// </summary>
+    /// <param name="requested">The URL the request names.</param>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    string? ResolveNightscoutUrl(string? requested, bool instanceStanding);
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
@@ -137,6 +161,7 @@ public class MigrationJobService : IMigrationJobService
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
+        CredentialMaker? starter,
         CancellationToken ct = default
     )
     {
@@ -152,7 +177,7 @@ public class MigrationJobService : IMigrationJobService
         var tenantId = tenantContext.TenantId;
         var sourceDesc =
             request.Mode == MigrationMode.Api
-                ? request.NightscoutUrl is { } url ? NightscoutBaseUri.Display(url) : null
+                ? request.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null
                 : $"MongoDB: {request.MongoDatabaseName}";
 
         var jobInfo = new MigrationJobInfo
@@ -166,6 +191,7 @@ public class MigrationJobService : IMigrationJobService
         var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider, _timeProvider)
         {
             StoredRequest = _secrets.Encrypt(System.Text.Json.JsonSerializer.Serialize(request)),
+            Starter = starter,
         };
 
         // One migration per tenant at a time: two runs over the same target race on their inserts.
@@ -354,16 +380,16 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out var baseAddress))
+        if (!NightscoutAddress.TryResolve(request.NightscoutUrl, out var address))
         {
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = NightscoutBaseUri.InvalidUrlMessage,
+                ErrorMessage = NightscoutAddress.InvalidUrlMessage,
             };
         }
 
-        var httpClient = CreateSourceClient(baseAddress, request.NightscoutApiSecret);
+        var httpClient = CreateSourceClient(address, request.NightscoutApiSecret);
 
         try
         {
@@ -373,7 +399,7 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = true,
-                SiteName = NightscoutBaseUri.Display(request.NightscoutUrl),
+                SiteName = NightscoutAddress.Masked(request.NightscoutUrl),
                 AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
@@ -393,20 +419,20 @@ public class MigrationJobService : IMigrationJobService
     public async Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
         string nightscoutUrl, string? apiSecret, CancellationToken ct = default)
     {
-        if (!NightscoutBaseUri.TryFor(nightscoutUrl, out var baseAddress))
-            throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+        if (!NightscoutAddress.TryResolve(nightscoutUrl, out var address))
+            throw new MigrationSourceException(NightscoutAddress.InvalidUrlMessage, MigrationFailureCause.Unreachable);
 
-        var httpClient = CreateSourceClient(baseAddress, apiSecret);
+        var httpClient = CreateSourceClient(address, apiSecret);
         var status = await MigrationJob.ReadFromSourceAsync(
             httpClient, "api/v1/status.json", "status", ct, NightscoutRead.ImportProbe);
         var profiles = await MigrationJob.ReadFromSourceAsync(httpClient, "api/v1/profile.json", "profile", ct);
         return NightscoutDisplaySettings.Parse(status, profiles);
     }
 
-    private HttpClient CreateSourceClient(Uri baseAddress, string? apiSecret)
+    private HttpClient CreateSourceClient(NightscoutAddress address, string? apiSecret)
     {
         var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
-        httpClient.BaseAddress = baseAddress;
+        httpClient.BaseAddress = address.BaseUri;
 
         // Nightscout expects the SHA1 hash of the secret.
         if (!string.IsNullOrEmpty(apiSecret))
@@ -477,31 +503,27 @@ public class MigrationJobService : IMigrationJobService
         };
     }
 
-    public PendingMigrationConfig GetPendingConfig()
-    {
-        var migrationMode = _configuration["MIGRATION_MODE"];
+    /// <inheritdoc />
+    public PendingMigrationConfig GetPendingConfig(bool instanceStanding) =>
+        instanceStanding && ConfiguredMigrationSource.Read(_configuration) is { } source
+            ? new PendingMigrationConfig
+            {
+                HasPendingConfig = true,
+                Mode = source.Mode,
+                NightscoutUrl = source.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null,
+                HasApiSecret = source.HasApiSecret,
+                HasMongoConnectionString = source.MongoConnectionString is not null,
+                MongoDatabaseName = source.MongoDatabaseName,
+            }
+            : new PendingMigrationConfig { HasPendingConfig = false };
 
-        if (string.IsNullOrEmpty(migrationMode))
-        {
-            return new PendingMigrationConfig { HasPendingConfig = false };
-        }
-
-        var mode = migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase)
-            ? MigrationMode.MongoDb
-            : MigrationMode.Api;
-
-        return new PendingMigrationConfig
-        {
-            HasPendingConfig = true,
-            Mode = mode,
-            NightscoutUrl = _configuration["MIGRATION_NS_URL"] is { Length: > 0 } url ? NightscoutBaseUri.Display(url) : null,
-            HasApiSecret = !string.IsNullOrEmpty(_configuration["MIGRATION_NS_API_SECRET"]),
-            HasMongoConnectionString = !string.IsNullOrEmpty(
-                _configuration["MIGRATION_MONGO_CONNECTION_STRING"]
-            ),
-            MongoDatabaseName = _configuration["MIGRATION_MONGO_DATABASE_NAME"],
-        };
-    }
+    /// <inheritdoc />
+    public string? ResolveNightscoutUrl(string? requested, bool instanceStanding) =>
+        string.IsNullOrWhiteSpace(requested)
+        && instanceStanding
+        && ConfiguredMigrationSource.Read(_configuration)?.NightscoutUrl is { } configured
+            ? configured
+            : requested;
 
     public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(
         Guid tenantId,
@@ -510,7 +532,7 @@ public class MigrationJobService : IMigrationJobService
     {
         await using var dbContext = await _contexts.CreateAsync(ct);
 
-        var sources = (await dbContext
+        return await dbContext
             .MigrationSources
             .Where(s => s.TenantId == tenantId)
             .OrderByDescending(s => s.LastMigrationAt ?? s.CreatedAt)
@@ -524,11 +546,7 @@ public class MigrationJobService : IMigrationJobService
                 LastMigratedDataTimestamp = s.LastMigratedDataTimestamp,
                 CreatedAt = s.CreatedAt,
             })
-            .ToListAsync(ct))
-            .Select(s => s.NightscoutUrl is null ? s : s with { NightscoutUrl = NightscoutBaseUri.Display(s.NightscoutUrl) })
-            .ToList();
-
-        return sources;
+            .ToListAsync(ct);
     }
 }
 
@@ -551,6 +569,12 @@ internal class MigrationJob
 
     /// <summary>The request as <see cref="MigrationRunEntity.RequestEncrypted"/> holds it, written when the run record is added.</summary>
     public string? StoredRequest { get; init; }
+
+    /// <summary>
+    /// Who started the job, written to <see cref="MigrationRunEntity.StartedBySubjectId"/> and
+    /// <see cref="MigrationRunEntity.StarterAccessEndsAt"/> when the run record is added.
+    /// </summary>
+    public CredentialMaker? Starter { get; init; }
 
     /// <summary>The <see cref="MigrationRunEntity.Revision"/> this job last wrote, or was resumed at.</summary>
     private int _revision;
@@ -933,7 +957,14 @@ internal class MigrationJob
         var revision = run is null ? _revision : _revision + 1;
         if (run is null)
         {
-            run = new MigrationRunEntity { Id = _id, CreatedAt = _info.CreatedAt, RequestEncrypted = StoredRequest };
+            run = new MigrationRunEntity
+            {
+                Id = _id,
+                CreatedAt = _info.CreatedAt,
+                RequestEncrypted = StoredRequest,
+                StartedBySubjectId = Starter?.SubjectId,
+                StarterAccessEndsAt = Starter?.AccessEndsAt,
+            };
             db.MigrationRuns.Add(run);
         }
 
@@ -1134,45 +1165,32 @@ internal class MigrationJob
 
     /// <summary>
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
-    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>: the Nightscout URL for
-    /// API mode, a SHA-256 digest of the connection string for MongoDB mode. Only non-usable
-    /// digests are stored — never the API secret, a URL's token or the connection string themselves.
+    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>, a SHA-256 digest of the
+    /// Nightscout base for API mode and of the connection string for MongoDB mode. Only non-usable
+    /// digests and the <see cref="NightscoutAddress.Masked"/> URL are stored, never the API secret,
+    /// a URL's token or path secret, or the connection string themselves.
     /// </summary>
-    /// <remarks>
-    /// A row stored under <see cref="LegacyApiSourceIdentifier"/> is taken over and rewritten, so
-    /// its history stays attached and a token it recorded is dropped.
-    /// </remarks>
     private async Task<Guid> UpsertSourceAsync(NocturneDbContext db, CancellationToken ct)
     {
         var isApi = _request.Mode == MigrationMode.Api;
         var identifier = isApi
             ? ApiSourceIdentifier(_request.NightscoutUrl!)
             : MongoSourceIdentifier(_request.MongoConnectionString ?? string.Empty);
-        var legacyIdentifier = isApi ? LegacyApiSourceIdentifier(_request.NightscoutUrl!) : identifier;
 
-        var matches = await db.MigrationSources
-            .Where(s => s.TenantId == _tenantId
-                && (s.SourceIdentifier == identifier || s.SourceIdentifier == legacyIdentifier))
-            .ToListAsync(ct);
-        var source = matches.FirstOrDefault(s => s.SourceIdentifier == identifier);
-        if (source is not null)
-            return source.Id;
+        var existing = await db.MigrationSources
+            .Where(s => s.TenantId == _tenantId && s.SourceIdentifier == identifier)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(ct);
+        if (existing is { } id)
+            return id;
 
-        source = matches.FirstOrDefault();
-        if (source is not null)
-        {
-            source.SourceIdentifier = identifier;
-            source.NightscoutUrl = identifier;
-            return source.Id;
-        }
-
-        source = new MigrationSourceEntity
+        var source = new MigrationSourceEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
             Mode = _request.Mode.ToString(),
             SourceIdentifier = identifier,
-            NightscoutUrl = isApi ? identifier : null,
+            NightscoutUrl = isApi ? NightscoutAddress.Masked(_request.NightscoutUrl!) : null,
             NightscoutApiSecretHash = isApi && !string.IsNullOrEmpty(_request.NightscoutApiSecret)
                 ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
                 : null,
@@ -1183,11 +1201,13 @@ internal class MigrationJob
         return source.Id;
     }
 
-    /// <summary>Canonical source identifier for an API-mode migration. Shared with the startup pending-migration check so the two always agree.</summary>
-    internal static string ApiSourceIdentifier(string nightscoutUrl) => NightscoutBaseUri.Display(nightscoutUrl);
-
-    /// <summary>The identifier API-mode sources were stored under before <see cref="ApiSourceIdentifier"/> normalised the URL.</summary>
-    internal static string LegacyApiSourceIdentifier(string nightscoutUrl) => nightscoutUrl.TrimEnd('/');
+    /// <summary>
+    /// Canonical source identifier for an API-mode migration: a non-usable digest of the
+    /// <see cref="NightscoutAddress.Display"/> base, never the URL itself. Shared with the startup
+    /// pending-migration check so the two always agree.
+    /// </summary>
+    internal static string ApiSourceIdentifier(string nightscoutUrl) =>
+        HashUtils.Sha256Hex(NightscoutAddress.Display(nightscoutUrl));
 
     /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
     internal static string MongoSourceIdentifier(string connectionString) =>
@@ -1282,9 +1302,7 @@ internal class MigrationJob
             Id = run.Id,
             Mode = Enum.TryParse<MigrationMode>(run.Mode, out var m) ? m : MigrationMode.Api,
             CreatedAt = run.CreatedAt,
-            SourceDescription = run.Mode == nameof(MigrationMode.Api) && run.SourceDescription is { } url
-                ? NightscoutBaseUri.Display(url)
-                : run.SourceDescription,
+            SourceDescription = run.SourceDescription,
             State = state,
             StartedAt = run.StartedAt,
             CompletedAt = run.CompletedAt,
@@ -1408,9 +1426,9 @@ internal class MigrationJob
         using var scope = CreateTenantScope();
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient(MigrationJobService.HttpClientName);
-        httpClient.BaseAddress = NightscoutBaseUri.TryFor(_request.NightscoutUrl, out var baseAddress)
-            ? baseAddress
-            : throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+        httpClient.BaseAddress = NightscoutAddress.TryResolve(_request.NightscoutUrl, out var address)
+            ? address.BaseUri
+            : throw new MigrationSourceException(NightscoutAddress.InvalidUrlMessage, MigrationFailureCause.Unreachable);
 
         // Add API secret header if provided (Nightscout expects the SHA1 hash)
         if (!string.IsNullOrEmpty(_request.NightscoutApiSecret))
@@ -1714,7 +1732,9 @@ internal class MigrationJob
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, sendToken);
+            response = await httpClient.GetAsync(
+                httpClient.BaseAddress is { } site ? NightscoutAddress.Of(site).For(url) : url,
+                HttpCompletionOption.ResponseHeadersRead, sendToken);
         }
         catch (Nocturne.Infrastructure.Outbound.OutboundRefusedException ex)
         {
@@ -1734,7 +1754,8 @@ internal class MigrationJob
             // ApiSecretRejected cause. That is how Nightscout's admin routes turn down a
             // non-admin secret, which the subjects step skips over rather than failing on.
             throw new MigrationSourceException(
-                NightscoutMessages.ForStatus(response.StatusCode, label, read),
+                NightscoutMessages.ForStatus(
+                    response.StatusCode, label, read, secretSent: httpClient.DefaultRequestHeaders.Contains("api-secret")),
                 response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                     ? MigrationFailureCause.ApiSecretRejected
                     : MigrationFailureCause.Status)
@@ -2819,6 +2840,20 @@ internal class MigrationJob
         return Convert.ToHexStringLower(bytes);
     }
 
+    /// <summary>
+    /// The maker the run record holds for the tokens it adopts. It is read from the record, not from
+    /// <see cref="Starter"/>, so a resumed run stamps the end captured at start, lowered by any cap
+    /// since (<see cref="MemberCreations.CapAsync"/>); null for a run that recorded no starter.
+    /// </summary>
+    private async Task<CredentialMaker?> ReadStarterAsync(NocturneDbContext dbContext, CancellationToken ct)
+    {
+        var run = await dbContext.MigrationRuns.AsNoTracking()
+            .Where(r => r.Id == _id && r.TenantId == _tenantId)
+            .Select(r => new { r.StartedBySubjectId, r.StarterAccessEndsAt })
+            .FirstOrDefaultAsync(ct);
+        return run?.StartedBySubjectId is { } subjectId ? new CredentialMaker(subjectId, run.StarterAccessEndsAt) : null;
+    }
+
     private async Task MigrateSubjectsViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
@@ -2881,6 +2916,7 @@ internal class MigrationJob
             : HashApiSecret(_request.NightscoutApiSecret);
 
         Guid? deviceSubjectId = null;
+        var starter = await ReadStarterAsync(dbContext, ct);
 
         foreach (var subject in subjects)
         {
@@ -2941,7 +2977,9 @@ internal class MigrationJob
                         subject.Name ?? "Unnamed",
                         [.. scopes],
                         TokenHash: tokenHash,
-                        LegacyTokenDigest: legacyDigest),
+                        LegacyTokenDigest: legacyDigest,
+                        CreatedBySubjectId: starter?.SubjectId,
+                        ExpiresAt: starter?.AccessEndsAt),
                     ct);
 
                 existingHashes.Add(tokenHash);
@@ -3017,7 +3055,7 @@ internal class MigrationJob
     private async Task<Dictionary<string, List<string>>> FetchNightscoutRolePermissionsAsync(
         HttpClient httpClient, CancellationToken ct)
     {
-        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         try
         {

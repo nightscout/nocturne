@@ -37,7 +37,7 @@ vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
       : remoteQuery(() => state.options),
   updateRule: remoteCommand((request: unknown) => state.update(request)),
   deleteRule: remoteCommand(() => Promise.resolve()),
-  testFire: remoteCommand(() => Promise.resolve({ success: true })),
+  testFire: remoteCommand(() => Promise.resolve({ notSent: [] })),
   getInAppRecipients: () => remoteQuery(() => []),
   keepChannel: remoteCommand(() => Promise.reject(new Error("not under test"))),
   suggestAutoResolve: remoteCommand(() => Promise.resolve({ condition: null })),

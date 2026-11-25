@@ -90,12 +90,16 @@ public interface IOidcAuthService
     );
 
     /// <summary>
-    /// End the session (logout)
+    /// Ends the sessions the caller signs out of, every token of each chain: the session the
+    /// presented refresh token belongs to, whether that token is live, rotated out or revoked, and
+    /// <paramref name="signedIn"/>. When both name one session it ends once. No other session of
+    /// the subject is touched.
     /// </summary>
-    /// <param name="refreshToken">Refresh token to revoke</param>
+    /// <param name="refreshToken">The refresh token the caller presents, if any.</param>
+    /// <param name="signedIn">The session the caller's access token names, if it is a session.</param>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional)</param>
     /// <returns>Logout result with optional provider logout URL</returns>
-    Task<OidcLogoutResult> LogoutAsync(string refreshToken, Guid? providerId = null);
+    Task<OidcLogoutResult> LogoutAsync(string? refreshToken, RefreshTokenSession? signedIn, Guid? providerId = null);
 
     /// <returns>User info or null if not found</returns>
     Task<OidcUserInfo?> GetUserInfoAsync(Guid subjectId);
@@ -160,12 +164,15 @@ public interface IOidcAuthService
         Guid providerId, Guid subjectId, string? tenantSlug = null);
 
     /// <summary>
-    /// Handle the OIDC callback for setup owner creation.
-    /// Links the OIDC identity to the pre-created subject and issues session tokens.
+    /// Handle the OIDC callback for setup owner creation: links the proved identity to the
+    /// pre-created subject, or adopts the subject that already holds it. It issues no session;
+    /// the caller finishes setup and then the sign-in.
     /// </summary>
-    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
-        string code, string state, string expectedState,
-        string? ipAddress = null, string? userAgent = null);
+    /// <param name="tenantId">
+    /// The tenant being set up, whose setup the link or adoption claims. Fails with
+    /// <c>setup_already_complete</c> when another completion has claimed it first.
+    /// </param>
+    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(string code, string state, string expectedState, Guid tenantId);
 }
 
 /// <summary>
@@ -452,12 +459,28 @@ public class OidcSetupCallbackResult
     public bool Success { get; set; }
     public string? Error { get; set; }
     public string? ErrorDescription { get; set; }
+
+    /// <summary>The setup owner, holding the proved identity.</summary>
     public Guid? SubjectId { get; set; }
-    public OidcTokenResponse? Tokens { get; set; }
+
+    /// <summary>The provider that proved the identity.</summary>
+    public Guid? ProviderId { get; set; }
+
+    /// <summary>The provider's session id (<c>sid</c>) from the ID token, for the session the sign-in issues.</summary>
+    public string? OidcSessionId { get; set; }
+
     public string? ReturnUrl { get; set; }
 
-    public static OidcSetupCallbackResult Succeeded(Guid subjectId, OidcTokenResponse tokens, string? returnUrl = null) =>
-        new() { Success = true, SubjectId = subjectId, Tokens = tokens, ReturnUrl = returnUrl };
+    public static OidcSetupCallbackResult Succeeded(
+        Guid subjectId, Guid providerId, string? oidcSessionId, string? returnUrl = null) =>
+        new()
+        {
+            Success = true,
+            SubjectId = subjectId,
+            ProviderId = providerId,
+            OidcSessionId = oidcSessionId,
+            ReturnUrl = returnUrl,
+        };
 
     public static OidcSetupCallbackResult Failed(string error, string? description = null) =>
         new() { Success = false, Error = error, ErrorDescription = description };

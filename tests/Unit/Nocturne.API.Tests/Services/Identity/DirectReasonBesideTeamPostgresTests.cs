@@ -34,7 +34,7 @@ namespace Nocturne.API.Tests.Services.Identity;
 /// <summary>
 /// The paths that let a person in directly, remove them and list them, on PostgreSQL under the runtime
 /// role, for a member who also holds, or only holds, a team's reason. The team reasons are written
-/// straight to the tables and projected by the startup check, since no product path gives one yet.
+/// straight to the tables, with the staff rows they stand on, and projected by the startup check.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresTests.Database database)
@@ -56,26 +56,6 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         }
 
         public Task DisposeAsync() => Task.CompletedTask;
-    }
-
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
     }
 
     private sealed record Row(string EventType, string? Details)
@@ -105,7 +85,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         return context;
     }
 
-    private Factory Contexts(Guid tenant, Guid? actor = null) => new(t => Context(t, actor), tenant);
+    private SuppliedContextFactory Contexts(Guid tenant, Guid? actor = null) => new(() => Context(tenant, actor));
 
     private async Task<Seeded> SeedAsync(string slug, bool personPending = false)
     {
@@ -135,9 +115,10 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
 
     /// <summary>
     /// Gives <paramref name="subject"/> the reason of a new team's access to <paramref name="tenant"/>
-    /// (or of a team with access to <paramref name="accessTenant"/> when another site's) giving
-    /// <paramref name="role"/> until <paramref name="endsAt"/>, adding the row when they hold none, and
-    /// projects it as the startup check does.
+    /// giving <paramref name="role"/> until <paramref name="endsAt"/>, with the staff rows it stands on,
+    /// adding the row when they hold none, and projects it as the startup check does. A reason of a team
+    /// with access to another site (<paramref name="accessTenant"/>) stands on nothing at this one, so it
+    /// is written alone and the check, which would remove it, does not run.
     /// </summary>
     private async Task<Guid> TeamReasonAsync(
         Guid tenant, Guid subject, Guid role, string teamName, bool limitTo24Hours = false, Guid? accessTenant = null,
@@ -152,11 +133,23 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         var limit = limitTo24Hours ? "true" : "false";
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var at = accessTenant ?? tenant;
+        var teamMember = Guid.CreateVersion7();
+        var staff = accessTenant is null
+            ? $"""
+                INSERT INTO team_tenant_access_roles (id, team_tenant_access_id, tenant_role_id)
+                VALUES ('{Guid.CreateVersion7()}', '{access}', '{role}');
+                INSERT INTO team_members (id, team_id, subject_id, kind, limit_to_24_hours, ends_at)
+                VALUES ('{teamMember}', '{team}', '{subject}', 'staff', false, {ends});
+                INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
+                VALUES ('{Guid.CreateVersion7()}', '{access}', '{teamMember}', 'approved');
+                """
+            : string.Empty;
         await ExecuteAsync($"""
             SELECT set_config('app.current_tenant_id', '{at}', false);
             INSERT INTO teams (id, name) VALUES ('{team}', '{teamName}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{at}', {limit});
+            {staff}
             SELECT set_config('app.current_tenant_id', '{tenant}', false);
             {(existing is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
@@ -167,10 +160,16 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
             """);
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now.UtcDateTime, NullLogger.Instance, Ct);
+        if (accessTenant is null)
+            await ReconcileAsync();
         return team;
     }
+
+    private Task ReconcileAsync() =>
+        DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            database.MigratorConnectionString, Now.UtcDateTime,
+            (unit, changes, ct) => TeamReasonWrites.ApplyAsync(unit, changes, Revocation(), Now.UtcDateTime, ct),
+            NullLogger.Instance, Ct);
 
     private async Task<List<string>> KindsAsync(Guid tenant, Guid subject) =>
         await ReadAsync($"""
@@ -196,7 +195,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
 
-    private static MemberInviteService InviteService(Factory contexts) => new(
+    private static MemberInviteService InviteService(SuppliedContextFactory contexts) => new(
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
         new MemberInviteRepository(contexts),
         new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -207,14 +206,14 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         new FakeTimeProvider(Now),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static ITenantRoleService GrantsEverything() =>
         Mock.Of<ITenantRoleService>(r => r.ValidateRoleGrantAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())
             == Task.FromResult(RoleGrantValidation.Valid));
 
-    private static MembershipRequestService RequestService(Factory contexts) => new(
+    private static MembershipRequestService RequestService(SuppliedContextFactory contexts) => new(
         new TenantRepository(contexts),
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
         new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -225,9 +224,9 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         new FakeTimeProvider(Now),
         NullLogger<MembershipRequestService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
-    private static TenantService TenantService(Factory contexts) => new(
+    private static TenantService TenantService(SuppliedContextFactory contexts, GuestSessionCacheService? sessions = null) => new(
         contexts,
         new TenantRepository(contexts),
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
@@ -236,10 +235,10 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        Revocation(),
+        sessions is null ? Revocation() : new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private Task<string> InviteAsync(Seeded s) => InviteByAsync(s, s.Manager);
 
@@ -264,9 +263,10 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     /// <summary>A device credential and an alert channel <see cref="Seeded.Person"/> made, neither with an end.</summary>
     private async Task<(Guid Credential, Guid Channel)> MadeByPersonAsync(Seeded s)
     {
+        var device = await new SubjectRepository(Contexts(s.Tenant), AccountLinkRoutes.Off).EnsureDeviceSubjectAsync(Ct);
         var credential = await new OAuthGrantRepository(Contexts(s.Tenant)).CreateAsync(
             new NewOAuthGrant(
-                null, s.Person, OAuthGrantTypes.Direct, [Scope.GlucoseRead], "uploader", Guid.NewGuid().ToString("N"), null, null, false,
+                null, device, OAuthGrantTypes.Direct, [Scope.GlucoseRead], "uploader", Guid.NewGuid().ToString("N"), null, null, false,
                 CreatedBySubjectId: s.Person),
             Ct);
         var channel = Guid.CreateVersion7();
@@ -302,6 +302,66 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         var channel = await db.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.Id == made.Channel, Ct);
         return (grant.ExpiresAt, grant.RevokedAt is not null, channel.StopsAt);
     }
+
+    /// <summary>A guest link to <see cref="Seeded.Manager"/>'s data that <see cref="Seeded.Person"/> made, with no end.</summary>
+    private async Task<Guid> GuestLinkByPersonAsync(Seeded s) =>
+        await new OAuthGrantRepository(Contexts(s.Tenant)).CreateAsync(
+            new NewOAuthGrant(
+                null, s.Manager, OAuthGrantTypes.Guest, [Scope.GlucoseRead], "link", Guid.NewGuid().ToString("N"), null, null, false,
+                CreatedBySubjectId: s.Person),
+            Ct);
+
+    private async Task<(DateTime? Expires, bool Revoked)> LinkStateAsync(Seeded s, Guid link)
+    {
+        await using var db = Context(s.Tenant, null);
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == link, Ct);
+        return (grant.ExpiresAt, grant.RevokedAt is not null);
+    }
+
+    private async Task<DateTime?> AccessEndAsync(Seeded s) =>
+        (await new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off).FindMemberAsync(s.Tenant, s.Person, Ct))!.AccessEndsAt;
+
+    /// <summary>Two sites, in the order the startup check reaches them, which is by tenant id.</summary>
+    private async Task<(Seeded First, Seeded Second)> TwoSitesAsync(string slug)
+    {
+        var a = await SeedAsync($"{slug}-a");
+        var b = await SeedAsync($"{slug}-b");
+        return string.CompareOrdinal(a.Tenant.ToString(), b.Tenant.ToString()) < 0 ? (a, b) : (b, a);
+    }
+
+    /// <summary>
+    /// Makes <see cref="Seeded.Person"/> a member only through a team's reason ending at
+    /// <paramref name="teamEnds"/>, then has them make a guest link, a device credential and an alert channel.
+    /// </summary>
+    private async Task<(Guid Link, (Guid Credential, Guid Channel) Made)> TeamOnlyWithMadeAsync(Seeded s, DateTime teamEnds)
+    {
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic", endsAt: teamEnds);
+        return (await GuestLinkByPersonAsync(s), await MadeByPersonAsync(s));
+    }
+
+    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => ExecuteAsync($"""
+        SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+        UPDATE alert_rule_channels SET channel_type = '{channelType}' WHERE id = '{channel}';
+        """);
+
+    /// <summary>Clears the end of <see cref="Seeded.Person"/>'s row, as a build that knows nothing of reasons would.</summary>
+    private Task ClearAccessEndAsync(Seeded s) => ExecuteAsync($"""
+        SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+        UPDATE tenant_members SET access_ends_at = NULL WHERE tenant_id = '{s.Tenant}' AND subject_id = '{s.Person}';
+        """);
+
+    private async Task<Guid> AccessOfTeamAsync(Seeded s, Guid team) =>
+        Guid.Parse((await ReadInTenantAsync(s.Tenant, $"SELECT id::text FROM team_tenant_access WHERE team_id = '{team}'")).Single());
+
+    private static GuestSessionCacheService SessionsOf(Seeded s, params Guid[] grants)
+    {
+        var sessions = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
+        foreach (var grant in grants)
+            sessions.Set(s.Tenant, grant, null);
+        return sessions;
+    }
+
+    private static bool IsCached(GuestSessionCacheService sessions, Seeded s, Guid grant) => sessions.TryGet(s.Tenant, grant, out _);
 
     [Fact]
     public async Task A_staff_member_accepts_an_invite_and_holds_the_sum_of_both_reasons()
@@ -399,7 +459,8 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             Mock.Of<IInAppNotificationService>(),
             new FakeTimeProvider(Now),
             NullLogger<AccessRequestService>.Instance,
-            AccountLinkRoutes.Off);
+            AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
 
         (await service.ApproveAsync(s.Person, s.Tenant, [s.ViewerRole], null, false, [Scope.FullAccess], s.Manager))
             .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
@@ -646,6 +707,242 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             .Should().Be(OwnerGuardedChange.Changed);
 
         (await MadeStateAsync(s, made)).Should().Be(((DateTime?)ends, false, (DateTime?)ends));
+    }
+
+    [Fact]
+    public async Task Removing_a_direct_reason_with_no_end_caps_what_the_person_made_at_the_teams_end_and_evicts_it_after_the_commit()
+    {
+        var s = await SeedAsync("remove-ending-team");
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        await TenantService(Contexts(s.Tenant, s.Manager)).AddMemberAsync(s.Tenant, s.Person, [s.ViewerRole]);
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic", endsAt: teamEnds);
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+        (await AccessEndAsync(s)).Should().BeNull();
+        var sessions = SessionsOf(s, link, made.Credential);
+
+        (await TenantService(Contexts(s.Tenant, s.Manager), sessions).RemoveMemberAsync(s.Tenant, s.Person)).Ok.Should().BeTrue();
+
+        (await AccessEndAsync(s)).Should().Be(teamEnds);
+        (await LinkStateAsync(s, link)).Revoked.Should().BeTrue("removal revokes every guest link the person made");
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)teamEnds, false, (DateTime?)teamEnds));
+        IsCached(sessions, s, link).Should().BeFalse();
+        IsCached(sessions, s, made.Credential).Should().BeFalse("the capped credential is evicted with the revoked link");
+        await RowIsTheSumAsync(s, s.Person);
+    }
+
+    [Fact]
+    public async Task Removing_a_direct_reason_with_an_end_beside_a_later_teams_lets_what_the_person_made_last_to_the_teams_end()
+    {
+        var s = await SeedAsync("remove-ended-direct-kept");
+        var directEnds = Now.UtcDateTime.AddDays(10);
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        (await new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off).AddMemberAsync(
+                new NewTenantMember(s.Tenant, s.Person, [s.ViewerRole], AccessEndsAt: directEnds) { How = MembershipJoinHow.Direct, By = null },
+                Ct))
+            .Should().BeTrue();
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic", endsAt: teamEnds);
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+        var sessions = SessionsOf(s, link, made.Credential);
+
+        (await TenantService(Contexts(s.Tenant, s.Manager), sessions).RemoveMemberAsync(s.Tenant, s.Person)).Ok.Should().BeTrue();
+
+        (await AccessEndAsync(s)).Should().Be(teamEnds);
+        (await LinkStateAsync(s, link)).Revoked.Should().BeTrue("a guest link made under the direct access goes with it");
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)teamEnds, false, (DateTime?)teamEnds));
+        IsCached(sessions, s, made.Credential).Should().BeFalse();
+        await RowIsTheSumAsync(s, s.Person);
+    }
+
+    [Fact]
+    public async Task Removing_a_direct_reason_with_an_end_beside_an_unending_teams_caps_nothing_the_person_made()
+    {
+        var s = await SeedAsync("remove-ended-unending-team");
+        (await new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off).AddMemberAsync(
+                new NewTenantMember(s.Tenant, s.Person, [s.ViewerRole], AccessEndsAt: Now.UtcDateTime.AddDays(10))
+                    { How = MembershipJoinHow.Direct, By = null },
+                Ct))
+            .Should().BeTrue();
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic");
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+
+        (await TenantService(Contexts(s.Tenant, s.Manager)).RemoveMemberAsync(s.Tenant, s.Person)).Ok.Should().BeTrue();
+
+        (await AccessEndAsync(s)).Should().BeNull();
+        (await LinkStateAsync(s, link)).Revoked.Should().BeTrue("a guest link made under the direct access goes with it");
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)null, false, (DateTime?)null));
+        await RowIsTheSumAsync(s, s.Person);
+    }
+
+    [Fact]
+    public async Task Removing_a_direct_reason_with_no_end_beside_an_unending_teams_caps_nothing_the_person_made()
+    {
+        var s = await SeedAsync("remove-unending-team");
+        await TenantService(Contexts(s.Tenant, s.Manager)).AddMemberAsync(s.Tenant, s.Person, [s.ViewerRole]);
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic");
+        var made = await MadeByPersonAsync(s);
+
+        (await TenantService(Contexts(s.Tenant, s.Manager)).RemoveMemberAsync(s.Tenant, s.Person)).Ok.Should().BeTrue();
+
+        (await AccessEndAsync(s)).Should().BeNull();
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)null, false, (DateTime?)null));
+    }
+
+    [Fact]
+    public async Task Ending_a_teams_reason_caps_what_the_person_made_at_the_end_of_the_direct_reason_left()
+    {
+        var s = await SeedAsync("team-end-caps");
+        var directEnds = Now.UtcDateTime.AddDays(10);
+        (await new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off).AddMemberAsync(
+                new NewTenantMember(s.Tenant, s.Person, [s.ViewerRole], AccessEndsAt: directEnds) { How = MembershipJoinHow.Direct, By = null },
+                Ct))
+            .Should().BeTrue();
+        var access = await AccessOfTeamAsync(s, await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic"));
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+        (await AccessEndAsync(s)).Should().BeNull();
+
+        IReadOnlyList<OAuthGrantRecord>? lowered;
+        await using (var unit = DbUnitOfWork.Own(Context(s.Tenant, null)))
+        {
+            lowered = await unit.CommitAsync(async token =>
+            {
+                var capped = await TenantMembershipRepository.StageRemoveTeamReasonAsync(
+                    unit, s.Tenant, s.Person, access, MemberAccessSource.System, Now.UtcDateTime, token);
+                await unit.Context.SaveChangesAsync(token);
+                return capped;
+            }, ct: Ct);
+        }
+
+        lowered.Should().NotBeNull();
+        lowered!.Select(g => g.Id).Should().BeEquivalentTo([link, made.Credential]);
+        (await AccessEndAsync(s)).Should().Be(directEnds);
+        (await LinkStateAsync(s, link)).Should().Be(((DateTime?)directEnds, false));
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)directEnds, false, (DateTime?)directEnds));
+        await RowIsTheSumAsync(s, s.Person);
+    }
+
+    [Fact]
+    public async Task Ending_a_teams_reason_on_a_row_another_build_cleared_caps_at_the_end_its_alignment_gives_back()
+    {
+        var s = await SeedAsync("team-end-cleared");
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic", endsAt: teamEnds);
+        var access = await AccessOfTeamAsync(s, await TeamReasonAsync(s.Tenant, s.Person, s.ViewerRole, "Camp", endsAt: teamEnds.AddDays(-5)));
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+        await ClearAccessEndAsync(s);
+
+        IReadOnlyList<OAuthGrantRecord>? lowered;
+        await using (var unit = DbUnitOfWork.Own(Context(s.Tenant, null)))
+        {
+            lowered = await unit.CommitAsync(async token =>
+            {
+                var capped = await TenantMembershipRepository.StageRemoveTeamReasonAsync(
+                    unit, s.Tenant, s.Person, access, MemberAccessSource.System, Now.UtcDateTime, token);
+                await unit.Context.SaveChangesAsync(token);
+                return capped;
+            }, ct: Ct);
+        }
+
+        lowered!.Select(g => g.Id).Should().BeEquivalentTo([link, made.Credential]);
+        (await AccessEndAsync(s)).Should().Be(teamEnds);
+        (await LinkStateAsync(s, link)).Should().Be(((DateTime?)teamEnds, false));
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)teamEnds, false, (DateTime?)teamEnds));
+        await RowIsTheSumAsync(s, s.Person);
+    }
+
+    [Fact]
+    public async Task The_startup_check_caps_what_the_person_made_at_the_end_it_gives_back_to_a_row_another_build_cleared()
+    {
+        var s = await SeedAsync("reconcile-cleared");
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic", endsAt: teamEnds);
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+        await ClearAccessEndAsync(s);
+
+        await ReconcileAsync();
+
+        (await AccessEndAsync(s)).Should().Be(teamEnds);
+        (await LinkStateAsync(s, link)).Should().Be(((DateTime?)teamEnds, false));
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)teamEnds, false, (DateTime?)teamEnds));
+        await RowIsTheSumAsync(s, s.Person);
+    }
+
+    [Fact]
+    public async Task The_startup_check_caps_each_cleared_row_under_its_own_tenant()
+    {
+        var (first, second) = await TwoSitesAsync("reconcile-two");
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        var firstMade = await TeamOnlyWithMadeAsync(first, teamEnds);
+        var secondMade = await TeamOnlyWithMadeAsync(second, teamEnds);
+        await ClearAccessEndAsync(first);
+        await ClearAccessEndAsync(second);
+
+        await ReconcileAsync();
+
+        foreach (var (s, (link, made)) in new[] { (first, firstMade), (second, secondMade) })
+        {
+            (await AccessEndAsync(s)).Should().Be(teamEnds);
+            (await LinkStateAsync(s, link)).Should().Be(((DateTime?)teamEnds, false));
+            (await MadeStateAsync(s, made)).Should().Be(((DateTime?)teamEnds, false, (DateTime?)teamEnds));
+        }
+    }
+
+    [Fact]
+    public async Task The_startup_check_carries_on_past_a_member_whose_cap_fails()
+    {
+        var (first, second) = await TwoSitesAsync("reconcile-fails");
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        var (_, broken) = await TeamOnlyWithMadeAsync(first, teamEnds);
+        var (link, made) = await TeamOnlyWithMadeAsync(second, teamEnds);
+        await SetChannelTypeAsync(first, broken.Channel, "not_a_channel");
+        await ClearAccessEndAsync(first);
+        await ClearAccessEndAsync(second);
+
+        try
+        {
+            await ReconcileAsync();
+
+            (await AccessEndAsync(first)).Should().BeNull("the failed member's transaction rolled back");
+            (await AccessEndAsync(second)).Should().Be(teamEnds);
+            (await LinkStateAsync(second, link)).Should().Be(((DateTime?)teamEnds, false));
+            (await MadeStateAsync(second, made)).Should().Be(((DateTime?)teamEnds, false, (DateTime?)teamEnds));
+        }
+        finally
+        {
+            await SetChannelTypeAsync(first, broken.Channel, "in_app");
+        }
+    }
+
+    [Fact]
+    public async Task The_lapse_sweep_moves_no_end_and_caps_nothing_the_person_made()
+    {
+        var s = await SeedAsync("lapse-caps-nothing");
+        var directEnds = Now.UtcDateTime.AddDays(1);
+        var teamEnds = Now.UtcDateTime.AddDays(20);
+        (await new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off).AddMemberAsync(
+                new NewTenantMember(s.Tenant, s.Person, [s.ViewerRole], AccessEndsAt: directEnds) { How = MembershipJoinHow.Direct, By = null },
+                Ct))
+            .Should().BeTrue();
+        await TeamReasonAsync(s.Tenant, s.Person, s.CaretakerRole, "Clinic", endsAt: teamEnds);
+        var link = await GuestLinkByPersonAsync(s);
+        var made = await MadeByPersonAsync(s);
+        (await AccessEndAsync(s)).Should().Be(teamEnds);
+
+        await new MembershipReasonLapses(Contexts(s.Tenant), NullLogger<MembershipReasonLapses>.Instance)
+            .NarrowLapsedAsync(directEnds.AddMinutes(1), Ct);
+
+        (await ReadInTenantAsync(s.Tenant, $"""
+            SELECT coalesce(next_reason_lapse_at::text, 'none') FROM tenant_members
+             WHERE tenant_id = '{s.Tenant}' AND subject_id = '{s.Person}'
+            """)).Should().Equal(["none"], "the sweep recomputed the row");
+        (await AccessEndAsync(s)).Should().Be(teamEnds);
+        (await LinkStateAsync(s, link)).Should().Be(((DateTime?)null, false));
+        (await MadeStateAsync(s, made)).Should().Be(((DateTime?)null, false, (DateTime?)null));
     }
 
     private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);

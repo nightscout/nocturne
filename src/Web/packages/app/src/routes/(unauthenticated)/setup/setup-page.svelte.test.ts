@@ -119,7 +119,7 @@ describe("setup who-for step", () => {
     const group = page.getByRole("radiogroup", { name: /Who is Nocturne for/ });
     await expect.element(group).toBeVisible();
     expect(group.getByRole("radio").elements()).toHaveLength(3);
-    await expect.element(page.getByText("Step 01 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 1 of 6")).toBeVisible();
     await expect
       .element(page.getByTestId("artwork"))
       .toHaveAttribute("data-artwork", "people-group");
@@ -134,7 +134,7 @@ describe("setup who-for step", () => {
     await expect
       .element(page.getByRole("button", { name: "Finish", exact: true }))
       .not.toBeInTheDocument();
-    await expect.element(page.getByText("Step 01 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 1 of 6")).toBeVisible();
   });
 
   it("asks the patient's name only for someone else", async () => {
@@ -219,7 +219,7 @@ describe("setup who-for step", () => {
     await continueButton().click();
 
     expect(relationship.set).not.toHaveBeenCalled();
-    await expect.element(page.getByText("Step 02 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 2 of 6")).toBeVisible();
   });
 
   it("stays on the step when the answer cannot be saved", async () => {
@@ -229,7 +229,7 @@ describe("setup who-for step", () => {
     await page.getByRole("radio", { name: /^Me/ }).click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 01 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 1 of 6")).toBeVisible();
     await expect.element(page.getByRole("alert")).toBeVisible();
   });
 });
@@ -240,7 +240,7 @@ describe("setup path step", () => {
 
     await expect.element(freshCard()).toHaveAttribute("aria-checked", "true");
     await expect
-      .element(page.getByText("Fresh Start", { exact: true }))
+      .element(page.getByText("Fresh start", { exact: true }))
       .toBeVisible();
   });
 
@@ -252,9 +252,9 @@ describe("setup path step", () => {
     await expect
       .element(migrationCard())
       .toHaveAttribute("aria-checked", "true");
-    await expect.element(page.getByText("Step 02 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 2 of 6")).toBeVisible();
     await expect
-      .element(page.getByText("Nightscout Migration", { exact: true }))
+      .element(page.getByText("Nightscout migration", { exact: true }))
       .toBeVisible();
   });
 
@@ -264,9 +264,9 @@ describe("setup path step", () => {
     await migrationCard().click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 03 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 3 of 6")).toBeVisible();
     await expect
-      .element(page.getByText("Nightscout Migration", { exact: true }))
+      .element(page.getByText("Nightscout migration", { exact: true }))
       .toBeVisible();
     await expect.element(migrationCard()).not.toBeInTheDocument();
   });
@@ -354,7 +354,7 @@ describe("setup import step", () => {
     await skipButton().click();
     await expect.element(unitsHeading()).toBeVisible();
     await skipButton().click();
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
   }
 
   it("blocks leaving while the import runs", async () => {
@@ -370,7 +370,7 @@ describe("setup import step", () => {
 
     await page.getByRole("button", { name: "Finish" }).click();
 
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
   });
 
   it("offers Continue once the import has settled", async () => {
@@ -379,7 +379,7 @@ describe("setup import step", () => {
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 6 of 6")).toBeVisible();
   });
 
   // /setup is still the core until the server records it complete, so going there would land
@@ -390,13 +390,13 @@ describe("setup import step", () => {
     await reachImport();
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await continueButton().click();
-    await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 6 of 6")).toBeVisible();
 
     await continueButton().click();
 
     await expect.poll(() => markSetupComplete.mock.calls.length).toBe(1);
     expect(goto).not.toHaveBeenCalled();
-    await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 6 of 6")).toBeVisible();
 
     markSetupComplete.mockResolvedValueOnce({ success: true, completed: true });
     await continueButton().click();
@@ -416,7 +416,7 @@ describe("setup import step", () => {
     await page.getByRole("button", { name: "Stub: complete" }).click();
     await skipButton().click();
 
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
     await expect
       .element(page.getByTestId("start-error"))
       .toHaveTextContent("Your Nightscout connection is not saved yet.");
@@ -445,7 +445,7 @@ describe("setup units step", () => {
   it("comes before any data, with the suggested units and an example in each", async () => {
     await reachUnits();
 
-    await expect.element(page.getByText("Step 03 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 3 of 6")).toBeVisible();
     await expect.element(mmolCard()).toHaveAttribute("aria-checked", "true");
     await expect.element(mgdlCard()).toHaveAttribute("aria-checked", "false");
     await expect.element(mmolCard()).toHaveTextContent(/6\.1\s*mmol\/L/);
@@ -585,7 +585,7 @@ describe("setup units step", () => {
     await skipButton().click();
 
     expect(startFromConnector).toHaveBeenCalledWith("nightscout");
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
   });
 
   it("does not restart an import still running after going back", async () => {
@@ -594,13 +594,13 @@ describe("setup units step", () => {
     await reachUnitsFromNightscout();
 
     await continueButton().click();
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
     migrationHistory.jobs = [{ id: "job-1", state: MigrationJobState.Running }];
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await page.getByRole("button", { name: "Back" }).click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
     expect(startFromConnector).toHaveBeenCalledOnce();
   });
 
@@ -610,7 +610,7 @@ describe("setup units step", () => {
     await reachUnitsFromNightscout();
 
     await continueButton().click();
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
     migrationHistory.jobs = [{ id: "job-failed", state: MigrationJobState.Failed }];
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await page.getByRole("button", { name: "Back" }).click();
@@ -619,7 +619,7 @@ describe("setup units step", () => {
     await expect.element(unitsHeading()).toBeVisible();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
     expect(startFromConnector).toHaveBeenCalledTimes(2);
   });
 
@@ -630,7 +630,7 @@ describe("setup units step", () => {
     await page.getByRole("button", { name: "Finish", exact: true }).click();
 
     expect(startFromConnector).toHaveBeenCalledWith("nightscout");
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
   });
 
   it("starts the import once the step is answered", async () => {
@@ -641,6 +641,6 @@ describe("setup units step", () => {
     await continueButton().click();
 
     expect(startFromConnector).toHaveBeenCalledWith("nightscout");
-    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await expect.element(page.getByText("Step 5 of 6")).toBeVisible();
   });
 });

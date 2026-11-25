@@ -22,7 +22,8 @@ public interface ITeamRepository
 
     /// <summary>
     /// The team, or null when <paramref name="callerSubjectId"/> is not a member of it. Only a manager
-    /// reads its invites, its access links and the sites it has access to.
+    /// reads its managers' subject ids, its staff, its invites, its access links and the sites it has
+    /// access to; a staff member reads its name, its managers' names and what narrows them.
     /// </summary>
     Task<TeamDetail?> GetAsync(Guid teamId, Guid callerSubjectId, DateTime now, CancellationToken ct);
 
@@ -48,6 +49,18 @@ public interface ITeamRepository
     /// </summary>
     Task<bool> RevokeInviteAsync(Guid teamId, Guid callerSubjectId, Guid inviteId, DateTime now, CancellationToken ct);
 
+    /// <summary>Stores a staff invite and returns its id; null when the caller is not a manager.</summary>
+    Task<Guid?> CreateStaffInviteAsync(Guid teamId, Guid callerSubjectId, NewTeamStaffInvite invite, CancellationToken ct);
+
+    /// <summary>
+    /// Revokes the staff invite. False when the caller is not a manager of the team or the team has no
+    /// such invite; revoking a revoked invite succeeds.
+    /// </summary>
+    Task<bool> RevokeStaffInviteAsync(Guid teamId, Guid callerSubjectId, Guid inviteId, DateTime now, CancellationToken ct);
+
+    /// <summary>The team a staff invite is for, as <paramref name="subjectId"/> holding its token sees it.</summary>
+    Task<TeamStaffInviteInfo?> GetStaffInviteInfoAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
+
     /// <summary>The team an invite is for, as <paramref name="subjectId"/> holding its token sees it.</summary>
     Task<TeamInviteInfo?> GetInviteInfoAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
 
@@ -57,13 +70,6 @@ public interface ITeamRepository
     /// <see cref="TeamInviteRefusal.NoLongerValid"/> once the invite's maker no longer manages the team.
     /// </summary>
     Task<TeamInviteAcceptance> AcceptInviteAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
-
-    /// <summary>
-    /// Deletes the team with its members, invites and access to sites, recording each site's access
-    /// as stopped. <see cref="TeamDeletion.NotFound"/> when the
-    /// caller is not a member, <see cref="TeamDeletion.Refused"/> when the team may not be deleted now.
-    /// </summary>
-    Task<TeamDeletion> DeleteAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct);
 
     /// <summary>
     /// Stores a "give this team access" link and returns its id; null when the caller is not a manager.
@@ -82,22 +88,8 @@ public interface ITeamRepository
     /// <summary>Of <paramref name="tenantIds"/>, the sites the team already has access to.</summary>
     Task<IReadOnlySet<Guid>> ListSitesWithAccessAsync(Guid teamId, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct);
 
-    /// <summary>
-    /// Gives the link's team access to <see cref="TeamAccessGrant.TenantId"/> and takes one use of the
-    /// link, as <paramref name="approver"/>. Everything is decided in its own transaction under the
-    /// site's owners lock, the team's manager lock and the site's team access lock, from what those
-    /// locks hold still: the link, the approver's live membership of the site (an owner, the scopes it
-    /// resolves to on the credential, its end and its 24-hour limit), and the chosen roles. Refused,
-    /// taking no use and writing nothing, on any <see cref="TeamAccessRefusal"/>.
-    /// </summary>
-    Task<TeamAccessApproval> ApproveAccessAsync(
-        string tokenHash, TeamAccessApproverCredential approver, TeamAccessGrant grant, DateTime now, CancellationToken ct);
-
-    /// <summary>The teams with access to <paramref name="tenantId"/>, by name.</summary>
+    /// <summary>The teams with access to <paramref name="tenantId"/>, by name, each with its staff waiting for approval first.</summary>
     Task<IReadOnlyList<TenantTeamAccess>> ListAccessOfTenantAsync(Guid tenantId, DateTime now, CancellationToken ct);
-
-    /// <summary>Stops the team's access to <paramref name="tenantId"/>. False when it has none.</summary>
-    Task<bool> StopAccessAsync(Guid tenantId, Guid teamId, CancellationToken ct);
 
     /// <summary>The roles of <paramref name="tenantId"/> a team's access gives.</summary>
     Task<IReadOnlySet<Guid>> ListRolesHeldByTeamsAsync(Guid tenantId, CancellationToken ct);
@@ -107,4 +99,16 @@ public interface ITeamRepository
     /// with the team's name as it is now.
     /// </summary>
     Task<IReadOnlyList<TeamAccessApprover>> ListAccessApproversAsync(Guid teamId, CancellationToken ct);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> with the team's current name and the staff whose rows on its access to
+    /// <paramref name="tenantId"/> wait for an owner, and whose place and access have not ended at
+    /// <paramref name="now"/>, read under a lock on the team at the site that every other call for the pair
+    /// waits for until <paramref name="work"/> has finished. Null when the team has no access to the site.
+    /// </summary>
+    Task WithStaffWaitingLockedAsync(
+        Guid tenantId, Guid teamId, DateTime now, Func<TeamStaffWaiting?, Task> work, CancellationToken ct);
+
+    /// <summary>Each team and site where <paramref name="subjectId"/> has a <c>team_site_staff</c> row, across every site.</summary>
+    Task<IReadOnlyList<TeamSiteKey>> ListStaffSitesOfSubjectAsync(Guid subjectId, CancellationToken ct);
 }

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -232,22 +233,17 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
         jobInfo.Should().NotBeNull();
         await MigrationJobPump.RunAsync(Fixture);
 
-        // Poll until complete
-        MigrationJobStatus? status = null;
-        for (var i = 0; i < 120; i++)
-        {
-            var statusResponse = await AuthenticatedClient.GetAsync(
-                $"/api/v4/migration/{jobInfo!.Id}/status");
-            status = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
-
-            if (status!.State is MigrationJobState.Completed or MigrationJobState.Failed)
-                break;
-
-            await Task.Delay(500);
-        }
-
-        status.Should().NotBeNull();
-        if (status!.State == MigrationJobState.Failed)
+        var status = await Eventually.ValueAsync(
+            "the migration job to complete or fail",
+            async () =>
+            {
+                var statusResponse = await AuthenticatedClient.GetAsync(
+                    $"/api/v4/migration/{jobInfo!.Id}/status");
+                var current = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
+                return current!.State is MigrationJobState.Completed or MigrationJobState.Failed ? current : null;
+            },
+            step: TimeSpan.FromMilliseconds(250));
+        if (status.State == MigrationJobState.Failed)
         {
             Log($"Migration failed: {status.ErrorMessage}");
         }

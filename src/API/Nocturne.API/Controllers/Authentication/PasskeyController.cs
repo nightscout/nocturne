@@ -44,8 +44,8 @@ namespace Nocturne.API.Controllers.Authentication;
 ///   <item><description><b>Invite acceptance:</b> <c>POST /invite/options</c> → <c>POST /invite/complete</c> using a pre-issued invite token.</description></item>
 /// </list>
 ///
-/// Login hands the proved subject to <see cref="SignInCompletion"/>. Invite acceptance uses
-/// <see cref="SessionCookieExtensions.SetSessionCookies(HttpResponse, SessionTokenPair, OidcOptions)"/> to set session cookies.
+/// Login, invite acceptance and the tenant creation link hand the proved subject to
+/// <see cref="SignInCompletion"/>, which issues the session.
 ///
 /// Passkey deletion is guarded by <see cref="ISubjectService.TryRemovePasskeyCredentialAsync"/> which
 /// enforces an atomic last-factor check inside a serializable transaction.
@@ -70,7 +70,6 @@ public class PasskeyController : ControllerBase
     private readonly ITrustedDeviceService _trustedDevices;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly RecoverySession _recoverySession;
-    private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
     private readonly ITenantAccessor _tenantAccessor;
@@ -85,12 +84,12 @@ public class PasskeyController : ControllerBase
     private readonly TimeProvider _time;
 
     /// <param name="passkeyService">Generates each ceremony's options, verifies its response, lists a subject's passkeys, and removes the passkey of a refused invite.</param>
-    /// <param name="signIn">Finishes a passkey login once the assertion has proved the subject.</param>
+    /// <param name="signIn">Finishes a passkey login, an invite acceptance and a tenant creation once the
+    /// ceremony has proved the subject.</param>
     /// <param name="trustedDevices">Forgets a subject's trusted devices when a recovery code is spent.</param>
     /// <param name="recoveryCodeService">Generates, counts, verifies and voids recovery codes.</param>
     /// <param name="recoverySession">Starts, reads and spends the recovery session a recovery code buys.</param>
-    /// <param name="sessionService">Issues the session an invite acceptance signs in with.</param>
-    /// <param name="subjectService">Counts a subject's sign-in factors, removes a passkey under the last-factor check, and records when a sign-in completes.</param>
+    /// <param name="subjectService">Counts a subject's sign-in factors and removes a passkey under the last-factor check.</param>
     /// <param name="auditService">Records the login and recovery outcomes in the auth audit log.</param>
     /// <param name="tenantAccessor">For the id of the request's tenant.</param>
     /// <param name="tenantService">Stored, and read by no action.</param>
@@ -108,7 +107,6 @@ public class PasskeyController : ControllerBase
         ITrustedDeviceService trustedDevices,
         IRecoveryCodeService recoveryCodeService,
         RecoverySession recoverySession,
-        ISessionService sessionService,
         ISubjectService subjectService,
         IAuthAuditService auditService,
         ITenantAccessor tenantAccessor,
@@ -128,7 +126,6 @@ public class PasskeyController : ControllerBase
         _trustedDevices = trustedDevices;
         _recoveryCodeService = recoveryCodeService;
         _recoverySession = recoverySession;
-        _sessionService = sessionService;
         _subjectService = subjectService;
         _auditService = auditService;
         _tenantAccessor = tenantAccessor;
@@ -163,8 +160,7 @@ public class PasskeyController : ControllerBase
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
-        var subjectId = await ResolveRegistrationSubjectAsync();
-        if (subjectId == null)
+        if (await ResolveRegistrationSubjectAsync(HttpContext.RequestAborted) is not { } registering)
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
@@ -175,7 +171,7 @@ public class PasskeyController : ControllerBase
         }
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, request.Username, PasskeyRegistrationFlow.OwnAccount);
+            registering.SubjectId, request.Username, PasskeyRegistrationFlow.OwnAccount);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -187,7 +183,10 @@ public class PasskeyController : ControllerBase
     /// <summary>
     /// Resolves which subject a registration ceremony is allowed to bind a credential to.
     /// </summary>
-    /// <returns>The subject to register against, or <see langword="null"/> when none qualifies.</returns>
+    /// <returns>
+    /// The subject to register against and whether the caller is signed in as it, or
+    /// <see langword="null"/> when none qualifies.
+    /// </returns>
     /// <remarks>
     /// <para>
     /// The request deliberately gets no say in this. The subject id is sealed into the challenge
@@ -202,15 +201,24 @@ public class PasskeyController : ControllerBase
     /// challenge minted here: each challenge is bound to the flow that minted it
     /// (<see cref="PasskeyRegistrationFlow"/>).
     /// </para>
+    /// <para>
+    /// A caller whose subject is inactive or whose session has ended is not signed in here
+    /// (<see cref="HttpContextExtensions.IsCallerSubjectInactiveAsync"/>): the request is read as
+    /// one with no session, so a recovery session it also carries still enrols.
+    /// </para>
     /// </remarks>
-    private async Task<Guid?> ResolveRegistrationSubjectAsync()
+    private async Task<RegistrationSubject?> ResolveRegistrationSubjectAsync(CancellationToken ct)
     {
-        var auth = HttpContext.GetAuthContext();
-        if (auth is { IsAuthenticated: true, SubjectId: not null })
-            return auth.SubjectId;
+        if (HttpContext.GetAuthContext() is { IsAuthenticated: true, SubjectId: { } signedIn }
+            && !await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return new RegistrationSubject(signedIn, SignedIn: true);
 
-        return await _recoverySession.ReadSubjectAsync(HttpContext, HttpContext.RequestAborted);
+        return await _recoverySession.ReadSubjectAsync(HttpContext, ct) is { } recovering
+            ? new RegistrationSubject(recovering, SignedIn: false)
+            : null;
     }
+
+    private readonly record struct RegistrationSubject(Guid SubjectId, bool SignedIn);
 
     /// <summary>
     /// Complete passkey registration with attestation response. The challenge must have been issued for the caller's own account. Under a recovery session this is the session's one enrolment: it issues no session, and the caller then signs in with the new passkey.
@@ -240,8 +248,8 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyRegisterCompleteResponse>> RegisterComplete(
         [FromBody] PasskeyRegisterCompleteRequest request)
     {
-        var subjectId = await ResolveRegistrationSubjectAsync();
-        if (subjectId == null)
+        var ct = HttpContext.RequestAborted;
+        if (await ResolveRegistrationSubjectAsync(ct) is not { } registering)
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
@@ -252,18 +260,16 @@ public class PasskeyController : ControllerBase
         }
 
         var tenantId = _tenantAccessor.TenantId;
-        var ct = HttpContext.RequestAborted;
-        var signedIn = HttpContext.GetAuthContext() is { IsAuthenticated: true, SubjectId: not null };
 
         PasskeyCredentialResult result;
         try
         {
-            if (signedIn)
+            if (registering.SignedIn)
             {
                 result = await _passkeyService.CompleteRegistrationAsync(
                     request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
-                    expectedSubjectId: subjectId.Value, request.Label);
-                await _recoverySession.EndAsync(HttpContext, subjectId.Value, ct);
+                    expectedSubjectId: registering.SubjectId, request.Label);
+                await _recoverySession.EndAsync(HttpContext, registering.SubjectId, ct);
             }
             else
             {
@@ -498,7 +504,10 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Complete passkey login with assertion response
+    /// Complete passkey login with assertion response. A member who has never held recovery codes
+    /// gets them in the response when the caller shows them
+    /// (<see cref="PasskeyLoginCompleteRequest.ShowsRecoveryCodes"/>,
+    /// <see cref="IRecoveryCodeService.GenerateFirstCodesAsync"/>).
     /// </summary>
     [HttpPost("login/complete")]
     [AllowAnonymous]
@@ -558,6 +567,9 @@ public class PasskeyController : ControllerBase
                 Success = true,
                 AccessToken = signedIn.Session.AccessToken,
                 ExpiresIn = signedIn.Session.ExpiresInSeconds,
+                RecoveryCodes = request.ShowsRecoveryCodes
+                    ? await _recoveryCodeService.GenerateFirstCodesAsync(assertionResult.SubjectId)
+                    : null,
             }),
             SignInOutcome.SecondFactorRequired required => Ok(new PasskeyLoginCompleteResponse
             {
@@ -731,6 +743,9 @@ public class PasskeyController : ControllerBase
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
+
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
 
         var codes = await _recoveryCodeService.GenerateCodesAsync(auth.SubjectId.Value);
 
@@ -937,26 +952,9 @@ public class PasskeyController : ControllerBase
         if (enrollingSubjectId == null)
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
 
-        PasskeyCredentialResult? credResult = null;
-        try
-        {
-            credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.AccessRequest,
-                tenant.Id, expectedSubjectId: enrollingSubjectId.Value);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Access request passkey registration failed");
-        }
-        catch (Fido2VerificationException ex)
-        {
-            _logger.LogWarning(ex, "Access request passkey attestation was refused");
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Access request passkey attestation could not be read");
-        }
-
+        var credResult = await TryCompleteRegistrationAsync(
+            request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.AccessRequest,
+            tenant.Id, enrollingSubjectId.Value);
         if (credResult is null)
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
 
@@ -1039,13 +1037,20 @@ public class PasskeyController : ControllerBase
 
     /// <summary>
     /// Complete passkey registration for an invite acceptance.
-    /// Verifies attestation, accepts the invite, generates recovery codes, and issues a session.
+    /// Verifies attestation, accepts the invite, completes the sign-in, then generates recovery codes
+    /// (<see cref="IRecoveryCodeService.GenerateFirstCodesAsync"/>) before the session cookies are set.
     /// </summary>
     /// <remarks>
     /// The challenge must have been minted by <see cref="InviteOptions"/>
     /// (<see cref="PasskeyRegistrationFlow.MemberInvite"/>), and the subject it names must still be
     /// active and approved under this username, with no way to sign in and no membership in any
     /// tenant. Any other challenge is refused.
+    /// <para>
+    /// The sign-in checks the membership the acceptance made. The invitee holds no authenticator,
+    /// so it owes no code; were one owed, the answer carries the recovery codes and no session, and
+    /// the invitee signs in with the passkey and the code. Once the invite is accepted, a failure
+    /// leaves a member who signs in with the passkey on the login page.
+    /// </para>
     /// </remarks>
     [HttpPost("invite/complete")]
     [AllowAnonymous]
@@ -1073,57 +1078,100 @@ public class PasskeyController : ControllerBase
         if (enrollingSubjectId == null)
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
 
-        try
-        {
-            var credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.MemberInvite,
-                tenantId, expectedSubjectId: enrollingSubjectId.Value);
-
-            // Accept the invite
-            var acceptResult = await memberInviteService.AcceptInviteAsync(
-                request.Token, credResult.SubjectId, tenantId);
-            if (!acceptResult.Success)
-            {
-                // A refused invite joins no one, so the passkey would leave a subject that signs in
-                // nowhere.
-                await _passkeyService.RemoveCredentialAsync(credResult.CredentialId, credResult.SubjectId, tenantId);
-                return Problem(detail: acceptResult.ErrorDescription ?? "Failed to accept invite", statusCode: 400, title: "Invite Error");
-            }
-
-            await _subjectService.UpdateLastLoginAsync(credResult.SubjectId);
-
-            // Generate recovery codes
-            var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
-
-            var session = await _sessionService.IssueSessionAsync(
-                credResult.SubjectId,
-                new SessionContext(
-                    DeviceDescription: "Invite Passkey",
-                    IpAddress: HttpContext.GetClientAddress(),
-                    UserAgent: Request.Headers.UserAgent.ToString()));
-
-            Response.SetSessionCookies(session, _oidcOptions);
-
-            _logger.LogInformation(
-                "Invite complete: subject {SubjectId} registered with passkey via invite",
-                credResult.SubjectId);
-
-            return Ok(new PasskeyRegistrationResponse
-            {
-                Success = true,
-                RecoveryCodes = recoveryCodes,
-                AccessToken = session.AccessToken,
-                RefreshToken = session.RefreshToken,
-                ExpiresIn = session.ExpiresInSeconds,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Invite passkey registration failed");
+        var credResult = await TryCompleteRegistrationAsync(
+            request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.MemberInvite,
+            tenantId, enrollingSubjectId.Value);
+        if (credResult is null)
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
+
+        var acceptResult = await memberInviteService.AcceptInviteAsync(
+            request.Token, credResult.SubjectId, tenantId);
+        if (!acceptResult.Success)
+        {
+            // A refused invite joins no one, so the passkey would leave a subject that signs in
+            // nowhere.
+            await _passkeyService.RemoveCredentialAsync(credResult.CredentialId, credResult.SubjectId, tenantId);
+            return Problem(detail: acceptResult.ErrorDescription ?? "Failed to accept invite", statusCode: 400, title: "Invite Error");
+        }
+
+        var outcome = await _signIn.CompleteAsync(new SignInAttempt(
+            credResult.SubjectId,
+            SignInMethod.Passkey,
+            new SignInAdmission.Member(tenantId),
+            new SecondFactorProof.Primary(Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]),
+            new SessionContext(
+                DeviceDescription: "Invite Passkey",
+                IpAddress: HttpContext.GetClientAddress(),
+                UserAgent: Request.Headers.UserAgent.ToString()),
+            Enrolment: SignInEnrolment.Invite));
+
+        List<string> recoveryCodes = outcome is SignInOutcome.Refused
+            ? []
+            : await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
+
+        await HttpContext.ApplySignInAsync(outcome, _oidcOptions);
+
+        switch (outcome)
+        {
+            case SignInOutcome.SignedIn signedIn:
+                _logger.LogInformation(
+                    "Invite complete: subject {SubjectId} registered with passkey via invite",
+                    credResult.SubjectId);
+                return Ok(new PasskeyRegistrationResponse
+                {
+                    Success = true,
+                    RecoveryCodes = recoveryCodes,
+                    AccessToken = signedIn.Session.AccessToken,
+                    RefreshToken = signedIn.Session.RefreshToken,
+                    ExpiresIn = signedIn.Session.ExpiresInSeconds,
+                });
+            case SignInOutcome.SecondFactorRequired:
+                return Ok(new PasskeyRegistrationResponse { Success = true, RecoveryCodes = recoveryCodes });
+            case SignInOutcome.Refused { Reason: SignInRefusal.NotAMember }:
+                return Problem(
+                    detail: "The invite was accepted, but the account is no longer a member.",
+                    statusCode: 400, title: "Invite Error");
+            default:
+                throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null);
         }
     }
 
+    /// <summary>
+    /// The registration proof of an enrolment flow: the stored credential, or null when the
+    /// attestation is refused.
+    /// </summary>
+    /// <remarks>
+    /// The types caught are the refusals <see cref="IPasskeyService.CompleteRegistrationAsync"/>
+    /// names, and so also anything of those types the store raises, which rolls back and leaves
+    /// only the spent challenge. Anything else is not a refusal and is left to the error handler.
+    /// </remarks>
+    private async Task<PasskeyCredentialResult?> TryCompleteRegistrationAsync(
+        string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId,
+        Guid enrollingSubjectId)
+    {
+        try
+        {
+            return await _passkeyService.CompleteRegistrationAsync(
+                attestationResponseJson, challengeToken, flow, tenantId, expectedSubjectId: enrollingSubjectId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogRegistrationRefused(ex, flow);
+        }
+        catch (JsonException ex)
+        {
+            LogRegistrationRefused(ex, flow);
+        }
+        catch (PasskeyRegistrationRefusedException ex)
+        {
+            LogRegistrationRefused(ex, flow);
+        }
+
+        return null;
+    }
+
+    private void LogRegistrationRefused(Exception ex, PasskeyRegistrationFlow flow) =>
+        _logger.LogWarning(ex, "Passkey registration for {Flow} was refused", flow);
 
     /// <summary>
     /// Generate passkey registration options for someone without an account who holds a tenant
@@ -1176,8 +1224,9 @@ public class PasskeyController : ControllerBase
 
     /// <summary>
     /// Complete passkey registration for a tenant creation invite: takes one use of the link,
-    /// verifies the attestation, creates the tenant with the new subject as its owner, and signs
-    /// them in.
+    /// verifies the attestation, creates the tenant with the new subject as its owner, completes the
+    /// sign-in, then generates recovery codes (<see cref="IRecoveryCodeService.GenerateFirstCodesAsync"/>)
+    /// before the session cookies are set.
     /// </summary>
     /// <remarks>
     /// The use is taken before the ceremony and given back if it fails, so two people on a
@@ -1191,6 +1240,10 @@ public class PasskeyController : ControllerBase
     /// (<see cref="PasskeyRegistrationFlow.CreationLink"/>), which checked the username, and the
     /// subject it names must still be active and approved under this username, with no way to sign
     /// in and no membership in any tenant. Any other challenge is refused.
+    /// </para>
+    /// <para>
+    /// That subject holds no authenticator, so the sign-in owes no code. Were one owed, the answer
+    /// carries the recovery codes and no session: the owner signs in with the passkey and the code.
     /// </para>
     /// </remarks>
     [HttpPost("tenant-invite/complete")]
@@ -1225,21 +1278,9 @@ public class PasskeyController : ControllerBase
         PasskeyCredentialResult? credResult = null;
         try
         {
-            credResult = await _passkeyService.CompleteRegistrationAsync(
+            credResult = await TryCompleteRegistrationAsync(
                 request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.CreationLink,
-                Guid.Empty, expectedSubjectId: enrollingSubjectId.Value);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Tenant invite passkey registration failed");
-        }
-        catch (Fido2VerificationException ex)
-        {
-            _logger.LogWarning(ex, "Tenant invite passkey attestation was refused");
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Tenant invite passkey attestation could not be read");
+                Guid.Empty, enrollingSubjectId.Value);
         }
         finally
         {
@@ -1271,32 +1312,54 @@ public class PasskeyController : ControllerBase
                 TenantInviteRefusalCode.InvalidRequest, "We could not make your site.");
         }
 
-        await _subjectService.UpdateLastLoginAsync(credResult.SubjectId);
-
-        var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
-
-        var session = await _sessionService.IssueSessionAsync(
+        // The owner membership is made with the tenant, so a created tenant is checked for it. A
+        // refused tenant leaves an account that is a member nowhere, so there is none to check.
+        SignInAdmission admission = created.Value is { } tenant
+            ? new SignInAdmission.Member(tenant.TenantId)
+            : new SignInAdmission.Account();
+        var outcome = await _signIn.CompleteAsync(new SignInAttempt(
             credResult.SubjectId,
+            SignInMethod.Passkey,
+            admission,
+            new SecondFactorProof.Primary(Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]),
             new SessionContext(
                 DeviceDescription: "Invite Passkey",
                 IpAddress: HttpContext.GetClientAddress(),
-                UserAgent: Request.Headers.UserAgent.ToString()));
+                UserAgent: Request.Headers.UserAgent.ToString()),
+            Enrolment: SignInEnrolment.TenantInvite));
 
-        Response.SetSessionCookies(session, _oidcOptions);
+        List<string> recoveryCodes = outcome is SignInOutcome.Refused
+            ? []
+            : await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
+
+        await HttpContext.ApplySignInAsync(outcome, _oidcOptions);
 
         // The account exists and is signed in either way, so a refused tenant is reported beside
         // the session rather than in place of it: the page shows the recovery codes, then lets the
         // new owner pick another subdomain on the signed-in path.
-        return Ok(new TenantInviteRegistrationResponse
+        return outcome switch
         {
-            Success = true,
-            RecoveryCodes = recoveryCodes,
-            AccessToken = session.AccessToken,
-            RefreshToken = session.RefreshToken,
-            ExpiresIn = session.ExpiresInSeconds,
-            Tenant = created.Value,
-            TenantRefusal = created.Refusal?.Message,
-        });
+            SignInOutcome.SignedIn signedIn => Ok(new TenantInviteRegistrationResponse
+            {
+                Success = true,
+                RecoveryCodes = recoveryCodes,
+                AccessToken = signedIn.Session.AccessToken,
+                RefreshToken = signedIn.Session.RefreshToken,
+                ExpiresIn = signedIn.Session.ExpiresInSeconds,
+                Tenant = created.Value,
+                TenantRefusal = created.Refusal?.Message,
+            }),
+            SignInOutcome.SecondFactorRequired => Ok(new TenantInviteRegistrationResponse
+            {
+                Success = true,
+                RecoveryCodes = recoveryCodes,
+                Tenant = created.Value,
+                TenantRefusal = created.Refusal?.Message,
+            }),
+            SignInOutcome.Refused { Reason: SignInRefusal.NotAMember } =>
+                Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed"),
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null),
+        };
     }
 }
 
@@ -1382,6 +1445,12 @@ public class PasskeyLoginCompleteRequest
 {
     public string AssertionResponseJson { get; set; } = string.Empty;
     public string ChallengeToken { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether the caller shows the recovery codes of its <see cref="PasskeyLoginCompleteResponse"/> to the person.
+    /// Only such a caller is given first codes: codes it dropped would be stored and never seen.
+    /// </summary>
+    public bool ShowsRecoveryCodes { get; set; }
 }
 
 /// <summary>
@@ -1396,6 +1465,12 @@ public class PasskeyLoginCompleteResponse
     public int ExpiresIn { get; set; }
     public bool TotpRequired { get; set; }
     public string? StepUpToken { get; set; }
+
+    /// <summary>
+    /// The member's first recovery codes, when this sign-in issued them
+    /// (<see cref="IRecoveryCodeService.GenerateFirstCodesAsync"/>). They are shown nowhere else.
+    /// </summary>
+    public List<string>? RecoveryCodes { get; set; }
 }
 
 /// <summary>

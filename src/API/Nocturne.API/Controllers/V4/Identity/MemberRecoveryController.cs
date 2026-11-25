@@ -122,6 +122,11 @@ public class MemberRecoveryController : ControllerBase
     {
         // [RequireScope] answers 401 to a request with no auth context, as members.manage is not a read scope.
         var auth = HttpContext.GetAuthContext()!;
+        if (HttpContext.CallerGrantCeiling() is null)
+            return this.CallerAccessFromTeamProblem();
+
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
 
         var tenantId = _tenantAccessor.TenantId;
         await using var db = await _contexts.CreateAsync(ct);
@@ -162,10 +167,11 @@ public class MemberRecoveryController : ControllerBase
             ?? throw new InvalidOperationException($"Subject {subjectId} is not a member of tenant {tenantId}.");
 
         var memberPermissions = await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct);
-        if (Scope.ValidateGrant(memberPermissions, HttpContext.GetGrantedScopes()) is not null)
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling
+            || Scope.ValidateGrant(memberPermissions, ceiling.Scopes) is not null)
             return RecoveryIssueRefusal.MissingPermissions;
 
-        if (!member.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
+        if (!member.LimitTo24Hours && ceiling.HistoryClamped)
             return RecoveryIssueRefusal.HistoryClamped;
 
         return HttpContext.OutlastsCallerAccess(member.AccessEndsAt)

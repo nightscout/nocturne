@@ -72,6 +72,8 @@
     showEnvVarHints?: boolean;
     /** See the config form's `saveLabel`. */
     saveLabel?: string;
+    /** `setup` is the form inside a setup or migration step. See the config form's `variant`. */
+    variant?: "settings" | "setup";
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -89,6 +91,7 @@
     primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
     saveLabel,
+    variant = "settings",
     extras,
   }: Props = $props();
 
@@ -153,6 +156,10 @@
   );
 
   const existingConfig = $derived(configQuery?.current ?? null);
+  const storedConfiguration = $derived.by((): Record<string, unknown> => {
+    const data = existingConfig?.configuration?.rootElement ?? existingConfig?.configuration;
+    return data && typeof data === "object" ? { ...data } : {};
+  });
   const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
   const dataSummary = $derived(dataSummaryQuery?.current ?? null);
   const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
@@ -244,10 +251,8 @@
     const id = activeId;
     if (!s || !id || configQuery?.loading || seededConnectorId === id) return;
 
-    const config = existingConfig;
-    const configData = config?.configuration?.rootElement ?? config?.configuration;
-    if (configData && typeof configData === "object" && Object.keys(configData).length > 0) {
-      configuration = { ...configData };
+    if (Object.keys(storedConfiguration).length > 0) {
+      configuration = { ...storedConfiguration };
     } else {
       configuration = getDefaultsFromSchema(s);
     }
@@ -394,12 +399,18 @@
       <!-- Header -->
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
-          <h2 class="text-2xl font-bold tracking-tight">{displayName}</h2>
+          <h2
+            class={variant === "setup"
+              ? "text-lg font-semibold"
+              : "text-2xl font-bold tracking-tight"}
+          >
+            {displayName}
+          </h2>
           {#if connectorInfo.description}
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canSetUp && showConfiguration}
+        {#if canSetUp && showConfiguration && variant === "settings"}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -494,6 +505,8 @@
           {showEnvVarHints}
           {saveLabel}
           lockedKeys={existingConfig?.lockedKeys ?? []}
+          {storedConfiguration}
+          {variant}
           onSave={handleSave}
         />
       {:else if showConfiguration}
@@ -583,7 +596,17 @@
       {/if}
 
       <!-- Documentation Link -->
-      {#if connectorInfo.documentationUrl}
+      {#if connectorInfo.documentationUrl && variant === "setup"}
+        <a
+          href={connectorInfo.documentationUrl}
+          target="_blank"
+          rel="external noopener noreferrer"
+          class="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+        >
+          <ExternalLink class="h-4 w-4" />
+          View documentation for {displayName}
+        </a>
+      {:else if connectorInfo.documentationUrl}
         <Card>
           <CardContent class="py-4">
             <a

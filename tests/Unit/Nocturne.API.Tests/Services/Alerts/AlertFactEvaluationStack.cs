@@ -53,8 +53,6 @@ internal sealed record AlertPass(Guid TenantId, IReadOnlyList<AlertRuleSnapshot>
 /// </summary>
 internal sealed class AlertFactEvaluationStack : IDisposable
 {
-    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
-
     public const string SiteAgeOver72Hours = """{"operator":">","value":72}""";
 
     private readonly AlertFactEvaluationDatabase _database;
@@ -117,7 +115,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
     {
         while (true)
         {
-            var pass = await _passes.Reader.ReadAsync().AsTask().WaitAsync(Guard);
+            var pass = await _passes.Reader.ReadAsync().AsTask().WaitAsync(Eventually.DefaultPatience);
             if (pass.TenantId == tenant)
                 return pass;
         }

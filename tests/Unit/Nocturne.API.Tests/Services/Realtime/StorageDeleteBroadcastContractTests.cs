@@ -152,7 +152,7 @@ public class StorageDeleteBroadcastContractTests
         );
 
     private static SignalRTreatmentEventSink CreateTreatmentSink(BroadcastCapture capture) =>
-        new(capture.Broadcast, NullLogger<SignalRTreatmentEventSink>.Instance);
+        new(capture.Broadcast);
 
     private static ActivityService CreateActivityService(
         BroadcastCapture capture,

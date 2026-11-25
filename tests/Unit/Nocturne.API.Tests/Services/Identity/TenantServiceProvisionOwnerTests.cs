@@ -44,7 +44,7 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off);
+        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private async Task<Guid> SeedSubjectAsync(string email)
     {

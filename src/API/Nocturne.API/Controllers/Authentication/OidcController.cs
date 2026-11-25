@@ -151,7 +151,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Handle OIDC callback from provider.
-    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page, and a missing <c>code</c> or <c>state</c> returns 400.
+    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page with the reason (or back to the tenant-creation or join link the sign-in started from), and a missing <c>code</c> or <c>state</c> returns 400.
     /// </summary>
     /// <param name="code">Authorization code from provider.</param>
     /// <param name="state">State parameter for CSRF verification.</param>
@@ -255,7 +255,7 @@ public class OidcController : ControllerBase
                         detailsJson: NotAMemberDetails(result));
                 }
 
-                return RedirectToLogin();
+                return RedirectToRefusal(result);
             }
 
             _logger.LogWarning(
@@ -312,6 +312,9 @@ public class OidcController : ControllerBase
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
             return Unauthorized(new { error = "not_authenticated", message = "Authentication required" });
+
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
 
         if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
@@ -418,9 +421,16 @@ public class OidcController : ControllerBase
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
         {
-            // Session expired mid-flow: the link-state cookie is useless without a session, so clear it.
             ClearLinkStateCookie();
             return Redirect("/auth/login?returnUrl=/settings/account");
+        }
+
+        // An ended session's access token still reads as signed in to the login page, which would
+        // send the person straight back to settings, so it is told to sign in again instead.
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+        {
+            ClearLinkStateCookie();
+            return RedirectToError("callback_failed", "Your session has ended. Sign in again.");
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -664,13 +674,13 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Logout and revoke the session. Clears all session cookies and revokes the refresh token if one is present. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
+    /// Logout and end the session. Clears all session cookies and ends the session the presented refresh token belongs to and the session the caller is signed in with. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
     /// </summary>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional).</param>
     /// <returns>A <see cref="LogoutResponse"/> indicating success and an optional provider logout URL.</returns>
     /// <remarks>
     /// Clears all session cookies (access token, refresh token, IsAuthenticated).
-    /// If a refresh token is present, revokes it via <see cref="IOidcAuthService.LogoutAsync"/>.
+    /// Ends the session through <see cref="IOidcAuthService.LogoutAsync"/>.
     /// When <paramref name="providerId"/> is supplied and the provider supports RP-initiated logout,
     /// the response includes a <c>ProviderLogoutUrl</c> for the frontend to redirect to.
     /// </remarks>
@@ -681,21 +691,19 @@ public class OidcController : ControllerBase
     public async Task<ActionResult<LogoutResponse>> Logout([FromQuery] Guid? providerId = null)
     {
         var refreshToken = GetRefreshToken();
+        var authContext = HttpContext.GetAuthContext();
+        var signedIn = authContext is { SubjectId: { } subjectId, SessionId: { Length: > 0 } sessionId }
+            && CallerSessionLiveness.IsSessionCaller(authContext)
+                ? new RefreshTokenSession(subjectId, sessionId)
+                : null;
 
-        OidcLogoutResult result;
-        if (!string.IsNullOrEmpty(refreshToken))
-        {
-            result = await _authService.LogoutAsync(refreshToken, providerId);
-        }
-        else
-        {
-            result = OidcLogoutResult.Succeeded();
-        }
+        var result = string.IsNullOrEmpty(refreshToken) && signedIn is null
+            ? OidcLogoutResult.Succeeded()
+            : await _authService.LogoutAsync(refreshToken, signedIn, providerId);
 
         // Clear session cookies
         ClearSessionCookies();
 
-        var authContext = HttpContext.GetAuthContext();
         await _auditService.LogAsync(AuthAuditEventType.Logout, authContext?.SubjectId, success: true,
             ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent);
 
@@ -744,7 +752,9 @@ public class OidcController : ControllerBase
     /// <returns>A <see cref="SessionInfo"/> describing the current session state.</returns>
     /// <remarks>
     /// Returns <c>IsAuthenticated = false</c> for unauthenticated requests (does not return 401).
-    /// This allows the frontend to check auth status without triggering redirect logic.
+    /// This allows the frontend to check auth status without triggering redirect logic. A session
+    /// caller that a mint would refuse (<see cref="HttpContextExtensions.IsSessionCallerInactiveAsync"/>)
+    /// reads as not authenticated, so the web offers it the sign-in that the refusal asks for.
     /// </remarks>
     /// <response code="200">Session information (always returns 200).</response>
     [HttpGet("session")]
@@ -755,7 +765,8 @@ public class OidcController : ControllerBase
         [FromServices] ITenantService tenants, CancellationToken ct = default)
     {
         var authContext = HttpContext.GetAuthContext();
-        if (authContext == null || !authContext.IsAuthenticated)
+        if (authContext == null || !authContext.IsAuthenticated
+            || await HttpContext.IsSessionCallerInactiveAsync(ct))
         {
             return Ok(new SessionInfo { IsAuthenticated = false });
         }
@@ -855,11 +866,31 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Redirect to the tenant login page. Used when an authenticated identity is denied because
-    /// it is not a member of the tenant; the login page surfaces the request-membership option
-    /// when the tenant allows access requests.
+    /// Sends back a person whose provider sign-in was refused. A sign-in that started from a
+    /// tenant-creation link or a join link returns to that link, whose page says why it cannot be
+    /// used. Any other goes to the login page with the refusal's reason, which it words for the host,
+    /// and the return URL; the page also surfaces the request-membership option when the tenant
+    /// allows access requests.
     /// </summary>
-    private IActionResult RedirectToLogin() => Redirect("/auth/login");
+    private IActionResult RedirectToRefusal(OidcCallbackResult refused)
+    {
+        var startedFromLink =
+            OidcAuthService.TokenFromReturnUrl(
+                refused.ReturnUrl,
+                ITenantCreationInviteService.StartPath,
+                ITenantCreationInviteService.TokenQueryParameter) != null
+            || OidcAuthService.TokenFromReturnUrl(
+                refused.ReturnUrl,
+                IMemberInviteService.JoinPath,
+                IMemberInviteService.TokenQueryParameter) != null;
+        if (startedFromLink)
+            return Redirect(refused.ReturnUrl!);
+
+        var login = $"/auth/login?reason={Uri.EscapeDataString(refused.Error!)}";
+        return Redirect(string.IsNullOrEmpty(refused.ReturnUrl)
+            ? login
+            : $"{login}&returnUrl={Uri.EscapeDataString(refused.ReturnUrl)}");
+    }
 
     /// <summary>
     /// Names the provider always. The person is the row's subject when there is one, else a digest

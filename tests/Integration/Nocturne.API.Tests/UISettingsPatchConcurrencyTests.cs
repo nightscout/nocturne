@@ -123,14 +123,14 @@ public class UISettingsPatchConcurrencyTests : ApiIntegrationTestBase
             await held.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
             {
                 await using var transaction = await held.Database.BeginTransactionAsync();
-                await first(Service(new Pinned(held)));
+                await first(Service(new SuppliedContextFactory(() => held)));
 
-                secondTask = second(Service(new Pinned(racer)));
-                await WaitUntilBlockedOnALockAsync(racerPid, secondTask);
+                secondTask = second(Service(new SuppliedContextFactory(() => racer)));
+                await PostgresLockWaits.UntilSessionBlockedAsync(Fixture.AppConnectionString, racerPid, secondTask);
 
                 await transaction.CommitAsync();
             });
-            await secondTask!.WaitAsync(TimeSpan.FromSeconds(30));
+            await secondTask!.WaitAsync(Eventually.DefaultPatience);
         }
         finally
         {
@@ -138,7 +138,7 @@ public class UISettingsPatchConcurrencyTests : ApiIntegrationTestBase
             {
                 try
                 {
-                    await secondTask.WaitAsync(TimeSpan.FromSeconds(30));
+                    await secondTask.WaitAsync(Eventually.DefaultPatience);
                 }
                 catch (Exception ex)
                 {
@@ -148,29 +148,6 @@ public class UISettingsPatchConcurrencyTests : ApiIntegrationTestBase
             await held.Database.CloseConnectionAsync();
             await racer.Database.CloseConnectionAsync();
         }
-    }
-
-    private async Task WaitUntilBlockedOnALockAsync(int pid, Task racing)
-    {
-        await using var probe = Fixture.CreateDbContext(Fixture.TenantId);
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (racing.IsCompleted)
-                throw new InvalidOperationException("The second change finished while the first was uncommitted", racing.Exception);
-
-            var blocked = await probe.Database
-                .SqlQuery<bool>($"""
-                    SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = {pid} AND wait_event_type = 'Lock') AS "Value"
-                    """)
-                .SingleAsync();
-            if (blocked)
-                return;
-
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException("The second change never blocked on the first");
     }
 
     private async Task SeedFeaturesAsync()
@@ -199,13 +176,4 @@ public class UISettingsPatchConcurrencyTests : ApiIntegrationTestBase
 
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
-    /// <summary>
-    /// Hands the service one of the race's contexts on every call. Those come from
-    /// <see cref="TestNocturneDbContextFactory.CreateUndisposed"/>, so the service's
-    /// <c>await using</c> leaves the held transaction and the racer's connection open.
-    /// </summary>
-    private sealed class Pinned(NocturneDbContext context) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(context);
-    }
 }

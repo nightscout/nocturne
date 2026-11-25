@@ -31,7 +31,8 @@ public interface ITrackerAlertRuleSyncService
     /// Creates the managed alert rules of <paramref name="definitionId"/>, a definition that has
     /// none yet, on the caller's <paramref name="unit"/> and inside its transaction, so the rules
     /// commit with the definition. Having no rules, it retires none, so nothing is closed
-    /// before the caller commits.
+    /// before the caller commits. The caller has them evaluated once it commits
+    /// (<see cref="AlertRuleRearm.Committed"/>).
     /// </summary>
     /// <exception cref="InvalidOperationException">The definition already has managed rules.</exception>
     Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default);
@@ -213,6 +214,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                     ct);
                 await LinkAsync(threshold, createdId);
                 keptRuleIds.Add(createdId);
+                changed.Add(createdId);
             }
         }
 
@@ -347,9 +349,11 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             return;
         }
 
-        keptRuleIds.Add(await rules.CreateAsync(
+        var createdId = await rules.CreateAsync(
             ManagedRule(name, null, AlertConditionType.Reservoir, conditionParams, scopeClass, severity, tag, recipient),
-            ct));
+            ct);
+        keptRuleIds.Add(createdId);
+        changed.Add(createdId);
     }
 
     /// <summary>

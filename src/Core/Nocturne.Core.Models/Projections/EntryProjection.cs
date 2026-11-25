@@ -59,6 +59,12 @@ public static class EntryProjection
         return entry;
     }
 
+    /// <summary>
+    /// The id a V4 record is served under on the legacy surfaces, before <see cref="MongoObjectId.Coerce"/>
+    /// puts it on the wire.
+    /// </summary>
+    public static string ServedId(Guid id, string? legacyId) => legacyId ?? id.ToString();
+
     private static Entry CreateBase(
         Guid id,
         string? legacyId,
@@ -73,7 +79,7 @@ public static class EntryProjection
         var mills = timestamp.ToMills();
         return new Entry
         {
-            Id = legacyId ?? id.ToString(),
+            Id = ServedId(id, legacyId),
             Mills = mills,
             DateString = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Device = device,

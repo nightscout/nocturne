@@ -134,6 +134,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
         var treatment = await _treatmentService.GetTreatmentByIdAsync(id, cancellationToken);
 
+        // NIGHTSCOUT-COMPAT: Nightscout answers 410 for a deleted document (isValid: false); a deleted
+        // treatment is answered 404, as one never stored is.
         if (treatment == null)
         {
             return CreateV3ErrorResponse(
@@ -159,7 +161,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored treatment.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if a treatment with the same ID already exists,
-    /// returns 200 with <c>isDeduplication: true</c>.
+    /// returns 200 with <c>isDeduplication: true</c>. One sent with <c>isValid: false</c> deletes it first.
     /// Treatments are routed through <see cref="ITreatmentService"/> which handles
     /// StateSpan creation for temp basals and other event-type-specific processing.
     /// </remarks>
@@ -196,13 +198,16 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             // Check for duplicate treatment (AAPS expects isDeduplication response)
             // Route through TreatmentService to check both treatments table and StateSpans
+            Treatment? existingTreatment = null;
             if (!string.IsNullOrEmpty(treatment.Id))
             {
-                var existingTreatment = await _treatmentService.GetTreatmentByIdAsync(
+                existingTreatment = await _treatmentService.GetTreatmentByIdAsync(
                     treatment.Id,
                     cancellationToken
                 );
-                if (existingTreatment != null)
+                // A create with isValid: false is not a duplicate of the treatment its id names: it
+                // deletes it (InvalidUploads in Services/V4).
+                if (existingTreatment != null && treatment.IsValid != false)
                 {
                     return V3Deduplicated(existingTreatment.Id, existingTreatment.SrvModified);
                 }
@@ -219,6 +224,9 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             if (created.Rejected is [{ Reason: var reason }])
                 return CreateV3ErrorResponse(400, "Treatment cannot be stored", reason);
+
+            if (existingTreatment != null)
+                return V3Deduplicated(existingTreatment.Id, srvModified: null);
 
             var createdTreatment = created[0];
 
@@ -339,6 +347,9 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
             }
 
+            if (treatment.IsValid == false)
+                return IsValidImmutable();
+
             // Ensure the ID matches
             treatment.Id = id;
 
@@ -453,6 +464,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// semantics. This is critical for AAPS which uses PATCH to update Temp Basal end times and durations.
     /// </remarks>
     /// <response code="200">Treatment patched successfully.</response>
+    /// <response code="400">The patch sets <c>isValid: false</c>.</response>
     /// <response code="404">Treatment not found.</response>
     /// <response code="500">Internal server error.</response>
     [HttpPatch("{id}")]
@@ -460,6 +472,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -470,6 +483,9 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     )
     {
         _logger.LogDebug("V3 treatment PATCH requested for {Id}", id);
+
+        if (PatchSetsInvalid(patchData))
+            return IsValidImmutable();
 
         var result = await _treatmentService.PatchTreatmentAsync(
             id,

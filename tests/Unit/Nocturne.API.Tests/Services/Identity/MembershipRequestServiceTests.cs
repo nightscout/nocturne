@@ -30,6 +30,7 @@ public class MembershipRequestServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IInAppNotificationService> _notificationService;
     private readonly Mock<IAuthAuditService> _audit = new();
+    private readonly Mock<ITeamRepository> _teams = new();
     private readonly MembershipRequestService _service;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -63,12 +64,12 @@ public class MembershipRequestServiceTests : IDisposable
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory()), _dbContext.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             _notificationService.Object,
             _audit.Object,
             _time,
             NullLogger<MembershipRequestService>.Instance, AccountLinkRoutes.Off,
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer(_teams));
 
         SeedData();
     }
@@ -303,6 +304,22 @@ public class MembershipRequestServiceTests : IDisposable
         member.LimitTo24Hours.Should().BeFalse();
         member.MemberRoles.Select(r => r.TenantRoleId).Should().BeEquivalentTo(roleIds);
         ApprovalNotifications().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_recountsTheTeamStaffOfTheSiteAndARefusalDoesNot()
+    {
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+
+        (await _service.ApproveRequestAsync(request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.GlucoseRead], null))
+            .Success.Should().BeFalse("the role exceeds what the approver holds");
+        _teams.Verify(t => t.ListAccessOfTenantAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never());
+
+        (await _service.ApproveRequestAsync(request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null))
+            .Success.Should().BeTrue();
+
+        _teams.Verify(t => t.ListAccessOfTenantAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once());
     }
 
     [Fact]

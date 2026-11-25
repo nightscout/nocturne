@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
@@ -58,7 +59,7 @@ public sealed class ShareLinkControllerTests
             new RequestMembership(
                     subjectId,
                     tenantId,
-                    new MembershipFacts(Guid.NewGuid(), new TenantMemberAccess(new HashSet<string>(grantedScopes), false, end), null))
+                    new MembershipFacts(Guid.NewGuid(), new TenantMemberAccess(new HashSet<string>(grantedScopes), false, end), new TenantMemberAccess(new HashSet<string>(grantedScopes), false, end), null))
                 .StoreOn(httpContext);
         }
 
@@ -302,6 +303,81 @@ public sealed class ShareLinkControllerTests
 
         (await controller.GetShareLink(CancellationToken.None)).Result.Should().BeOfType<OkObjectResult>();
         (await controller.RevealShareLink(CancellationToken.None)).Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    private ShareLinkController BuildMixedController(GrantCeiling? ceiling)
+    {
+        var controller = BuildController(Scope.SharingManage, Scope.GlucoseRead, Scope.TreatmentsRead);
+        controller.HttpContext.SetGrantCeiling(ceiling);
+        return controller;
+    }
+
+    [Fact]
+    public async Task A_mixed_member_may_not_publish_a_category_only_the_team_gives()
+    {
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.SharingManage, Scope.GlucoseRead }, null, false));
+
+        var result = await controller.SetShareLinkScopes(
+            new SetShareScopesRequest([Scope.GlucoseRead, Scope.TreatmentsRead]), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _service.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_mixed_member_may_publish_what_the_direct_reason_reads()
+    {
+        ServiceAnswersEveryWrite();
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.SharingManage, Scope.GlucoseRead }, null, false));
+
+        (await controller.SetShareLinkScopes(new SetShareScopesRequest([Scope.GlucoseRead]), CancellationToken.None))
+            .Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_mixed_member_whose_direct_reason_is_clamped_may_not_widen_the_share_or_hand_out_a_full_history_link()
+    {
+        ShareHasFullHistory(true);
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.SharingManage, Scope.GlucoseRead }, null, true));
+
+        ShouldRefuseTheHistoryCeiling((await controller.SetShareLinkFullHistory(new SetShareFullHistoryRequest(true), CancellationToken.None)).Result);
+        ShouldRefuseTheHistoryCeiling((await controller.RevealShareLink(CancellationToken.None)).Result);
+        ShouldRefuseTheHistoryCeiling((await controller.RotateShareLink(CancellationToken.None)).Result);
+        _service.Verify(s => s.SetFullHistoryAsync(It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        _service.Verify(s => s.RevealAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _service.Verify(s => s.RotateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [MemberData(nameof(ChangingActions))]
+    public async Task Every_change_by_a_mixed_member_whose_direct_reason_ends_is_refused(string action)
+    {
+        ServiceAnswersEveryWrite();
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.SharingManage, Scope.GlucoseRead }, CallerEnd, false));
+
+        ShouldRefuseTheEndDate(await ChangeAsync(controller, action));
+        _service.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [MemberData(nameof(ChangingActions))]
+    public async Task Every_change_by_a_team_only_member_is_refused(string action)
+    {
+        ServiceAnswersEveryWrite();
+        var controller = BuildMixedController(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam((await ChangeAsync(controller, action))!);
+        _service.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_team_only_member_is_not_handed_the_link()
+    {
+        ShareHasFullHistory(false);
+        var controller = BuildMixedController(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam((await controller.RevealShareLink(CancellationToken.None)).Result!);
+        _service.Verify(s => s.RevealAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

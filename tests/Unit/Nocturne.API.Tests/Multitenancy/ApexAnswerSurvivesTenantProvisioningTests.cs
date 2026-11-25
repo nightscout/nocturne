@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using Nocturne.API.Services.Auth;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
@@ -42,7 +43,7 @@ public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolution
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off);
+        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     [Fact]
     public async Task Provisioning_a_second_tenant_stops_the_apex_serving_the_first()

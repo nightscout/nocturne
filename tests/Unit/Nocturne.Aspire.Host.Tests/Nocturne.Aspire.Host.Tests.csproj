@@ -23,5 +23,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\Aspire\Nocturne.Aspire.Host\Nocturne.Aspire.Host.csproj" />
+        <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj" />
     </ItemGroup>
 </Project>

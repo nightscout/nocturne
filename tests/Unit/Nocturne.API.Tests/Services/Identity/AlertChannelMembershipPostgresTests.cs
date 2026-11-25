@@ -15,6 +15,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -24,7 +25,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -59,26 +59,6 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     /// <summary>Records every dispatch the chat provider makes to the bot service.</summary>
     private sealed class BotService : HttpMessageHandler
     {
@@ -97,12 +77,12 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private sealed class Site(Guid tenant, string slug, Guid guest, Factory contexts, FakeTimeProvider clock, BotService bot)
+    private sealed class Site(Guid tenant, string slug, Guid guest, SuppliedContextFactory contexts, FakeTimeProvider clock, BotService bot)
     {
         public Guid Tenant => tenant;
         public string Slug => slug;
         public Guid Guest => guest;
-        public Factory Contexts => contexts;
+        public SuppliedContextFactory Contexts => contexts;
         public FakeTimeProvider Clock => clock;
         public BotService Bot => bot;
         public TenantMembershipRepository Members => new(contexts, AccountLinkRoutes.Off);
@@ -127,7 +107,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -143,7 +123,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
     private async Task<string> LinkDiscordAsync(Site site, string? platformUser = null)
     {
         platformUser ??= Snowflake();
-        var platform = new Factory(Context, Guid.Empty);
+        var platform = new SuppliedContextFactory(() => Context(Guid.Empty));
         await new ChatIdentityDirectoryService(
                 platform, new TenantMembershipRepository(platform, AccountLinkRoutes.Off), site.Clock,
                 Mock.Of<ILogger<ChatIdentityDirectoryService>>())
@@ -153,13 +133,14 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
 
     /// <summary>A rule with one channel, as the rule editor saves it for <paramref name="saver"/>.</summary>
     private async Task<Guid> SaveRuleAsync(
-        Site site, ChannelType type, string destination, Guid? saver = null, DateTime? saverAccessEndsAt = null)
+        Site site, ChannelType type, string destination, Guid? saver = null, DateTime? saverAccessEndsAt = null,
+        string? label = null)
     {
         List<AlertRuleChannelWrite> channels;
         await using (var db = Context(site.Tenant))
         {
             channels = await new AlertRuleChannelWriter(Mock.Of<ISecretEncryptionService>()).ToWritesAsync(
-                [new CreateAlertRuleChannelRequest { ChannelType = type, Destination = destination }],
+                [new CreateAlertRuleChannelRequest { ChannelType = type, Destination = destination, DestinationLabel = label }],
                 saver, saverAccessEndsAt, db, CancellationToken.None);
         }
 
@@ -396,6 +377,114 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         site.Bot.Bodies.Should().ContainSingle();
     }
 
+    /// <summary>
+    /// The notices one reconcile of <paramref name="ruleIds"/> raises for an owner who holds none, by
+    /// channel id, with the metadata each carries.
+    /// </summary>
+    private async Task<Dictionary<string, Dictionary<string, object>?>> RaisedNoticesAsync(Site site, params Guid[] ruleIds)
+    {
+        var owner = Guid.CreateVersion7().ToString();
+        var raised = new Dictionary<string, Dictionary<string, object>?>();
+        var notifications = new Mock<Nocturne.Core.Contracts.Notifications.IInAppNotificationService>();
+        notifications.Setup(n => n.GetActiveNotificationsAsync(owner, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        notifications.Setup(n => n.CreateNotificationUnlessActiveAsync(
+                owner, NotificationSubjectNaming.AlertChannelNotSending, It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Nocturne.Core.Models.NotificationCategory?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, string _, string _, string sourceId, Nocturne.Core.Models.NotificationCategory? _, string? _,
+                string? _, Dictionary<string, object>? metadata, CancellationToken _) => raised[sourceId] = metadata)
+            .ReturnsAsync(true);
+        var owners = new Mock<Nocturne.Core.Contracts.Identity.ITenantOwnerResolver>();
+        owners.Setup(o => o.GetOwnerSubjectIdsAsync(site.Tenant, It.IsAny<CancellationToken>())).ReturnsAsync([owner]);
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.Setup(a => a.TenantId).Returns(site.Tenant);
+        AlertRuleSnapshot[] enabled =
+        [
+            .. ruleIds.Select(rule => new AlertRuleSnapshot(
+                rule, site.Tenant, "Urgent low", AlertConditionType.Threshold, "{}", AlertRuleSeverity.Critical, "{}", 0, false, null)),
+        ];
+        await new AlertChannelNotice(
+                new AlertRuleRepository(site.Contexts, site.Clock), site.Members,
+                new SubjectRepository(site.Contexts, AccountLinkRoutes.Off), site.Contexts, owners.Object,
+                notifications.Object, tenantAccessor.Object, new AlertChannelNoticeLog(site.Clock),
+                NullLogger<AlertChannelNotice>.Instance)
+            .CheckAsync(enabled, site.UtcNow, CancellationToken.None);
+        return raised;
+    }
+
+    private async Task DeleteGuestAsync(Site site)
+    {
+        var contexts = new SuppliedContextFactory(() => Context(Guid.Empty));
+        var deletion = new SubjectDeletion(
+            contexts,
+            new SubjectRepository(contexts, AccountLinkRoutes.Off),
+            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            Mock.Of<IAuthAuditService>(),
+            site.Clock,
+            InertTeamStaff.Announcer(),
+            InertTeamStaff.Sites(),
+            NullLogger<SubjectDeletion>.Instance);
+        (await deletion.DeleteAsync(site.Guest, evenLastOwner: false, CancellationToken.None)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
+    }
+
+    [Fact]
+    public async Task After_a_deletion_the_owner_is_told_of_the_persons_channels_without_their_name()
+    {
+        var site = await SeedAsync("notice-deleted", accessEndsAt: null);
+        var toGuest = await SaveRuleAsync(site, ChannelType.InApp, site.Guest.ToString(), label: "Guest's app");
+        var added = await SaveRuleAsync(site, ChannelType.DiscordChannel, Snowflake(), site.Guest, label: "Guest's server");
+        (await RaisedNoticesAsync(site, toGuest, added)).Should().BeEmpty("both channels send while the guest is a member");
+
+        await DeleteGuestAsync(site);
+        var raised = await RaisedNoticesAsync(site, toGuest, added);
+
+        raised.Keys.Should().BeEquivalentTo(
+            [(await ChannelAsync(site, toGuest)).Id.ToString(), (await ChannelAsync(site, added)).Id.ToString()],
+            "the deletion leaves a channel to the guest with no recipient and stops the channel the guest added");
+        foreach (var metadata in raised.Values)
+        {
+            metadata.Should().NotContainKeys(
+                NotificationSubjectNaming.MemberSubjectIdKey, NotificationSubjectNaming.AddedBySubjectIdKey, "destinationLabel");
+            metadata!.Values.Select(v => v.ToString()).Should().NotContain(site.Guest.ToString());
+        }
+    }
+
+    [Fact]
+    public async Task After_a_deletion_a_direct_message_saved_before_its_recipient_was_recorded_is_told_without_its_label()
+    {
+        var site = await SeedAsync("notice-deleted-dm", accessEndsAt: null);
+        var rule = await SaveRuleAsync(site, ChannelType.DiscordDm, await LinkDiscordAsync(site), label: "Guest's Discord");
+        var channel = (await ChannelAsync(site, rule)).Id;
+        await using (var db = Context(site.Tenant))
+        {
+            await db.AlertRuleChannels.Where(c => c.Id == channel)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.RecipientSubjectId, (Guid?)null));
+        }
+
+        await DeleteGuestAsync(site);
+        var raised = await RaisedNoticesAsync(site, rule);
+
+        raised.Keys.Should().Equal([channel.ToString()], "the deletion took the link the direct message went through");
+        raised[channel.ToString()].Should().NotContainKeys(
+            NotificationSubjectNaming.MemberSubjectIdKey, NotificationSubjectNaming.AddedBySubjectIdKey, "destinationLabel");
+    }
+
+    [Fact]
+    public async Task After_a_removal_the_owner_is_told_of_the_channel_to_the_member_by_their_name()
+    {
+        var site = await SeedAsync("notice-removed", accessEndsAt: null);
+        var toGuest = await SaveRuleAsync(site, ChannelType.InApp, site.Guest.ToString(), label: "Guest's app");
+
+        await RemoveGuestAsync(site);
+        var raised = await RaisedNoticesAsync(site, toGuest);
+
+        raised[(await ChannelAsync(site, toGuest)).Id.ToString()].Should()
+            .Contain(NotificationSubjectNaming.MemberSubjectIdKey, site.Guest.ToString())
+            .And.Contain("destinationLabel", "Guest's app");
+    }
+
     /// <summary>Replaces the guest's ended membership with a new one, as an accepted invite does.</summary>
     private async Task RejoinAsync(Site site)
     {
@@ -426,31 +515,8 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         site.Bot.Bodies.Should().BeEmpty("joining again went through removal, which deleted the chat link");
         rejoined.LastError.Should().StartWith("No recipient");
 
-        var owner = Guid.CreateVersion7().ToString();
-        var raised = new List<string>();
-        var notifications = new Mock<Nocturne.Core.Contracts.Notifications.IInAppNotificationService>();
-        notifications.Setup(n => n.GetActiveNotificationsAsync(owner, It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        notifications.Setup(n => n.CreateNotificationUnlessActiveAsync(
-                owner, AlertChannelNotice.NotificationType, It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<Nocturne.Core.Models.NotificationCategory?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
-            .Callback((string _, string _, string _, string sourceId, Nocturne.Core.Models.NotificationCategory? _, string? _,
-                string? _, Dictionary<string, object>? _, CancellationToken _) => raised.Add(sourceId))
-            .ReturnsAsync(true);
-        var owners = new Mock<Nocturne.Core.Contracts.Identity.ITenantOwnerResolver>();
-        owners.Setup(o => o.GetOwnerSubjectIdsAsync(site.Tenant, It.IsAny<CancellationToken>())).ReturnsAsync([owner]);
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(a => a.TenantId).Returns(site.Tenant);
-        var rules = new AlertRuleRepository(site.Contexts, site.Clock);
-        AlertRuleSnapshot[] enabled =
-        [
-            new(rule, site.Tenant, "Urgent low", AlertConditionType.Threshold, "{}", AlertRuleSeverity.Critical, "{}", 0, false, null),
-        ];
-        await new AlertChannelNotice(
-                rules, site.Members, site.Contexts, owners.Object, notifications.Object, tenantAccessor.Object,
-                new AlertChannelNoticeLog(site.Clock), NullLogger<AlertChannelNotice>.Instance)
-            .CheckAsync(enabled, site.UtcNow, CancellationToken.None);
-        raised.Should().Equal([(await ChannelAsync(site, rule)).Id.ToString()], "the owner is told the direct message reaches no one");
+        var raised = await RaisedNoticesAsync(site, rule);
+        raised.Keys.Should().Equal([(await ChannelAsync(site, rule)).Id.ToString()], "the owner is told the direct message reaches no one");
 
         await LinkDiscordAsync(site, account);
         await FireAsync(site, rule);

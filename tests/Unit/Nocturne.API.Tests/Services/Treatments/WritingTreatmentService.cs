@@ -30,7 +30,8 @@ internal static class WritingTreatmentService
         IDeviceEventRepository deviceEvents,
         IBolusCalculationRepository calculations,
         INocturneDbContextFactory? contexts = null,
-        ITreatmentFoodService? foods = null)
+        ITreatmentFoodService? foods = null,
+        IDataEventSink<Treatment>? events = null)
     {
         IV4ToLegacyProjectionService projection = contexts is null
             ? new Mock<IV4ToLegacyProjectionService>().AnswersSpanIdsPerId().AnswersProjectedSpansPerId().Object
@@ -47,7 +48,7 @@ internal static class WritingTreatmentService
             NullLogger<TreatmentReadService>.Instance);
 
         return new TreatmentService(
-            store, decomposer, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
+            store, decomposer, Mock.Of<ITreatmentCache>(), events ?? Mock.Of<IDataEventSink<Treatment>>(),
             Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);
     }
 }

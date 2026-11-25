@@ -89,7 +89,7 @@ public class AlertDeliveryWebhookSigningTests
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
-        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant))
+        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant), TimeProvider.System)
             .GetChannelsAsync([ruleId], CancellationToken.None))[ruleId];
 
         var provider = new WebhookProvider(

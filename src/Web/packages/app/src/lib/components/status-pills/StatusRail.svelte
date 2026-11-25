@@ -5,6 +5,8 @@
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { cn } from "#lib/utils/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import COBPill from "./COBPill.svelte";
   import BasalPill from "./BasalPill.svelte";
   import IOBPill from "./IOBPill.svelte";
@@ -12,7 +14,12 @@
   import ReservoirPill from "./ReservoirPill.svelte";
   import LinkBatteryPill from "./LinkBatteryPill.svelte";
   import TrackerPillBar from "./TrackerPillBar.svelte";
-  import { visibleLegacyFallbacks, visibleTrackerInstances } from "./tracker-pill-visibility";
+  import {
+    anyReachedWarning,
+    visibleLegacyFallbacks,
+    visibleTrackerInstances,
+  } from "./tracker-pill-visibility";
+  import { splitMobileRail } from "./rail";
   import { writePillRows, type PillRail } from "./pill-rows";
 
   interface Props {
@@ -32,6 +39,8 @@
     leading?: Snippet;
     /** Render nothing, margin included, while no item has anything to show. */
     hideWhenEmpty?: boolean;
+    /** Show only the lead items (`splitMobileRail`) until the user asks for the rest. */
+    collapsible?: boolean;
     class?: string;
     testid?: string;
   }
@@ -43,6 +52,7 @@
     onTrackerComplete,
     leading,
     hideWhenEmpty = false,
+    collapsible = false,
     class: className,
     testid,
   }: Props = $props();
@@ -53,14 +63,15 @@
     visibleLegacyFallbacks(realtimeStore.legacyFallbacks, hiddenLegacyFallbacks.current)
   );
 
-  const hasTrackerPills = $derived(
-    legacyFallbacks.length > 0 ||
-      visibleTrackerInstances(
-        realtimeStore.trackerInstances,
-        realtimeStore.trackerDefinitions,
-        realtimeStore.now
-      ).length > 0
+  const trackerInstances = $derived(
+    visibleTrackerInstances(
+      realtimeStore.trackerInstances,
+      realtimeStore.trackerDefinitions,
+      realtimeStore.now
+    )
   );
+
+  const hasTrackerPills = $derived(legacyFallbacks.length > 0 || trackerInstances.length > 0);
 
   const conversionDialog = lazyComponent(
     () => import("#lib/components/trackers/CreateTrackersFromLegacyDialog.svelte")
@@ -84,6 +95,17 @@
             : true
     )
   );
+
+  const split = $derived(
+    collapsible
+      ? splitMobileRail(
+          renderable,
+          anyReachedWarning([...trackerInstances, ...legacyFallbacks], realtimeStore.now)
+        )
+      : { lead: renderable, rest: [] }
+  );
+  let expanded = $state(false);
+  const restId = $props.id();
 
   // The pills arrive after the page paints and can wrap onto more rows than the one the row
   // starts with, so the rows last rendered on this device are held until they do. Until then
@@ -112,6 +134,8 @@
     const which = rail;
     if (!el || !realtimeStore.isReady) return;
     const observer = new ResizeObserver(() => {
+      // A page loads with the rail closed, so only the closed rail's rows are worth reserving.
+      if (expanded) return;
       // A hidden layout fills no rows and says nothing about how many the pills need.
       const rows = renderedPillRows(el);
       if (rows === 0) return;
@@ -122,6 +146,34 @@
     return () => observer.disconnect();
   });
 </script>
+
+{#snippet railItem(item: RailItemId)}
+  <div class="contents" data-rail-item={item}>
+    {#if item === RailItemId.Cob}
+      <COBPill data={realtimeStore.pillsData.cob} />
+    {:else if item === RailItemId.Basal}
+      <BasalPill data={realtimeStore.pillsData.basal} />
+    {:else if item === RailItemId.Iob}
+      <IOBPill data={realtimeStore.pillsData.iob} />
+    {:else if item === RailItemId.Loop}
+      <LoopPill data={realtimeStore.pillsData.loop} />
+    {:else if item === RailItemId.Reservoir && realtimeStore.currentReservoir !== null}
+      <ReservoirPill reservoir={realtimeStore.currentReservoir} />
+    {:else if item === RailItemId.LinkBattery && realtimeStore.currentLinkBatteryVoltage !== null}
+      <LinkBatteryPill voltage={realtimeStore.currentLinkBatteryVoltage} />
+    {:else if item === RailItemId.Trackers}
+      <TrackerPillBar
+        instances={realtimeStore.trackerInstances}
+        definitions={realtimeStore.trackerDefinitions}
+        fallbacks={legacyFallbacks}
+        now={realtimeStore.now}
+        onComplete={onTrackerComplete}
+        onCreateTracker={openConversion}
+        class="contents"
+      />
+    {/if}
+  </div>
+{/snippet}
 
 {#if !hideWhenEmpty || renderable.length > 0}
   <div
@@ -140,33 +192,30 @@
       data-pill-rail
     >
       {@render leading?.()}
-      {#each renderable as item (item)}
-        <div class="contents" data-rail-item={item}>
-          {#if item === RailItemId.Cob}
-            <COBPill data={realtimeStore.pillsData.cob} />
-          {:else if item === RailItemId.Basal}
-            <BasalPill data={realtimeStore.pillsData.basal} />
-          {:else if item === RailItemId.Iob}
-            <IOBPill data={realtimeStore.pillsData.iob} />
-          {:else if item === RailItemId.Loop}
-            <LoopPill data={realtimeStore.pillsData.loop} />
-          {:else if item === RailItemId.Reservoir && realtimeStore.currentReservoir !== null}
-            <ReservoirPill reservoir={realtimeStore.currentReservoir} />
-          {:else if item === RailItemId.LinkBattery && realtimeStore.currentLinkBatteryVoltage !== null}
-            <LinkBatteryPill voltage={realtimeStore.currentLinkBatteryVoltage} />
-          {:else if item === RailItemId.Trackers}
-            <TrackerPillBar
-              instances={realtimeStore.trackerInstances}
-              definitions={realtimeStore.trackerDefinitions}
-              fallbacks={legacyFallbacks}
-              now={realtimeStore.now}
-              onComplete={onTrackerComplete}
-              onCreateTracker={openConversion}
-              class="contents"
-            />
-          {/if}
-        </div>
+      {#each split.lead as item (item)}
+        {@render railItem(item)}
       {/each}
+      {#if split.rest.length > 0}
+        <div id={restId} class={expanded ? "contents" : "hidden"}>
+          {#each split.rest as item (item)}
+            {@render railItem(item)}
+          {/each}
+        </div>
+        <Button
+          variant="subtle"
+          size="xs"
+          class="group"
+          aria-expanded={expanded}
+          aria-controls={restId}
+          onclick={() => (expanded = !expanded)}
+        >
+          <ChevronDown
+            class="transition-transform group-aria-expanded:rotate-180 motion-reduce:transition-none"
+            aria-hidden="true"
+          />
+          {expanded ? "Show fewer" : "Show all"}
+        </Button>
+      {/if}
     </div>
   </div>
 {/if}

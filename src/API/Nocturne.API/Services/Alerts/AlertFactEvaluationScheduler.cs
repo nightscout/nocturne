@@ -18,7 +18,9 @@ namespace Nocturne.API.Services.Alerts;
 /// serialise what overlapping passes decide, as they do for the sweep. Any other fact starts one
 /// <see cref="Debounce"/> after the tenant's last unhandled change, and no later than
 /// <see cref="MaxWait"/> after its first, once the tenant's previous debounced evaluation has ended;
-/// a batch write is one evaluation, and a change that lands while it runs is taken by the next.
+/// a batch write is one evaluation, and a change that lands while it runs is taken by the next. A
+/// rule save (<see cref="MovedFacts.Rules"/>, announced by <see cref="AlertRuleRearm"/>) is debounced
+/// with them, or joins a glucose evaluation that has not yet begun.
 /// <para>
 /// Each evaluation runs in a scope of its own that reads as no one, pinned to the tenant the write
 /// was made for (<see cref="TenantJobScope.Open(IServiceProvider, TenantContext?, string)"/>), with
@@ -31,7 +33,7 @@ namespace Nocturne.API.Services.Alerts;
 /// requests that evaluated inline before. Only the host's shutdown timeout drops work.
 /// </para>
 /// </remarks>
-internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, IDisposable
+public sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, IDisposable
 {
     /// <summary>How long after a tenant's last non-glucose change its evaluation starts.</summary>
     internal static readonly TimeSpan Debounce = TimeSpan.FromSeconds(1);
@@ -62,6 +64,7 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
     {
         public TenantContext Tenant { get; set; } = tenant;
         public HashSet<string> Pending { get; } = new(StringComparer.Ordinal);
+        public HashSet<Guid> PendingRules { get; } = [];
         public bool PendingGlucoseWithoutReading { get; set; }
         public long FirstAt { get; set; }
         public long LastAt { get; set; }
@@ -75,10 +78,16 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
 
         public bool Idle => !GlucoseQueued && GlucoseRunning == 0 && !DebouncedRunning;
 
+        public bool HasPending => Pending.Count > 0 || PendingRules.Count > 0;
+
         public MovedFacts TakePending()
         {
-            var moved = new MovedFacts(Pending.ToHashSet(StringComparer.Ordinal), PendingGlucoseWithoutReading);
+            var moved = new MovedFacts(Pending.ToHashSet(StringComparer.Ordinal), PendingGlucoseWithoutReading)
+            {
+                Rules = PendingRules.ToHashSet(),
+            };
             Pending.Clear();
+            PendingRules.Clear();
             PendingGlucoseWithoutReading = false;
             return moved;
         }
@@ -87,7 +96,7 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
     /// <summary>Records that a committed write for <paramref name="tenant"/> moved <paramref name="moved"/>.</summary>
     public void Moved(TenantContext tenant, MovedFacts moved)
     {
-        if (moved.Facts.Count == 0 || _abandon.IsCancellationRequested) return;
+        if (moved.IsEmpty || _abandon.IsCancellationRequested) return;
 
         lock (_gate)
         {
@@ -95,11 +104,12 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
                 _tenants[tenant.TenantId] = queue = new TenantQueue(tenant);
 
             var now = _time.GetTimestamp();
-            if (queue.Pending.Count == 0)
+            if (!queue.HasPending)
                 queue.FirstAt = now;
             queue.LastAt = now;
             queue.Tenant = tenant;
             queue.Pending.UnionWith(moved.Facts);
+            queue.PendingRules.UnionWith(moved.Rules);
             queue.PendingGlucoseWithoutReading |= moved.GlucoseWithoutReading;
             StartOrArm(queue);
         }
@@ -108,7 +118,7 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
     /// <summary>Starts the tenant's evaluation when it is due, or arms its timer for when it will be.</summary>
     private void StartOrArm(TenantQueue queue)
     {
-        if (queue.Pending.Count == 0)
+        if (!queue.HasPending)
         {
             DisarmIfIdle(queue);
             return;
@@ -192,11 +202,11 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
 
         try
         {
-            if (moved!.Facts.Count > 0)
+            if (!moved!.IsEmpty)
             {
                 await using var scope = TenantJobScope.Open(_scopes, tenant, AuditEndpoint);
                 await scope.ServiceProvider.GetRequiredService<ICanonicalAlertEvaluator>()
-                    .EvaluateAsync(moved, _abandon.Token);
+                    .EvaluateAsync(moved, ReadingReport.Here, _abandon.Token);
             }
         }
         catch (OperationCanceledException) when (_abandon.IsCancellationRequested)

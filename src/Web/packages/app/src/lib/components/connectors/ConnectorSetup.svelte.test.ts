@@ -2,12 +2,21 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const calls = vi.hoisted(() => ({ saved: 0, activated: 0, failActivation: false }));
+const calls = vi.hoisted(() => ({
+  saved: 0,
+  activated: 0,
+  failActivation: false,
+  request: undefined as Record<string, unknown> | undefined,
+}));
 const capabilities = vi.hoisted(() => ({
   savedSecretStopsAt: undefined as string | undefined,
   savedSecretMakesNoCredential: false,
 }));
-const stored = vi.hoisted(() => ({ lockedKeys: [] as string[] }));
+const stored = vi.hoisted(() => ({
+  lockedKeys: [] as string[],
+  configuration: { url: "https://old.example" } as Record<string, unknown>,
+  address: false,
+}));
 const secretsSave = vi.hoisted(() => ({
   withSecretField: false,
   result: {} as { secretAlreadyInUse?: boolean; secretInUseStopsAt?: string },
@@ -28,7 +37,10 @@ vi.mock("#lib/api/generated/configurations.generated.remote.js", () => ({
     current: {
       type: "object",
       properties: {
-        url: { type: "string", title: "URL", default: "https://old.example" },
+        url: stored.address
+          ? { type: "string", title: "URL", format: "uri", "x-address": true }
+          : { type: "string", title: "URL", default: "https://old.example" },
+        ...(stored.address ? { pollingInterval: { type: "integer", default: 300 } } : {}),
         ...(secretsSave.withSecretField
           ? { apiSecret: { type: "string", title: "API secret", "x-secret": true } }
           : {}),
@@ -37,12 +49,13 @@ vi.mock("#lib/api/generated/configurations.generated.remote.js", () => ({
     },
   }),
   getConfiguration: () => ({
-    current: { configuration: { url: "https://old.example" }, lockedKeys: stored.lockedKeys },
+    current: { configuration: stored.configuration, lockedKeys: stored.lockedKeys },
     loading: false,
   }),
   getEffectiveConfiguration: () => ({ current: {}, loading: false }),
-  saveConfiguration: () => {
+  saveConfiguration: ({ request }: { request: Record<string, unknown> }) => {
     calls.saved++;
+    calls.request = request;
     return Promise.resolve({});
   },
   saveSecrets: () => Promise.resolve(secretsSave.result),
@@ -112,11 +125,14 @@ describe("ConnectorSetup", () => {
     calls.saved = 0;
     calls.activated = 0;
     calls.failActivation = false;
+    calls.request = undefined;
     grant.scopes = ["tenant.settings"];
     grant.refusedAsDemoSubject = false;
     capabilities.savedSecretStopsAt = undefined;
     capabilities.savedSecretMakesNoCredential = false;
     stored.lockedKeys = [];
+    stored.configuration = { url: "https://old.example" };
+    stored.address = false;
     secretsSave.result = {};
     secretsSave.withSecretField = false;
   });
@@ -258,16 +274,21 @@ describe("ConnectorSetup", () => {
     it("cannot change a destination the API locks, and is told why", async () => {
       grant.scopes = CARETAKER;
       stored.lockedKeys = ["url"];
+      stored.address = true;
+      stored.configuration = { url: "mine.example/AGYL…" };
       render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
 
-      await expect.element(page.getByRole("textbox").first()).toBeDisabled();
+      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/AGYL…");
       await expect.element(page.getByTestId("locked-url")).toBeVisible();
+      expect(page.getByRole("button", { name: "Change address" }).elements()).toHaveLength(0);
     });
 
     it("may change a destination the API does not lock", async () => {
+      stored.address = true;
+      stored.configuration = { url: "mine.example/AGYL…" };
       render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
 
-      await expect.element(page.getByRole("textbox").first()).toBeEnabled();
+      await expect.element(page.getByRole("button", { name: "Change address" })).toBeEnabled();
       expect(page.getByTestId("locked-url").elements()).toHaveLength(0);
     });
 
@@ -281,6 +302,55 @@ describe("ConnectorSetup", () => {
       render(ConnectorSetup, { props: { connectorId: "carelink", primaryAction: "save-only" } });
       await expect.element(page.getByRole("textbox").first()).toBeVisible();
       expect(page.getByTestId("carelink-read-only").elements()).toHaveLength(0);
+    });
+  });
+
+  describe("a stored address", () => {
+    beforeEach(() => {
+      stored.address = true;
+      stored.configuration = { url: "mine.example/AGYL…", pollingInterval: 300 };
+    });
+
+    it("is shown as the API masks it, and a save leaves it out", async () => {
+      render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
+
+      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/AGYL…");
+      await expect.element(page.getByRole("button", { name: "Change address" })).toBeVisible();
+      expect(page.getByRole("textbox").elements()).toHaveLength(0);
+
+      await page.getByRole("spinbutton").fill("500");
+      await page.getByRole("button", { name: "Save" }).click();
+      await expect.poll(() => calls.saved).toBe(1);
+
+      expect(calls.request).toEqual({ pollingInterval: 500 });
+    });
+
+    it("is sent as typed once the viewer presses Change address", async () => {
+      render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
+
+      await page.getByRole("button", { name: "Change address" }).click();
+      const input = page.getByRole("textbox", { name: "URL" });
+      await expect.element(input).toHaveValue("");
+      await input.fill("https://new.example/ns");
+      await page.getByRole("button", { name: "Save" }).click();
+      await expect.poll(() => calls.saved).toBe(1);
+
+      expect(calls.request).toEqual({ url: "https://new.example/ns", pollingInterval: 300 });
+    });
+
+    it("is left out again once the viewer keeps the current address", async () => {
+      render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
+
+      await page.getByRole("button", { name: "Change address" }).click();
+      await page.getByRole("textbox", { name: "URL" }).fill("https://new.example/ns");
+      await page.getByRole("button", { name: "Keep current address" }).click();
+      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/AGYL…");
+
+      await page.getByRole("spinbutton").fill("500");
+      await page.getByRole("button", { name: "Save" }).click();
+      await expect.poll(() => calls.saved).toBe(1);
+
+      expect(calls.request).toEqual({ pollingInterval: 500 });
     });
   });
 

@@ -111,9 +111,12 @@ public static class ServiceCollectionExtensions
         // Audit config cache (singleton — uses IDbContextFactory internally)
         services.TryAddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
-        var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(config);
-        services.AddSingleton(new ContextDataSource(dataSource));
-        services.AddSingleton(PostgresRuntimeOptions.BuildRawDataSource(config));
+        // Built once here so a bad pool setting fails at registration. Each provider builds its own
+        // pools through a factory, because a provider disposes only what it created: a pool
+        // registered as an instance keeps its connections open after its provider is disposed.
+        PostgresRuntimeOptions.BuildRuntimeDataSource(config).Dispose();
+        services.AddSingleton(_ => new ContextDataSource(PostgresRuntimeOptions.BuildRuntimeDataSource(config)));
+        services.AddSingleton(_ => PostgresRuntimeOptions.BuildRawDataSource(config));
 
         // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
         // is never returned to a pool and reused, so a fault cannot poison later callers. Database
@@ -122,7 +125,7 @@ public static class ServiceCollectionExtensions
             (sp, options) =>
             {
                 options.UseNpgsql(
-                    dataSource,
+                    sp.GetRequiredService<ContextDataSource>().Source,
                     npgsqlOptions =>
                     {
                         npgsqlOptions.EnableRetryOnFailure(
@@ -204,11 +207,13 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
         services.AddTransient<IRoleRepository, RoleRepository>();
         services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
+        services.AddTransient<ISpentPasskeyChallengeRepository, SpentPasskeyChallengeRepository>();
         services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
         services.AddTransient<ITrustedDeviceRepository, TrustedDeviceRepository>();
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();
+        services.AddTransient<IGoogleHealthWorkStore, GoogleHealthWorkRepository>();
         services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
@@ -256,6 +261,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
         services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
         services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
+        services.AddScoped<IWriteBackSentRecords>(sp => sp.GetRequiredService<IDecomposedTreatmentKeys>());
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
         services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();

@@ -98,13 +98,14 @@
     bind:ref={trigger}
     class={pillClasses}
     data-pill-trigger
+    data-pill
     data-testid="legacy-age-pill"
   >
-    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+    <span class="flex items-center gap-1 text-xs text-muted-foreground" data-pill-label>
       <TrackerCategoryIcon {category} class="size-3" />
       {label}
     </span>
-    <span class="flex items-center gap-1 text-sm font-medium tabular-nums {VALUE_TONE[level]}">
+    <span class="flex items-center gap-1 text-sm font-medium tabular-nums {VALUE_TONE[level]}" data-pill-value>
       {#if alertPrefix}
         <TriangleAlert class="size-3.5" aria-hidden="true" />
         <span class="sr-only">{alertPrefix}</span>

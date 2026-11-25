@@ -40,14 +40,14 @@ public class PasskeyCeremonyOriginIntegrationTests : ApiIntegrationTestBase
 
         try
         {
-            using var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi);
-            var options = await client.PostAsync("/api/auth/passkey/login/discoverable/options", null);
-            options.EnsureSuccessStatusCode();
-            var challengeToken = JsonDocument.Parse(await options.Content.ReadAsStringAsync())
-                .RootElement.GetProperty("challengeToken").GetString();
-
             foreach (var origin in presented)
             {
+                using var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi);
+                var options = await client.PostAsync("/api/auth/passkey/login/discoverable/options", null);
+                options.EnsureSuccessStatusCode();
+                var challengeToken = JsonDocument.Parse(await options.Content.ReadAsStringAsync())
+                    .RootElement.GetProperty("challengeToken").GetString();
+
                 var complete = await client.PostAsJsonAsync("/api/auth/passkey/login/complete", new
                 {
                     assertionResponseJson = Assertion(credentialId, origin),

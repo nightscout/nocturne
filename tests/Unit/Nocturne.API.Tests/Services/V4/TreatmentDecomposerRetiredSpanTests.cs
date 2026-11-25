@@ -1,27 +1,17 @@
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.API.Tests.Infrastructure;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -165,33 +155,10 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
             .SetProperty(s => EF.Property<bool>(s, NocturneDbContext.DeletedByUserProperty), true));
     }
 
-    private TreatmentDecomposer Decomposer()
-    {
-        var foods = new Mock<ITreatmentFoodService>();
-        foods
-            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        return new TreatmentDecomposer(
-            _factory, new DecomposedTreatmentKeys(_factory),
-            new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
-            new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
-            new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
-            new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),
-            new DeviceEventRepository(_factory, _dedup, _audit, NullLogger<DeviceEventRepository>.Instance),
-            new BolusCalculationRepository(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance),
-            new StateSpanService(
+    private TreatmentDecomposer Decomposer() =>
+        TreatmentDecomposerDoubles.Stored(
+            _factory, _dedup, _audit,
+            stateSpans: new StateSpanService(
                 new StateSpanRepository(_factory, _dedup, _audit, NullLogger<StateSpanRepository>.Instance),
-                NullLogger<StateSpanService>.Instance),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            foods.Object,
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            _audit,
-            NullLogger<TreatmentDecomposer>.Instance);
-    }
+                NullLogger<StateSpanService>.Instance));
 }

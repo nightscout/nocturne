@@ -800,3 +800,29 @@ describe("(authenticated) layout load: the tenant switcher targets", () => {
     expect(data.tenantTargets).toEqual([]);
   });
 });
+
+describe("(authenticated) layout load: the sidebar's open state", () => {
+  const tenant = {
+    host: `sam.${BASE}`,
+    status: { status: "ok", tenantSlug: "sam" },
+    authStatus: { onboardingCompleted: true },
+  } as const;
+
+  it("opens the sidebar for a browser that never collapsed it", async () => {
+    const data = await runLoad(tenant);
+
+    expect(data).toMatchObject({ sidebarOpen: true });
+  });
+
+  it("keeps the sidebar collapsed for a browser that collapsed it", async () => {
+    const data = await runLoad({ ...tenant, cookies: { "sidebar:state": "false" } });
+
+    expect(data).toMatchObject({ sidebarOpen: false });
+  });
+
+  it("opens the sidebar for a browser that reopened it", async () => {
+    const data = await runLoad({ ...tenant, cookies: { "sidebar:state": "true" } });
+
+    expect(data).toMatchObject({ sidebarOpen: true });
+  });
+});

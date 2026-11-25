@@ -88,7 +88,7 @@ public class TeamRenameAnnouncerTests
         });
 
         return new TeamRenameAnnouncer(
-            _teams.Object, _members.Object, _tenants.Object, services.BuildServiceProvider(),
+            _teams.Object, _members.Object, new SiteNotices(_tenants.Object, services.BuildServiceProvider()),
             TimeProvider.System, NullLogger<TeamRenameAnnouncer>.Instance);
     }
 

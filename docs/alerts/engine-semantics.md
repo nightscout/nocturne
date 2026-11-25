@@ -1041,10 +1041,19 @@ the backend adds the facts the write moved to its tenant's pending set
   200 treatments is one evaluation. A change during an evaluation is taken by the next.
 - A `glucose` move that is not a reading (a target-range schedule moves the bucket) evaluates the
   rules that read `glucose` even when the reading was just evaluated.
+- A rule is first evaluated when it is saved, not at the next reading. A save that creates a rule,
+  enables one, or changes its condition, auto-resolve, glucose freshness bound or `on_unknown`, and
+  leaves it enabled, names the rule to its tenant's pending set once the save has committed
+  (`AlertRuleRearm`, which every such writer but the dev-only sample data seeder saves through). The named rules are evaluated as a
+  non-glucose fact is, after the same debounce, or with a glucose evaluation that has not yet begun,
+  against the reading already evaluated and past its claim. A disabled rule, and a save that changes
+  only what the evaluation does not read (the name, the channels, the smart snooze), names nothing.
+  A save inside a transaction its caller opened (a tracker's managed rules created with the
+  tracker) names its rules once the caller has committed.
 - The evaluation selects the tenant's newest usable canonical reading, as a reading's does, and
-  evaluates the enabled rules that read a moved fact, or every enabled rule when a reading not yet
-  evaluated moved `glucose`, in a scope of its own pinned to the tenant, with none of the writing
-  request's execution context. With no usable reading it evaluates
+  evaluates the enabled rules that read a moved fact and the enabled rules a save named, or every
+  enabled rule when a reading not yet evaluated moved `glucose`, in a scope of its own pinned to the
+  tenant, with none of the writing request's execution context. With no usable reading it evaluates
   nothing.
 
 Pending work lives in one process. On shutdown, after the server has drained its requests, every
@@ -1083,10 +1092,11 @@ The sweep makes good a reading whose evaluation never completed:
   the later of 10 s after its reading was stored and the end of the failed pass: at most that plus
   the 30 s interval. A pass that ran to its end and recorded nothing, because its record failed to
   write or because it read no enabled rule, keeps its claim for 60 s
-  (`AlertEvaluationWatermark.MaxSkipWindow`), so a rule enabled after it is evaluated at most 60 s
-  plus the 30 s interval after the claim. A write's pass still running in the same process holds
-  its claim too, so a later rule of that pass is decided when the pass reaches it, and the sweep
-  cannot take the reading until 60 s after the claim. A process that starts reads the record, so a
+  (`AlertEvaluationWatermark.MaxSkipWindow`), so the sweep takes the reading up at most 60 s plus
+  the 30 s interval after the claim; a rule enabled after the pass is evaluated by its save. A
+  write's pass still running in the same process holds its claim too, so a later rule of that pass
+  is decided when the pass reaches it, and the sweep cannot take the reading until 60 s after the
+  claim. A process that starts reads the record, so a
   reading evaluated before the restart is not evaluated again.
 - The claim keeps the sweep's pass and the write's pass on a reading from both running in one
   process. A write's pass still running in another process past the grace is evaluated a second
@@ -1100,7 +1110,9 @@ The sweep makes good a reading whose evaluation never completed:
   information when the tenant has no record yet, which is the first sweep of each tenant after the
   record begins, and as a warning when the record names another reading.
 
-What stays uncovered: the record names readings only. A lost evaluation of a write that moved
+What stays uncovered: the record names readings only. A lost evaluation of a rule save (the process
+ended between the save and its evaluation, or the shutdown timeout cut it off) leaves the rule to the
+next reading and, when it is wall-clock, the sweep. A lost evaluation of a write that moved
 another fact (a pump snapshot moving `iob`, say) is made good by the next reading's evaluation, or,
 when the newest reading itself was never evaluated, by the sweep's pass, which reads every fact
 afresh; with neither, a rule that reads no clock waits for the next reading. The record holds the
@@ -1308,6 +1320,23 @@ notification is reported after the evaluation it comes from, and a failure to wr
 an evaluation. Instants the
 host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_at`,
 `held_since`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
+For a pump mode with no span open at `now`, the host also sends the soonest open span of that mode dated up to the
+tolerance ahead of `now`, as §4 selects a reading, since a device's clock usually dates it. It holds back a span dated
+further ahead. A live pass that reads pump modes reports a span that starts further ahead, open or closed, as the reading
+selection reports a reading, under the fact `active_pump_modes`. A pass reads pump modes when a rule reads `pump_state`,
+or reads the suspension while the pump snapshot is fresh. The notification is raised for the latest start ahead and
+archived once no stored pump-mode span that has not ended starts ahead of `now`. A span that is removed archives it at
+the next such pass. A tenant with no such pass is not told. The host judges a span against the instant it chose the
+spans at, so a span is either sent or reported. A closed span dated ahead is never sent.
+With no override in force at `now`, the host also sends the soonest override dated up to the tolerance ahead that a
+device status wrote (its metadata `collection` is `devicestatus`), open or with an end after its start, since an
+uploader's clock dates it. It looks among every copy of the override, because Loop reports one override as a treatment
+and as a device status, and deduplication can hide the device status copy behind the treatment one. A live pass that
+reads the override (a rule reads `override_active`) reports such an override that starts further ahead, whether or not another override is in force,
+under the fact `active_override`, as it reports a pump-mode span. An override written any other way is a plan and is
+held back until its time, as are the spans of every other category, and is never reported. A v4 request that sets
+`collection` to `devicestatus` on its own override makes the engine read it up to 5 minutes early, and one dated
+further ahead raises the notification. Replay sends only the spans open at its tick and reports nothing.
 
 ---
 

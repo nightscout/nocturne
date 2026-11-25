@@ -132,6 +132,9 @@ public class ChatIdentityController : ControllerBase
     public async Task<ActionResult<ChatIdentityLinkResponse>> ClaimLink(
         [FromBody] ClaimChatIdentityLinkRequest body, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var userId = GetUserIdOrThrow();
         try

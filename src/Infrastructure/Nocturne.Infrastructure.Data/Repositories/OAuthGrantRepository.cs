@@ -64,7 +64,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         MembershipReasons.ReadInForceAsync(_contexts, tenantId, now, async (inForce, token) =>
         {
             var row = await FindLiveDirectGrantRowAsync(tenantId, lookup, now, inForce, token);
-            return (row is null ? null : new AuthenticatedDirectGrant(row.Grant, row.Membership()),
+            return (row is null ? null : new AuthenticatedDirectGrant(row.Grant, row.Membership(now)),
                 row?.Grant.SubjectId ?? Guid.Empty, row?.MemberNextReasonLapseAt);
         }, ct);
 
@@ -74,7 +74,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     {
         await using var db = await OpenForTenantAsync(tenantId, ct);
         var grants = Match(PinnedGrants(db, tenantId).Where(IsLiveDirectGrant(now)).Where(g => g.Subject!.IsActive), lookup);
-        return await WithMembership(grants, db, tenantId, inForce).FirstOrDefaultAsync(ct);
+        return await WithMembership(grants, db, tenantId, now, inForce).FirstOrDefaultAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -599,7 +599,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     /// <paramref name="inForce"/> joins as none.
     /// </summary>
     private static IQueryable<AuthenticatedRow> WithMembership(
-        IQueryable<OAuthGrantEntity> grants, NocturneDbContext db, Guid tenantId,
+        IQueryable<OAuthGrantEntity> grants, NocturneDbContext db, Guid tenantId, DateTime now,
         Expression<Func<TenantMemberEntity, bool>> inForce) =>
         grants
             .GroupJoin(
@@ -628,6 +628,9 @@ public class OAuthGrantRepository : IOAuthGrantRepository
                     MemberAccessEndsAt = m.AccessEndsAt,
                     MemberNextReasonLapseAt = m.NextReasonLapseAt,
                     MemberLastUsedAt = m.LastUsedAt,
+                    MemberReasons = m.Reasons.AsQueryable()
+                        .Where(r => r.TenantMember.NextReasonLapseAt == null || r.TenantMember.NextReasonLapseAt > now)
+                        .Select(MembershipReasonColumns.Of).ToList(),
                 });
 
     /// <summary>A grant with the membership columns of the left join; <see cref="MemberId"/> is null when there is none.</summary>
@@ -649,15 +652,20 @@ public class OAuthGrantRepository : IOAuthGrantRepository
 
         public DateTime? MemberLastUsedAt { get; init; }
 
-        public DirectGrantMembership? Membership() => MemberId is { } id
-            ? new DirectGrantMembership(
-                id,
-                new TenantMemberAccess(
-                    MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
-                    MemberLimitTo24Hours == true,
-                    MemberAccessEndsAt),
-                MemberLastUsedAt)
-            : null;
+        public List<MembershipReasonColumns> MemberReasons { get; init; } = [];
+
+        public DirectGrantMembership? Membership(DateTime now)
+        {
+            if (MemberId is not { } id)
+                return null;
+
+            var access = new TenantMemberAccess(
+                MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
+                MemberLimitTo24Hours == true,
+                MemberAccessEndsAt);
+            return new DirectGrantMembership(
+                id, access, MembershipReasonColumns.DirectAccess(MemberReasons, access, now), MemberLastUsedAt);
+        }
     }
 
     private static IReadOnlyList<OAuthGrantRecord> ToRecords(List<OAuthGrantEntity> grants) =>

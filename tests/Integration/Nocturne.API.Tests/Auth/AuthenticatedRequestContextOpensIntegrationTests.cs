@@ -153,15 +153,12 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
     /// </summary>
     private async Task MarkEveryCredentialJustUsedAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync("""
             SELECT set_config('app.current_tenant_id', @tenant, false);
             UPDATE tenant_members SET last_used_at = now();
             UPDATE oauth_grants SET last_used_at = now();
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenant", Fixture.TenantId.ToString()));
     }
 
     private static Action<HttpRequestMessage> Cookie(string session) =>
@@ -186,24 +183,15 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
 
     private async Task<(Guid SubjectId, string Token)> SeedMemberAsync(string name)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, name);
     }
 
     private async Task ExecuteAsync(string sql, Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);" + sql;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        (await cmd.ExecuteNonQueryAsync()).Should().BeGreaterThan(0);
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+        await using var conn = await OpenPostgresAsync();
+        (await conn.ExecuteAsync(
+            "SELECT set_config('app.current_tenant_id', @tenant, false);" + sql,
+            ("tenant", Fixture.TenantId.ToString()), ("subject", subjectId))).Should().BeGreaterThan(0);
     }
 }

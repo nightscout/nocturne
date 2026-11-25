@@ -84,7 +84,7 @@ public class UserDisplayPreferences
         "sv-SE", "nb-NO", "da-DK", "fi-FI", "cs-CZ", "ru-RU", "ja-JP",
     };
 
-    private static readonly HashSet<string> AllowedColorThemes = new(StringComparer.Ordinal) { "nocturne", "trio", "aaps", "classic" };
+    private static readonly HashSet<string> AllowedColorThemes = new(StringComparer.Ordinal) { "nocturne", "trio", "aaps", "classic", "nightscout" };
     private static readonly HashSet<string> AllowedGlucoseRangePalettes = new(StringComparer.Ordinal) { "theme", "clarity" };
     private static readonly HashSet<string> AllowedPredictionModes = new(StringComparer.Ordinal) { "cone", "lines", "main", "iob", "zt", "uam", "cob" };
     private static readonly HashSet<string> AllowedColorModes = new(StringComparer.Ordinal) { "single", "threshold", "continuous" };
@@ -287,7 +287,7 @@ public class UserDisplayPreferences
     [JsonPropertyName("effectiveEnergyUnit")]
     public string EffectiveEnergyUnit => EnergyUnits.Resolve(EnergyUnit, RegionFormat);
 
-    /// <summary>Color theme: "nocturne", "trio", "aaps", or "classic".</summary>
+    /// <summary>Color theme: "nocturne", "trio", "aaps", "classic", or "nightscout".</summary>
     [JsonPropertyName("colorTheme")]
     public string? ColorTheme { get; set; }
 

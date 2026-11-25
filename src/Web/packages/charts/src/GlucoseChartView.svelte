@@ -29,6 +29,7 @@
   import type { ChartLabels } from "./labels.js";
   import type { GlucoseLineAppearance, PredictionOptions } from "./options.js";
   import type { GlucoseRangePalette } from "./colors.js";
+  import { forecastDotRadius, nightscoutTicks, sgvDotRadius } from "./view/nightscout-sizing.js";
 
   interface Props {
     view: ChartDataView;
@@ -63,6 +64,11 @@
     belowPlot?: Snippet;
     /** Extra tooltip rows for the hovered time. */
     tooltipExtras?: Snippet<[{ time: Date }]>;
+    /**
+     * "nightscout" draws cgm-remote-monitor's focus chart: the Nightscout layout and track
+     * variants, sized by its rules, and no legend.
+     */
+    variant?: "default" | "nightscout";
   }
 
   let {
@@ -88,6 +94,7 @@
     placeholder,
     belowPlot,
     tooltipExtras,
+    variant = "default",
   }: Props = $props();
 
   const ownLegend = createLegendState();
@@ -96,6 +103,13 @@
   const legendSystemEvents = $derived(
     view.displaySystemEvents.map((e) => ({ id: e.id, eventType: e.eventType, color: e.color })),
   );
+
+  // The focus range Nightscout sizes its dots by: the window shown, forecast excluded.
+  const focusMs = $derived.by(() => {
+    const from = brushDomain?.[0] ?? view.displayDateRange.from;
+    const to = brushDomain?.[1] ?? view.displayDateRange.to;
+    return new Date(to).getTime() - new Date(from).getTime();
+  });
 
   const hasUnreportedBasal = $derived(
     legend.basal &&
@@ -125,8 +139,37 @@
       {printing}
       {brushDomain}
       {padding}
+      layoutMode={variant}
+      timeAxisClass={variant === "nightscout" ? "fill-foreground" : undefined}
     >
       {#snippet tracks()}
+        {#if variant === "nightscout"}
+          <BasalTrack variant="nightscout" />
+          <ThresholdRules variant="nightscout" />
+          <GlucoseTrack
+            showLine={false}
+            showPoints={true}
+            lineColorMode="single"
+            pointColorMode="threshold"
+            pointRadius={sgvDotRadius(plotWidth, focusMs)}
+            pointClass=""
+            axisPlacement="inside-right"
+            axisTicks={nightscoutTicks(glucoseUnits, view.thresholds)}
+          />
+          {#if predictions?.show}
+            <!-- Nightscout has no cone: that mode draws the main forecast's dots. -->
+            <PredictionTrack
+              displayMode={predictions.displayMode === "cone" ? "main" : predictions.displayMode}
+              enabled={predictions.enabled}
+              markStyle="dots"
+              dotRadius={forecastDotRadius(plotWidth, focusMs)}
+            />
+          {/if}
+          <IobCobTrack variant="nightscout" {onMarkerClick} />
+          <DeviceEventMarkers {onMarkerClick} />
+          <BgCheckMarkers />
+          <ChartHighlight />
+        {:else}
         <BasalTrack />
         <SwimLaneTrack />
         <ThresholdRules />
@@ -141,6 +184,7 @@
         <BasalInjectionMarkers />
         <BgCheckMarkers />
         <ChartHighlight />
+        {/if}
       {/snippet}
       {#snippet overlays()}
         <ChartTooltip {onTimeClick} {tooltipExtras} />
@@ -153,6 +197,7 @@
 
 {@render belowPlot?.()}
 
+{#if variant === "default"}
 <ChartLegend
   omitted={omittedTracks}
   {glucoseUnits}
@@ -199,3 +244,4 @@
   targetHigh={view.thresholds.targetHigh}
   onToggleExpandedPumpModes={() => legend.toggle("expandedPumpModes")}
 />
+{/if}

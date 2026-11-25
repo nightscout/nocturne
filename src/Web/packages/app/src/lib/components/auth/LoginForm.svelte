@@ -23,18 +23,19 @@
   import {
     discoverableLoginOptions,
     loginOptions,
-    loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
   import { getTrustedDevicePolicy } from "#lib/api/generated/totps.generated.remote.js";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
+  import { invalidateAll } from "$app/navigation";
   import { page } from "$app/state";
+  import FirstRecoveryCodes from "./FirstRecoveryCodes.svelte";
   import { describePasskeyError } from "./passkey-errors";
   import {
     offerPasskeyInAutofill,
     runPasskeyAssertion,
     type CeremonyOptionsResponse,
   } from "./passkey-login";
-  import { settleSignIn, type SignInResult } from "./sign-in-result";
+  import { completePasskeySignIn, settleSignIn, type SignInResult } from "./sign-in-result";
   import { brandColors } from "./brand-colors";
   import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
@@ -50,6 +51,13 @@
     tenantless?: boolean;
     /** A step-up token from an identity-provider sign-in that still needs the authenticator code. */
     pendingStepUpToken?: string;
+    /**
+     * Told when a passkey sign-in starts and stops being in flight, and while first recovery codes
+     * show. A dialog that holds the form must not close in between: the request finishes whether
+     * or not the form is still there, and the codes are shown nowhere else. Told false when the
+     * form unmounts.
+     */
+    onBusyChange?: (busy: boolean) => void;
   }
 
   let {
@@ -57,6 +65,7 @@
     onSuccess,
     tenantless = false,
     pendingStepUpToken,
+    onBusyChange,
   }: Props = $props();
 
   const oidcQuery = getOidcProviders();
@@ -85,7 +94,7 @@
   let trustDevice = $state(false);
 
   // UI mode
-  type LoginMode = "default" | "username" | "recovery" | "totp";
+  type LoginMode = "default" | "username" | "recovery" | "totp" | "recovery-codes";
   let mode = $state<LoginMode>(
     untrack(() => (pendingStepUpToken ? "totp" : "default"))
   );
@@ -122,6 +131,22 @@
    */
   let stepUpToken = $state(untrack(() => pendingStepUpToken ?? ""));
 
+  let issuedRecoveryCodes = $state<string[]>([]);
+
+  const busy = $derived(isLoading || mode === "recovery-codes");
+
+  $effect(() => onBusyChange?.(busy));
+  $effect(() => () => onBusyChange?.(false));
+
+  async function finishSignIn() {
+    if (onSuccess) {
+      await invalidateAll();
+      onSuccess();
+    } else {
+      await goToReturnUrl(returnUrl, { refreshAll: true });
+    }
+  }
+
   async function handleAuthResult(result: SignInResult) {
     const outcome = await settleSignIn(result);
 
@@ -139,11 +164,13 @@
       return;
     }
 
-    if (onSuccess) {
-      onSuccess();
-    } else {
-      await goToReturnUrl(returnUrl, { refreshAll: true });
+    if (outcome.recoveryCodes.length > 0) {
+      issuedRecoveryCodes = outcome.recoveryCodes;
+      mode = "recovery-codes";
+      return;
     }
+
+    await finishSignIn();
   }
 
   /**
@@ -159,7 +186,7 @@
 
     try {
       await handleAuthResult(
-        await runPasskeyAssertion(requestOptions, loginComplete)
+        await runPasskeyAssertion(requestOptions, completePasskeySignIn)
       );
     } catch (err) {
       console.error("Passkey sign-in failed:", err);
@@ -192,21 +219,26 @@
   $effect(() => {
     if (mode !== "username" || tenantless || !passkeysSupported) return;
 
-    let abandoned = false;
-
     void offerPasskeyInAutofill(async () => {
-      const result = await runPasskeyAssertion(
-        discoverableLoginOptions,
-        loginComplete,
-        true
-      );
-      if (!abandoned) await handleAuthResult(result);
+      let submitted = false;
+      try {
+        await handleAuthResult(
+          await runPasskeyAssertion(
+            discoverableLoginOptions,
+            (assertion) => {
+              submitted = true;
+              isLoading = true;
+              return completePasskeySignIn(assertion);
+            },
+            true
+          )
+        );
+      } finally {
+        if (submitted) isLoading = false;
+      }
     }).catch(() => {});
 
-    return () => {
-      abandoned = true;
-      WebAuthnAbortService.cancelCeremony();
-    };
+    return () => WebAuthnAbortService.cancelCeremony();
   });
 
   function loginWithProvider(providerId: string) {
@@ -628,6 +660,9 @@
       <div class="text-center">
         {@render backToSignIn("Back to sign in")}
       </div>
+
+    {:else if mode === "recovery-codes"}
+      <FirstRecoveryCodes codes={issuedRecoveryCodes} onContinue={finishSignIn} />
     {/if}
   </div>
 {/if}

@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
@@ -21,6 +22,9 @@ namespace Nocturne.API.Services.Identity;
 /// </summary>
 public class MembershipRequestService : IMembershipRequestService
 {
+    public const string ApprovedNotificationType = "membership.approved";
+    public const string DeniedNotificationType = "membership.denied";
+
     private static readonly DecideMembershipRequestResult AlreadyAMember =
         new(false, "The subject is already a member.");
 
@@ -47,6 +51,7 @@ public class MembershipRequestService : IMembershipRequestService
     private readonly ILogger<MembershipRequestService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TeamStaffAnnouncer _teamStaff;
 
     public MembershipRequestService(
         ITenantRepository tenants,
@@ -59,7 +64,8 @@ public class MembershipRequestService : IMembershipRequestService
         TimeProvider timeProvider,
         ILogger<MembershipRequestService> logger,
         IAccountLinkRoute linkRoute,
-        GrantRevocationService grantRevocation)
+        GrantRevocationService grantRevocation,
+        TeamStaffAnnouncer teamStaff)
     {
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
         _members = members ?? throw new ArgumentNullException(nameof(members));
@@ -72,6 +78,7 @@ public class MembershipRequestService : IMembershipRequestService
         _logger = logger;
         _linkRoute = linkRoute;
         _grantRevocation = grantRevocation ?? throw new ArgumentNullException(nameof(grantRevocation));
+        _teamStaff = teamStaff;
     }
 
     /// <inheritdoc />
@@ -176,6 +183,7 @@ public class MembershipRequestService : IMembershipRequestService
                 await unit.CommitAsync(async token =>
                 {
                     activated = false;
+                    await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, request.SubjectId, token);
                     switch (await subjects.GetAsync(request.SubjectId, token))
                     {
                         case null:
@@ -211,6 +219,8 @@ public class MembershipRequestService : IMembershipRequestService
                         throw new RefusedCommitException<DecideMembershipRequestResult>(NoLongerPending);
 
                     await unit.Context.SaveChangesAsync(token);
+                    revoked = [.. revoked, .. await TeamReasonWrites.SyncOwnerChangeAsync(
+                        unit, _grantRevocation, tenantId, request.SubjectId, _time.GetUtcNow().UtcDateTime, token)];
                 }, ct);
             }
             catch (RefusedCommitException<DecideMembershipRequestResult> refused)
@@ -231,6 +241,7 @@ public class MembershipRequestService : IMembershipRequestService
             return refusal;
 
         _grantRevocation.EvictSessions(revoked);
+        await _teamStaff.RecountOwnerChangeAsync(tenantId, request.SubjectId);
 
         _logger.LogInformation(
             "MembershipRequestAudit: {Event} request_id={RequestId} tenant_id={TenantId} subject_id={SubjectId} decided_by={DecidedBy}",
@@ -241,7 +252,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         await _notificationService.CreateNotificationAsync(
             request.SubjectId.ToString(),
-            "membership.approved",
+            ApprovedNotificationType,
             "Your membership request has been approved",
             sourceId: requestId.ToString(),
             cancellationToken: ct);
@@ -300,7 +311,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         await _notificationService.CreateNotificationAsync(
             request.SubjectId.ToString(),
-            "membership.denied",
+            DeniedNotificationType,
             "Your membership request has been denied",
             sourceId: requestId.ToString(),
             cancellationToken: ct);
@@ -345,7 +356,7 @@ public class MembershipRequestService : IMembershipRequestService
             {
                 await _notificationService.CreateNotificationAsync(
                     recipientSubjectId.ToString(),
-                    "membership.requested",
+                    NotificationSubjectNaming.MembershipRequested,
                     $"Membership request from {subjectName}",
                     subtitle: message,
                     sourceId: requestId.ToString(),

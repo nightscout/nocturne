@@ -8,15 +8,18 @@ namespace Nocturne.API.Services.Alerts.Webhooks;
 /// each request with an HMAC-SHA256 signature via <see cref="WebhookSignature"/>.
 /// </summary>
 /// <remarks>
-/// Blank or null URLs are silently skipped. Failed URLs are collected and returned
-/// rather than raising an exception so that partial success is possible. A URL that is
-/// not a publicly routable http(s) destination is reported as failed without being
-/// requested — see <see cref="OutboundDestination"/>.
+/// Blank or null URLs are silently skipped. Every URL is sent at once. A URL fails on a non-2xx
+/// answer, a transport failure, or when its attempt (the destination check and the POST together)
+/// outlasts <see cref="AlertDeliveryClient.Timeout"/>; failed URLs are collected and returned so that
+/// partial success is possible. The caller's own cancellation is not a failure and propagates.
+/// A URL that is not a publicly routable http(s) destination is reported as failed without
+/// being requested; see <see cref="OutboundDestination"/>.
 /// </remarks>
 public class WebhookRequestSender(
     IHttpClientFactory httpClientFactory,
     ILogger<WebhookRequestSender> logger,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    OutboundDestination.AddressResolver? resolver = null)
 {
     /// <summary>
     /// Name of the HTTP client used for webhook delivery. Configured not to follow
@@ -26,7 +29,14 @@ public class WebhookRequestSender(
     public const string HttpClientName = "Webhook";
 
     /// <summary>
-    /// Posts <paramref name="payload"/> to each URL in <paramref name="urls"/>.
+    /// The most URLs a caller-built list may name, since each is sent at once: about what a rule
+    /// channel's destination (512 characters) can hold, so no request opens more than a stored
+    /// channel can.
+    /// </summary>
+    public const int MaxUrls = 25;
+
+    /// <summary>
+    /// Posts <paramref name="payload"/> to every URL in <paramref name="urls"/> at once.
     /// </summary>
     /// <param name="urls">The destination webhook URLs to POST to.</param>
     /// <param name="payload">The JSON payload to include in the request body.</param>
@@ -37,8 +47,8 @@ public class WebhookRequestSender(
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// A read-only list of URLs that failed to receive the payload (non-2xx response or exception).
-    /// An empty list indicates full success.
+    /// The URLs that failed to receive the payload (non-2xx answer, transport failure or timeout),
+    /// in the order of <paramref name="urls"/>. An empty list indicates full success.
     /// </returns>
     public async Task<IReadOnlyList<string>> SendAsync(
         IEnumerable<string> urls,
@@ -48,52 +58,64 @@ public class WebhookRequestSender(
     )
     {
         var httpClient = httpClientFactory.CreateClient(HttpClientName);
-        var failures = new List<string>();
         var urlList = urls.Where(url => !string.IsNullOrWhiteSpace(url)).ToList();
 
-        foreach (var url in urlList)
+        var delivered = await Task.WhenAll(
+            urlList.Select(url => SendOneAsync(httpClient, url, payload, secret, cancellationToken)));
+
+        return [.. urlList.Where((_, i) => !delivered[i])];
+    }
+
+    private async Task<bool> SendOneAsync(
+        HttpClient httpClient, string url, string payload, string? secret, CancellationToken cancellationToken)
+    {
+        using var limit = new CancellationTokenSource(AlertDeliveryClient.Timeout, timeProvider);
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, limit.Token);
+
+        try
         {
-            if (!await OutboundDestination.IsPubliclyRoutableAsync(url, cancellationToken))
+            if (!await OutboundDestination.IsPubliclyRoutableAsync(url, attempt.Token, resolver))
             {
-                failures.Add(url);
                 logger.LogWarning(
                     "Refusing to send webhook to {Url}: not a publicly routable http(s) destination", url);
-                continue;
+                return false;
             }
 
-            try
+            using var content = new StringContent(
+                payload,
+                Encoding.UTF8,
+                "application/json"
+            );
+
+            if (!string.IsNullOrWhiteSpace(secret))
             {
-                using var content = new StringContent(
-                    payload,
-                    Encoding.UTF8,
-                    "application/json"
-                );
-
-                if (!string.IsNullOrWhiteSpace(secret))
-                {
-                    var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-                    var signature = WebhookSignature.Create(secret, payload, timestamp);
-                    content.Headers.Add("X-Nocturne-Timestamp", timestamp.ToString());
-                    content.Headers.Add("X-Nocturne-Signature", signature);
-                    content.Headers.Add("X-Nocturne-Signature-Version", "v1");
-                }
-
-                var response = await httpClient.PostAsync(url, content, cancellationToken);
-                if (response.IsSuccessStatusCode) continue;
-                failures.Add(url);
-                logger.LogWarning(
-                    "Webhook delivery failed for {Url} with status {StatusCode}",
-                    url,
-                    response.StatusCode
-                );
+                var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+                var signature = WebhookSignature.Create(secret, payload, timestamp);
+                content.Headers.Add("X-Nocturne-Timestamp", timestamp.ToString());
+                content.Headers.Add("X-Nocturne-Signature", signature);
+                content.Headers.Add("X-Nocturne-Signature-Version", "v1");
             }
-            catch (Exception ex)
-            {
-                failures.Add(url);
-                logger.LogWarning(ex, "Failed to send webhook to {Url}", url);
-            }
+
+            using var response = await httpClient.PostAsync(url, content, attempt.Token);
+            if (response.IsSuccessStatusCode) return true;
+            logger.LogWarning(
+                "Webhook delivery failed for {Url} with status {StatusCode}",
+                url,
+                response.StatusCode
+            );
+            return false;
         }
-
-        return failures;
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "Webhook to {Url} timed out after {Timeout} seconds", url, AlertDeliveryClient.Timeout.TotalSeconds);
+            return false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
+                                      or NotSupportedException or UriFormatException)
+        {
+            logger.LogWarning(ex, "Failed to send webhook to {Url}", url);
+            return false;
+        }
     }
 }

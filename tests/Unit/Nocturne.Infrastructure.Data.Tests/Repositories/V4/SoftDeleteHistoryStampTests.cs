@@ -403,8 +403,16 @@ public class SoftDeleteHistoryStampTests : IDisposable
     }
 
     private NoteRepository NotesAs(IAuditContext audit) => new(
-        new AuditedFactory(_db, audit), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
+        new SuppliedContextFactory(() => AuditedContext(audit)), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
         audit, NullLogger<NoteRepository>.Instance);
+
+    /// <summary>A fresh context carrying a user's audit context, as a request's factory hands out.</summary>
+    private NocturneDbContext AuditedContext(IAuditContext audit)
+    {
+        var ctx = _db.CreateContext();
+        ctx.AttributedTo(audit);
+        return ctx;
+    }
 
     /// <summary>One group per row: source A's reading leads, source B's is its duplicate.</summary>
     private async Task<(List<Guid> Primaries, List<Guid> Copies)> SeedGroupsAsync(int count)
@@ -443,17 +451,6 @@ public class SoftDeleteHistoryStampTests : IDisposable
         await _context.Notes.ExecuteUpdateAsync(s => s.SetProperty(n => n.SysUpdatedAt, Written));
         _context.ChangeTracker.Clear();
         return (primary.Id, copy.Id);
-    }
-
-    /// <summary>Hands out fresh contexts carrying a user's audit context, as a request's factory does.</summary>
-    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
-        {
-            var ctx = db.CreateContext();
-            ctx.AttributedTo(audit);
-            return ValueTask.FromResult(ctx);
-        }
     }
 
     private sealed class UserAuditContext : IAuditContext

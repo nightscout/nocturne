@@ -93,7 +93,7 @@ public static class ScenarioConversions
             TransmitterResistance = ctx.TransmitterResistance,
             TransmitterDays = ctx.TransmitterDays,
             ActiveOverride = ctx.ActiveOverride is { } ov
-                ? new OverrideSnapshot(Utc(ov.StartedAt)!.Value, null, null, null)
+                ? new OverrideSnapshot(Utc(ov.StartedAt)!.Value)
                 : null,
             ActivePumpSuspension = ctx.ActivePumpSuspension is { } ps
                 ? new PumpSuspensionSnapshot(Utc(ps.StartedAt)!.Value)

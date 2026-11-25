@@ -152,7 +152,7 @@ public class ChatIdentityPendingLinkCleanupServiceTests : IDisposable
 
         // Wait for the sweep's context to be disposed, then stop the loop, so the connection is
         // only ever touched by one thread at a time.
-        var finished = await Task.WhenAny(swept, Task.Delay(TimeSpan.FromSeconds(10)));
+        var finished = await Task.WhenAny(swept, Task.Delay(Eventually.DefaultPatience));
         await sut.StopAsync(CancellationToken.None);
 
         finished.Should().Be(swept, "starting the hosted service must reach CleanupExpiredAsync");
@@ -174,7 +174,7 @@ public class ChatIdentityPendingLinkCleanupServiceTests : IDisposable
         await using var _ = provider;
 
         await sut.StartAsync(CancellationToken.None);
-        (await Task.WhenAny(swept, Task.Delay(TimeSpan.FromSeconds(10))))
+        (await Task.WhenAny(swept, Task.Delay(Eventually.DefaultPatience)))
             .Should().Be(swept, "the loop must be running before its cancellation means anything");
 
         await sut.StopAsync(CancellationToken.None);

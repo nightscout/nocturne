@@ -15,6 +15,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Infrastructure;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Trace;
@@ -36,6 +37,22 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
         _factory = factory;
         _factory.Services.GetRequiredService<TracerProvider>();
         _client = factory.CreateClient();
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries.json", "/api/v1/entries.json")]
+    [InlineData("/api/v1/entries.json?count=1", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?count=1&token=caller", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?token=caller&count=1", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?count=1&secret=caller", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?access_token=caller&count=1&find%5Btype%5D=sgv", "/api/v1/entries.json?count=1&find%5Btype%5D=sgv")]
+    [InlineData("/api/v1/entries.json?TOKEN=caller&to%6Ben=caller2&count=1", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?token=caller", "/api/v1/entries.json")]
+    [InlineData("/api/v1/entries.json?token&secret=", "/api/v1/entries.json")]
+    [InlineData("/api/v1/entries.json?tokens=kept&mytoken=kept", "/api/v1/entries.json?tokens=kept&mytoken=kept")]
+    public void Only_the_callers_credential_parameters_are_dropped(string path, string expected)
+    {
+        CredentialPathRedactor.WithoutCredentialQuery(path).Should().Be(expected);
     }
 
     [Theory]
@@ -267,13 +284,11 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
 
         await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path));
 
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!_factory.Spans.Skip(spansBefore).Any(s => s.UrlPath == expectedPath)
-            || !_factory.Logs.Skip(logsBefore).Any(l => l.Message.StartsWith("Request finished")))
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the request's server span and closing request line are captured");
-            await Task.Delay(20);
-        }
+        await Eventually.UntilAsync(
+            "the request's server span and closing request line to be captured",
+            () => _factory.Spans.Skip(spansBefore).Any(s => s.UrlPath == expectedPath)
+                && _factory.Logs.Skip(logsBefore).Any(l => l.Message.StartsWith("Request finished")),
+            step: TimeSpan.FromMilliseconds(20));
 
         return (_factory.Logs.Skip(logsBefore).ToList(), _factory.Spans.Skip(spansBefore).ToList());
     }

@@ -144,14 +144,11 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
 
     private static async Task DeleteAllPasskeysForTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             DELETE FROM passkey_credentials
             WHERE subject_id IN (
                 SELECT subject_id FROM tenant_members WHERE tenant_id = @tenantId
             );
-            """;
-        cmd.Parameters.AddWithValue("tenantId", tenantId);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenantId", tenantId));
     }
 }

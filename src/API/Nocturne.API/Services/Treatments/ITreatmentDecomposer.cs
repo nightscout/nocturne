@@ -46,6 +46,14 @@ internal interface ITreatmentDecomposer
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Deletes the treatments stored under <paramref name="legacyIds"/> as their client's edit to
+    /// <c>isValid: false</c> deletes them: as the system's delete, which a later upload of the id brings
+    /// back, and leaving another source's copy of the same dose live.
+    /// </summary>
+    /// <returns>Total number of v4 records deleted across all tables.</returns>
+    Task<int> InvalidateAsync(IReadOnlyCollection<string> legacyIds, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
     /// The subset of <paramref name="legacyIds"/> held only by records the user deleted, which a
     /// re-upload under that id does not bring back.
     /// </summary>
@@ -58,6 +66,10 @@ internal interface ITreatmentDecomposer
     Task<IReadOnlyDictionary<string, DateTime>> GetLegacyIdsFromSourceAsync(
         string source, DateTime from, DateTime to, CancellationToken ct = default);
 
+    /// <inheritdoc cref="ITreatmentService.GetOpenSpansFromSourceAsync"/>
+    Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpansFromSourceAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken ct = default);
+
     /// <inheritdoc cref="ITreatmentService.RekeyClientIdRecordsAsync"/>
     Task<int> RekeyClientIdRecordsAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
@@ -67,8 +79,15 @@ internal interface ITreatmentDecomposer
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
     /// <inheritdoc cref="ITreatmentService.SelectForRepublishAsync"/>
-    Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+    Task<TreatmentRepublish> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
+    /// <summary>
+    /// The write of <see cref="ITreatmentService.RepublishSpansAsync"/>, which announces what it returns.
+    /// </summary>
+    /// <returns>The treatments whose spans were written.</returns>
+    Task<IReadOnlyList<Treatment>> RepublishSpansAsync(
+        string source, IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk-deletes V4 treatment records matching the optional find filter (time range).

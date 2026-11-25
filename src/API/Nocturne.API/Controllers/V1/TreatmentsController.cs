@@ -432,7 +432,7 @@ public class TreatmentsController : ControllerBase
         }
 
         if (string.IsNullOrWhiteSpace(prepared.Id)
-            && await _treatmentService.FindSameEventIdAsync(prepared, cancellationToken) is { } sameEventId
+            && await SameEventIdAsync(prepared, cancellationToken) is { } sameEventId
             && await _treatmentService.UpdateV1TreatmentAsync(sameEventId, prepared, cancellationToken) is { } replaced)
             return Ok(replaced);
 
@@ -489,7 +489,7 @@ public class TreatmentsController : ControllerBase
 
             await FlushAsync();
 
-            if (await _treatmentService.FindSameEventIdAsync(treatment, cancellationToken) is { } sameEventId
+            if (await SameEventIdAsync(treatment, cancellationToken) is { } sameEventId
                 && await _treatmentService.UpdateV1TreatmentAsync(sameEventId, treatment, cancellationToken) is { } replaced)
             {
                 results.Add(replaced);
@@ -503,6 +503,18 @@ public class TreatmentsController : ControllerBase
         await FlushAsync();
         return results.ToArray();
     }
+
+    /// <summary>
+    /// The stored treatment a document without an identity replaces: the one at its <c>created_at</c>
+    /// with its <c>eventType</c>, which Nightscout's upsert matches.
+    /// </summary>
+    private async Task<string?> SameEventIdAsync(Treatment treatment, CancellationToken cancellationToken) =>
+        // NIGHTSCOUT-COMPAT: Nightscout replaces that document with one sent with isValid: false,
+        // which deletes it. A time and an event type do not name a treatment, and a dose deleted by
+        // another record's upload leaves IOB and COB, so such a document replaces nothing.
+        treatment.IsValid == false
+            ? null
+            : await _treatmentService.FindSameEventIdAsync(treatment, cancellationToken);
 
     private static Treatment? ReadTreatment(JsonElement document)
     {

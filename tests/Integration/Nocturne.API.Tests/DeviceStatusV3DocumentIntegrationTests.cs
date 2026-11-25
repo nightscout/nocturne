@@ -92,6 +92,7 @@ public class DeviceStatusV3DocumentIntegrationTests : ApiIntegrationTestBase
     {
         var (client, device, identifier) = await UploadAsync();
 
+        await SettleHistoryAsync();
         var response = await client.GetAsync("/api/v3/devicestatus/history/0?limit=1000");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
@@ -145,6 +146,7 @@ public class DeviceStatusV3DocumentIntegrationTests : ApiIntegrationTestBase
 
         var byId = await client.GetAsync($"/api/v3/devicestatus/{identifier}");
         byId.StatusCode.Should().Be(HttpStatusCode.OK, await byId.Content.ReadAsStringAsync());
+        await SettleHistoryAsync();
         var history = await client.GetAsync("/api/v3/devicestatus/history/0?limit=1000");
         history.StatusCode.Should().Be(HttpStatusCode.OK, await history.Content.ReadAsStringAsync());
         var fromHistory = (await ReadAsync(history))!["result"]!.AsArray().Should().ContainSingle().Subject!;

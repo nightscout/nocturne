@@ -29,18 +29,16 @@
 
   // This header is the glucose surface on a phone unless the Current Glucose widget is showing —
   // CurrentBGDisplay hides itself below @md — so it carries the same stale/disconnected states.
-  const rawCurrentBG = $derived(glucose.currentBG);
+  const value = $derived(glucose.value);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(
     getGlucoseTileVariant(glucose.status)
   );
   const now = $derived(realtimeStore?.now ?? Date.now());
-  const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
+  const displayCurrentBG = $derived(value === null ? "—" : formatGlucoseValue(value, units));
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
-  // No reading yet: show the skeleton rather than rendering the 0 sentinel as a
-  // glucose value.
-  const isLoading = $derived(rawCurrentBG <= 0);
+  const isLoading = $derived(value === null && !(realtimeStore?.currentReadingLoaded ?? true));
   const statusText = $derived(
     isDisconnected
       ? "Connection error"
@@ -89,6 +87,9 @@
   <!-- Current BG display on the right -->
   {#if realtimeStore}
     <div class="flex items-center gap-2">
+      {#if value === null && !isLoading}
+        <span class="sr-only">No glucose reading</span>
+      {/if}
       <GlucoseValueIndicator
         displayValue={displayCurrentBG}
         variant={tileVariant}
@@ -102,7 +103,7 @@
 
       <!-- Direction arrow and delta. Hidden while stale: the trend describes a
            reading that is no longer current. -->
-      {#if !isLoading && !isStale}
+      {#if value !== null && !isStale}
         <div class="flex flex-col items-center text-xs">
           <span class={deltaColorClass(glucose.direction)}>
             {#if directionInfo.icon}

@@ -434,6 +434,25 @@ jobs:
         with:
           name: api-client
           path: src/Web/packages
+      # translator-merge.yml reads and writes catalogs with a vendored copy of the pofile Wuchale
+      # uses, since it installs nothing, and copies a few of Wuchale's loading rules. This keeps the
+      # copy identical to the installed one and fails on a Wuchale upgrade, so the rules are rechecked.
+      - name: Translator merge
+        if: ${{ !cancelled() }}
+        run: |
+          wuchale=$(node -p 'require("fs").realpathSync("node_modules/wuchale")')
+          installed=$(node -p 'require("module").createRequire(process.argv[1] + "/package.json").resolve("pofile")' "$wuchale")
+          cmp "$installed" ../../.github/scripts/vendor/pofile/po.js || {
+            echo "::error::Wuchale's pofile ($installed) differs from .github/scripts/vendor/pofile/po.js. Copy it there."
+            exit 1
+          }
+          version=$(node -p 'require(process.argv[1] + "/package.json").version' "$wuchale")
+          expected=$(node -p 'require("../../.github/scripts/translator-merge.cjs").WUCHALE_VERSION')
+          [ "$version" = "$expected" ] || {
+            echo "::error::Wuchale is $version; translator-merge.cjs copies the loading rules of $expected. Check itemKey and readCatalog against wuchale/dist/pofile.js and adapters.js, then update WUCHALE_VERSION."
+            exit 1
+          }
+          node --test ../../.github/scripts/translator-merge.test.cjs
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
@@ -649,6 +668,9 @@ jobs:
           dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj --no-build \
             --filter "$(tests/quarantine.sh exclude)" \
             --logger "trx;LogFileName=integration-api.trx" \
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --test-adapter-path .coverlet \
             --results-directory TestResults/integration-api
       # tests/quarantine.txt: tests failing on a known product bug. Run so they stay visible, and
       # never fail the job; a quarantined test that passes means its line can go.
@@ -660,6 +682,13 @@ jobs:
             --filter "$(tests/quarantine.sh include)" \
             --logger "trx;LogFileName=integration-api-quarantine.trx" \
             --results-directory TestResults/integration-api-quarantine
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-dotnet-integration-api
+          path: TestResults/integration-api/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
@@ -804,7 +833,7 @@ jobs:
   # request's sticky comment, and applies the patch coverage gate. A fork's pull request runs with
   # a read-only token, so its comment is posted by coverage-comment.yml from the uploaded report.
   coverage:
-    needs: [changes, unit, integration-db, web-static, web-app-tests, desktop-rust]
+    needs: [changes, unit, integration-db, integration-api, web-static, web-app-tests, desktop-rust]
     if: >-
       ${{ !cancelled() && (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true'
       || needs.changes.outputs.desktop == 'true') }}

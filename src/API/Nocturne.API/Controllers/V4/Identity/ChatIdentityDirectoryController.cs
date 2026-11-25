@@ -163,6 +163,8 @@ public class ChatIdentityDirectoryController : ControllerBase
             return Forbid();
         if (!_tenantAccessor.IsResolved || _tenantAccessor.TenantId != row.TenantId)
             return NotFound();
+        if (!await _directory.HasActiveSubjectAsync(row.Id, ct))
+            return NotFound();
 
         await using var db = await _contextFactory.CreateAsync(ct);
         List<Guid> excursionIds;

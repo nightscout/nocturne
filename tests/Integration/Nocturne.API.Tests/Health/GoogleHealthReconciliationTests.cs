@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +5,8 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
@@ -242,7 +243,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.Single(await db.StepCounts.AsNoTracking().ToListAsync());
         Assert.Equal(0, await db.Database.SqlQueryRaw<int>("""
             SELECT count(*)::integer AS "Value" FROM pg_class
-            WHERE relname LIKE 'google_health_%' AND relname <> 'google_health_grant_holders'
+            WHERE relname LIKE 'google_health_%' AND relname NOT IN ('google_health_grant_holders', 'google_health_work')
             """).SingleAsync());
     }
 
@@ -364,7 +365,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         try
         {
             Assert.Null(await coordinator.AcquireAsync(tenantId, default, TimeSpan.Zero));
-            Assert.False(await coordinator.QueueAsync(tenantId, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.False(await coordinator.QueueAsync(tenantId, 4, default).WaitAsync(Eventually.DefaultPatience));
             await using var unrelated = await coordinator.AcquireAsync(otherTenantId, default, TimeSpan.Zero);
             Assert.NotNull(unrelated);
             using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
@@ -378,8 +379,10 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
             using var scope = provider.CreateScope();
             await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
                 .CreateForTenantAsync(tenantId);
-            var cursors = new ConnectorSyncCursorStore(new ConnectorConfigurationRepository(db.AsFactory()), NullLogger<ConnectorSyncCursorStore>.Instance);
-            await cursors.SetAsync("GoogleHealth", "health", new(null, "{\"backfillComplete\":true}"));
+            var state = new ConnectorStateStore(new ConnectorConfigurationRepository(db.AsFactory()), NullLogger<ConnectorStateStore>.Instance);
+            await state.SetResumeAsync(DataSources.GoogleHealthConnector,
+                new Dictionary<string, DateTime?> { [GoogleHealthState.BackfillCursor] = DateTime.UtcNow.Date });
+            await state.ClearAsync(DataSources.GoogleHealthConnector, ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor);
             Assert.Equal(3, (await coordinator.ProgressAsync(tenantId, default))!.PagesRead);
             Assert.Null(await Coordinator(provider).ProgressAsync(tenantId, default));
         }
@@ -431,14 +434,14 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var subject = Guid.NewGuid();
         await using var reader = await coordinator.WatchReadsAsync(tenantId, default);
         var request = await coordinator.RequestDisconnectAsync(tenantId, subject, default);
-        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(Eventually.DefaultPatience);
         var restarted = Coordinator(provider);
         Assert.Equal(subject, (await restarted.DisconnectRequestAsync(tenantId, default))!.SubjectId);
         Assert.Equal(request, await restarted.RequestDisconnectAsync(tenantId, Guid.NewGuid(), default));
         await using (var late = await restarted.WatchReadsAsync(tenantId, default))
             Assert.True(late.Token.IsCancellationRequested);
         await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
-        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(Eventually.DefaultPatience));
         Assert.Equal(tenantId, requests.Current);
         await restarted.FinishDisconnectAsync(tenantId, Guid.NewGuid());
         Assert.NotNull(await restarted.DisconnectRequestAsync(tenantId, default));
@@ -454,10 +457,11 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var tenants = Mock.Get(provider.GetRequiredService<ITenantService>());
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var coordinator = Coordinator(provider);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cancellation = new CancellationTokenSource(Eventually.DefaultPatience);
         await using var requests = coordinator.ReadRequestsAsync(cancellation.Token).GetAsyncEnumerator();
         var next = requests.MoveNextAsync().AsTask();
-        while (tenants.Invocations.Count == 0) await Task.Delay(10, cancellation.Token);
+        await Eventually.UntilAsync(
+            "the coordinator to list the tenants", () => tenants.Invocations.Count > 0);
         Assert.False(next.IsCompleted);
 
         Assert.True(await coordinator.QueueAsync(tenantId, 1, cancellation.Token));
@@ -478,90 +482,62 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     }
 
     [Fact]
-    public async Task Cursor_store_json_keys_are_set_read_and_removed_alone_for_one_tenant()
+    public async Task Work_parts_are_set_read_and_cleared_alone_for_one_tenant()
     {
         await SeedConnectorAsync();
-        await using (var seed = Context())
-        {
-            seed.TenantId = otherTenantId;
-            seed.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
-            {
-                Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-                SyncCursorsJson = "{\"progress\":{\"kept\":true}}"
-            });
-            await seed.SaveChangesAsync();
-        }
         await using var provider = Services();
         using var scope = provider.CreateScope();
         var contexts = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
         await using var db = await contexts.CreateForTenantAsync(tenantId);
-        var cursors = new ConnectorSyncCursorStore(new ConnectorConfigurationRepository(db.AsFactory()), NullLogger<ConnectorSyncCursorStore>.Instance);
-
-        Assert.Null(await cursors.GetJsonAsync("GoogleHealth", "progress"));
-        await cursors.SetJsonAsync("GoogleHealth", "progress", new JsonObject { ["pages"] = 3 });
-        Assert.Equal(3, (int)(await cursors.GetJsonAsync("GoogleHealth", "progress"))!["pages"]!);
-        Assert.Equal("retained", (await cursors.GetAsync("GoogleHealth", "unrelated"))!.LastUpdatedAt);
-
-        await cursors.RemoveAsync("GoogleHealth", "progress");
-        Assert.Null(await cursors.GetJsonAsync("GoogleHealth", "progress"));
-        Assert.Equal("retained", (await cursors.GetAsync("GoogleHealth", "unrelated"))!.LastUpdatedAt);
-
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE connector_configurations SET sync_cursors = '[]'::jsonb
-            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
-            """);
-        Assert.Null(await cursors.GetJsonAsync("GoogleHealth", "progress"));
-        await cursors.SetJsonAsync("GoogleHealth", "progress", JsonValue.Create(1));
-        Assert.Equal(1, (int)(await cursors.GetJsonAsync("GoogleHealth", "progress"))!);
-
         await using var other = await contexts.CreateForTenantAsync(otherTenantId);
-        var otherCursors = new ConnectorSyncCursorStore(new ConnectorConfigurationRepository(other.AsFactory()), NullLogger<ConnectorSyncCursorStore>.Instance);
-        Assert.True((bool)(await otherCursors.GetJsonAsync("GoogleHealth", "progress"))!["kept"]!);
+        var work = new GoogleHealthWorkRepository(db.AsFactory());
+        var otherWork = new GoogleHealthWorkRepository(other.AsFactory());
+        var progress = new GoogleHealthSyncProgress(GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3, WorkerOwned: true);
+        var disconnect = new GoogleHealthDisconnectRequest(Guid.NewGuid(), Guid.NewGuid());
+        await otherWork.SetProgressAsync(new GoogleHealthSyncProgress(GoogleHealthSyncPhase.Queued, null, 0, 2, 0), default);
+
+        Assert.Equal(GoogleHealthWork.None, await work.GetAsync(default));
+        await work.SetProgressAsync(progress, default);
+        await work.SetDisconnectAsync(disconnect, default);
+        Assert.Equal(new GoogleHealthWork(progress, disconnect), await work.GetAsync(default));
+
+        await work.SetProgressAsync(null, default);
+        Assert.Equal(new GoogleHealthWork(null, disconnect), await work.GetAsync(default));
+        await work.SetProgressAsync(progress, default);
+        await work.SetDisconnectAsync(null, default);
+        Assert.Equal(new GoogleHealthWork(progress, null), await work.GetAsync(default));
+
+        Assert.Equal(GoogleHealthSyncPhase.Queued, (await otherWork.GetAsync(default)).Progress!.Phase);
+        Assert.Null((await otherWork.GetAsync(default)).Disconnect);
+        Assert.Equal(2, await db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM google_health_work").SingleAsync()
+            + await other.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM google_health_work").SingleAsync());
     }
 
     [Theory]
-    [InlineData("null")]
-    [InlineData("[]")]
-    [InlineData("\"legacy\"")]
-    [InlineData("42")]
-    [InlineData("true")]
-    [InlineData("{\"googleHealthProgress\":[]}")]
-    [InlineData("{\"googleHealthProgress\":\"invalid\"}")]
-    [InlineData("{\"googleHealthProgress\":42}")]
-    [InlineData("{\"googleHealthProgress\":{\"Phase\":999,\"WorkerOwned\":true}}")]
-    [InlineData("{\"googleHealthProgress\":{\"Phase\":\"invalid\"}}")]
-    [InlineData("{\"googleHealthProgress\":{\"WorkerOwned\":\"invalid\"}}")]
-    [InlineData("{\"googleHealthProgress\":{\"PagesRead\":{}}}")]
-    public async Task Invalid_cursor_payloads_recover_for_cursor_writes_status_and_queue(string legacyJson)
+    [InlineData("invalid")]
+    [InlineData("")]
+    [InlineData("999")]
+    [InlineData("Reading")]
+    public async Task An_unknown_progress_phase_reads_as_none_and_is_replaced_by_the_next_queue(string phase)
     {
-        await SeedConnectorAsync(legacyJson);
+        await SeedConnectorAsync();
         await using var provider = Services();
         var coordinator = Coordinator(provider);
-        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
-
         using var scope = provider.CreateScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
             .CreateForTenantAsync(tenantId);
-        var cursors = new ConnectorSyncCursorStore(new ConnectorConfigurationRepository(db.AsFactory()), NullLogger<ConnectorSyncCursorStore>.Instance);
-        await cursors.SetAsync("GoogleHealth", "health", new(null, "restored"));
-        Assert.Equal("restored", (await cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
-
         await db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE connector_configurations SET sync_cursors = {legacyJson}::jsonb
-            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
+            INSERT INTO google_health_work (tenant_id, progress_phase, progress_completed_data_types,
+                                            progress_total_data_types, progress_pages_read, progress_worker_owned)
+            VALUES ({tenantId}, {phase}, 0, 4, 0, true)
             """);
+        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
+
         Assert.True(await coordinator.QueueAsync(tenantId, 4, default));
         Assert.True((await coordinator.ProgressAsync(tenantId, default))!.WorkerOwned);
         await coordinator.CompleteAsync(tenantId);
         Assert.Null(await coordinator.ProgressAsync(tenantId, default));
-
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE connector_configurations SET sync_cursors = {legacyJson}::jsonb
-            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
-            """);
-        await coordinator.CompleteAsync(tenantId);
-        db.ChangeTracker.Clear();
-        Assert.Equal("{}", await db.ConnectorConfigurations.Select(row => row.SyncCursorsJson).SingleAsync());
+        Assert.Null(await db.GoogleHealthWork.AsNoTracking().Select(row => row.ProgressPhase).SingleAsync());
     }
 
     private async Task SeedConnectorAsync(string cursorJson = "{\"unrelated\":{\"LastUpdatedAt\":\"retained\",\"LastGuid\":null}}")
@@ -571,7 +547,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
         {
             Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-            SyncCursorsJson = cursorJson
+            VendorStateJson = cursorJson
         });
         await db.SaveChangesAsync();
     }
@@ -584,7 +560,6 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
-        services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options

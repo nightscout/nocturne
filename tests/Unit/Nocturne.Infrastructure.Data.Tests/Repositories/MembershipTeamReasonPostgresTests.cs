@@ -18,8 +18,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
 /// <summary>
 /// A membership holding a team's reason beside its direct one, or only a team's, on PostgreSQL under the
-/// runtime role. The team reasons are written straight to the tables and projected by the startup
-/// check, since no product path gives one yet. The direct reason's writers change only it and refuse a
+/// runtime role. The team reasons are written straight to the tables, with the staff rows they stand on,
+/// and projected by the startup check. The direct reason's writers change only it and refuse a
 /// member who holds none; the team entry points name the team and never read as the member leaving.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -45,28 +45,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Site(
-        Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
+        Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
         Guid CaretakerRole);
 
     private sealed record Row(string EventType, string? Details, Guid? Team, Guid? Actor)
@@ -93,7 +73,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-reason', true, now(), now());
             """);
-        var factory = new Factory(Context, tenant);
+        var factory = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, Ct);
         var ownerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, Ct))!.Value;
@@ -105,7 +85,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         return new Site(tenant, factory, members, owner, ownerRole, viewerRole, caretakerRole);
     }
 
-    private static Task<Guid> NewSubjectAsync(Factory factory, string name) =>
+    private static Task<Guid> NewSubjectAsync(SuppliedContextFactory factory, string name) =>
         new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), Ct);
 
     /// <summary>A team named <paramref name="name"/> with access to <paramref name="tenant"/>; returns the access.</summary>
@@ -119,10 +99,25 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
 
     /// <summary>
     /// Writes a reason from <paramref name="access"/> giving <paramref name="role"/> to the subject's membership,
-    /// adding the row when they hold none, and projects it as the startup check does.
+    /// adding the row when they hold none, with the staff rows it stands on, and projects it as the startup
+    /// check does.
     /// </summary>
     private async Task<Guid> TeamReasonAsync(
         Site site, Guid subject, Guid access, Guid role, bool limitTo24Hours = false, DateTime? endsAt = null)
+    {
+        var memberId = await WriteTeamReasonAsync(
+            site, subject, access, role, limitTo24Hours, endsAt, TeamReasonSql.Staff(access, subject, role, limitTo24Hours, endsAt));
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            database.MigratorConnectionString, Now, TeamWrites.Apply(Now), NullLogger.Instance, Ct);
+        return memberId;
+    }
+
+    /// <summary>
+    /// Writes the reason alone, after <paramref name="staffSql"/>, leaving the row as it was: no check runs
+    /// to remove a reason that no staff row stands on.
+    /// </summary>
+    private async Task<Guid> WriteTeamReasonAsync(
+        Site site, Guid subject, Guid access, Guid role, bool limitTo24Hours, DateTime? endsAt, string staffSql)
     {
         var member = (await site.Members.FindMemberAsync(site.Tenant, subject, Ct))?.Id;
         var memberId = member ?? Guid.CreateVersion7();
@@ -139,9 +134,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
             VALUES ('{reason}', '{memberId}', 'team', '{access}', {limit}, {ends});
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
+            {staffSql}
             """);
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now, NullLogger.Instance, Ct);
         return memberId;
     }
 
@@ -216,6 +210,17 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         await db.SaveChangesAsync(Ct);
         await transaction.CommitAsync(Ct);
         return result;
+    }
+
+    private async Task<T> InUnitAsync<T>(Site site, Func<DbUnitOfWork, Task<T>> work)
+    {
+        await using var unit = DbUnitOfWork.Own(Context(site.Tenant));
+        return await unit.CommitAsync(async token =>
+        {
+            var result = await work(unit);
+            await unit.Context.SaveChangesAsync(token);
+            return result;
+        }, ct: Ct);
     }
 
     [Fact]
@@ -307,8 +312,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var (subject, member, access) = await MixedAsync(site, "remove-direct-mixed", ["treatments.read"]);
         var before = (await RowsAsync(site, subject)).Count;
 
-        (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
-            .Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
+            .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var rows = (await RowsAsync(site, subject)).Skip(before).ToList();
         rows.Select(r => r.EventType).Should().Equal(
@@ -331,10 +336,10 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var state = await RowStateAsync(member);
         var audit = await AuditCountAsync(site);
 
-        (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
-            .Should().Be(OwnerGuardedChange.FromTeam);
-        (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
+            .Outcome.Should().Be(OwnerGuardedChange.FromTeam);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.FromTeam);
         (await site.Members.ReplaceRolesAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct)).Should().BeFalse();
         (await site.Members.SetDirectPermissionsAsync(site.Tenant, member, ["glucose.read"], Now, Ct)).Should().BeFalse();
@@ -351,10 +356,10 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("roles-mixed");
         var (_, member, _) = await MixedAsync(site, "roles-mixed-member");
 
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.ViewerRole], [site.CaretakerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.ViewerRole], [site.CaretakerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
 
@@ -385,7 +390,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("end-mixed");
         var (_, member, _) = await MixedAsync(site, "end-mixed-member");
 
-        (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
 
         var record = (await site.Members.GetMemberAsync(site.Tenant, member, Ct))!;
@@ -403,7 +408,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var foreignSubject = await NewSubjectAsync(site.Factory, "list-foreign");
         (await site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, foreignSubject, [site.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct))
             .Should().BeTrue();
-        var foreign = await TeamReasonAsync(site, foreignSubject, foreignAccess, site.CaretakerRole);
+        var foreign = await WriteTeamReasonAsync(site, foreignSubject, foreignAccess, site.CaretakerRole, false, null, string.Empty);
 
         var listed = await site.Members.ListMembersAsync(site.Tenant, Ct);
 
@@ -450,6 +455,24 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     }
 
     [Fact]
+    public async Task The_writer_refuses_to_set_a_team_reason_to_the_owner_role()
+    {
+        var site = await SiteAsync("owner-set-refused");
+        var subject = await NewSubjectAsync(site.Factory, "owner-set-refused-staff");
+        var (_, access) = await TeamAccessAsync(site.Tenant, "Owners");
+        await InTransactionAsync(site, db => TenantMembershipRepository.StageAddTeamReasonAsync(
+            db, site.Tenant, subject, access, new MembershipGrant([site.CaretakerRole], null, false, null),
+            MemberAccessSource.System, Now, Ct));
+
+        var set = () => InUnitAsync(site, unit => TenantMembershipRepository.StageSetTeamReasonAsync(
+            unit, site.Tenant, subject, access, new MembershipGrant([site.OwnerRole], null, false, null),
+            MemberAccessSource.System, Now, Ct));
+
+        await set.Should().ThrowAsync<InvalidOperationException>();
+        (await site.Members.FindMemberAsync(site.Tenant, subject, Ct))!.Roles.Select(r => r.RoleId).Should().Equal(site.CaretakerRole);
+    }
+
+    [Fact]
     public async Task A_team_reason_names_the_team_and_a_staff_member_ending_it_themselves_is_not_recorded_as_leaving()
     {
         var site = await SiteAsync("team-entry");
@@ -464,8 +487,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         member.DirectReason.Should().BeNull();
         member.Roles.Select(r => r.RoleId).Should().Equal(site.CaretakerRole);
 
-        (await InTransactionAsync(site, db => TenantMembershipRepository.StageRemoveTeamReasonAsync(
-            db, site.Tenant, subject, access, bySelf, Now, Ct))).Should().BeTrue();
+        (await InUnitAsync(site, unit => TenantMembershipRepository.StageRemoveTeamReasonAsync(
+            unit, site.Tenant, subject, access, bySelf, Now, Ct))).Should().BeEmpty();
 
         var rows = await RowsAsync(site, subject);
         rows.Select(r => r.EventType).Should().Equal(
@@ -482,8 +505,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("team-end-mixed");
         var (subject, member, access) = await MixedAsync(site, "team-end-mixed-member");
 
-        (await InTransactionAsync(site, db => TenantMembershipRepository.StageRemoveTeamReasonAsync(
-            db, site.Tenant, subject, access, MemberAccessSource.System, Now, Ct))).Should().BeTrue();
+        (await InUnitAsync(site, unit => TenantMembershipRepository.StageRemoveTeamReasonAsync(
+            unit, site.Tenant, subject, access, MemberAccessSource.System, Now, Ct))).Should().BeEmpty();
 
         (await ReasonsAsync(member)).Should().Equal((MembershipReasonKind.Direct, (Guid?)null));
         await RowIsTheSumAsync(site, member);

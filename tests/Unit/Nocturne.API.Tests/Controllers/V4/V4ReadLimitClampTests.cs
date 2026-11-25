@@ -254,7 +254,8 @@ public class V4ReadLimitClampTests
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>());
+            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>());
 
     private static void VerifyTherapySettingsFetched(Mock<ITherapySettingsRepository> repo, int limit, int offset) =>
         repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
@@ -500,6 +501,7 @@ public class V4ReadLimitClampTests
         new(
             Mock.Of<IDiscrepancyPersistenceService>(),
             repo.Object,
+            Mock.Of<IHttpClientFactory>(),
             Options.Create(new CompatibilityProxyConfiguration()),
             Mock.Of<ILogger<CompatibilityController>>());
 

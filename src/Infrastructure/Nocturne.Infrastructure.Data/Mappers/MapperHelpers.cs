@@ -18,14 +18,14 @@ internal static class MapperHelpers
     /// <summary>
     /// Deserialize a JSON string, returning default for null, empty, "null", or malformed input.
     /// </summary>
-    public static T? DeserializeJson<T>(string? json)
+    public static T? DeserializeJson<T>(string? json, JsonSerializerOptions? options = null)
     {
         if (string.IsNullOrEmpty(json) || json == "null")
             return default;
 
         try
         {
-            return JsonSerializer.Deserialize<T>(json);
+            return JsonSerializer.Deserialize<T>(json, options);
         }
         catch (JsonException)
         {

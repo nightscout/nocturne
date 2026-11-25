@@ -209,16 +209,19 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             // For single record POSTs, check for deduplication (AAPS expects isDeduplication response)
             var recordsList = deviceStatusRecords.ToList();
+            DeviceStatus? existing = null;
             if (recordsList.Count == 1)
             {
                 var single = recordsList[0];
                 if (!string.IsNullOrEmpty(single.Id))
                 {
-                    var existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
+                    existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
                         single.Id,
                         cancellationToken
                     );
-                    if (existing != null)
+                    // A create with isValid: false is not a duplicate of the status its id names: it
+                    // deletes it, when the write names it (InvalidUploads in Services/V4).
+                    if (existing != null && single.IsValid != false)
                     {
                         return V3Deduplicated(existing.Id, existing.SrvModified);
                     }
@@ -227,6 +230,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             var projectedResults = await _deviceStatuses.CreateDeviceStatusesAsync(
                 recordsList, cancellationToken: cancellationToken);
+
+            if (existing != null && projectedResults.Invalidated.Count > 0)
+                return V3Deduplicated(existing.Id, srvModified: null);
 
             if (deviceStatusData.ValueKind == JsonValueKind.Array)
             {
@@ -294,6 +300,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 "Request body must contain valid device status data"
             );
         }
+
+        if (deviceStatus.IsValid == false)
+            return IsValidImmutable();
 
         // Ensure ID matches
         if (deviceStatus.Id != null && deviceStatus.Id != id)

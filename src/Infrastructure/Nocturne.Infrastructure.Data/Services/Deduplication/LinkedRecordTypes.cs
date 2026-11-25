@@ -63,53 +63,56 @@ public static class LinkedRecordTypes
     internal static string WriteLockKey(Guid tenantId) => $"dedup:{tenantId}";
 
     /// <summary>
-    /// Loads the full set of data sources behind each of the given canonical groups. The whole
-    /// group is read rather than just the links inside a matching window, so a same-source record
-    /// sitting outside the window still blocks a wide match. A group in <paramref name="unlinked"/> is
-    /// not stored and its one record is its source.
+    /// Every member of each of the given canonical groups. The whole group is read rather than just
+    /// the links inside a matching window, so a same-source record sitting outside the window still
+    /// blocks a wide match. A group in <paramref name="unlinked"/> is not stored and its one record is
+    /// its only member.
     /// </summary>
-    internal static async Task<Dictionary<Guid, HashSet<string>>> LoadGroupSourcesAsync(
+    internal static async Task<Dictionary<Guid, List<GroupMember>>> LoadGroupMembersAsync(
         NocturneDbContext db,
         string recordTypeStr,
         List<Guid> canonicalIds,
         IReadOnlyDictionary<Guid, LinkedRecordEntity> unlinked,
         CancellationToken ct)
     {
-        var sourcesByCanonical = new Dictionary<Guid, HashSet<string>>();
-        void Add(Guid canonicalId, string dataSource)
+        var membersByCanonical = new Dictionary<Guid, List<GroupMember>>();
+        void Add(Guid canonicalId, Guid recordId, string dataSource)
         {
-            if (!sourcesByCanonical.TryGetValue(canonicalId, out var sources))
+            if (!membersByCanonical.TryGetValue(canonicalId, out var members))
             {
-                sources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                sourcesByCanonical[canonicalId] = sources;
+                members = [];
+                membersByCanonical[canonicalId] = members;
             }
 
-            sources.Add(dataSource);
+            members.Add(new GroupMember(recordId, dataSource));
         }
 
         var stored = new List<Guid>();
         foreach (var canonicalId in canonicalIds)
         {
             if (unlinked.TryGetValue(canonicalId, out var link))
-                Add(canonicalId, link.DataSource);
+                Add(canonicalId, link.RecordId, link.DataSource);
             else
                 stored.Add(canonicalId);
         }
 
         if (stored.Count == 0)
-            return sourcesByCanonical;
+            return membersByCanonical;
 
         var rows = await db.LinkedRecords
             .AsNoTracking()
             .Where(lr => lr.RecordType == recordTypeStr && stored.Contains(lr.CanonicalId))
-            .Select(lr => new { lr.CanonicalId, lr.DataSource })
+            .Select(lr => new { lr.CanonicalId, lr.RecordId, lr.DataSource })
             .ToListAsync(ct);
 
         foreach (var row in rows)
-            Add(row.CanonicalId, row.DataSource);
+            Add(row.CanonicalId, row.RecordId, row.DataSource);
 
-        return sourcesByCanonical;
+        return membersByCanonical;
     }
+
+    /// <summary>A record linked into a canonical group, and the source that wrote it.</summary>
+    internal sealed record GroupMember(Guid RecordId, string DataSource);
 
     /// <summary>
     /// The <see cref="RecordType"/> a <c>linked_records.record_type</c> string names, or null when
@@ -250,17 +253,11 @@ public static class LinkedRecordTypes
                     .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
                     .Where(e => EF.Property<DateTime>(e, createdAtName) < createdBefore
                         && !context.LinkedRecords.Any(lr =>
-                            lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)));
-                if (fromMills is { } from)
-                {
-                    var fromTime = from.ToUtcDateTime();
-                    query = query.Where(e => EF.Property<DateTime>(e, timestampName) >= fromTime);
-                }
-                if (toMills is { } to)
-                {
-                    var toTime = to.ToUtcDateTime();
-                    query = query.Where(e => EF.Property<DateTime>(e, timestampName) <= toTime);
-                }
+                            lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)))
+                    .InWindow(
+                        e => EF.Property<DateTime>(e, timestampName),
+                        fromMills?.ToUtcDateTime(),
+                        toMills?.ToUtcDateTime());
 
                 return (await query.ToListAsync(ct)).Select(e => new LinkedRecordEntity
                 {

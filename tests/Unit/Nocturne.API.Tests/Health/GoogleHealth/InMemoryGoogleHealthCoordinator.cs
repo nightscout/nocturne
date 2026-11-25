@@ -1,25 +1,35 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Services.Health.GoogleHealth;
-using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
-/// <summary>A coordinator whose sync cursors live in memory, one set per tenant.</summary>
+/// <summary>A coordinator whose work in flight lives in memory, one entry per tenant.</summary>
 internal static class InMemoryGoogleHealthCoordinator
 {
-    public static GoogleHealthCoordinator Create(TimeProvider? clock = null, ITenantService? tenants = null)
+    public static GoogleHealthCoordinator Create(TimeProvider? clock = null, ITenantService? tenants = null) =>
+        Build(clock, tenants, null);
+
+    /// <summary>As <see cref="Create(TimeProvider?, ITenantService?)"/>, and <paramref name="progressCleared"/> completes once progress is written as none.</summary>
+    public static GoogleHealthCoordinator Create(
+        out Task progressCleared, TimeProvider? clock = null, ITenantService? tenants = null)
     {
-        var stored = new ConcurrentDictionary<(Guid, string, string), JsonNode>();
+        var cleared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        progressCleared = cleared.Task;
+        return Build(clock, tenants, progress => { if (progress is null) cleared.TrySetResult(); });
+    }
+
+    private static GoogleHealthCoordinator Build(
+        TimeProvider? clock, ITenantService? tenants, Action<GoogleHealthSyncProgress?>? progressWritten)
+    {
+        var stored = new ConcurrentDictionary<Guid, GoogleHealthWork>();
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, Accessor>();
-        services.AddScoped<IConnectorSyncCursorStore>(provider =>
-            new Cursors(provider.GetRequiredService<ITenantAccessor>(), stored));
+        services.AddScoped<IGoogleHealthWorkStore>(provider =>
+            new Work(provider.GetRequiredService<ITenantAccessor>(), stored, progressWritten));
         services.AddSingleton(tenants ?? Mock.Of<ITenantService>(service =>
             service.GetAllAsync(It.IsAny<CancellationToken>()) == Task.FromResult(new List<TenantDto>())));
         return new(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), clock ?? TimeProvider.System);
@@ -33,30 +43,27 @@ internal static class InMemoryGoogleHealthCoordinator
         public void SetTenant(TenantContext context) => Context = context;
     }
 
-    private sealed class Cursors(ITenantAccessor tenant, ConcurrentDictionary<(Guid, string, string), JsonNode> stored)
-        : IConnectorSyncCursorStore
+    private sealed class Work(
+        ITenantAccessor tenant, ConcurrentDictionary<Guid, GoogleHealthWork> stored,
+        Action<GoogleHealthSyncProgress?>? progressWritten) : IGoogleHealthWorkStore
     {
-        private (Guid, string, string) Key(string connectorName, string resource) =>
-            (tenant.TenantId, ConnectorNames.Canonical(connectorName), resource);
+        public Task<GoogleHealthWork> GetAsync(CancellationToken ct) =>
+            Task.FromResult(stored.GetValueOrDefault(tenant.TenantId) ?? GoogleHealthWork.None);
 
-        public async Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            (await GetJsonAsync(connectorName, resource, cancellationToken))?.Deserialize<ConnectorSyncCursor>();
-
-        public Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default) =>
-            SetJsonAsync(connectorName, resource, JsonSerializer.SerializeToNode(cursor)!, cancellationToken);
-
-        public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            Task.FromResult(stored.GetValueOrDefault(Key(connectorName, resource))?.DeepClone());
-
-        public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default)
+        public Task SetProgressAsync(GoogleHealthSyncProgress? progress, CancellationToken ct)
         {
-            stored[Key(connectorName, resource)] = value.DeepClone();
+            stored.AddOrUpdate(tenant.TenantId,
+                _ => GoogleHealthWork.None with { Progress = progress },
+                (_, work) => work with { Progress = progress });
+            progressWritten?.Invoke(progress);
             return Task.CompletedTask;
         }
 
-        public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default)
+        public Task SetDisconnectAsync(GoogleHealthDisconnectRequest? request, CancellationToken ct)
         {
-            stored.TryRemove(Key(connectorName, resource), out _);
+            stored.AddOrUpdate(tenant.TenantId,
+                _ => GoogleHealthWork.None with { Disconnect = request },
+                (_, work) => work with { Disconnect = request });
             return Task.CompletedTask;
         }
     }

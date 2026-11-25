@@ -11,6 +11,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
@@ -643,8 +644,13 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
         await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
 
+        var startedAt = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
+        var grantRevocation = scope.ServiceProvider.GetRequiredService<GrantRevocationService>();
         await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            migratorConnectionString, scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime, logger);
+            migratorConnectionString,
+            startedAt,
+            (unit, changes, token) => TeamReasonWrites.ApplyAsync(unit, changes, grantRevocation, startedAt, token),
+            logger);
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
@@ -662,6 +668,10 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
     // migrations (it depends on the widened share_token column) and before the server accepts
     // requests, so no request can read a column in the old format.
     await CredentialAtRestStartupTask.RunAsync(app.Services);
+
+    app.Lifetime.ApplicationStarted.Register(() => _ = app.Services
+        .GetRequiredService<Nocturne.API.Services.V4.RawMmolProfileNotifier>()
+        .NotifyAllAsync(app.Lifetime.ApplicationStopping));
 }
 else if (isNSwagGeneration)
 {

@@ -20,6 +20,10 @@ export interface SummarizeContext {
 	resolveAlertName?: (id: string) => string | undefined;
 }
 
+export function ratePerMinuteText(mgdlPerMinute: number): string {
+	return `${convertRateToDisplayUnits(mgdlPerMinute, glucoseUnits.current)} ${bgLabel()} per minute`;
+}
+
 /**
  * Render a <see cref="ConditionNode"/> as a short, human-readable string for
  * use in row chips on the overview, history descriptions, and the optional
@@ -67,9 +71,7 @@ export function summarizeCondition(
 		case "rate_of_change": {
 			const p = node.rate_of_change;
 			if (!p) return "";
-			const perMinute = (mgdl: number) =>
-				`${convertRateToDisplayUnits(mgdl, glucoseUnits.current)} ${bgLabel()} per minute`;
-			return withMargin(rateChip(p.direction, perMinute(p.rate ?? 0)), p.clear_margin, perMinute);
+			return withMargin(rateChip(p.direction, ratePerMinuteText(p.rate ?? 0)), p.clear_margin, ratePerMinuteText);
 		}
 		case "staleness": {
 			const p = node.staleness;

@@ -13,6 +13,7 @@ using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.RateLimiting;
@@ -54,10 +55,8 @@ public class DelegatedConnectorSyncLimiterTests : IDisposable
 
         refused.Should().NotBeNull("the allowance is keyed on the registered connector id, not the spelling");
         var http = await ExecuteAsync(refused!);
-        http.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
         int.Parse(http.Response.Headers.RetryAfter.ToString()).Should().BeInRange(1, 3600);
-        http.Response.Body.Position = 0;
-        (await new StreamReader(http.Response.Body).ReadToEndAsync()).Should().Contain("rate_limit_exceeded");
+        await http.Response.ShouldBeTheRateLimitProblemAsync();
     }
 
     [Fact]
@@ -160,7 +159,7 @@ public class DelegatedConnectorSyncLimiterTests : IDisposable
 
     private static async Task<HttpContext> ExecuteAsync(IActionResult result)
     {
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.Response.Body = new MemoryStream();
         await result.ExecuteResultAsync(new ActionContext(http, new RouteData(), new ActionDescriptor()));
         return http;

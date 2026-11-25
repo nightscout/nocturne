@@ -1,85 +1,88 @@
 <script lang="ts">
-  import { Button } from "#lib/components/ui/button/index.js";
-  import * as Card from "#lib/components/ui/card/index.js";
-  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
-  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import UsersRound from "@lucide/svelte/icons/users-round";
-  import UserMinus from "@lucide/svelte/icons/user-minus";
-  import { accessEndDate } from "#lib/components/members/access-end.js";
-  import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
-  import type { TenantTeamAccess } from "@nocturne/api-client";
+  import TeamAccessCard from "#lib/components/members/TeamAccessCard.svelte";
+  import type { TenantRoleDto, TenantTeamAccess } from "@nocturne/api-client";
 
   interface Props {
     teams: TenantTeamAccess[];
     /** The caller holds members.manage, which stopping a team's access needs. */
     canStop: boolean;
+    /** The caller is an owner of this site, the only one who decides about a team and its staff. */
+    canDecide: boolean;
+    /** The site's roles, each saying whether the caller may give it to a team; undefined until they load. */
+    roles: TenantRoleDto[] | undefined;
+    /** The site's roles did not load. */
+    rolesFailed: boolean;
+    onRetryRoles: () => void;
+    /** The caller reads only the last 24 hours, so the access they set must keep that limit. */
+    limitForced: boolean;
+    /** When the caller's direct access ends, which bounds the end they set. */
+    callerAccessEndsAt?: string;
+    /** The team the page was opened for, from a notice. Its row is scrolled to and focused. */
+    linkedTeamId?: string | null;
     stoppingId?: string | null;
     onStop: (teamId: string) => void | Promise<void>;
+    onStale: () => void;
+    onSuccess: (message: string) => void;
   }
 
-  let { teams, canStop, stoppingId = null, onStop }: Props = $props();
+  let {
+    teams,
+    canStop,
+    canDecide,
+    roles,
+    rolesFailed,
+    onRetryRoles,
+    limitForced,
+    callerAccessEndsAt,
+    linkedTeamId = null,
+    stoppingId = null,
+    onStop,
+    onStale,
+    onSuccess,
+  }: Props = $props();
+
+  let followedId: string | null = null;
+
+  $effect(() => {
+    if (!linkedTeamId) {
+      followedId = null;
+      return;
+    }
+    if (followedId === linkedTeamId || !teams.some((t) => t.teamId === linkedTeamId)) return;
+    followedId = linkedTeamId;
+    const row = document.getElementById(`team-${linkedTeamId}`);
+    row?.scrollIntoView({ block: "start" });
+    row?.focus({ preventScroll: true });
+  });
 </script>
 
 {#if teams.length > 0}
   <div class="space-y-4">
-    <h2 class="flex items-center gap-2 text-lg font-semibold">
-      <UsersRound class="h-5 w-5" />
-      Teams
-    </h2>
+    <div class="space-y-1">
+      <h2 class="flex items-center gap-2 text-lg font-semibold">
+        <UsersRound class="h-5 w-5" />
+        Teams
+      </h2>
+      <p class="text-sm text-muted-foreground">
+        Staff are the people who work for a team. Approved staff can see this site through the team.
+      </p>
+    </div>
     {#each teams as team (team.teamId)}
-      <Card.Root>
-        <Card.Content class="flex flex-col gap-3 pt-6 @md:flex-row @md:items-start @md:justify-between">
-          <div class="min-w-0 space-y-1">
-            <p class="truncate font-medium">{team.teamName}</p>
-            <p class="text-sm text-muted-foreground">
-              Roles: {(team.roles ?? []).map((r) => r.name).join(", ")}
-            </p>
-            <p class="text-sm text-muted-foreground">
-              {team.limitTo24Hours ? "Only the last 24 hours" : "All history"}
-              ·
-              {#if !team.accessEndsAt}
-                Access does not end
-              {:else if team.hasEnded}
-                Access ended {formatMediumDate(accessEndDate(team.accessEndsAt))}
-              {:else}
-                Access ends {formatMediumDate(accessEndDate(team.accessEndsAt))}
-              {/if}
-            </p>
-            <p class="text-sm text-muted-foreground">
-              Approved by {team.approvedByName ?? "a deleted member"} · {formatMediumDateTime(team.givenAt)}
-            </p>
-          </div>
-          {#if canStop}
-            <ConfirmDialog
-              title="Stop access"
-              confirmLabel="Stop access"
-              destructive
-              onConfirm={() => onStop(team.teamId ?? "")}
-            >
-              {#snippet trigger(props)}
-                <Button
-                  {...props}
-                  variant="outline-destructive"
-                  size="sm"
-                  aria-label={`Stop the access of ${team.teamName}`}
-                  disabled={stoppingId !== null}
-                >
-                  {#if stoppingId === team.teamId}
-                    <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                  {:else}
-                    <UserMinus class="mr-2 h-4 w-4" />
-                  {/if}
-                  Stop access
-                </Button>
-              {/snippet}
-              {#snippet description()}
-                Stop the access of {team.teamName}? The staff of the team lose access at once. A manager of
-                the team must ask again.
-              {/snippet}
-            </ConfirmDialog>
-          {/if}
-        </Card.Content>
-      </Card.Root>
+      <TeamAccessCard
+        {team}
+        {canStop}
+        {canDecide}
+        {roles}
+        {rolesFailed}
+        {onRetryRoles}
+        {limitForced}
+        {callerAccessEndsAt}
+        stoppingId={stoppingId ?? null}
+        {onStop}
+        {onStale}
+        {onSuccess}
+      />
     {/each}
   </div>
 {/if}

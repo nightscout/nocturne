@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
 import { MealPeriod } from "#lib/api/index.js";
 import Harness from "./IobCobTrackHarness.test.svelte";
+import { computeNightscoutTrackLayout } from "@nocturne/charts/core";
 
 const baseTime = new Date("2026-01-01T12:00:00Z").getTime();
 const minutes = (n: number) => new Date(baseTime + n * 60 * 1000);
@@ -92,5 +93,98 @@ describe("IobCobTrack meal names", () => {
 
 		await vi.waitFor(() => expect(carbGlyphs(container)).toHaveLength(1));
 		expect(names(container).filter((t) => !/^\d+(\.\d+)?$|^IOB\/COB$/.test(t!))).toEqual([]);
+	});
+});
+
+describe("IobCobTrack Nightscout bubbles", () => {
+	const reading = (m: number, sgv: number) => ({ time: minutes(m), sgv, color: "" });
+	const glucoseData = [reading(0, 100), reading(55, 120), reading(65, 140), reading(180, 160)];
+
+	const halves = (container: HTMLElement) => ({
+		carbs: container.querySelectorAll("path.fill-carbs"),
+		carbOutlines: container.querySelectorAll("path.stroke-carbs"),
+		insulin: container.querySelectorAll("path.fill-insulin-bolus"),
+		insulinOutlines: container.querySelectorAll("path.stroke-insulin-bolus"),
+	});
+	const labels = (container: HTMLElement) =>
+		Array.from(container.querySelectorAll("text")).map((t) => t.textContent?.trim());
+
+	it("draws a meal's carbs and bolus as the two halves of one pie", async () => {
+		const { container } = render(Harness, {
+			variant: "nightscout",
+			glucoseData,
+			carbMarkers: [{ time: minutes(60), carbs: 40, treatmentId: "meal1" }],
+			bolusMarkers: [{ time: minutes(60), insulin: 2, treatmentId: "meal1" }],
+		});
+
+		await vi.waitFor(() => expect(halves(container).carbs).toHaveLength(1));
+		const h = halves(container);
+		expect(h.insulin).toHaveLength(1);
+		expect(h.carbOutlines).toHaveLength(0);
+		expect(h.insulinOutlines).toHaveLength(0);
+		expect(labels(container)).toEqual(expect.arrayContaining(["40g", "2U"]));
+
+		// Both halves take the entry's size from its carbs.
+		const carbHalf = h.carbs[0].getBoundingClientRect();
+		const insulinHalf = h.insulin[0].getBoundingClientRect();
+		expect(insulinHalf.width).toBeCloseTo(carbHalf.width, 0);
+	});
+
+	it("outlines the missing half of an entry with only one of the two", async () => {
+		const { container } = render(Harness, {
+			variant: "nightscout",
+			glucoseData,
+			carbMarkers: [{ time: minutes(30), carbs: 12, treatmentId: "snack" }],
+			bolusMarkers: [{ time: minutes(120), insulin: 0.35, treatmentId: "smb" }],
+		});
+
+		await vi.waitFor(() => expect(halves(container).carbs).toHaveLength(1));
+		const h = halves(container);
+		expect(h.insulinOutlines).toHaveLength(1);
+		expect(h.carbOutlines).toHaveLength(1);
+		expect(labels(container)).toEqual(expect.arrayContaining(["12g", "0.35U"]));
+	});
+
+	it("pins an entry to the reading nearest its time", async () => {
+		const { container } = render(Harness, {
+			variant: "nightscout",
+			glucoseData,
+			carbMarkers: [{ time: minutes(64), carbs: 20, treatmentId: "meal2" }],
+		});
+
+		await vi.waitFor(() => expect(halves(container).carbs).toHaveLength(1));
+		const group = halves(container).carbs[0].parentElement!;
+		const y = Number(/translate\([^,]+,\s*([-\d.]+)\)/.exec(group.getAttribute("transform")!)![1]);
+		const nearest = computeNightscoutTrackLayout(300, 400, 1).glucose.axisScale(140);
+		expect(y).toBeCloseTo(nearest, 0);
+	});
+
+	it("opens the entry when its pie is clicked", async () => {
+		const onMarkerClick = vi.fn();
+		const { container } = render(Harness, {
+			variant: "nightscout",
+			glucoseData,
+			bolusMarkers: [{ time: minutes(120), insulin: 1, treatmentId: "bolus1" }],
+			onMarkerClick,
+		});
+
+		await vi.waitFor(() => expect(halves(container).insulin).toHaveLength(1));
+		halves(container).insulin[0].parentElement!.dispatchEvent(
+			new MouseEvent("click", { bubbles: true })
+		);
+
+		expect(onMarkerClick).toHaveBeenCalledWith("bolus1");
+	});
+
+	it("draws no IOB/COB track", async () => {
+		const { container } = render(Harness, {
+			variant: "nightscout",
+			glucoseData,
+			iobData: [0, 60, 120].map((m) => ({ time: minutes(m), value: 1 })),
+		});
+
+		await vi.waitFor(() => expect(container.querySelector("svg")).not.toBeNull());
+		expect(labels(container)).not.toContain("IOB/COB");
+		expect(container.querySelector("path.fill-iob-basal\\/60")).toBeNull();
 	});
 });

@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 vi.mock("#lib/api/chart-data.remote.js", () => ({
   getChartData: vi.fn(async () => (await import("@nocturne/charts/core")).transformChartData({})),
@@ -11,7 +11,7 @@ vi.mock("#lib/api/predictions.remote.js", () => ({
 }));
 
 import { MealPeriod } from "#lib/api/index.js";
-import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { colorTheme, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./DeferredPlotHarness.test.svelte";
 
 describe("GlucoseChartCard inspection dialogs", () => {
@@ -110,5 +110,64 @@ describe("GlucoseChartCard inspection dialogs", () => {
     const dialog = page.getByRole("dialog");
     await expect.element(dialog.getByText("6.7").first()).toBeVisible();
     expect(dialog.element().textContent).not.toMatch(/(?<!\d)120(?!\d)/);
+  });
+});
+
+describe("GlucoseChartCard in the Nightscout theme", () => {
+  afterEach(() => {
+    colorTheme.current = "nocturne";
+  });
+
+  function chartHeights(frame: HTMLElement) {
+    return [
+      frame.style.getPropertyValue("--ns-focus-height"),
+      frame.style.getPropertyValue("--ns-context-height"),
+    ];
+  }
+
+  /** index.js: the window below the chart's top, less a 10px margin. */
+  function expectedHeights(frame: HTMLElement) {
+    const available = Math.max(
+      360,
+      window.innerHeight - (frame.getBoundingClientRect().top + window.scrollY) - 10
+    );
+    return [`${Math.round(available * 0.7)}px`, `${Math.round(available * 0.3)}px`];
+  }
+
+  async function renderNightscoutChart() {
+    colorTheme.current = "nightscout";
+    render(Harness, { props: { initiallyDeferred: false, onready: () => {} } });
+    return vi.waitFor(() => {
+      const el = page.getByTestId("nightscout-chart").element() as HTMLElement;
+      expect(el).not.toBeNull();
+      return el;
+    });
+  }
+
+  it("gives the window below the chart's top 70% to the focus chart and 30% to the context chart", async () => {
+    const frame = await renderNightscoutChart();
+
+    await vi.waitFor(() => expect(chartHeights(frame)).toEqual(expectedHeights(frame)));
+    const plot = page.getByTestId("glucose-plot").element();
+    expect(plot.closest('[data-slot="card"]')).toBeNull();
+  });
+
+  it("measures again when the content above the chart changes height", async () => {
+    const spacer = document.createElement("div");
+    document.body.prepend(spacer);
+    try {
+      const frame = await renderNightscoutChart();
+      await vi.waitFor(() => expect(chartHeights(frame)).toEqual(expectedHeights(frame)));
+      const before = chartHeights(frame);
+
+      spacer.style.height = "100px";
+
+      await vi.waitFor(() => {
+        expect(chartHeights(frame)).toEqual(expectedHeights(frame));
+        expect(chartHeights(frame)).not.toEqual(before);
+      });
+    } finally {
+      spacer.remove();
+    }
   });
 });

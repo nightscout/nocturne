@@ -136,6 +136,8 @@
 
   /* Carbohydrates */
   --color-carbs: var(--carbs);
+  /* Amount labels beside a treatment drawn as a bubble; themes without one use the text colour. */
+  --color-treatment-label: var(--treatment-label, var(--foreground));
   --color-carbs-on-board: var(--carbs-on-board);
 
   /* IOB */

@@ -15,18 +15,16 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 /// <remarks>
 /// Registered transient, like the factory it holds. Writes are tracked reads and saves, which update
-/// only the columns they change, so a health report cannot undo a configuration save. The cursor,
-/// low-water-mark, enabled-flag and configuration writes are the exception on PostgreSQL: each is one
+/// only the columns they change, so a health report cannot undo a configuration save. The vendor
+/// state, resume state, enabled-flag and configuration writes are the exception on PostgreSQL: each is one
 /// jsonb statement, so two writers of different keys on the same row cannot drop each other's key, as
-/// a read-modify-write of the whole object could. A dropped low-water mark is stranded history the
+/// a read-modify-write of the whole object could. A dropped crawl mark is stranded history the
 /// failure marks exist to prevent, a toggle that re-wrote the configuration it read would undo a
 /// configuration saved in between, and a configuration saved from a form that read the flag earlier
 /// would undo a toggle. Same-key writes stay last-writer-wins.
 /// </remarks>
 public class ConnectorConfigurationRepository : IConnectorConfigurationRepository
 {
-    private const string ConnectorSourceSuffix = "-connector";
-
     private readonly INocturneDbContextFactory _contexts;
     private readonly TimeProvider _time;
 
@@ -142,21 +140,21 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
     }
 
     /// <inheritdoc/>
-    public virtual async Task<JsonNode?> GetSyncCursorAsync(string connectorName, string resource, CancellationToken ct)
+    public virtual async Task<JsonNode?> GetVendorStateAsync(string connectorName, string key, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var name = ConnectorNames.Canonical(connectorName);
         var json = await db.ConnectorConfigurations
             .Where(c => c.ConnectorName == name)
-            .Select(c => c.SyncCursorsJson)
+            .Select(c => c.VendorStateJson)
             .FirstOrDefaultAsync(ct);
 
-        return ReadObject(json)[resource]?.DeepClone();
+        return ReadObject(json)[key]?.DeepClone();
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> SetSyncCursorAsync(
-        string connectorName, string resource, JsonNode value, CancellationToken ct)
+    public virtual async Task<bool> SetVendorStateAsync(
+        string connectorName, string key, JsonNode value, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var name = ConnectorNames.Canonical(connectorName);
@@ -166,17 +164,17 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
             return await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations
                 SET sync_cursors = jsonb_set(CASE WHEN jsonb_typeof(sync_cursors) = 'object'
-                    THEN sync_cursors ELSE jsonb_build_object() END, ARRAY[{resource}], {json}::jsonb),
+                    THEN sync_cursors ELSE jsonb_build_object() END, ARRAY[{key}], {json}::jsonb),
                     sys_updated_at = {_time.GetUtcNow().UtcDateTime}
                 WHERE tenant_id = {db.TenantId} AND connector_name = {name}
                 """, ct) > 0;
         }
 
-        return await UpdateCursorsAsync(db, name, cursors => cursors[resource] = value.DeepClone(), ct);
+        return await UpdateVendorStateAsync(db, name, state => state[key] = value.DeepClone(), ct);
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> RemoveSyncCursorAsync(string connectorName, string resource, CancellationToken ct)
+    public virtual async Task<bool> RemoveVendorStateAsync(string connectorName, string key, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var name = ConnectorNames.Canonical(connectorName);
@@ -185,35 +183,35 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
             return await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations
                 SET sync_cursors = (CASE WHEN jsonb_typeof(sync_cursors) = 'object'
-                    THEN sync_cursors ELSE jsonb_build_object() END) - {resource},
+                    THEN sync_cursors ELSE jsonb_build_object() END) - {key},
                     sys_updated_at = {_time.GetUtcNow().UtcDateTime}
                 WHERE tenant_id = {db.TenantId} AND connector_name = {name}
                 """, ct) > 0;
         }
 
-        return await UpdateCursorsAsync(db, name, cursors => cursors.Remove(resource), ct);
+        return await UpdateVendorStateAsync(db, name, state => state.Remove(key), ct);
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
-        string source, CancellationToken ct)
+    public virtual async Task<IReadOnlyDictionary<string, DateTime>> GetResumeStateAsync(
+        string connectorName, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var config = await FindBySourceAsync(db, source, tracked: false, ct);
-        return ReadMarks(config?.BackfillLowWaterMarks);
+        var name = ConnectorNames.Canonical(connectorName);
+        var json = await db.ConnectorConfigurations
+            .Where(c => c.ConnectorName == name)
+            .Select(c => c.ResumeStateJson)
+            .FirstOrDefaultAsync(ct);
+        return ReadMarks(json);
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> SetBackfillLowWaterMarksAsync(
-        string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct)
+    public virtual async Task<bool> SetResumeStateAsync(
+        string connectorName, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var isNpgsql = db.Database.IsNpgsql();
-        var config = await FindBySourceAsync(db, source, tracked: !isNpgsql, ct);
-        if (config is null)
-            return false;
-
-        if (isNpgsql)
+        var name = ConnectorNames.Canonical(connectorName);
+        if (db.Database.IsNpgsql())
         {
             var removed = changes.Where(c => c.Value is null).Select(c => c.Key).ToArray();
             // ISO-8601 UTC ("...Z"), as System.Text.Json writes it, so the read round-trips without
@@ -221,19 +219,22 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
             var stored = JsonSerializer.Serialize(changes
                 .Where(c => c.Value is not null)
                 .ToDictionary(c => c.Key, c => c.Value!.Value.ToString("O", CultureInfo.InvariantCulture)));
-            await db.Database.ExecuteSqlAsync(
+            return await db.Database.ExecuteSqlAsync(
                 $"""
                  UPDATE connector_configurations
                  SET backfill_low_water_marks = NULLIF(
                      (coalesce(backfill_low_water_marks, jsonb_build_object()) - {removed}::text[]) || {stored}::jsonb,
                      jsonb_build_object())
-                 WHERE id = {config.Id}
+                 WHERE tenant_id = {db.TenantId} AND connector_name = {name}
                  """,
-                ct);
-            return true;
+                ct) > 0;
         }
 
-        var marks = new Dictionary<string, DateTime>(ReadMarks(config.BackfillLowWaterMarks));
+        var config = await FindTrackedAsync(db, name, ct);
+        if (config is null)
+            return false;
+
+        var marks = new Dictionary<string, DateTime>(ReadMarks(config.ResumeStateJson));
         foreach (var (key, mark) in changes)
         {
             if (mark is { } at)
@@ -242,20 +243,24 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
                 marks.Remove(key);
         }
 
-        config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
+        config.ResumeStateJson = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
         await db.SaveChangesAsync(ct);
         return true;
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> ClearBackfillLowWaterMarksAsync(string source, CancellationToken ct)
+    public virtual async Task<bool> ClearStateAsync(
+        string connectorName, ConnectorStateSlots slots, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var config = await FindBySourceAsync(db, source, tracked: true, ct);
+        var config = await FindTrackedAsync(db, connectorName, ct);
         if (config is null)
             return false;
 
-        config.BackfillLowWaterMarks = null;
+        if (slots.HasFlag(ConnectorStateSlots.Resume))
+            config.ResumeStateJson = null;
+        if (slots.HasFlag(ConnectorStateSlots.Vendor))
+            config.VendorStateJson = null;
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -379,16 +384,16 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
         return ToRecord(entity);
     }
 
-    private async Task<bool> UpdateCursorsAsync(
+    private async Task<bool> UpdateVendorStateAsync(
         NocturneDbContext db, string connectorName, Action<JsonObject> update, CancellationToken ct)
     {
         var entity = await FindTrackedAsync(db, connectorName, ct);
         if (entity is null)
             return false;
 
-        var cursors = ReadObject(entity.SyncCursorsJson);
-        update(cursors);
-        entity.SyncCursorsJson = cursors.ToJsonString();
+        var state = ReadObject(entity.VendorStateJson);
+        update(state);
+        entity.VendorStateJson = state.ToJsonString();
 
         await db.SaveChangesAsync(ct);
         return true;
@@ -399,23 +404,6 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
     {
         var name = ConnectorNames.Canonical(connectorName);
         return db.ConnectorConfigurations.FirstOrDefaultAsync(c => c.ConnectorName == name, ct);
-    }
-
-    /// <summary>
-    /// Sources are named <c>{connector}-connector</c>, hyphenating a connector name of several
-    /// words (<c>nocturne-remote-connector</c>), while rows carry the bare connector name
-    /// (<c>nocturneremote</c>), so the suffix and hyphens are stripped, with an exact match as fallback.
-    /// </summary>
-    private static Task<ConnectorConfigurationEntity?> FindBySourceAsync(
-        NocturneDbContext db, string source, bool tracked, CancellationToken ct)
-    {
-        var canonicalSource = ConnectorNames.Canonical(source);
-        var name = (canonicalSource.EndsWith(ConnectorSourceSuffix, StringComparison.Ordinal)
-            ? canonicalSource[..^ConnectorSourceSuffix.Length]
-            : canonicalSource).Replace("-", "", StringComparison.Ordinal);
-
-        var query = tracked ? db.ConnectorConfigurations : db.ConnectorConfigurations.AsNoTracking();
-        return query.FirstOrDefaultAsync(c => c.ConnectorName == name || c.ConnectorName == canonicalSource, ct);
     }
 
     private static async Task<IReadOnlyList<ConnectorConfigurationRecord>> ListAsync(
@@ -472,6 +460,6 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
         entity.LastErrorMessage,
         entity.LastErrorAt,
         entity.IsHealthy,
-        entity.SyncCursorsJson,
-        entity.BackfillLowWaterMarks);
+        entity.VendorStateJson,
+        entity.ResumeStateJson);
 }

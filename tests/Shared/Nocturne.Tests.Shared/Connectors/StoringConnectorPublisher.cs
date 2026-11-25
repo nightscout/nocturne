@@ -9,17 +9,19 @@ namespace Nocturne.Tests.Shared.Connectors;
 /// <summary>
 ///     A connector publisher that keeps what it is given the way the store does: a record whose type
 ///     and key are already held is skipped, so a second sync of one payload adds nothing only while
-///     every record keeps its key. The key is the first of the legacy id, sync identifier and
-///     original id a record type carries (device events match on the sync identifier and state
-///     spans on the original id, for example). A record of such a type with no key has nothing to
+///     every record keeps its key. The key is the first of the legacy id, sync identifier, original
+///     id and external entry id a record type carries (device events match on the sync identifier,
+///     state spans on the original id and connector food entries on the external entry id, for
+///     example). A record of such a type with no key has nothing to
 ///     skip on and is listed in <see cref="Unkeyed"/>. A record type with none of the three (entries
 ///     and profiles, for example) is only counted in <see cref="NotDeduplicated"/>, because its real
 ///     key is not modelled. A patient device is keyed on its <see cref="PatientDevice.Id"/>, the way
 ///     the store upserts it, and one without an id is unkeyed. <see cref="Offered"/> counts every
 ///     record handed over, kept or skipped, so a sync that fetched nothing is not mistaken for one
-///     that skipped everything.
+///     that skipped everything. The connector's state between runs is <see cref="State"/>, an
+///     <see cref="InMemoryConnectorStateStore"/> unless the test hands it another.
 /// </summary>
-public sealed class StoringConnectorPublisher :
+public sealed class StoringConnectorPublisher(IConnectorStateStore? state = null) :
     IConnectorPublisher, IGlucosePublisher, ITreatmentPublisher, IDevicePublisher, IMetadataPublisher
 {
     private readonly Dictionary<(string Type, string Key), object> _stored = [];
@@ -33,6 +35,7 @@ public sealed class StoringConnectorPublisher :
     public ITreatmentPublisher Treatments => this;
     public IDevicePublisher Device => this;
     public IMetadataPublisher Metadata => this;
+    public IConnectorStateStore State { get; } = state ?? new InMemoryConnectorStateStore();
     public int SkippedDeleted => 0;
     public int Refused => 0;
 
@@ -72,7 +75,7 @@ public sealed class StoringConnectorPublisher :
 
     public int StoredCount => Stored.Count;
 
-    private static readonly string[] KeyProperties = ["LegacyId", "SyncIdentifier", "OriginalId"];
+    private static readonly string[] KeyProperties = ["LegacyId", "SyncIdentifier", "OriginalId", "ExternalEntryId"];
 
     private Task<bool> Keep<T>(IEnumerable<T> records) => Task.FromResult(Add(records) >= 0);
 
@@ -131,6 +134,7 @@ public sealed class StoringConnectorPublisher :
     public Task<bool> PublishBasalInjectionsAsync(IEnumerable<BasalInjection> records, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Keep(records);
     public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
     public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
+    public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(string source, StoredTreatmentKey? after, int limit, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StoredTreatmentKey>>([]);
     public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
     public Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken cancellationToken = default)
     {
@@ -152,7 +156,11 @@ public sealed class StoringConnectorPublisher :
 
     public Task<bool> PublishProfilesAsync(IEnumerable<Profile> profiles, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Keep(profiles);
     public Task<bool> PublishFoodAsync(IEnumerable<Food> foods, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Keep(foods);
-    public Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(IEnumerable<ConnectorFoodEntryImport> entries, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ConnectorFoodEntry>?>([]);
+    public Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(IEnumerable<ConnectorFoodEntryImport> entries, string source, WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        Add(entries);
+        return Task.FromResult<IReadOnlyList<ConnectorFoodEntry>?>([]);
+    }
     public Task<int?> ReconcileConnectorFoodEntriesAsync(IEnumerable<string> presentExternalEntryIds, DateTimeOffset from, DateTimeOffset to, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Task.FromResult<int?>(0);
     public Task<bool> PublishActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Keep(activities);
     public Task<int?> PublishRecentActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => KeepCounting(activities);
@@ -165,6 +173,4 @@ public sealed class StoringConnectorPublisher :
     public Task<bool> PublishHeartRatesAsync(IEnumerable<HeartRate> records, string source, CancellationToken cancellationToken = default) => Keep(records);
     public Task<DateTime?> GetLatestActivityTimestampAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
     public Task<DateTime?> GetLatestStateSpanTimestampAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
-    public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
-    public Task SetBackfillLowWaterMarksAsync(string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

@@ -18,7 +18,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
@@ -54,15 +53,13 @@ public class DeviceStatusDecomposerTests : IDisposable
         _spans = _stateSpanServiceMock.BacksWith([]);
         _deviceServiceMock = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
 
-        _decomposer = new DeviceStatusDecomposer(
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
             apsRepo, pumpRepo, uploaderRepo,
             _extrasRepo,
             _sensorStateRepo,
             _stateSpanServiceMock.Object,
             _deviceServiceMock.Object,
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            new FakeTimeProvider(ReceivedAt), NullLogger<DeviceStatusDecomposer>.Instance);
+            time: new FakeTimeProvider(ReceivedAt));
     }
 
     public void Dispose()
@@ -2154,17 +2151,14 @@ public class DeviceStatusDecomposerTests : IDisposable
                 [.. ids.Select(id => { patientDevice.DeviceId = id; return patientDevice; })]);
 
         var ctxFactory = new TestNocturneDbContextFactory(_context);
-        return new DeviceStatusDecomposer(
+        return DeviceStatusDecomposerDoubles.Build(
             new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance),
             new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance),
             new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance),
             _extrasRepo,
             _sensorStateRepo,
             _stateSpanServiceMock.Object,
-            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()),
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()));
     }
 
     private static V4Models.PatientDevice MakeDatedPatientDevice() => new()
@@ -2829,7 +2823,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             "_id": "aaps-stamps-1",
             "mills": 1700000000000,
             "device": "openaps://samsung",
-            "isValid": false,
+            "isValid": true,
             "srvModified": 1,
             "srvCreated": 1,
             "configuration": { "sensitivityType": "oref1" },
