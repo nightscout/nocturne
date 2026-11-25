@@ -73,7 +73,8 @@ public sealed record TeamManagerInvite(
 
 /// <summary>
 /// A team as one of its members reads it. A staff member reads its name, its managers' names, their
-/// own kind and <paramref name="OwnStaff"/>, and nothing else.
+/// own kind, <paramref name="OwnStaff"/> and the static <paramref name="SuggestableRoles"/> that name
+/// their role ceiling, and nothing else.
 /// </summary>
 /// <param name="Managers">The managers with their subject ids; empty unless the caller is a manager.</param>
 /// <param name="ManagerNames">The managers' display names, for any member.</param>
@@ -86,7 +87,7 @@ public sealed record TeamManagerInvite(
 /// <param name="StaffInvites">The live staff invites; empty unless the caller is a manager.</param>
 /// <param name="AccessLinks">The live access links; empty unless the caller is a manager.</param>
 /// <param name="Sites">The sites the team has access to; empty unless the caller is a manager.</param>
-/// <param name="SuggestableRoles">The roles an access link may suggest; empty unless the caller is a manager.</param>
+/// <param name="SuggestableRoles">The roles an access link may suggest and a role ceiling may name, for any member.</param>
 /// <param name="CanDelete">Whether the caller may delete the team now.</param>
 /// <param name="CallerKind">What the caller is in the team, a <see cref="TeamMemberKind"/> value.</param>
 /// <param name="OwnStaff">What narrows the caller; null unless the caller is a staff member.</param>

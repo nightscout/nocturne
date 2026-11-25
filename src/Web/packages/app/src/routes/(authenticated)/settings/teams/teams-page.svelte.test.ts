@@ -46,6 +46,17 @@ describe("teams page", () => {
     await expect.element(page.getByText("Manager", { exact: true })).toBeVisible();
   });
 
+  it("lists a team the person is staff of, with the staff badge", async () => {
+    mocks.teams = { items: [{ id: teamId, name: "Clinic", kind: "staff" }], canCreate: true };
+    render(TeamsPage);
+
+    await expect
+      .element(page.getByRole("link", { name: /Clinic/ }))
+      .toHaveAttribute("href", `/settings/teams/${teamId}`);
+    await expect.element(page.getByText("Staff", { exact: true })).toBeVisible();
+    expect(page.getByText("Manager", { exact: true }).elements()).toHaveLength(0);
+  });
+
   it("shows the kind the API sends, not a fixed one", async () => {
     mocks.teams = { items: [{ id: teamId, name: "Clinic", kind: "other" }], canCreate: true };
     render(TeamsPage);

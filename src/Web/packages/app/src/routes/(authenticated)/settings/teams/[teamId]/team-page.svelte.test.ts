@@ -39,6 +39,10 @@ vi.mock("#lib/api/generated/teams.generated.remote.js", () => ({
   deleteTeam: (arg: unknown) => remoteCommand(mocks.deleteTeam)(arg),
   createAccessLink: vi.fn(),
   revokeAccessLink: vi.fn(),
+  createStaffInvite: vi.fn(),
+  revokeStaffInvite: vi.fn(),
+  updateStaff: vi.fn(),
+  removeStaff: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({
@@ -59,6 +63,7 @@ const twoManagers: TeamDetail = {
     { subjectId: me, displayName: "Alex" },
     { subjectId: sam, displayName: "Sam" },
   ],
+  managerNames: ["Alex", "Sam"],
   invites: [],
   isLastManager: false,
   canDelete: false,
@@ -181,7 +186,7 @@ describe("team page", () => {
     expect(page.getByRole("button", { name: "Delete team" }).elements()).toHaveLength(0);
   });
 
-  it("deletes after a confirmation that names the team and says every manager loses it", async () => {
+  it("deletes after a confirmation that names the team and says every manager and staff member loses it", async () => {
     mocks.team = { ...twoManagers, canDelete: true };
     mocks.deleteTeam.mockResolvedValue({ success: true });
     render(TeamPage);
@@ -189,7 +194,7 @@ describe("team page", () => {
     await page.getByRole("button", { name: "Delete team" }).click();
     await expect
       .element(dialog())
-      .toHaveTextContent("Delete Clinic? Every manager loses the team.");
+      .toHaveTextContent("Delete Clinic? Every manager and staff member loses the team.");
     expect(mocks.deleteTeam).not.toHaveBeenCalled();
 
     await dialog().getByRole("button", { name: "Delete team" }).click();
@@ -304,11 +309,15 @@ describe("team page", () => {
     await expect.element(page.getByText("One person can use each link.", { exact: false })).toBeVisible();
   });
 
-  it("describes the page under its heading", async () => {
+  it("describes the page under its heading for a manager", async () => {
     render(TeamPage);
 
     await expect
-      .element(page.getByText("The managers of this team, and the links that add a manager."))
+      .element(
+        page.getByText(
+          "The managers and staff of this team, the links that add them, and the sites that the team has access to.",
+        ),
+      )
       .toBeVisible();
   });
 

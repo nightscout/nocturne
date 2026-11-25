@@ -101,8 +101,8 @@ public class TeamsController(
     /// The team's name, managers, and what the caller may do to it. A manager also reads the managers'
     /// subject ids, the staff, the live manager and staff invites and access links, and the sites the
     /// team has access to: their names, the roles given, the limit and the end, never who approved or
-    /// who is in the site. A staff member reads the name, the managers' names and what narrows them,
-    /// and nothing else.
+    /// who is in the site. A staff member reads the name, the managers' names, what narrows them and
+    /// the static list of roles a ceiling may name, and nothing else.
     /// </summary>
     [HttpGet("{teamId:guid}")]
     [RemoteQuery]
@@ -322,7 +322,12 @@ public class TeamsController(
             return this.ProblemWithCode(UnusableCode(info.Refusal)!, detail, StatusCodes.Status400BadRequest);
 
         return Ok(new TeamStaffInviteDetails(
-            info.TeamId, info.TeamName, info.CreatedByName, info.Narrowing, info.Refusal == TeamInviteRefusal.AlreadyMember));
+            info.TeamId,
+            info.TeamName,
+            info.CreatedByName,
+            info.Narrowing,
+            info.Refusal == TeamInviteRefusal.AlreadyMember,
+            TeamSuggestableRoles.All));
     }
 
     /// <summary>
@@ -708,8 +713,14 @@ public sealed record TeamInviteDetails(
 /// <param name="CreatedByName">The manager who made the invite.</param>
 /// <param name="Narrowing">What narrows the staff member accepting makes the caller.</param>
 /// <param name="AlreadyMember">Whether the caller is already a member of either kind, so accepting changes nothing.</param>
+/// <param name="SuggestableRoles">The roles a role ceiling may name, so the ceiling can be shown by its name.</param>
 public sealed record TeamStaffInviteDetails(
-    Guid TeamId, string TeamName, string CreatedByName, TeamStaffNarrowing Narrowing, bool AlreadyMember);
+    Guid TeamId,
+    string TeamName,
+    string CreatedByName,
+    TeamStaffNarrowing Narrowing,
+    bool AlreadyMember,
+    IReadOnlyList<TeamSuggestableRole> SuggestableRoles);
 
 /// <summary>
 /// The status and code of each reason a team's access cannot be given, or changed, as an owner sets it.
