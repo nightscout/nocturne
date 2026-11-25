@@ -139,7 +139,10 @@ internal sealed class AlertOrchestrator(
         {
             case ExcursionTransitionType.ExcursionOpened when evaluation.Transition.ExcursionId is { } opened:
                 await openedHandler.HandleOpenedAsync(
-                    rule, opened, context, tenantId, late: false, evaluation.MetBy, ct);
+                    rule, opened, context, tenantId, late: false, evaluation.MetBy,
+                    callerCloses: evaluation.AutoResolveTransition is { Type: ExcursionTransitionType.ExcursionClosed } closing
+                        && closing.ExcursionId == opened,
+                    ct);
                 break;
 
             case ExcursionTransitionType.ExcursionClosed:

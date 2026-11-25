@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -105,6 +106,7 @@ internal sealed class AlertSnoozeService(
             || excursion.HysteresisStartedAt is not null
             || excursion.AcknowledgedAt is not null
             || !ruleEntity.IsEnabled
+            || !AlertRuleMapper.IsReadable(ruleEntity)
             || AlertSnooze.IsSnoozed(instance.SnoozedUntil, now))
         {
             return false;
@@ -126,11 +128,7 @@ internal sealed class AlertSnoozeService(
             LastReadingAt = latest?.Timestamp,
         };
 
-        var rule = new AlertRuleSnapshot(
-            ruleEntity.Id, tenantId, ruleEntity.Name, ruleEntity.ConditionType,
-            ruleEntity.ConditionParams, ruleEntity.Severity, ruleEntity.ClientConfiguration,
-            ruleEntity.SortOrder, ruleEntity.AutoResolveEnabled, ruleEntity.AutoResolveParams,
-            ruleEntity.AllowThroughDnd, ruleEntity.ScopeClass);
+        var rule = AlertRuleMapper.ToSnapshot(ruleEntity);
 
         // The enricher is only consulted for the active DND scopes. If it fails the alert is
         // delivered: missing a still-standing alert is the worse error.

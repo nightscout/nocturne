@@ -17,8 +17,16 @@ describe("reviewReasonMessage", () => {
 		expect(reviewReasonMessage("legacy_threshold_implausible")).toContain("below 40 mg/dL");
 	});
 
-	it("explains a rule turned off for an unknown condition type", () => {
-		expect(reviewReasonMessage("condition_type_unrecognized")).toContain("turned off");
+	it("says a rule with an unknown condition type does not run, whether an update turned it off or not", () => {
+		expect(reviewReasonMessage("condition_type_unrecognized")).toBe(
+			"Nocturne does not know the condition type of this rule, so the rule does not run. Edit its conditions and save it."
+		);
+	});
+
+	it("says a rule with an unknown severity shows it as critical, whether an update stored critical or not", () => {
+		expect(reviewReasonMessage("severity_unrecognized")).toBe(
+			"Nocturne does not know the severity of this rule, so the rule shows it as critical. Check its severity and save it."
+		);
 	});
 
 	it("still asks for a review for a reason it has no sentence for", () => {

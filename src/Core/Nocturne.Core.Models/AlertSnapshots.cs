@@ -61,14 +61,17 @@ public sealed record AlertChannelSecret(
 /// A stored <see cref="AlertRule"/>, enabled or not, with what the rule editor reads beside its
 /// evaluated fields.
 /// </summary>
+/// <param name="ReviewReason">The stored review reason, one of <see cref="AlertRuleReviewReasons"/>, or null.</param>
 /// <param name="Channels">The rule's channels in <see cref="AlertRuleChannelSnapshot.SortOrder"/>.</param>
+/// <param name="Unreadable">The columns <see cref="Rule"/> shows a stand-in for.</param>
 public sealed record AlertRuleRecord(
     AlertRuleSnapshot Rule,
     string? Description,
     bool IsEnabled,
     string? ManagedBy,
     string? ReviewReason,
-    IReadOnlyList<AlertRuleChannelSnapshot> Channels);
+    IReadOnlyList<AlertRuleChannelSnapshot> Channels,
+    AlertRuleUnreadableValues Unreadable = AlertRuleUnreadableValues.None);
 
 /// <summary>
 /// A tenant's enabled rules, with the enabled rules left out because their stored condition type or

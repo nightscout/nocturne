@@ -21,6 +21,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Authorization;
@@ -305,7 +306,10 @@ public class AlertRulesController : ControllerBase
         var glucoseFreshnessMinutes = request.ClearGlucoseFreshness
             ? null
             : request.GlucoseFreshnessMinutes ?? rule.Rule.GlucoseFreshnessMinutes;
-        var conditionsChanged = rule.IsEnabled != request.IsEnabled
+        // A rule shown with a stand-in is not evaluated, so the save that stores a member makes it
+        // evaluable whatever it changes.
+        var conditionsChanged = rule.Unreadable != AlertRuleUnreadableValues.None
+            || rule.IsEnabled != request.IsEnabled
             || rule.Rule.ConditionType != request.ConditionType
             || !sameBody
             || rule.Rule.GlucoseFreshnessMinutes != glucoseFreshnessMinutes
@@ -697,7 +701,7 @@ public class AlertRulesController : ControllerBase
         AllowThroughDnd = record.Rule.AllowThroughDnd,
         ScopeClass = record.Rule.ScopeClass,
         ManagedBy = record.ManagedBy,
-        ReviewReason = record.ReviewReason,
+        ReviewReason = AlertRuleMapper.ShownReviewReason(record),
         ConditionIssues = [.. conditionIssues ?? []],
         AutoResolveEnabled = record.Rule.AutoResolveEnabled,
         AutoResolveParams = record.Rule.AutoResolveParams is null

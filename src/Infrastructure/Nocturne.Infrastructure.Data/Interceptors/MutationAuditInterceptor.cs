@@ -144,8 +144,8 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             if (!prop.IsModified)
                 continue;
 
-            var oldValue = prop.OriginalValue;
-            var newValue = prop.CurrentValue;
+            var oldValue = Recorded(prop, prop.OriginalValue);
+            var newValue = Recorded(prop, prop.CurrentValue);
 
             if (Equals(oldValue, newValue))
                 continue;
@@ -190,7 +190,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
 
             snapshot[prop.Metadata.Name] = behavior == AuditPropertyBehavior.Redacted
                 ? "[redacted]"
-                : prop.OriginalValue;
+                : Recorded(prop, prop.OriginalValue);
         }
 
         return JsonSerializer.Serialize(snapshot, JsonOptions);
@@ -212,11 +212,20 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
 
             snapshot[prop.Metadata.Name] = behavior == AuditPropertyBehavior.Redacted
                 ? "[redacted]"
-                : prop.CurrentValue;
+                : Recorded(prop, prop.CurrentValue);
         }
 
         return JsonSerializer.Serialize(snapshot, JsonOptions);
     }
+
+    /// <summary>
+    /// The value as recorded: a stored value its converter could not read is not known, so it is
+    /// recorded as such rather than as what the converter read it as.
+    /// </summary>
+    private static object? Recorded(PropertyEntry prop, object? value) =>
+        prop.Metadata.GetValueConverter() is Converters.IUnreadableValues converter && converter.IsUnreadable(value)
+            ? "[unreadable]"
+            : value;
 
     private static Guid GetEntityId(EntityEntry entry)
     {

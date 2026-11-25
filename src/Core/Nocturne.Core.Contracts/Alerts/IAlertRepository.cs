@@ -46,7 +46,8 @@ public interface IAlertRepository
 
     /// <summary>
     /// Returns every rule of <paramref name="tenantId"/>, enabled or not, in <c>SortOrder</c>,
-    /// without its channels.
+    /// without its channels. A condition type, severity or scope class no member has reads as the
+    /// stand-in the rule editor shows for it.
     /// </summary>
     /// <remarks>
     /// A startup loop calls it once per tenant. Callers serving a request are bound as for
@@ -105,6 +106,12 @@ public interface IAlertRepository
 
     /// <summary>Records that the work <paramref name="kind"/> of <paramref name="excursionId"/> owed is done.</summary>
     Task SettleTransitionAsync(Guid excursionId, ExcursionTransitionType kind, CancellationToken ct);
+
+    /// <summary>
+    /// Records that the close of <paramref name="excursionId"/> owes its work again, taken up at
+    /// <paramref name="now"/>, when the excursion has ended. False when it is open or does not exist.
+    /// </summary>
+    Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct);
 
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
