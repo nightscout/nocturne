@@ -3078,6 +3078,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
 
+                    b.Property<Guid?>("StartedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("started_by_subject_id");
+
+                    b.Property<DateTime?>("StarterAccessEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starter_access_ends_at");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(20)

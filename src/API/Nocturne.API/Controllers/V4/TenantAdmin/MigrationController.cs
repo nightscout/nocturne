@@ -101,7 +101,8 @@ public class MigrationController : ControllerBase
 
         try
         {
-            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            var jobInfo = await _migrationService.StartMigrationAsync(
+                request, _tenantAccessor.Context, await HttpContext.CredentialMakerAsync(ct), ct);
             return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
         }
         catch (MigrationAlreadyRunningException ex)
@@ -156,7 +157,8 @@ public class MigrationController : ControllerBase
 
         try
         {
-            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            var jobInfo = await _migrationService.StartMigrationAsync(
+                request, _tenantAccessor.Context, await HttpContext.CredentialMakerAsync(ct), ct);
             return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
         }
         catch (MigrationAlreadyRunningException ex)

@@ -96,15 +96,18 @@ internal static class MigrationJobHarness
     /// <param name="profileOutcome">What the profile decomposer reports for each profile; empty when omitted.</param>
     /// <param name="deviceStatusOutcome">What the device status import reports for each page; empty when omitted.</param>
     /// <param name="interceptor">Attached to every <see cref="NocturneDbContext"/> the provider creates.</param>
+    /// <param name="database">Configures the store every context opens; a fresh in-memory one when omitted.</param>
     public static ServiceProvider BuildProvider(
         HttpMessageHandler handler,
         Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
         Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null,
         Func<Profile, DecompositionResult>? profileOutcome = null,
         IInterceptor? interceptor = null,
-        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null)
+        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null,
+        Action<DbContextOptionsBuilder>? database = null)
     {
-        var database = $"migration-{Guid.NewGuid():N}";
+        var inMemory = $"migration-{Guid.NewGuid():N}";
+        database ??= o => o.UseInMemoryDatabase(inMemory);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -138,7 +141,7 @@ internal static class MigrationJobHarness
         return new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o =>
             {
-                o.UseInMemoryDatabase(database);
+                database(o);
                 if (interceptor is not null)
                     o.AddInterceptors(interceptor);
             })
