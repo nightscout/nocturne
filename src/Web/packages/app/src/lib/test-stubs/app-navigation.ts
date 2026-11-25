@@ -21,7 +21,14 @@ export function refreshAll() {
 
 export function beforeNavigate(_callback: unknown) {}
 
-export function afterNavigate(_callback: unknown) {}
+type AfterNavigateCallback = (navigation: { type: string }) => void;
+
+/** Callbacks registered with `afterNavigate`. Nothing calls them unless a test does. */
+export const afterNavigateCallbacks: AfterNavigateCallback[] = [];
+
+export function afterNavigate(callback: AfterNavigateCallback) {
+  afterNavigateCallbacks.push(callback);
+}
 
 export function onNavigate(_callback: unknown) {}
 
@@ -31,8 +38,9 @@ function setShallowState(url: string | URL, state: App.PageState) {
   page.state = state;
 }
 
-export function replaceState(url: string | URL, state: App.PageState) {
+export function replaceState(url: string | URL, state: App.PageState): Promise<void> {
   setShallowState(url, state);
+  return Promise.resolve();
 }
 
 export function pushState(url: string | URL, state: App.PageState) {
