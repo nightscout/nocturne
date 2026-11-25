@@ -39,7 +39,7 @@ public class TreatmentsPostUpsertTests : IDisposable
 
     public TreatmentsPostUpsertTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
 
         var audit = Mock.Of<IAuditContext>();

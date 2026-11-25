@@ -6,9 +6,9 @@ using Nocturne.Infrastructure.Data.Mappers;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// The rule that ends an open span of an exclusive category at the next stored span it conflicts with:
-/// the insert of a span behind a later one (<see cref="StateSpanRepository"/>), and the delete and the
-/// restore of a superseder (<see cref="Extensions.StateSpanSupersessionExtensions"/>), all apply it.
+/// The rule that ends an open span of an exclusive category at the next stored span it conflicts with.
+/// Every write that moves supersession applies it through <see cref="Extensions.StateSpanSupersessionExtensions"/>:
+/// an upload, a fold, the delete and the restore of a superseder, and a replace.
 /// </summary>
 internal static class StateSpanSuccession
 {
@@ -96,32 +96,24 @@ internal static class StateSpanSuccession
     }
 
     /// <summary>
-    /// The first stored span that <see cref="Follows"/> <paramref name="open"/>, is
-    /// <paramref name="eligible"/> and starts before <paramref name="before"/>. Reads past
-    /// <paramref name="candidates"/>, the ones <see cref="LoadCandidatesAsync"/> read for its key, only when
-    /// every one was passed over and more may lie before <paramref name="before"/>; null candidates were
-    /// never read.
+    /// The first stored span that <see cref="Follows"/> <paramref name="open"/> and is
+    /// <paramref name="eligible"/>. Reads past <paramref name="candidates"/>, the ones
+    /// <see cref="LoadCandidatesAsync"/> read for its key, only when every one was passed over and more may
+    /// lie beyond them.
     /// </summary>
     internal static async Task<StateSpanEntity?> FirstStoredAsync(
         NocturneDbContext db,
         StateSpanEntity open,
         IDictionary<string, object>? metadata,
-        List<StateSpanEntity>? candidates,
+        List<StateSpanEntity> candidates,
         Func<StateSpanEntity, bool> eligible,
-        DateTime? before,
         CancellationToken cancellationToken)
     {
-        var found = candidates?.Where(eligible).FirstOrDefault(s => Follows(open, metadata, s));
-        if (found is not null)
+        var found = candidates.Where(eligible).FirstOrDefault(s => Follows(open, metadata, s));
+        if (found is not null || candidates.Count < Candidates)
             return found;
-        if (candidates is not null
-            && (candidates.Count < Candidates || (before is { } bound && candidates[^1].StartTimestamp >= bound)))
-            return null;
 
-        var after = candidates is null ? open.StartTimestamp : candidates[^1].StartTimestamp;
-        var further = After(db, Key(open.Category, open.State, after));
-        if (before is { } end)
-            further = further.Where(s => s.StartTimestamp < end);
+        var further = After(db, Key(open.Category, open.State, candidates[^1].StartTimestamp));
         await foreach (var later in further.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
             if (eligible(later) && Follows(open, metadata, later))

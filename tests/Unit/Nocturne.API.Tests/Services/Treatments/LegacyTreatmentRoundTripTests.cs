@@ -46,7 +46,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
 
     public LegacyTreatmentRoundTripTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
 
         IAuditContext caller = new AuditContext

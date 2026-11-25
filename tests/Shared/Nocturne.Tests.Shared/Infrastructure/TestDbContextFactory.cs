@@ -82,6 +82,7 @@ public sealed class SqliteTestDatabase : IDisposable
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .AddInterceptors(interceptors)
             .EnableSensitiveDataLogging();
+        SqliteNpgsqlJson.Translate(builder);
         configure?.Invoke(builder);
         Options = builder.Options;
 

@@ -27,7 +27,7 @@ public class DecomposedTreatmentKeysTests : IDisposable
 
     public DecomposedTreatmentKeysTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, SqliteNpgsqlJson.Translate).SeedTenant(_otherTenant, "other");
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant).SeedTenant(_otherTenant, "other");
     }
 
     public void Dispose() => _db.Dispose();
