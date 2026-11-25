@@ -97,7 +97,7 @@ public class DeduplicatedTableListTests : IDisposable
         var info = await LinkedRecordTypes.LoadRecordInfoAsync(context, recordType, [id], default);
 
         info[id].UpstreamFingerprint.Should().Be(
-            recordType is RecordType.SensorGlucose or RecordType.StateSpan ? null : "stamped");
+            recordType is RecordType.SensorGlucose ? null : "stamped");
     }
 
     [Theory]

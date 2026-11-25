@@ -30,8 +30,10 @@ public partial class NightscoutConnectorServiceBase<TConfig>
     ///     Reads again, by id, the overrides and temporary targets this connector stored that are still
     ///     open or served as indefinite, and publishes the ones the source has since given a duration.
     ///     Loop ends an override by sending it again under the same id and <c>created_at</c>, which no
-    ///     crawl or reconcile reads once newer records exist, and a span is never written again from
-    ///     them (<see cref="ITreatmentPublisher.PublishRecentTreatmentsAsync"/>). A document marked
+    ///     crawl or reconcile reads once newer records exist. The ones given a duration are published as
+    ///     a crawl publishes, not under <see cref="ITreatmentPublisher.PublishRecentTreatmentsAsync"/>'s
+    ///     rule, which takes a span stored with no fingerprint as it stands and so would leave it open.
+    ///     A document marked
     ///     <c>isValid: false</c>, or confirmed gone (<see cref="ConfirmGoneAsync"/>), is deleted. A span
     ///     not deleted is not read again until <see cref="LookUpAgainAfter"/> has passed, or
     ///     <see cref="RunningLookUpAgainAfter"/> for one running now. Past <see cref="FewMissing"/>

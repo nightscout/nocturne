@@ -14,6 +14,16 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, TimeProvider time) : IDecomposedTreatmentKeys
 {
+    /// <summary>
+    /// The categories of the spans a treatment writes in place of a table row. A profile switch is a
+    /// profile activation.
+    /// </summary>
+    public static IReadOnlyList<string> TreatmentSpanCategories { get; } =
+    [
+        nameof(StateSpanCategory.Override),
+        nameof(StateSpanCategory.TemporaryTarget),
+    ];
+
     /// <inheritdoc />
     public async Task<HeldLegacyIds> GetHeldLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
@@ -54,7 +64,7 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
             UNION
             SELECT original_id FROM state_spans
             WHERE deleted_at IS NULL AND original_id IS NOT NULL
-              AND category IN ({nameof(StateSpanCategory.Override)}, {nameof(StateSpanCategory.TemporaryTarget)})
+              AND category = ANY({TreatmentSpanCategories.ToArray()})
               AND (metadata -> 'isValid') = 'false'::jsonb
             """).OrderBy(id => id).ToListAsync(ct);
     }
@@ -170,23 +180,25 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<string, IReadOnlyList<string?>>> GetFingerprintsFromSourceAsync(
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
         string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
         string[] ids = [.. legacyIds];
-        var stamped = new Dictionary<string, List<string?>>(StringComparer.Ordinal);
+        var stored = new List<(string LegacyId, StoredFingerprint Fingerprint)>();
         foreach (var table in DecomposedTreatmentTables.All)
         {
-            foreach (var (legacyId, fingerprint) in await table.FingerprintsFromSourceAsync(db, source, ids, ct))
-            {
-                if (!stamped.TryGetValue(legacyId, out var rowFingerprints))
-                    stamped[legacyId] = rowFingerprints = [];
-                rowFingerprints.Add(fingerprint);
-            }
+            stored.AddRange((await table.FingerprintsFromSourceAsync(db, source, ids, ct))
+                .Select(row => (row.LegacyId, new StoredFingerprint(row.Fingerprint, OnSpan: false))));
         }
 
-        return stamped.ToDictionary(p => p.Key, IReadOnlyList<string?> (p) => p.Value, StringComparer.Ordinal);
+        stored.AddRange((await TreatmentSpansFromSource(db, source, ids).AsNoTracking()
+                .Select(s => new { LegacyId = s.LegacyId!, s.UpstreamFingerprint })
+                .ToListAsync(ct))
+            .Select(span => (span.LegacyId, new StoredFingerprint(span.UpstreamFingerprint, OnSpan: true))));
+
+        return stored.GroupBy(r => r.LegacyId, StringComparer.Ordinal).ToDictionary(
+            g => g.Key, IReadOnlyList<StoredFingerprint> (g) => [.. g.Select(r => r.Fingerprint)], StringComparer.Ordinal);
     }
 
     /// <inheritdoc />
@@ -199,6 +211,12 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             foreach (var table in DecomposedTreatmentTables.All)
                 await table.StampUnfingerprintedAsync(db, source, fingerprints, ct);
+            foreach (var (legacyId, fingerprint) in fingerprints)
+            {
+                await TreatmentSpansFromSource(db, source, [legacyId])
+                    .Where(s => s.UpstreamFingerprint == null)
+                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.UpstreamFingerprint, fingerprint), ct);
+            }
             await transaction.CommitAsync(ct);
         });
     }
@@ -337,6 +355,15 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
 
         var blocks = RecreationBlocks<string>.From(rows);
         return new HeldLegacyIds(blocks.Held, blocks.DeletedByUser);
+    }
+
+    /// <summary>The live spans of <see cref="TreatmentSpanCategories"/> <paramref name="source"/> stored under <paramref name="legacyIds"/>.</summary>
+    private static IQueryable<StateSpanEntity> TreatmentSpansFromSource(
+        NocturneDbContext db, string source, string[] legacyIds)
+    {
+        string[] categories = [.. TreatmentSpanCategories];
+        return db.StateSpans.Where(s => s.Source == source
+            && s.LegacyId != null && legacyIds.Contains(s.LegacyId) && categories.Contains(s.Category));
     }
 
     private static IQueryable<StateSpanEntity> StateSpansFromSource(

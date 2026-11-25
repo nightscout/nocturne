@@ -225,9 +225,20 @@ internal class TreatmentService : ITreatmentService
         _decomposer.ResolveStoredIdentitiesAsync(treatments, cancellationToken);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+    public Task<TreatmentRepublish> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
         _decomposer.SelectForRepublishAsync(source, treatments, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<int> RepublishSpansAsync(
+        string source, IReadOnlyList<Treatment> treatments, WriteOrigin origin,
+        CancellationToken cancellationToken = default)
+    {
+        var written = await _decomposer.RepublishSpansAsync(source, treatments, origin, cancellationToken);
+        if (origin == WriteOrigin.Live)
+            await AnnounceCreatedAsync([.. written.Select(t => new StoredTreatment.Unnamed(t) { Updated = true })]);
+        return written.Count;
+    }
 
     private async Task<BulkWrite<Treatment>> CreateAsync(
         IEnumerable<Treatment> treatments, bool splitPreBolus, WriteOrigin origin, CancellationToken cancellationToken)

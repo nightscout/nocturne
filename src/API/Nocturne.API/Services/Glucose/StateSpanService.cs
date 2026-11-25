@@ -140,6 +140,13 @@ public class StateSpanService : IStateSpanService
         => _repository.UpdateStateSpansAsync(stateSpans, cancellationToken);
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<string>> RewriteFromUpstreamAsync(
+        string source,
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+        => _repository.RewriteFromUpstreamAsync(source, stateSpans, cancellationToken);
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<StateSpan>> GetStateSpansAroundAsync(
         StateSpanCategory category,
         DateTime from,

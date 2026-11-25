@@ -411,7 +411,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         Table(_bolusCalculationRepository, TreatmentWireForms),
         Table(_tempBasalRepository, TreatmentWireForms),
         Table(_profileActivationRepository, TreatmentWireForms),
-        Table(new StateSpanLegacyKeys(_contexts, TreatmentSpanCategories), TreatmentWireForms),
+        Table(new StateSpanLegacyKeys(_contexts, DecomposedTreatmentKeys.TreatmentSpanCategories), TreatmentWireForms),
     ];
 
     private const WireForms TreatmentWireForms = WireForms.UuidPrefix | WireForms.Hashed | WireForms.KeyedOwnId;
@@ -1129,20 +1129,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         }
     }
 
-    /// <summary>
-    /// The categories of the spans a treatment writes in place of a table row. A switch is a
-    /// <see cref="V4Models.ProfileActivation"/>.
-    /// </summary>
-    private static readonly string[] TreatmentSpanCategories =
-    [
-        nameof(StateSpanCategory.Override),
-        nameof(StateSpanCategory.TemporaryTarget),
-    ];
-
-    /// <summary>The live spans of <see cref="TreatmentSpanCategories"/> stored under <paramref name="legacyIds"/>.</summary>
+    /// <summary>The live spans of <see cref="DecomposedTreatmentKeys.TreatmentSpanCategories"/> stored under <paramref name="legacyIds"/>.</summary>
     private static IQueryable<StateSpanEntity> StoredTreatmentSpans(NocturneDbContext db, string[] legacyIds)
     {
-        var categories = TreatmentSpanCategories;
+        string[] categories = [.. DecomposedTreatmentKeys.TreatmentSpanCategories];
         return db.StateSpans.Where(s =>
             s.LegacyId != null && legacyIds.Contains(s.LegacyId) && categories.Contains(s.Category));
     }
@@ -2510,9 +2500,15 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// in Nocturne therefore survives until the source itself changes the record, and then the
     /// source wins. When none of the rows carries a fingerprint, the record is taken as it stands:
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
-    /// uploader restated. A treatment stored only as a state span (an override, a temporary target)
-    /// has no row in <see cref="DecomposedTreatmentTables"/>, so it is stamped as it stands and never
-    /// written again here. A treatment the user deleted stays deleted.
+    /// uploader restated. A treatment the user deleted stays deleted.
+    /// <para>
+    /// A stored treatment <see cref="CanRepublish"/> refuses is not decomposed again: a profile switch,
+    /// an override, a temporary target, a pump suspend or resume. Of those, an override or temporary
+    /// target the source changed is selected for <see cref="RepublishSpansAsync"/> by the same rule,
+    /// over the fingerprint its state span carries alone, unless it is an upstream edit of a record
+    /// write-back sent. The bolus or carbs such a treatment also writes keep the fingerprint they were
+    /// written with, which the span write does not change.
+    /// </para>
     /// <para>
     /// All of this is keyed by the id each treatment is stored under, which for a copy Nightscout
     /// re-keyed is not the <c>_id</c> it came back with, so each is first planned onto the record it
@@ -2521,39 +2517,82 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// carries none of its fingerprints.
     /// </para>
     /// </remarks>
-    public async Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+    public async Task<TreatmentRepublish> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
         var identified = (await PlanForRepublishAsync(treatments, ct)).Where(t => t.Id is { Length: > 0 }).ToList();
         if (identified.Count == 0)
-            return [];
+            return new TreatmentRepublish([], []);
 
         var (held, deletedByUser) = await _keys.GetHeldLegacyIdsAsync(identified.Select(t => t.Id!).ToHashSet(), ct);
         var stamped = await _keys.GetFingerprintsFromSourceAsync(source, held, ct);
 
         var republish = new List<Treatment>();
+        var spans = new List<Treatment>();
         var baselines = new Dictionary<string, string>();
         foreach (var treatment in identified)
         {
             var id = treatment.Id!;
             var stored = held.Contains(id);
-            if (deletedByUser.Contains(id) || !CanRepublish(treatment, stored))
+            var storedAsSpan = stored && UpstreamEditOf(treatment) is null
+                && ClassifyTreatment(treatment) is { IsOverride: true } or { IsTemporaryTarget: true };
+            if (deletedByUser.Contains(id) || (!storedAsSpan && !CanRepublish(treatment, stored)))
                 continue;
 
             var fingerprint = UpstreamFingerprint(treatment);
-            var prior = stamped.GetValueOrDefault(id) ?? [];
+            var prior = (stamped.GetValueOrDefault(id) ?? [])
+                .Where(f => !storedAsSpan || f.OnSpan)
+                .Select(f => f.Fingerprint)
+                .ToList();
             if (!stored || UpstreamEditOf(treatment) is not null)
                 republish.Add(treatment);
             else if (prior.All(f => f is null))
                 baselines[id] = fingerprint;
             else if (!prior.All(f => f == fingerprint))
-                republish.Add(treatment);
+                (storedAsSpan ? spans : republish).Add(treatment);
         }
 
         if (baselines.Count > 0)
             await _keys.StampUnfingerprintedAsync(source, baselines, ct);
 
-        return republish;
+        return new TreatmentRepublish(republish, spans);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Each span is built as <see cref="DecomposeBatchAsync"/> builds it, and a treatment that cannot be
+    /// mapped writes nothing. The ends it takes are <see cref="IStateSpanService.RewriteFromUpstreamAsync"/>'s.
+    /// </remarks>
+    public async Task<IReadOnlyList<Treatment>> RepublishSpansAsync(
+        string source, IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default)
+    {
+        var spans = new List<StateSpan>(treatments.Count);
+        foreach (var treatment in treatments)
+        {
+            var c = ClassifyTreatment(treatment);
+            try
+            {
+                if (c.IsOverride)
+                    spans.Add(Mapped(() => BuildOverrideSpan(treatment)));
+                else if (c.IsTemporaryTarget)
+                    spans.Add(Mapped(() => BuildTemporaryTargetSpan(treatment)));
+            }
+            catch (TreatmentMappingException ex)
+            {
+                Logger.LogWarning(ex, "Kept treatment {LegacyId} as stored: its upstream edit cannot be mapped",
+                    LogText.Sanitize(treatment.Id));
+            }
+        }
+
+        IReadOnlyList<string> written;
+        using (LiveWriteScope.Open(origin == WriteOrigin.Live))
+            written = await _stateSpanService.RewriteFromUpstreamAsync(source, spans, ct);
+        if (written.Count == 0)
+            return [];
+
+        await ReportWrittenAsync([typeof(StateSpan)]);
+        var rewritten = written.ToHashSet(StringComparer.Ordinal);
+        return [.. treatments.Where(t => t.Id is { } id && rewritten.Contains(id))];
     }
 
     /// <summary>
