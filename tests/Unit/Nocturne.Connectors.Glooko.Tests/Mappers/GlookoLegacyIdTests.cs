@@ -113,7 +113,7 @@ public class GlookoLegacyIdTests
             "glooko_4cbbee06f06b7d61452d21647171407474e106bf",
             "glooko_food_food-1",
             "glooko_4a9ba130561a4e74092a6432e1950b7f283ba7e7");
-        Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId)
+        Treatments().MapBatchData(new GlookoBatchData { Foods = batch.Foods }).carbs.Select(c => c.LegacyId)
             .Should().Equal("glooko_food_food-1", "glooko_4a9ba130561a4e74092a6432e1950b7f283ba7e7");
     }
 
@@ -134,7 +134,7 @@ public class GlookoLegacyIdTests
         entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(
             "glooko_food_food-1", "glooko_4a9ba130561a4e74092a6432e1950b7f283ba7e7");
         entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(
-            Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId));
+            Treatments().MapBatchData(batch).carbs.Select(c => c.LegacyId));
     }
 
     [Fact]
@@ -160,7 +160,6 @@ public class GlookoLegacyIdTests
         carbs.Select(c => c.LegacyId).Should().OnlyHaveUniqueItems();
         entries.Select(e => e.Entry.ExternalEntryId).Should().OnlyHaveUniqueItems();
         entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
-        Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
     }
 
     [Fact]
@@ -231,7 +230,6 @@ public class GlookoLegacyIdTests
             "glooko_food_639129672000000000_20", "glooko_food_639129672000000000_20_occurrence:1");
         carbs.Select(c => c.LegacyId).Should().OnlyHaveUniqueItems().And.HaveCount(2);
         entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
-        Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
     }
 
     [Fact]
