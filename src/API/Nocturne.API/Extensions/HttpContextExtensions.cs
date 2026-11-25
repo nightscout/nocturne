@@ -351,6 +351,18 @@ public static class HttpContextExtensions
                 .GetSignInStateAsync(subjectId, ct) is not { IsActive: true }
             || await HasSessionEndedAsync(context, auth, ct));
 
+    /// <summary>
+    /// Whether the caller signed in with a session that an action minting a credential would refuse:
+    /// <see cref="IsCallerInactiveAsync"/> when the request resolved a tenant, otherwise
+    /// <see cref="IsCallerSubjectInactiveAsync"/>. Every other credential answers false.
+    /// </summary>
+    public static async Task<bool> IsSessionCallerInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { } auth
+        && CallerSessionLiveness.IsSessionCaller(auth)
+        && (auth.TenantId is not null
+            ? await context.IsCallerInactiveAsync(ct)
+            : await context.IsCallerSubjectInactiveAsync(ct));
+
     private static async Task<bool> HasSessionEndedAsync(HttpContext context, AuthContext auth, CancellationToken ct) =>
         CallerSessionLiveness.IsSessionCaller(auth)
         && await context.RequestServices.GetRequiredService<CallerSessionLiveness>().HasEndedAsync(auth, ct);

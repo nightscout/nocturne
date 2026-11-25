@@ -5,7 +5,11 @@
  */
 
 import { browser } from "$app/env";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { isShareHost } from "#lib/share-host.js";
+
+const REMOTE_CALL_PATH = "/_app/remote/";
+const SELF_ANSWERING_PAGES = ["/auth/login", "/auth/recovery"];
 
 /**
  * Auth interceptor state
@@ -46,14 +50,15 @@ class AuthInterceptorState {
       return;
     }
 
-    // Don't redirect if already on the login page
-    if (window.location.pathname.startsWith('/auth/login')) {
+    // The sign-in and recovery pages answer their own 401: a recovery session that ran out, a
+    // spent enrolment or a refused code. Other /auth/ pages (linking a bot account) hold a session.
+    if (SELF_ANSWERING_PAGES.some((page) => window.location.pathname.startsWith(page))) {
       return;
     }
 
     this.isRedirecting = true;
 
-    const returnUrl = window.location.pathname + window.location.search;
+    const returnUrl = safeReturnUrl(window.location.pathname + window.location.search);
     window.location.href = `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
   }
 
@@ -106,4 +111,34 @@ export function createAuthenticatedFetch(
     // Return the 401 response (page will redirect before this matters)
     return response;
   };
+}
+
+/**
+ * Sends the person to sign in when the server refuses a remote command or form with 401.
+ *
+ * `redirect` is not allowed in a command, so the generated 401 arm throws `error(401)`, which
+ * SvelteKit answers with a 200 whose body carries the status, and rejects at the call site.
+ * Every command and form posts through the global `fetch`, so this is the one place that sees the
+ * refusal for all of them. A query is sent with GET and redirects on the server.
+ */
+export function createRemoteSignInFetch(originalFetch: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    const response = await originalFetch(input, init);
+    if (init?.method === "POST" && isRemoteCall(input) && (await refusedAsUnauthorized(response))) {
+      authInterceptorState.redirectToLogin();
+    }
+    return response;
+  };
+}
+
+function isRemoteCall(input: RequestInfo | URL): boolean {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  return new URL(url, window.location.href).pathname.startsWith(REMOTE_CALL_PATH);
+}
+
+async function refusedAsUnauthorized(response: Response): Promise<boolean> {
+  const body: unknown = await response.clone().json().catch(() => null);
+  if (typeof body !== "object" || body === null || !("type" in body) || body.type !== "error") return false;
+  const error = "error" in body ? body.error : null;
+  return typeof error === "object" && error !== null && "status" in error && error.status === 401;
 }
