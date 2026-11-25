@@ -46,6 +46,83 @@ public class TreatmentReadServiceFindFilterTests
             .ReturnsAsync(treatments);
     }
 
+    private void SetupProjectionIncludingDeleted(params Treatment[] treatments)
+    {
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsIncludingDeletedAsync(
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(treatments);
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidFalse_ReturnsTheDeletedTreatmentsAndNoLiveOne()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "live", Mills = 3000, EventType = "Meal Bolus" },
+            new Treatment { Id = "deleted", Mills = 2000, EventType = "Meal Bolus", IsValid = false },
+            new Treatment { Id = "deleted-older", Mills = 1000, EventType = "Note", IsValid = false });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=false", Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("deleted", "deleted-older");
+        result.Should().OnlyContain(t => t.IsValid == false);
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidFalse_PagesOverTheMatchingTreatments()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "newest-deleted", Mills = 3000, IsValid = false },
+            new Treatment { Id = "live", Mills = 2000 },
+            new Treatment { Id = "older-deleted", Mills = 1000, IsValid = false });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=false", Count = 1, Skip = 1 });
+
+        result.Should().ContainSingle().Which.Id.Should().Be("older-deleted");
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidTrue_ReturnsNoDeletedTreatment()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "deleted", Mills = 3000, IsValid = false },
+            new Treatment { Id = "stored-valid", Mills = 2000, IsValid = true },
+            new Treatment { Id = "unmarked", Mills = 1000 });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=true", Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("stored-valid");
+    }
+
+    [Fact]
+    public async Task CountAsync_IsValidFalse_CountsTheDeletedTreatmentsTheListReturns()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "live", Mills = 3000 },
+            new Treatment { Id = "deleted", Mills = 2000, IsValid = false },
+            new Treatment { Id = "deleted-older", Mills = 1000, IsValid = false });
+
+        var count = await _service.CountAsync("find[isValid]=false");
+        var listed = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=false", Count = 10 });
+
+        count.Should().Be(2);
+        listed.Should().HaveCount((int)count);
+    }
+
+    [Fact]
+    public async Task QueryAsync_FindThatDoesNotNameIsValid_ReadsLiveTreatmentsOnly()
+    {
+        SetupProjection(new Treatment { Id = "live", Mills = 3000, EventType = "Meal Bolus" });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[eventType]=Meal Bolus", Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("live");
+        _projection.Verify(
+            p => p.GetProjectedTreatmentsIncludingDeletedAsync(
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task QueryAsync_EventTypeFilter_ReturnsOnlyMatchingType()
     {

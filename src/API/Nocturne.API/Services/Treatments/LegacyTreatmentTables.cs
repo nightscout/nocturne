@@ -32,19 +32,21 @@ internal sealed record LegacyTreatmentRepositories(
 );
 
 /// <summary>
-/// The time window, page size and direction of one time-range projection read.
+/// The time window, page size and direction of one time-range projection read, and whether it also
+/// reads the rows stored deleted, each of which is fetched with <see cref="FetchedRecord.Deleted"/> set.
 /// </summary>
 internal readonly record struct LegacyTreatmentRange(
     DateTime? From,
     DateTime? To,
     int Limit,
-    bool Descending
+    bool Descending,
+    bool IncludeDeleted = false
 );
 
 /// <summary>
 /// One record fetched for projection, carrying the table that owns it, the row's primary key, the
 /// creation and modification stamps of the row it came from, and whether that row is soft-deleted,
-/// which only a modified-since read returns.
+/// which only a modified-since read and a time-range read that includes deleted rows return.
 /// </summary>
 internal readonly record struct FetchedRecord(
     ILegacyTreatmentTable Table,
@@ -93,6 +95,7 @@ internal interface ILegacyTreatmentTable
     /// <summary>
     /// A page of records within the requested window: the newest <see cref="LegacyTreatmentRange.Limit"/>
     /// newest first, or the oldest oldest first when <see cref="LegacyTreatmentRange.Descending"/> is false.
+    /// Live rows only, unless <see cref="LegacyTreatmentRange.IncludeDeleted"/>.
     /// </summary>
     Task<IReadOnlyList<FetchedRecord>> InRangeAsync(
         LegacyTreatmentRepositories repositories,
@@ -305,6 +308,13 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         CancellationToken ct
     )
     {
+        if (range.IncludeDeleted)
+        {
+            var rows = await repository(repositories).GetIncludingDeletedAsync(
+                range.From, range.To, range.Limit, range.Descending, ct);
+            return rows.Select(row => Fetch(row.Record, row.Deleted)).ToList();
+        }
+
         var records = await repository(repositories).GetAsync(
             range.From, range.To, device: null, source: null, range.Limit, offset: 0, range.Descending, ct);
         return records.Select(Fetch).ToList();
@@ -342,8 +352,16 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
             .InObservationOrder(descending: true);
     }
 
-    internal FetchedRecord Fetch(TRecord record) =>
-        new(this, record, record.Id, record.CreatedAt, record.ModifiedAt);
+    internal FetchedRecord Fetch(TRecord record) => Fetch(record, deleted: false);
+
+    private FetchedRecord Fetch(TRecord record, bool deleted) =>
+        new(this, record, record.Id, record.CreatedAt, record.ModifiedAt, deleted);
+
+    private FetchedRecord Fetch(TEntity entity)
+    {
+        var record = toRecord(entity);
+        return new(this, record, record.Id, record.CreatedAt, entity.SysUpdatedAt, entity.DeletedAt is not null);
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FetchedRecord>> ModifiedSinceAsync(
@@ -365,11 +383,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
             RecordType,
             ct);
 
-        return entities
-            .Select(e => (Record: toRecord(e), e.SysUpdatedAt, Deleted: e.DeletedAt is not null))
-            .Select(x => new FetchedRecord(
-                this, x.Record, x.Record.Id, x.Record.CreatedAt, x.SysUpdatedAt, x.Deleted))
-            .ToList();
+        return entities.Select(Fetch).ToList();
     }
 
     /// <inheritdoc />
@@ -405,11 +419,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
             .Where(filter)
             .ToListAsync(ct);
 
-        return entities
-            .Select(e => (Record: toRecord(e), e.SysUpdatedAt))
-            .Select(x => new FetchedRecord(
-                this, x.Record, x.Record.Id, x.Record.CreatedAt, x.SysUpdatedAt))
-            .ToList();
+        return entities.Select(Fetch).ToList();
     }
 
     /// <inheritdoc />
@@ -478,7 +488,7 @@ internal sealed class LegacyStateSpanTable(
     }
 
     internal FetchedRecord Fetched(StateSpanEntity span) =>
-        new(this, span, span.Id, span.CreatedAt, span.UpdatedAt);
+        new(this, span, span.Id, span.CreatedAt, span.UpdatedAt, span.DeletedAt is not null);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FetchedRecord>> InRangeAsync(
@@ -488,7 +498,10 @@ internal sealed class LegacyStateSpanTable(
         CancellationToken ct
     )
     {
-        var spans = await InStartOrder(Window(Visible(context), range.From, range.To), range.Descending)
+        var rows = range.IncludeDeleted
+            ? Served(context.StateSpans.IncludingDeleted().AsNoTracking()).ExcludeDuplicates()
+            : Visible(context);
+        var spans = await InStartOrder(Window(rows, range.From, range.To), range.Descending)
             .Take(range.Limit)
             .ToListAsync(ct);
 
@@ -536,7 +549,7 @@ internal sealed class LegacyStateSpanTable(
             Served(context.StateSpans.IncludingDeleted().AsNoTracking()).ExcludeDuplicatesKeepingDeleted(),
             s => s.UpdatedAt, s => s.Id, cursorMills, limit, logger, RecordType, ct);
 
-        return spans.Select(span => Fetched(span) with { Deleted = span.DeletedAt is not null }).ToList();
+        return spans.Select(Fetched).ToList();
     }
 
     /// <inheritdoc />
@@ -607,10 +620,11 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
     internal static IQueryable<ProfileActivationEntity> Rows(NocturneDbContext context) =>
         Served(context.ProfileActivations.AsNoTracking());
 
-    /// <summary>Activations starting inside the window, bounds inclusive.</summary>
-    internal static IQueryable<ProfileActivationEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to)
+    /// <summary>Activations starting inside the window, bounds inclusive; deleted ones too when <paramref name="includeDeleted"/>.</summary>
+    internal static IQueryable<ProfileActivationEntity> InWindow(
+        NocturneDbContext context, DateTime? from, DateTime? to, bool includeDeleted = false)
     {
-        var rows = Rows(context);
+        var rows = includeDeleted ? Served(context.ProfileActivations.IncludingDeleted().AsNoTracking()) : Rows(context);
         if (from is { } lower)
             rows = rows.Where(a => a.Timestamp >= lower);
         if (to is { } upper)
@@ -664,7 +678,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
         CancellationToken ct
     )
     {
-        var rows = await InStartOrder(InWindow(context, range.From, range.To), range.Descending)
+        var rows = await InStartOrder(InWindow(context, range.From, range.To, range.IncludeDeleted), range.Descending)
             .Take(range.Limit)
             .ToListAsync(ct);
 
@@ -1174,10 +1188,11 @@ internal static class LegacyTreatmentTables
     internal static List<Treatment> Assemble(
         IReadOnlyList<FetchedRecord> rows,
         CarbFoodIndex foods,
-        IReadOnlyDictionary<string, string>? notes = null)
+        IReadOnlyDictionary<string, string>? notes = null,
+        IReadOnlyDictionary<string, string>? deletedNotes = null)
     {
         var treatments = new List<Treatment>();
-        var paired = PairMeals(rows, foods, notes, treatments);
+        var paired = PairMeals(rows, foods, notes, deletedNotes, treatments);
 
         foreach (var row in rows)
         {
@@ -1186,17 +1201,28 @@ internal static class LegacyTreatmentTables
 
             var treatment = row.Table.Project(row.Record, foods);
             if (row.Record is not DeviceEvent)
-                treatment = WithNotes(treatment, ServedKey(row.Record), notes);
+                treatment = WithNotes(treatment, ServedKey(row.Record), row.Deleted, notes, deletedNotes);
             treatments.Add(Stamp(treatment, row.Created, row.Modified, row.Deleted));
         }
 
         return treatments;
     }
 
+    /// <remarks>A deleted treatment is served with the text of its deleted Note when no live Note holds one.</remarks>
     private static Treatment WithNotes(
-        Treatment treatment, string? key, IReadOnlyDictionary<string, string>? notes)
+        Treatment treatment,
+        string? key,
+        bool deleted,
+        IReadOnlyDictionary<string, string>? notes,
+        IReadOnlyDictionary<string, string>? deletedNotes)
     {
-        if (key is not null && notes?.GetValueOrDefault(key) is { } text)
+        if (key is null)
+            return treatment;
+
+        var text = notes?.GetValueOrDefault(key);
+        if (text is null && deleted)
+            text = deletedNotes?.GetValueOrDefault(key);
+        if (text is not null)
             treatment.Notes = text;
         return treatment;
     }
@@ -1227,6 +1253,7 @@ internal static class LegacyTreatmentTables
         IReadOnlyList<FetchedRecord> records,
         CarbFoodIndex foods,
         IReadOnlyDictionary<string, string>? notes,
+        IReadOnlyDictionary<string, string>? deletedNotes,
         List<Treatment> treatments
     )
     {
@@ -1255,7 +1282,9 @@ internal static class LegacyTreatmentTables
                 WithNotes(
                     ProjectMealBolus(bolus.Record, carb.Record, foods.For(carb.Record.Id)),
                     bolus.Record.LegacyId ?? carb.Record.LegacyId,
-                    notes),
+                    key.Deleted,
+                    notes,
+                    deletedNotes),
                 Oldest(bolus.Record.CreatedAt, carb.Record.CreatedAt),
                 Newest(bolus.Modified, carb.Modified),
                 key.Deleted));

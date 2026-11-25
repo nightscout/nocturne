@@ -199,6 +199,14 @@ public interface ILegacyKeyedRepository<TRecord>
     Task<IReadOnlyList<HistoryRecord<TRecord>>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="IV4Repository{T}.GetAsync"/> over the rows stored deleted as well as the live ones, with
+    /// the same window, duplicate rule and order: one row per dose, a deleted one flagged
+    /// (<see cref="HistoryRecord{T}"/>). A deleted copy that another copy stands in for is not listed.
+    /// </summary>
+    Task<IReadOnlyList<HistoryRecord<TRecord>>> GetIncludingDeletedAsync(
+        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default);
+
+    /// <summary>
     /// The stored, non-empty correlation id of each live row carrying one of
     /// <paramref name="legacyIds"/>, under the same soft-delete visibility as
     /// <see cref="GetByLegacyIdAsync"/>. A legacy id with no such row is absent.

@@ -71,17 +71,35 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
+    public Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
         long? fromMills,
         long? toMills,
         int limit,
         bool descending = true,
         CancellationToken ct = default
+    ) => ReadWindowAsync(fromMills, toMills, limit, descending, includeDeleted: false, ct);
+
+    /// <inheritdoc />
+    public Task<IEnumerable<Treatment>> GetProjectedTreatmentsIncludingDeletedAsync(
+        long? fromMills,
+        long? toMills,
+        int limit,
+        bool descending,
+        CancellationToken ct = default
+    ) => ReadWindowAsync(fromMills, toMills, limit, descending, includeDeleted: true, ct);
+
+    private async Task<IEnumerable<Treatment>> ReadWindowAsync(
+        long? fromMills,
+        long? toMills,
+        int limit,
+        bool descending,
+        bool includeDeleted,
+        CancellationToken ct
     )
     {
         await using var db = await _contexts.CreateAsync(ct);
         var range = new LegacyTreatmentRange(
-            fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending);
+            fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending, includeDeleted);
 
         var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
         var treatments = await AssembleAsync(db, rows, ct);
@@ -556,6 +574,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             .Distinct()
             .ToList();
         Dictionary<string, string>? notes = null;
+        Dictionary<string, string>? deletedNotes = null;
         Dictionary<string, DateTime> noteStamps = [];
         if (keys.Count > 0)
         {
@@ -568,6 +587,11 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 .Where(n => n.Live)
                 .GroupBy(n => n.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
+            if (historyCursor is null)
+                deletedNotes = written
+                    .Where(n => !n.Live)
+                    .GroupBy(n => n.Key, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
             noteStamps = written
                 .GroupBy(n => n.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.Max(n => n.SysUpdatedAt), StringComparer.Ordinal);
@@ -588,8 +612,8 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var foods = await LoadCarbFoodsAsync(rows, ct);
         var treatments = pairedWithin is null
-            ? LegacyTreatmentTables.Assemble(rows, foods, notes)
-            : [.. rows.GroupBy(pairedWithin).SelectMany(group => LegacyTreatmentTables.Assemble([.. group], foods, notes))];
+            ? LegacyTreatmentTables.Assemble(rows, foods, notes, deletedNotes)
+            : [.. rows.GroupBy(pairedWithin).SelectMany(group => LegacyTreatmentTables.Assemble([.. group], foods, notes, deletedNotes))];
         return foldedNotes.Count == 0
             ? treatments
             : treatments.Select(t => t.Id is { } id && foldedNotes.Contains(id) ? FoldedNoteTombstone(t) : t).ToList();
