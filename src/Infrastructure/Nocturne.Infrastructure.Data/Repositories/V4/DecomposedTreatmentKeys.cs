@@ -41,6 +41,25 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
     }
 
     /// <inheritdoc />
+    /// <remarks>Matches the jsonb boolean, so a string <c>"false"</c> is not taken for it.</remarks>
+    public async Task<IReadOnlyList<string>> GetLiveInvalidLegacyIdsAsync(CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await db.Database.SqlQuery<string>($"""
+            SELECT legacy_id AS "Value" FROM temp_basals
+            WHERE deleted_at IS NULL AND legacy_id IS NOT NULL AND (additional_properties -> 'isValid') = 'false'::jsonb
+            UNION
+            SELECT legacy_id FROM profile_activations
+            WHERE deleted_at IS NULL AND legacy_id IS NOT NULL AND (additional_properties -> 'isValid') = 'false'::jsonb
+            UNION
+            SELECT original_id FROM state_spans
+            WHERE deleted_at IS NULL AND original_id IS NOT NULL
+              AND category IN ({nameof(StateSpanCategory.Override)}, {nameof(StateSpanCategory.TemporaryTarget)})
+              AND (metadata -> 'isValid') = 'false'::jsonb
+            """).OrderBy(id => id).ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task StoreDeletedAsync(
         IReadOnlyCollection<Core.Models.V4.IV4Record> records, IReadOnlyCollection<StateSpan> spans,
         CancellationToken ct = default)

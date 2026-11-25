@@ -6,7 +6,7 @@ namespace Nocturne.Core.Models;
 /// </summary>
 /// <remarks>
 /// Only <c>isValid: true</c> is kept: a treatment uploaded with <c>isValid: false</c> is stored
-/// deleted. A <c>false</c> kept by a record written before that still reads back.
+/// deleted.
 /// </remarks>
 public static class TempBasalUploadedFields
 {
@@ -30,7 +30,7 @@ public static class TempBasalUploadedFields
     public static void Restore(Treatment treatment, IReadOnlyDictionary<string, object?>? record)
     {
         treatment.BolusType = KeptField.String(record, Type);
-        treatment.IsValid = KeptField.Bool(record, IsValid);
+        treatment.IsValid = KeptField.Bool(record, IsValid) is true ? true : null;
         treatment.PumpType = KeptField.String(record, PumpType);
         treatment.PumpSerial = KeptField.String(record, PumpSerial);
     }

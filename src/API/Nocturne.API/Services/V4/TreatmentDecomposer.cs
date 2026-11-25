@@ -1619,10 +1619,15 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         new Dictionary<string, V4Models.CarbIntake>();
 
     /// <inheritdoc />
-    public async Task<int> InvalidateAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
+    public async Task<int> InvalidateAsync(
+        IReadOnlyCollection<string> legacyIds, WriteOrigin origin, CancellationToken ct = default)
     {
-        var stored = await LoadStoredAsync([legacyId], ct);
-        return await InvalidateAsync([legacyId], stored, stored.CorrelationIds(), origin, ct);
+        string[] ids = [.. legacyIds.Distinct(StringComparer.Ordinal)];
+        if (ids.Length == 0)
+            return 0;
+
+        var stored = await LoadStoredAsync(ids, ct);
+        return await InvalidateAsync(ids, stored, stored.CorrelationIds(), origin, ct);
     }
 
     /// <summary>

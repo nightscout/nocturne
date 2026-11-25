@@ -988,6 +988,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ILoopClosedLoopStamper, LoopClosedLoopStamper>();
         services.AddScheduledJob<ProfileVersionsMovedJob>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
+        services.AddScheduledJob<RetireInvalidTreatmentsJob>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddScheduledJob<ApsSnapshotCurvesJob>();
         services.AddScheduledJob<TempBasalOriginCorroborationJob>();
