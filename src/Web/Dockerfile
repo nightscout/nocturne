@@ -1,5 +1,6 @@
 # Requires build context = repo root (not src/Web/)
-# Requires pre-generated API client: run `aspire run` or `dotnet build -t:GenerateClient`
+# Requires pre-generated API client: run `aspire run` or
+# `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true`
 # before building this image.
 #
 # Build: docker build -t nocturne-web:local -f src/Web/Dockerfile .
@@ -27,7 +28,7 @@ RUN pnpm install --frozen-lockfile
 COPY src/Web/packages/api-client/src/ packages/api-client/src/
 COPY src/Web/packages/app/src/lib/api/generated/ packages/app/src/lib/api/generated/
 
-RUN pnpm --filter @nocturne/bridge build 2>/dev/null || true
+RUN pnpm --filter @nocturne/bridge build
 RUN pnpm --filter @nocturne/bot build
 # Extract first; see Dockerfile.web.
 RUN pnpm run translations:sync

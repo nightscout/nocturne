@@ -14,6 +14,8 @@
   } from "#lib/stores/appearance-store.svelte.js";
   import {
     paletteItemsFor,
+    paletteKeywordWords,
+    paletteStatValues,
     groupMeta,
     type CommandPaletteItem,
     type CommandPaletteGroup,
@@ -26,9 +28,6 @@
     recordRecent,
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
-  import { consumableAgeHours } from "./consumable-age";
-  import { LegacyConsumableKind } from "#lib/api/index.js";
-  import { formatAge } from "#lib/components/trackers/age.svelte.js";
   import Star from "@lucide/svelte/icons/star";
   import { Button } from "#lib/components/ui/button/index.js";
 
@@ -45,22 +44,32 @@
 
   let searchValue = $state("");
   let highlighted = $state("");
+  let highlightedId: string | null = null;
   let restoreHighlightTo: string | null = null;
 
-  // A toggled item registers again under its new label, and bits-ui then selects the first item,
-  // more than once. Until the person moves again, a selection goes to the toggled item.
+  // An item whose label changes, a toggled setting or a live stat, registers again under its new
+  // label, and bits-ui then selects the first item, more than once. Until the person moves again,
+  // a selection goes to the item that was highlighted.
   function setHighlighted(next: string) {
     const kept = visibleItems.find((item) => item.id === restoreHighlightTo)?.label;
     highlighted = kept ?? next;
+    if (restoreHighlightTo === null) {
+      highlightedId = visibleItems.find((item) => item.label === next)?.id ?? null;
+    }
   }
 
   const realtimeStore = getRealtimeStore();
 
   const visibleItems = $derived(
-    paletteItemsFor(tenantless, {
-      grantedScopes: page.data.effectivePermissions ?? [],
-      anonymous: !page.data.user,
-    }).filter(
+    paletteItemsFor(
+      tenantless,
+      {
+        grantedScopes: page.data.effectivePermissions ?? [],
+        anonymous: !page.data.user,
+      },
+      paletteKeywordWords(),
+      paletteStatValues(realtimeStore)
+    ).filter(
       (item) =>
         (!item.scope ||
           satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
@@ -109,45 +118,6 @@
       ]);
   });
 
-  function consumableAge(kind: LegacyConsumableKind): string | undefined {
-    const hours = consumableAgeHours(
-      kind,
-      realtimeStore.legacyFallbacks,
-      realtimeStore.legacyCoverage,
-      realtimeStore.trackerInstances,
-      realtimeStore.now
-    );
-    return hours === undefined ? undefined : formatAge(hours);
-  }
-
-  function getStatValue(itemId: string): string | undefined {
-    const pills = realtimeStore.pillsData;
-    switch (itemId) {
-      case "stat-iob":
-        return pills.iob?.display ?? undefined;
-      case "stat-cob":
-        return pills.cob?.display ?? undefined;
-      case "stat-cage":
-        return consumableAge(LegacyConsumableKind.Site);
-      case "stat-sage":
-        return consumableAge(LegacyConsumableKind.Sensor);
-      case "stat-a1c":
-        return undefined;
-      case "stat-tir":
-        return undefined;
-      default:
-        return undefined;
-    }
-  }
-
-  function getItemLabel(item: CommandPaletteItem): string {
-    if (item.group === "stats") {
-      const value = getStatValue(item.id);
-      return value ? `${item.label}: ${value}` : item.label;
-    }
-    return item.label;
-  }
-
   function handleSelect(item: CommandPaletteItem) {
     recordRecent(item.id);
 
@@ -161,7 +131,6 @@
       goto(item.linkedHref);
     } else {
       handleAction(item.id);
-      if (item.group === "quick-settings") restoreHighlightTo = item.id;
     }
   }
 
@@ -199,10 +168,19 @@
     }
   }
 
+  const labelSignature = $derived(visibleItems.map((item) => item.label).join("|"));
+
+  $effect.pre(() => {
+    if (!open) return;
+    void labelSignature;
+    restoreHighlightTo = highlightedId;
+  });
+
   $effect(() => {
     if (!open) {
       searchValue = "";
       restoreHighlightTo = null;
+      highlightedId = null;
     }
   });
 </script>
@@ -213,7 +191,7 @@
     <Icon class="mr-2 h-4 w-4" />
   {/if}
   <div class="flex flex-1 flex-col">
-    <span>{getItemLabel(item)}</span>
+    <span>{item.label}</span>
     {#if item.description}
       <span class="text-xs text-muted-foreground">{item.description}</span>
     {/if}

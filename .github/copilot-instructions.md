@@ -73,11 +73,8 @@ dotnet test --filter "Category!=Integration&Category!=Performance"
 # Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
-# Generate TypeScript API client (uses NSwag with .NET 11)
-dotnet build -t:GenerateClient src/API/Nocturne.API
-
-# Or from the web app directory
-cd src/Web/packages/app && pnpm run generate-api-client
+# Force the API client pipeline (NSwag client, Zod schemas, remote functions)
+dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true
 ```
 
 **VS Code Tasks**: Use `start-aspire`, `start-api`, `build` from Command Palette.

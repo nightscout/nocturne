@@ -4,6 +4,7 @@ import {
   paletteItems,
   paletteItemsFor,
   paletteKeywordWords,
+  paletteStatValues,
   type PaletteKeywordKey,
 } from "./command-palette-items.svelte.js";
 import { isTenantlessRoute } from "#lib/navigation/tenantless-navigation.js";
@@ -228,5 +229,37 @@ describe("quick-settings labels", () => {
 
   it("shows a dark mode that follows the system", () => {
     expect(labelOf("qs-dark-mode")).toBe("Dark mode: System");
+  });
+});
+
+describe("stat labels", () => {
+  const NOW = Date.UTC(2026, 9, 25, 12, 0, 0);
+  const labelOf = (id: string, values = {}) =>
+    paletteItems(undefined, values).find((item) => item.id === id)?.label;
+
+  it("carry the live value after the name", () => {
+    expect(labelOf("stat-iob", { iob: "1.2 U" })).toBe("IOB: 1.2 U");
+    expect(labelOf("stat-cob", { cob: "5 g" })).toBe("COB: 5 g");
+    expect(labelOf("stat-cage", { cage: "2d 2h" })).toBe("CAGE: 2d 2h");
+    expect(labelOf("stat-sage", { sage: "5h" })).toBe("SAGE: 5h");
+  });
+
+  it("are the bare name while there is no value", () => {
+    expect(labelOf("stat-iob")).toBe("IOB");
+    expect(labelOf("stat-sage", { iob: "1.2 U" })).toBe("SAGE");
+  });
+
+  it("read the pills and the consumable ages off the realtime store", () => {
+    const values = paletteStatValues({
+      pillsData: { iob: { display: "1.2 U" } },
+      nowMinute: NOW,
+      legacyFallbacks: [
+        { kind: "Site", latestEventAt: new Date(NOW - 50 * 3600_000).toISOString(), ageHours: 1 },
+      ],
+      legacyCoverage: [],
+      trackerInstances: [],
+    } as unknown as Parameters<typeof paletteStatValues>[0]);
+
+    expect(values).toEqual({ iob: "1.2 U", cob: undefined, cage: "2d 2h", sage: undefined });
   });
 });
