@@ -1,0 +1,64 @@
+name: Translator merge
+
+# Merges a pull request that changes only one locale catalog when its author is that catalog's
+# translator in .github/translators.json, after Tests passes on its head commit
+# (.github/scripts/translator-merge.cjs has the rest of the rules). Translators need no write access.
+#
+# This runs in the base repository with a write token, so it never checks out or runs anything from
+# the pull request: it checks out the default branch for the script and the allowlist, reads the pull
+# request through the API, and fetches the catalog as text.
+#
+# A merge made with this workflow's token starts no push workflow, so it dispatches the image publish
+# on main itself. Workflow_run only fires for a workflow file on the default branch.
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: translator-merge-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: read
+    steps:
+      # The default branch, never the pull request.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/translators.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Merge an allowlisted translator's pull request
+        uses: actions/github-script@v8
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const fs = require("fs");
+            const allowlist = JSON.parse(fs.readFileSync(".github/translators.json", "utf8"));
+            const { run } = require("./.github/scripts/translator-merge.cjs");
+            const merged = await run({ github, context, core, allowlist, headSha: process.env.HEAD_SHA });
+            if (merged) {
+              const { owner, repo } = context.repo;
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: "docker-publish.yml",
+                ref: context.payload.repository.default_branch,
+              });
+            }

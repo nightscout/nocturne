@@ -1,0 +1,8 @@
+{
+  "$comment": "GitHub logins that may merge a pull request changing only their locale file. translator-merge.yml merges it once Tests passes, the CLA is signed and no changed translation breaks a placeholder. The copy on main is the one read.",
+  "src/Web/locales/cs.po": ["mirkotomasek"],
+  "src/Web/locales/de.po": ["BlackSoul697"],
+  "src/Web/locales/es.po": ["josevicns"],
+  "src/Web/locales/fr.po": ["Uneo7"],
+  "src/Web/locales/pl.po": ["Pieselak"]
+}
