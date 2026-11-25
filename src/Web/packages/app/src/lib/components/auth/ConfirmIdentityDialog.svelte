@@ -6,7 +6,7 @@
   import { confirmIdentity } from "./confirm-identity.svelte";
 
   const returnUrl = $derived(page.url.pathname + page.url.search);
-  let showingRecoveryCodes = $state(false);
+  let signingIn = $state(false);
 
   async function signedIn() {
     await invalidateAll();
@@ -22,9 +22,9 @@
 >
   <Dialog.Content
     class="sm:max-w-md"
-    showClose={!showingRecoveryCodes}
-    escapeKeydownBehavior={showingRecoveryCodes ? "ignore" : "close"}
-    interactOutsideBehavior={showingRecoveryCodes ? "ignore" : "close"}
+    showClose={!signingIn}
+    escapeKeydownBehavior={signingIn ? "ignore" : "close"}
+    interactOutsideBehavior={signingIn ? "ignore" : "close"}
   >
     <Dialog.Header>
       <Dialog.Title>Confirm it is you</Dialog.Title>
@@ -37,7 +37,7 @@
       <LoginForm
         {returnUrl}
         onSuccess={signedIn}
-        onShowingRecoveryCodes={(showing) => (showingRecoveryCodes = showing)}
+        onBusyChange={(busy) => (signingIn = busy)}
       />
     {/if}
   </Dialog.Content>
