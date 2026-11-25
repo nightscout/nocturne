@@ -159,8 +159,8 @@ public class NightscoutConnectorBackgroundService
         var address = NightscoutAddress.Resolve(resolvedUrl);
 
         // SocketIOClient does not fall back to polling when the WebSocket upgrade fails, as behind a
-        // proxy that does not pass Upgrade on: it waits out the connect and dials a WebSocket on every
-        // retry. A site whose upgrade failed is connected again on polling alone.
+        // proxy that does not pass Upgrade on: it waits out the connect, and dials a WebSocket on every
+        // reconnect after it. A site whose upgrade failed is connected again on polling alone.
         var (client, upgradeFailed) = await ConnectListenerAsync(
             tenantId, tenantSlug, address, config.ApiSecret, upgrade: true, cancellationToken);
         if (upgradeFailed)
@@ -185,7 +185,8 @@ public class NightscoutConnectorBackgroundService
 
     /// <summary>
     /// The tenant's listener, connected, or null with the failure logged. <c>UpgradeFailed</c> is
-    /// true when the site answered over polling and the WebSocket upgrade then failed.
+    /// true when the connect failed after the site answered over polling, which is where the WebSocket
+    /// upgrade starts.
     /// </summary>
     private async Task<(SocketIO? Client, bool UpgradeFailed)> ConnectListenerAsync(
         Guid tenantId,
