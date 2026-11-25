@@ -203,10 +203,17 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
             }
 
-            // Check for duplicate entry (AAPS expects isDeduplication response)
-            if (entry.Mills > 0)
+            // A create with isValid: false is not a duplicate of the entry its id names: it deletes
+            // it, when the write names it (InvalidUploads in Services/V4).
+            Entry? existingEntry = null;
+            if (entry.IsValid == false)
             {
-                var existingEntry = await _entryService.CheckForDuplicateEntryAsync(
+                if (!string.IsNullOrEmpty(entry.Id))
+                    existingEntry = await _entryService.GetEntryByIdAsync(entry.Id, cancellationToken);
+            }
+            else if (entry.Mills > 0)
+            {
+                existingEntry = await _entryService.CheckForDuplicateEntryAsync(
                     entry.Device,
                     entry.Type ?? "sgv",
                     entry.Mills,
@@ -234,6 +241,9 @@ public class EntriesController : BaseV3Controller<Entry>
                     "Entry creation failed"
                 );
             }
+
+            if (existingEntry != null && createdEntries.Invalidated.Count > 0)
+                return V3Deduplicated(existingEntry.Id, srvModified: null);
 
             _logger.LogDebug("Successfully created V3 entry {Id}", createdEntry.Id);
 
@@ -351,6 +361,9 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
             }
 
+            if (entry.IsValid == false)
+                return IsValidImmutable();
+
             // Ensure the ID matches
             entry.Id = id;
 
@@ -388,8 +401,8 @@ public class EntriesController : BaseV3Controller<Entry>
     /// Partially update an entry via V3 API (JSON merge-patch). Accepts <c>PATCH</c> as AAPS NSClientV3 sends it.
     /// </summary>
     /// <remarks>
-    /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries (e.g. marking
-    /// a value invalid); without this endpoint every such update returns 405.
+    /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries; without this
+    /// endpoint every such update returns 405.
     /// </remarks>
     /// <param name="id">Entry ID to patch</param>
     /// <param name="patchData">JSON merge-patch data to apply to the existing entry</param>
@@ -401,6 +414,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
     public async Task<ActionResult> PatchEntry(
@@ -410,6 +424,9 @@ public class EntriesController : BaseV3Controller<Entry>
     )
     {
         _logger.LogDebug("V3 entry PATCH requested for {Id}", id);
+
+        if (PatchSetsInvalid(patchData))
+            return IsValidImmutable();
 
         var patchedEntry = await _entryService.PatchEntryAsync(id, patchData, cancellationToken);
 

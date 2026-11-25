@@ -27,7 +27,7 @@ public class EntryServiceTests
             .ReturnsAsync(new DecompositionResult());
         _decomposer
             .Setup(x => x.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync(new EntryDecomposition());
 
         _sut = new EntryService(
             _store.Object,
@@ -346,7 +346,7 @@ public class EntryServiceTests
     public async Task ImportEntriesAsync_DecomposesThePageAsABackfill()
     {
         var page = new[] { new Entry { Id = "a", Type = "sgv", Mills = 1 }, new Entry { Id = "b", Type = "note", Mills = 2 } };
-        var decomposed = new DecompositionResult { SkippedUnsupported = 1 };
+        var decomposed = new EntryDecomposition { SkippedUnsupported = 1 };
         _decomposer
             .Setup(x => x.DecomposeBatchAsync(page, WriteOrigin.Backfill, It.IsAny<CancellationToken>()))
             .ReturnsAsync(decomposed);

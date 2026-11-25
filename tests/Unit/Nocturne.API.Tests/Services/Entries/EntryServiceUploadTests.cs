@@ -28,7 +28,7 @@ public class EntryServiceUploadTests
         _decomposer
             .Setup(x => x.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => _written = [.. entries])
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync(new EntryDecomposition());
         StubStoredAt();
 
         _sut = new EntryService(_store.Object, _decomposer.Object, Mock.Of<IEntryCache>(), _logger.Object);

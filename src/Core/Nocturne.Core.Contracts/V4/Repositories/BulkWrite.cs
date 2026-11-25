@@ -51,6 +51,12 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     /// </summary>
     public IReadOnlyList<BulkWriteRejection<TRecord>> Rejected { get; init; } = [];
 
+    /// <summary>
+    /// The submitted records sent with <c>isValid: false</c> that deleted the live record their id
+    /// names, in submission order. The rest of those were stored already deleted, or wrote nothing.
+    /// </summary>
+    public IReadOnlyList<TRecord> Invalidated { get; init; } = [];
+
     public int Count => written.Count;
 
     public TRecord this[int index] => written[index];

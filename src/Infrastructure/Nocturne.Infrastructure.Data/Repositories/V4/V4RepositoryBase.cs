@@ -626,6 +626,42 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return (await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds.ToHashSet(StringComparer.Ordinal), ct)).Held;
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetDeletedLegacyIdsAsync" />
+    public async Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0)
+            return RecreationBlocks<string>.None.Held;
+
+        string[] ids = [.. legacyIds.Distinct(StringComparer.Ordinal)];
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return (await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+                .Where(e => e.DeletedAt != null && e.LegacyId != null && ids.Contains(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.StoreDeletedAsync" />
+    public async Task StoreDeletedAsync(IReadOnlyCollection<TModel> records, CancellationToken ct = default)
+    {
+        if (records.Count == 0)
+            return;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var deletedAt = DateTime.UtcNow;
+        foreach (var record in records)
+        {
+            var row = ToEntity(record);
+            row.DeletedAt = deletedAt;
+            ctx.Set<TEntity>().Add(row);
+        }
+
+        await ctx.SaveChangesAsync(ct);
+        await ReportWrittenAsync();
+    }
+
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync" />
     public async Task<IEnumerable<WriteBackSendable>> GetLegacyIdsWriteBackMaySendAsync(
         IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct = default)
@@ -1106,6 +1142,24 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return await AuditedSoftDeleteAndBroadcastAsync(
             ctx, ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), $"legacy_id={legacyId}",
             DuplicateDelete.EveryCopy, origin, ct);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.InvalidateAsync" />
+    public async Task<int> InvalidateAsync(
+        IReadOnlyCollection<string> legacyIds, IReadOnlyCollection<Guid> ids, WriteOrigin origin,
+        CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0 && ids.Count == 0)
+            return 0;
+
+        string[] keys = [.. legacyIds.Distinct(StringComparer.Ordinal)];
+        Guid[] rows = [.. ids.Distinct()];
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx,
+            ctx.Set<TEntity>().Where(e => (e.LegacyId != null && keys.Contains(e.LegacyId)) || rows.Contains(e.Id)),
+            $"legacy_id={string.Join(",", keys)};id={string.Join(",", rows)}",
+            DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 
     /// <summary>
