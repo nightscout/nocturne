@@ -663,7 +663,9 @@ public class SubjectRepositoryTests : IDisposable
             Name = "New", Username = "old", Email = "old@x.example", Notes = "keep", IsPlatformAdmin = true, LastLoginAt = Now,
         });
 
-        await Subjects().UpdateAsync(id, new SubjectEdit(PreferredLanguage: "fr", Preferences: "{}", ApprovalStatus: "Pending", IsActive: false), CancellationToken.None);
+        await Subjects().GrantPlatformAdminAsync([await CreateAsync(new NewSubject("Other admin"))], CancellationToken.None);
+        (await Subjects().UpdateAsync(id, new SubjectEdit(PreferredLanguage: "fr", Preferences: "{}", ApprovalStatus: "Pending", IsActive: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.Changed>();
         (await GetAsync(id)).Should().BeEquivalentTo(new { PreferredLanguage = "fr", Preferences = "{}" });
         (await GetAsync(id)).Should().BeEquivalentTo(new { ApprovalStatus = "Pending", IsActive = false });
 
@@ -677,7 +679,7 @@ public class SubjectRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task ThePlatformAdminFlagIsReadCountedAndGranted()
+    public async Task ThePlatformAdminFlagIsReadAndGranted()
     {
         var a = await CreateAsync(new NewSubject("A"));
         var b = await CreateAsync(new NewSubject("B"));
@@ -687,7 +689,6 @@ public class SubjectRepositoryTests : IDisposable
         (await Subjects().GrantPlatformAdminAsync([a, b, Guid.CreateVersion7()], CancellationToken.None)).Should().Be(2);
         (await Subjects().GrantPlatformAdminAsync([], CancellationToken.None)).Should().Be(0);
         (await Subjects().AnyPlatformAdminAsync(CancellationToken.None)).Should().BeTrue();
-        (await Subjects().CountPlatformAdminsAsync(CancellationToken.None)).Should().Be(2);
         (await Subjects().IsPlatformAdminAsync(a, CancellationToken.None)).Should().BeTrue();
         (await Subjects().IsPlatformAdminAsync(demo, CancellationToken.None)).Should().BeFalse();
         (await Subjects().IsPlatformAdminAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeFalse();
@@ -696,6 +697,70 @@ public class SubjectRepositoryTests : IDisposable
         (await Subjects().IsDemoSubjectAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeNull("a missing row is not 'not a demo subject'");
         (await Subjects().GetSignInStateAsync(a, CancellationToken.None)).Should().Be(new SubjectSignInState(true, true));
         (await Subjects().GetSignInStateAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PlatformAdministrationIsARightOfAnActiveSubject()
+    {
+        var active = await CreateAsync(new NewSubject("Active"));
+        var deactivated = await CreateAsync(new NewSubject("Deactivated"));
+        await Subjects().GrantPlatformAdminAsync([active, deactivated], CancellationToken.None);
+        await Subjects().UpdateAsync(deactivated, new SubjectEdit(IsActive: false), CancellationToken.None);
+
+        (await Subjects().IsPlatformAdminAsync(active, CancellationToken.None)).Should().BeTrue();
+        (await Subjects().IsPlatformAdminAsync(deactivated, CancellationToken.None)).Should().BeFalse();
+        (await Subjects().GetSignInStateAsync(deactivated, CancellationToken.None))!.IsActivePlatformAdmin.Should().BeFalse();
+        (await Subjects().GetSignInStateAsync(active, CancellationToken.None))!.IsActivePlatformAdmin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TheLastActivePlatformAdminCannotBeDemotedDeactivatedOrDeleted()
+    {
+        var last = await CreateAsync(new NewSubject("Last"));
+        var deactivated = await CreateAsync(new NewSubject("Deactivated", IsActive: false));
+        await Subjects().GrantPlatformAdminAsync([last, deactivated], CancellationToken.None);
+
+        (await Subjects().UpdateAsync(last, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+        (await Subjects().UpdateAsync(last, new SubjectEdit(IsActive: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+        (await Subjects().DeleteAsync(last, CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+        (await GetAsync(last)).Should().BeEquivalentTo(new { IsActive = true, IsPlatformAdmin = true });
+
+        (await Subjects().UpdateAsync(deactivated, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.Changed>("an inactive admin is not the one that keeps the instance administered");
+        (await Subjects().UpdateAsync(last, new SubjectEdit(Name: "Renamed"), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.Changed>();
+    }
+
+    [Fact]
+    public async Task APlatformAdminCanBeDemotedDeactivatedOrDeletedWhileAnotherActiveAdminRemains()
+    {
+        var keeper = await CreateAsync(new NewSubject("Keeper"));
+        var demoted = await CreateAsync(new NewSubject("Demoted"));
+        var deactivated = await CreateAsync(new NewSubject("Deactivated"));
+        var deleted = await CreateAsync(new NewSubject("Deleted"));
+        await Subjects().GrantPlatformAdminAsync([keeper, demoted, deactivated, deleted], CancellationToken.None);
+
+        (await Subjects().UpdateAsync(demoted, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await Subjects().UpdateAsync(deactivated, new SubjectEdit(IsActive: false), CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await Subjects().DeleteAsync(deleted, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await Subjects().UpdateAsync(keeper, new SubjectEdit(IsActive: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+    }
+
+    [Fact]
+    public async Task ASystemSubjectDoesNotKeepTheInstanceAdministered()
+    {
+        var person = await CreateAsync(new NewSubject("Person"));
+        var system = await CreateAsync(new NewSubject("System", IsSystemSubject: true));
+        await Subjects().GrantPlatformAdminAsync([person, system], CancellationToken.None);
+
+        (await Subjects().UpdateAsync(person, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+        (await Subjects().UpdateAsync(system, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.Changed>();
     }
 
     [Fact]

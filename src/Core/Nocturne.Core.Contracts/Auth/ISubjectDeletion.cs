@@ -24,7 +24,8 @@ public interface ISubjectDeletion
     /// <see cref="SubjectChange.Changed"/> when deleted, <see cref="SubjectChange.LastOwnerOf"/> naming
     /// the tenants when the subject is the last owner of any, <see cref="SubjectChange.LastManagerOf"/>
     /// naming the teams when the subject is the last manager of any with other members,
-    /// <see cref="SubjectChange.NotFound"/> when it does not exist or is a system subject.
+    /// <see cref="SubjectChange.LastActivePlatformAdmin"/> when it is the instance's last active
+    /// platform admin, <see cref="SubjectChange.NotFound"/> when it does not exist or is a system subject.
     /// </returns>
     Task<SubjectDeletionOutcome> DeleteAsync(Guid subjectId, bool evenLastOwner, CancellationToken ct);
 }

@@ -119,6 +119,23 @@ public class PlatformAdminStandingTests
             .Should().BeEquivalentTo(presentsStanding ? ["platform_admin"] : Array.Empty<string>());
     }
 
+    /// <summary>
+    /// Platform administration is a right of an active subject: a deactivated platform admin's
+    /// credential is accepted but presents no standing, with or without a resolved tenant.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADeactivatedSubject_PresentsNoPlatformAdminStanding(bool tenantResolved)
+    {
+        var active = await RunAsync(new StubHandler(SessionOf(AuthType.SessionCookie, handedOff: false, tenantResolved)), isActive: true, tenantResolved);
+        var deactivated = await RunAsync(new StubHandler(SessionOf(AuthType.SessionCookie, handedOff: false, tenantResolved)), isActive: false, tenantResolved);
+
+        IsPlatformAdmin(active).Should().BeTrue();
+        deactivated.User.Identity?.IsAuthenticated.Should().BeTrue();
+        IsPlatformAdmin(deactivated).Should().BeFalse();
+    }
+
     private static bool IsPlatformAdmin(HttpContext context) =>
         context.User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "platform_admin");
 
@@ -143,19 +160,20 @@ public class PlatformAdminStandingTests
                 NullLogger<InstanceKeyHandler>.Instance)
             : new StubHandler(SessionOf(authType, handedOff: false));
 
-    private static AuthContext SessionOf(AuthType authType, bool handedOff) => new()
+    private static AuthContext SessionOf(AuthType authType, bool handedOff, bool tenantResolved = true) => new()
     {
         IsAuthenticated = true,
         AuthType = authType,
         SubjectId = SubjectId,
-        TenantId = TenantId,
+        TenantId = tenantResolved ? TenantId : null,
         SubjectName = "Operator",
         IsHandedOff = handedOff,
     };
 
     private static Task<DefaultHttpContext> RunAsync(AuthType authType) => RunAsync(HandlerFor(authType));
 
-    private static async Task<DefaultHttpContext> RunAsync(IAuthHandler handler)
+    /// <param name="tenantResolved">False runs the request on the apex, where no membership is read alongside the flag.</param>
+    private static async Task<DefaultHttpContext> RunAsync(IAuthHandler handler, bool isActive = true, bool tenantResolved = true)
     {
         var dbName = $"platform_admin_standing_{Guid.NewGuid()}";
         var services = new ServiceCollection();
@@ -174,7 +192,7 @@ public class PlatformAdminStandingTests
             {
                 Id = SubjectId,
                 Name = "Operator",
-                IsActive = true,
+                IsActive = isActive,
                 IsPlatformAdmin = true,
                 ApprovalStatus = "Approved",
             });
@@ -186,7 +204,8 @@ public class PlatformAdminStandingTests
         }
 
         var context = new DefaultHttpContext { RequestServices = provider };
-        context.Items["TenantContext"] = new TenantContext(TenantId, "site", "Site", true, false);
+        if (tenantResolved)
+            context.Items["TenantContext"] = new TenantContext(TenantId, "site", "Site", true, false);
 
         var middleware = new AuthenticationMiddleware(
             next: _ => Task.CompletedTask,

@@ -167,7 +167,7 @@ public class AuthContext
 
     /// <summary>
     /// Whether this subject has platform-level admin access.
-    /// Set by AuthenticationMiddleware from the subject's IsPlatformAdmin flag.
+    /// Set by AuthenticationMiddleware from <see cref="SubjectSignInState.IsActivePlatformAdmin"/>.
     /// </summary>
     public bool IsPlatformAdmin { get; set; }
 
