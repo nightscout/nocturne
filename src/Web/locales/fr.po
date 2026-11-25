@@ -50347,7 +50347,6 @@ msgstr ""
 msgid "{0} did not get the test alert."
 msgstr ""
 
-
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 msgid "Add a color boundary here"
 msgstr ""

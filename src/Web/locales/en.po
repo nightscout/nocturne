@@ -50344,7 +50344,6 @@ msgstr "{0} did not get the test alert. This channel has stopped."
 msgid "{0} did not get the test alert."
 msgstr "{0} did not get the test alert."
 
-
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 msgid "Add a color boundary here"
 msgstr "Add a color boundary here"
