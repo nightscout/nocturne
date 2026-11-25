@@ -81,17 +81,23 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         var syncIdentifier = entity.SyncIdentifier;
         if (!string.IsNullOrEmpty(dataSource) && !string.IsNullOrEmpty(syncIdentifier))
         {
-            var existing = await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct);
+            var existing = await ctx.WriteWithHistoryClampLiftedAsync(
+                token => FindGoverningRowAsync(ctx, dataSource, syncIdentifier, token), ct);
 
             if (existing?.DeletedAt != null)
                 throw RecreationBlockedException.ForSyncKey(typeof(TModel).Name, dataSource, syncIdentifier);
 
             if (existing != null)
             {
+                var hidden = (await HiddenAsync(ctx, [existing], ct)).Count > 0;
                 var before = ToDomain(existing);
-                WriteSyncUpsert(existing, model);
-                await SaveWriteAsync(ctx, existing, before.Timestamp, ct);
-                var upserted = ToDomain(existing);
+                WriteSyncUpsert(existing, model, hidden);
+                if (hidden)
+                    await ctx.WriteWithHistoryClampLiftedAsync(
+                        token => SaveWriteAsync(ctx, existing, before.Timestamp, token), ct);
+                else
+                    await SaveWriteAsync(ctx, existing, before.Timestamp, ct);
+                var upserted = hidden ? AsSent(entity, existing) : ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
                 await RaiseBroadcastAsync([], [upserted], [], origin, ct, vacated: [before]);
                 return new SyncUpsert<TModel>(upserted, Created: false);
@@ -112,25 +118,38 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <see cref="ApplySyncUpsert"/>, keeping the row's stored legacy id over the one the create
     /// carries. That id is the key the row was first answered and written back under; a resend
     /// that names the row only by its sync key, under another id, would otherwise move it, and
-    /// write-back would look for the row's copy upstream under a key that copy never had.
+    /// write-back would look for the row's copy upstream under a key that copy never had. A row the
+    /// history clamp hides also keeps its correlation id (<see cref="V4RepositoryBase{TModel,TEntity}.KeepCorrelationId"/>).
     /// </summary>
-    private void WriteSyncUpsert(TEntity existing, TModel model)
+    private void WriteSyncUpsert(TEntity existing, TModel model, bool hidden)
     {
         var storedLegacyId = existing.LegacyId;
+        var storedCorrelationId = existing.CorrelationId;
         ApplySyncUpsert(existing, model);
         if (!string.IsNullOrEmpty(storedLegacyId))
             existing.LegacyId = storedLegacyId;
+        if (hidden)
+            KeepCorrelationId(existing, storedCorrelationId);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.ISyncKeyedRepository{T}.IsRecreationBlockedAsync" />
+    /// <remarks>
+    /// Reads with the history clamp lifted, as <see cref="UpsertAsync"/> matches, so it refuses what that
+    /// write would refuse. It tells the caller no more than the write's own refusal does.
+    /// </remarks>
     public async Task<bool> IsRecreationBlockedAsync(
         string dataSource, string syncIdentifier, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct) is { DeletedAt: not null };
+        return await ctx.WriteWithHistoryClampLiftedAsync(
+            token => FindGoverningRowAsync(ctx, dataSource, syncIdentifier, token), ct) is { DeletedAt: not null };
     }
 
     /// <inheritdoc cref="ISyncKeyedRepository{T}.GetUpsertTargetTimestampsAsync" />
+    /// <remarks>
+    /// Reads with the history clamp lifted, as the write matches, so the footprint holds the stored time of
+    /// a row the clamp hides. The times only key cache clears and never reach the caller.
+    /// </remarks>
     public async Task<IReadOnlyList<DateTime>> GetUpsertTargetTimestampsAsync(
         IReadOnlyCollection<TModel> records, CancellationToken ct = default)
     {
@@ -147,10 +166,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         await using var ctx = await ContextFactory.CreateAsync(ct);
         // Over-fetches by a Cartesian amount, as SplitUpsertsAsync does, on the same index.
-        var rows = await ctx.Set<TEntity>().AsNoTracking()
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .Select(e => new { e.DataSource, e.SyncIdentifier, e.Timestamp })
-            .ToListAsync(ct);
+        var rows = await ctx.WriteWithHistoryClampLiftedAsync(
+            token => ctx.Set<TEntity>().AsNoTracking()
+                .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+                .Select(e => new { e.DataSource, e.SyncIdentifier, e.Timestamp })
+                .ToListAsync(token),
+            ct);
 
         return [.. rows.Where(r => keys.Contains((r.DataSource!, r.SyncIdentifier!))).Select(r => r.Timestamp)];
     }
@@ -189,8 +210,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         if (!entities.Any(e => e.SyncKey() is not null))
             return UpsertSplit.Empty(entities);
 
-        var existingByKey = await ctx.Set<TEntity>().IncludingDeleted()
-            .GoverningRowsBySyncKeyAsync(entities, ct);
+        var existingByKey = await ctx.WriteWithHistoryClampLiftedAsync(
+            token => ctx.Set<TEntity>().IncludingDeleted().GoverningRowsBySyncKeyAsync(entities, token), ct);
+        var hidden = await HiddenAsync(ctx, existingByKey.Values, ct);
 
         var toInsert = new List<TEntity>();
         var split = UpsertSplit.Empty(toInsert);
@@ -206,8 +228,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                 }
 
                 var before = ToDomain(existing);
-                WriteSyncUpsert(existing, ToDomain(entity));
-                split.Classify(ctx, existing, before);
+                var isHidden = hidden.Contains(existing);
+                WriteSyncUpsert(existing, ToDomain(entity), isHidden);
+                split.Classify(ctx, existing, before, isHidden ? entity : null);
             }
             else
             {

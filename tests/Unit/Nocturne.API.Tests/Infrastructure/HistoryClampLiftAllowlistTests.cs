@@ -50,6 +50,22 @@ public class HistoryClampLiftAllowlistTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/StateSpanRepository.cs: StateSpanRepository.UpsertBatchAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SystemEventRepository.cs: SystemEventRepository.HiddenRowsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SystemEventRepository.cs: SystemEventRepository.SaveBatchAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SyncUpsertRepositoryBase.cs: SyncUpsertRepositoryBase.SplitUpsertsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SyncUpsertRepositoryBase.cs: SyncUpsertRepositoryBase.UpsertAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/V4RepositoryBase.cs: V4RepositoryBase.SplitLegacyIdUpdatesAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/V4RepositoryBase.cs: V4RepositoryBase.UpsertSplit.SaveAsync",
+        // The unique legacy-id index spans the tenant, so an insert checks the ids hidden rows hold; the
+        // check only decides whether to insert, and returns no row.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/V4RepositoryBase.cs: V4RepositoryBase.BlockingLegacyIdsAsync",
+        // A status's extras row and sensor state report are held off a re-send by the correlation id their
+        // group's stored rows hold, hidden or not; the check only decides whether to insert, and returns no row.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/DeviceStatusExtrasRepository.cs: DeviceStatusExtrasRepository.BlockingCorrelationIdsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SensorStateReportRepository.cs: SensorStateReportRepository.SplitUpsertsAsync",
+        // The meal endpoint's recreation check agrees with the lifted sync-key match it guards; it returns a
+        // bool the write's own refusal already gives.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SyncUpsertRepositoryBase.cs: SyncUpsertRepositoryBase.IsRecreationBlockedAsync",
+        // The stored times a sync-key upsert moves only key cache clears and never reach the caller.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SyncUpsertRepositoryBase.cs: SyncUpsertRepositoryBase.GetUpsertTargetTimestampsAsync",
         // Each glucose stream's first arrival feeds only replay's internal classification of readings as
         // live arrivals or imported history; no row of it reaches the caller.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SensorGlucoseRepository.cs: SensorGlucoseRepository.GetStreamFirstArrivalsAsync",
