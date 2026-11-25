@@ -179,19 +179,75 @@ internal static class DuplicateMatching
         sources.Count > 0 && !sources.Contains(DeduplicationInput.UnknownDataSource);
 
     /// <summary>
-    /// Whether the tight path refuses to put a record from <paramref name="source"/> into a group
-    /// already holding <paramref name="groupSources"/>. Two same-amount records from one source
-    /// seconds apart are two doses, and the tight window's tolerances cannot tell them from one, so
-    /// a group takes at most one record per source. The exception is a source and record type that
+    /// Whether the tight path refuses to put <paramref name="record"/> into a group of
+    /// <paramref name="members"/>. Two same-amount records from one source seconds apart are two doses,
+    /// and the tight window's tolerances cannot tell them from one, so a group takes at most one record
+    /// per source (<see cref="HoldsSourceAgainst"/>). The exception is a source and record type that
     /// <see cref="EmitsDuplicateEvents"/>, whose twins must still merge.
     /// <see cref="DeduplicationInput.UnknownDataSource"/> counts as one source like any other.
     /// Only dose-like record types are guarded; see <see cref="TracksTightSources"/>.
     /// </summary>
-    internal static bool RefusesTightJoin(RecordType recordType, string source, IReadOnlySet<string>? groupSources) =>
+    internal static bool RefusesTightJoin(
+        RecordType recordType,
+        LinkedRecordTypes.GroupMember record,
+        IReadOnlyList<LinkedRecordTypes.GroupMember>? members,
+        IReadOnlyDictionary<Guid, RecordInfo> info) =>
         TracksTightSources(recordType)
-        && !EmitsDuplicateEvents(recordType, source)
-        && groupSources is not null
-        && groupSources.Contains(source);
+        && !EmitsDuplicateEvents(recordType, record.DataSource)
+        && members is not null
+        && HoldsSourceAgainst(members, record, info);
+
+    /// <summary>
+    /// Whether one of <paramref name="members"/> holds <paramref name="record"/>'s source against it: it
+    /// comes from that source and is not the record written again (<see cref="IsWrittenAgain"/>). A
+    /// source that withdrew its copy of a linked dose and writes it again rejoins the group rather than
+    /// standing beside the surviving copy as a second dose, and a distinct dose of that source stays
+    /// apart.
+    /// </summary>
+    /// <remarks>
+    /// Allocates nothing: the merge asks it of every pair of matching groups, and a source that
+    /// re-inserts its records on every sync makes those pairs by the hundred thousand.
+    /// </remarks>
+    internal static bool HoldsSourceAgainst(
+        IReadOnlyList<LinkedRecordTypes.GroupMember> members,
+        LinkedRecordTypes.GroupMember record,
+        IReadOnlyDictionary<Guid, RecordInfo> info)
+    {
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (string.Equals(members[i].DataSource, record.DataSource, StringComparison.OrdinalIgnoreCase)
+                && !IsWrittenAgain(members[i], record, info))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The sources of the <paramref name="members"/> that hold their source against
+    /// <paramref name="record"/>: every source but the record's own, and that one when
+    /// <see cref="HoldsSourceAgainst"/>.
+    /// </summary>
+    internal static HashSet<string> SourcesHeldAgainst(
+        IEnumerable<LinkedRecordTypes.GroupMember> members,
+        LinkedRecordTypes.GroupMember record,
+        IReadOnlyDictionary<Guid, RecordInfo> info) =>
+        members.Where(m => !IsWrittenAgain(m, record, info))
+            .Select(m => m.DataSource)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether one of two records is the other written again: one source wrote both, one of them is
+    /// deleted, and <see cref="RecordInfo.IsWrittenAgainAs"/> holds. A record not in
+    /// <paramref name="info"/> is never written again.
+    /// </summary>
+    private static bool IsWrittenAgain(
+        LinkedRecordTypes.GroupMember a, LinkedRecordTypes.GroupMember b, IReadOnlyDictionary<Guid, RecordInfo> info) =>
+        string.Equals(a.DataSource, b.DataSource, StringComparison.OrdinalIgnoreCase)
+        && info.TryGetValue(a.RecordId, out var first)
+        && info.TryGetValue(b.RecordId, out var second)
+        && (first.IsDeleted || second.IsDeleted)
+        && first.IsWrittenAgainAs(second);
 
     /// <summary>
     /// True for a source and record type known to report one event twice under two ids. Tidepool

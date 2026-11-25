@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Interfaces;
@@ -9,7 +10,9 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Xunit;
 using Xunit.Abstractions;
 using V4Models = Nocturne.Core.Models.V4;
@@ -120,6 +123,66 @@ public class SourceRewriteDeduplicationIntegrationTests(ApiIntegrationTestFixtur
 
         (await BolusesOnBoardAsync()).Should().Be(1);
         (await ServedTreatmentsAsync()).Should().Be(1);
+    }
+
+    /// <summary>
+    /// Each withdrawn copy stays in the group as a deleted member. None of them holds its source against
+    /// the next copy written again, so the dose is still counted once, and a merge over the group finds
+    /// nothing to change.
+    /// </summary>
+    [Fact]
+    public async Task A_copy_its_source_withdraws_and_reports_again_twice_is_counted_once()
+    {
+        var legacyId = "glooko_bolus_" + Guid.NewGuid().ToString("N");
+        await LinkAndWithdrawAsync(legacyId);
+
+        for (var cycle = 0; cycle < 2; cycle++)
+        {
+            await using (var scope = OpenTenantScope())
+            {
+                await scope.ServiceProvider.GetRequiredService<IBolusRepository>()
+                    .CreateAsync(Copy(Withdrawing, legacyId, 5), WriteOrigin.Live);
+            }
+            (await BolusesOnBoardAsync()).Should().Be(1);
+
+            if (cycle == 0)
+            {
+                await using var scope = OpenTenantScope();
+                await scope.ServiceProvider.GetRequiredService<ITreatmentService>()
+                    .DeleteFromSourceAsync(Withdrawing, new HashSet<string> { legacyId });
+                (await BolusesOnBoardAsync()).Should().Be(1, "the other source's copy is promoted again");
+            }
+        }
+
+        (await ServedTreatmentsAsync()).Should().Be(1);
+
+        var links = await BolusLinksAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().ContainSingle();
+        links.Should().ContainSingle(l => l.DataSource == "pump-connector").Which.Deleted.Should().BeFalse();
+        var withdrawing = links.Where(l => l.DataSource == Withdrawing).ToList();
+        withdrawing.Should().HaveCount(3);
+        withdrawing.Count(l => l.Deleted).Should().Be(2);
+
+        await using (var scope = OpenTenantScope())
+        {
+            (await scope.ServiceProvider.GetRequiredService<DuplicateReconciler>()
+                .MergeAllAsync(RecordType.Bolus, CancellationToken.None)).Should().Be(0);
+        }
+
+        (await BolusesOnBoardAsync()).Should().Be(1);
+        (await ServedTreatmentsAsync()).Should().Be(1);
+    }
+
+    /// <summary>The tenant's bolus links, each with whether its record is deleted.</summary>
+    private async Task<List<(Guid CanonicalId, string DataSource, bool Deleted)>> BolusLinksAsync()
+    {
+        await using var scope = OpenTenantScope();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+        var key = RecordTypeKeys.Key(RecordType.Bolus);
+        var links = await db.LinkedRecords.AsNoTracking().Where(l => l.RecordType == key).ToListAsync();
+        var deleted = await db.Boluses.IncludingDeleted().AsNoTracking()
+            .Where(b => b.DeletedAt != null).Select(b => b.Id).ToListAsync();
+        return [.. links.Select(l => (l.CanonicalId, l.DataSource, deleted.Contains(l.RecordId)))];
     }
 
     [Fact]
