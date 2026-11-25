@@ -155,6 +155,7 @@ public static class BuiltInNotificationTemplates
             {
                 Type = type,
                 Category = NotificationCategory.Informational,
+                NamesSubject = false,
                 DefaultUrgency = NotificationUrgency.Info,
                 Icon = "users",
                 Source = source
