@@ -82,11 +82,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
         Failure Failure);
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor(), failure)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly, interceptors: [failure]);
 
     /// <summary>A definition with one 24h threshold, synced to its managed rule, which holds re-arm.</summary>
     private async Task<Setup> CreateAsync()

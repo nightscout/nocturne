@@ -35,14 +35,11 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
             ApplicationName = ApplicationName,
         }.ConnectionString;
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(connectionString, configuration: null, c =>
+        _provider = TestContexts.BuildProvider(connectionString, c =>
         {
             c.MaxPoolSize = 1;
             c.MaxAutoPrepare = 10;
         });
-        _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
         _tenant = await TenantReaderData.SeedTenantAsync(_fx, _provider);
     }

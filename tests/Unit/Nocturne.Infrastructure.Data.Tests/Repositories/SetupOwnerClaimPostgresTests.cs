@@ -40,14 +40,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     }
 
     private static NocturneDbContext Context(string connectionString, Guid tenant, bool retrying = false) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, o =>
-            {
-                if (retrying)
-                    o.EnableRetryOnFailure();
-            })
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant, npgsql: retrying ? TestContexts.Retrying : null);
 
     /// <summary>Contexts as the setup request's scope opens them: no tenant, with the runtime retry strategy.</summary>
     private SuppliedContextFactory Contexts(bool retrying) =>
@@ -257,5 +250,4 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await using var db = Context(database.AppConnectionString, Guid.Empty);
         return await db.Tenants.AsNoTracking().Where(t => t.Id == tenant).Select(t => t.SetupOwnerSubjectId).SingleAsync();
     }
-
 }

@@ -67,7 +67,7 @@ public partial class TeamAccessEndPostgresTests
         new(site.Tenant, roles, limit, end, teamManagesStaff);
 
     private async Task ApproveSiteRowsAsync(Site site) =>
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             UPDATE team_site_staff SET status = 'approved'
              WHERE team_tenant_access_id IN (SELECT id FROM team_tenant_access WHERE tenant_id = '{site.Tenant}');
@@ -172,7 +172,8 @@ public partial class TeamAccessEndPostgresTests
     {
         var (site, _, access, staff) = await StaffWithReasonAsync("unknown-ceiling");
         var made = await MadeByAsync(site, staff);
-        await ExecuteAsync($"UPDATE team_members SET role_ceiling_slug = 'retired' WHERE subject_id = '{staff}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_members SET role_ceiling_slug = 'retired' WHERE subject_id = '{staff}'");
 
         await ReconcileAsync();
 

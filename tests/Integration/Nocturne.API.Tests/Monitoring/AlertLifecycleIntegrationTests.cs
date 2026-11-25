@@ -236,7 +236,9 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
 
         await conn.ExecuteAsync("UPDATE alert_excursions SET ended_at = now() WHERE id = @excursionId;", ("excursionId", excursionId));
 
-        await conn.ExecuteAsync("UPDATE alert_instances SET status = 'resolved', resolved_at = now() WHERE alert_excursion_id = @excursionId;", ("excursionId", excursionId));
+        await conn.ExecuteAsync(
+            "UPDATE alert_instances SET status = 'resolved', resolved_at = now() WHERE alert_excursion_id = @excursionId;",
+            ("excursionId", excursionId));
 
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 

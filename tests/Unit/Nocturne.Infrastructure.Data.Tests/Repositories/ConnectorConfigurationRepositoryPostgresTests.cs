@@ -38,10 +38,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private ConnectorConfigurationRepository Configurations(Guid scope) => new(new SuppliedContextFactory(() => Context(scope)));
 

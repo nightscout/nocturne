@@ -94,10 +94,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
 
     private NocturneDbContext Context(Guid tenant, Guid? actor)
     {
-        var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
+        var context = TestContexts.Context(database.AppConnectionString)
             .ActingAs(actor is { } subject ? new TestAuditActor { SubjectId = subject } : null);
         context.TenantId = tenant;
         return context;
@@ -163,7 +160,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-access-end', true, now(), now());
             """);
@@ -601,9 +598,6 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         await ahead.WaitAsync(Eventually.DefaultPatience);
         await behind.WaitAsync(Eventually.DefaultPatience);
     }
-
-    private Task ExecuteAsync(string sql) =>
-        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, sql);
 
     private async Task<List<string>> ReadAsync(string sql)
     {

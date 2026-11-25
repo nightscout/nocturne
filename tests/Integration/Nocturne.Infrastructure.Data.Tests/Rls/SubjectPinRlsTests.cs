@@ -3,8 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -334,10 +334,7 @@ public class SubjectPinRlsTests : IAsyncLifetime
     {
         await using var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(
             new PostgreSqlConfiguration { ConnectionString = _fx.AppConnectionString, MaxPoolSize = 1 });
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(dataSource);
 
         int pinnedPid;
         await using (var pinned = new NocturneDbContext(options) { SubjectId = _subjectA })

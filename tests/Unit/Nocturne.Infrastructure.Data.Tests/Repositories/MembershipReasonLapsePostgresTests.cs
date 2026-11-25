@@ -48,10 +48,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     }
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private sealed record Site(
         string App, string Migrator, Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner,

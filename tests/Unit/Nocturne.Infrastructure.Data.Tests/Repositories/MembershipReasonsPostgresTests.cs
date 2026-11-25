@@ -51,10 +51,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     }
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private sealed record Seeded(
         Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
@@ -110,11 +107,15 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     {
         var s = await SeedTenantAsync("writes");
         var invite = Guid.CreateVersion7();
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+        await using (var conn = await NpgsqlTestCommands.OpenAsync(database.MigratorConnectionString))
+        {
+            await conn.PinTenantAsync(s.Tenant);
+            await conn.ExecuteAsync($"""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES ('{invite}', '{s.Tenant}', '{s.Owner}', '{invite:N}', false, now() + interval '1 day', 0, now());
             """);
+        }
+
         var subject = await NewSubjectAsync(s, "writes-member");
 
         (await s.Members.AddMemberAsync(new NewTenantMember(
@@ -287,7 +288,8 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             {TeamReasonSql.StaffOfMember(teamAccess, team, null, false, null)}
             """);
         var rowsBefore = await RowsAsync(migrator);
-        var teamReasonsBefore = await NpgsqlTestCommands.ScalarAsync<long>(migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");
+        var teamReasonsBefore = await NpgsqlTestCommands.ScalarAsync<long>(
+            migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");
 
         var logger = new RecordingLogger();
         await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
@@ -306,7 +308,8 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         driftReason.ReasonRoles.Should().BeEmpty();
         (await MembershipReasons.MatchesAsync(db, drift, Now, Ct)).Should().BeTrue();
 
-        (await NpgsqlTestCommands.ScalarAsync<long>(migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'"))
             .Should().Be(teamReasonsBefore);
         (await MembershipReasons.MatchesAsync(db, team, Now, Ct)).Should().BeTrue("a member with a reason of another kind is projected from its reasons");
         (await db.TenantMembers.AsNoTracking().SingleAsync(m => m.Id == team)).LimitTo24Hours.Should().BeFalse();

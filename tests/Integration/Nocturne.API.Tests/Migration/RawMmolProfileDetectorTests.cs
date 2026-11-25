@@ -191,7 +191,6 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
                 """);
         }
     }
-
 }
 
 /// <summary>
@@ -215,10 +214,7 @@ public class RawMmolProfileDetectorTests : IClassFixture<RawMmolProfileStoresFix
     public async Task DisposeAsync() => await _dataSource.DisposeAsync();
 
     private INocturneDbContextFactory Contexts(Guid tenant) =>
-        new OptionsFactory(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options).AsNocturneFactory(tenant);
+        new OptionsFactory(TestContexts.Options(_dataSource)).AsNocturneFactory(tenant);
 
     private RawMmolProfileDetector Detector(Guid tenant) => new(Contexts(tenant));
 

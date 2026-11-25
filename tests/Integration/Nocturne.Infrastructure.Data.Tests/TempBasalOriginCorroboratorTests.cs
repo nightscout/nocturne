@@ -130,11 +130,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     }
 
     private NocturneDbContext Context(Guid pinnedTo, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .AddInterceptors(interceptors)
-            .Options) { TenantId = pinnedTo };
+        TestContexts.Context(_database.AppConnectionString, pinnedTo, interceptors);
 
     /// <summary>Cancels the run once its first page has committed, so the run stops on that event and not on a clock.</summary>
     private sealed class CancelAfterFirstCommit(CancellationTokenSource run) : DbTransactionInterceptor
@@ -458,10 +454,7 @@ public class TempBasalOriginCorroboratorConcurrencyTests(TempBasalOriginCorrobor
 
         var corroborate = Task.Run(async () =>
         {
-            await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(fixture.Database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options) { TenantId = Tenant };
+            await using var db = TestContexts.Context(fixture.Database.AppConnectionString, Tenant);
             return await TempBasalOriginCorroborator.CorroborateTenantAsync(
                 db, Tenant, DateTime.UtcNow.AddMinutes(-30), 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
         });

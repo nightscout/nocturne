@@ -31,14 +31,9 @@ internal sealed record ReaderCounts(long Steps, long Foods, long Notes, long Spa
 
 internal static class TenantReaderData
 {
-    public static ServiceProvider BuildProvider(string connectionString)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(connectionString, configuration: null);
-        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
-        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-    }
+    public static ServiceProvider BuildProvider(string connectionString) =>
+        TestContexts.BuildProvider(
+            connectionString, configure: services => services.AddScoped<ITenantAccessor, SettableTenantAccessor>());
 
     public static async Task<Guid> SeedTenantAsync(RlsCompletenessFixture fx, IServiceProvider root)
     {

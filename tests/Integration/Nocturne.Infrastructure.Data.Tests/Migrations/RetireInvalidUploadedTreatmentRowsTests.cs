@@ -49,7 +49,7 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
         _app = database.AppConnectionString;
 
         foreach (var tenant in Tenants)
-            await ExecuteAsync($"""
+            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
                 INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
                 VALUES ('{tenant}', 'ri-{tenant:N}', 'ri', true, now(), now());
                 """);
@@ -90,7 +90,7 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
                 .GetLiveInvalidLegacyIdsAsync(CancellationToken.None);
         }
 
-        await ExecuteAsync(RetireInvalidUploadedTreatmentRows.RequestSql);
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, RetireInvalidUploadedTreatmentRows.RequestSql);
         LedgerAfterSecondRun = await LedgerAsync();
 
         await MigrateToAsync(PriorMigration);
@@ -100,7 +100,7 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     private Task TempBasalAsync(Guid tenant, string? legacyId, string? kept, bool deleted = false) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             SELECT set_config('app.current_tenant_id', '{tenant}', false);
             INSERT INTO temp_basals (id, tenant_id, start_timestamp, origin, legacy_id, additional_properties, deleted_at, deleted_by_user)
             VALUES ('{Guid.CreateVersion7()}', '{tenant}', now(), 'Algorithm', {Text(legacyId)}, {Json(kept)},
@@ -108,7 +108,7 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
             """);
 
     private Task ActivationAsync(Guid tenant, string legacyId, string? kept, bool deleted = false) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             SELECT set_config('app.current_tenant_id', '{tenant}', false);
             INSERT INTO profile_activations
                 (id, tenant_id, start_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms,
@@ -118,7 +118,7 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
             """);
 
     private Task SpanAsync(Guid tenant, string category, string? legacyId, string? kept, bool deleted = false) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             SELECT set_config('app.current_tenant_id', '{tenant}', false);
             INSERT INTO state_spans (id, tenant_id, category, state, start_timestamp, original_id, metadata, deleted_at, deleted_by_user)
             VALUES ('{Guid.CreateVersion7()}', '{tenant}', '{category}', 'Custom', now(), {Text(legacyId)}, {Json(kept)},
@@ -138,10 +138,7 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
     }
 
     private static DbContextOptions<NocturneDbContext> Options(string connectionString) =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(connectionString);
 
     private async Task<List<(Guid Tenant, bool Due, int Attempts)>> LedgerAsync()
     {
@@ -156,9 +153,6 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
             rows.Add((reader.GetGuid(0), reader.GetBoolean(1), reader.GetInt32(2)));
         return rows;
     }
-
-    private Task ExecuteAsync(string sql) =>
-        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 }
 
 [Trait("Category", "Integration")]

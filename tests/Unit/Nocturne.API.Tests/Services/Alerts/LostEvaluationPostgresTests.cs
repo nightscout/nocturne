@@ -276,10 +276,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Tenant> SeedAsync(
         bool withRule = true, AlertConditionType condition = AlertConditionType.Threshold, string conditionParams = Low)

@@ -87,11 +87,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
     }
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor(), failure)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly, interceptors: [failure]);
 
     private async Task<(AlertRulesController Controller, Guid Tenant, Guid Rule, Failure Failure)> CreateAsync(
         string clientConfiguration = "{}")

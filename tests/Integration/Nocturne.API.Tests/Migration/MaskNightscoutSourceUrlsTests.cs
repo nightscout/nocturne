@@ -94,7 +94,7 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
         _migrator = database.MigratorConnectionString;
 
         foreach (var tenant in new[] { TenantA, TenantB, TenantC })
-            await ExecuteAsync($"""
+            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
                 INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
                 VALUES ('{tenant}', 'mask-{tenant:N}', 'mask', true, now(), now());
                 """);
@@ -137,7 +137,7 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
 
         Sources = await ReadSourcesAsync();
         Runs = await ReadRunsAsync();
-        await ExecuteAsync(MaskNightscoutSourceUrls.RewriteSql);
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, MaskNightscoutSourceUrls.RewriteSql);
         SourcesAfterSecondRun = await ReadSourcesAsync();
         RunsAfterSecondRun = await ReadRunsAsync();
 
@@ -171,15 +171,12 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
     }
 
     private static DbContextOptions<NocturneDbContext> Options(string connectionString) =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(connectionString);
 
     private Task InsertSourceAsync(
         Guid id, Guid tenant, string mode, string identifier, string? url, string createdAt,
         string? lastMigrationAt = null, string? lastData = null, string? secretHash = null) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO migration_sources (id, tenant_id, mode, source_identifier, nightscout_url, nightscout_api_secret_hash,
                 created_at, last_migration_at, last_migrated_data_timestamp)
             VALUES ('{id}', '{tenant}', '{mode}', {Literal(identifier)}, {Literal(url)}, {Literal(secretHash)},
@@ -187,7 +184,7 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             """);
 
     private Task InsertRunAsync(Guid source, Guid tenant, string mode, string description) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO migration_runs (id, source_id, tenant_id, mode, state, started_at, created_at,
                 entries_migrated, treatments_migrated, revision, source_description)
             VALUES ('{Guid.CreateVersion7()}', '{source}', '{tenant}', '{mode}', 'Completed', now(), now(), 0, 0, 0,
@@ -222,13 +219,6 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             "SELECT id, source_id, tenant_id, source_description FROM migration_runs",
             reader => new RunRow(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.IsDBNull(3) ? null : reader.GetString(3)));
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await conn.ExecuteAsync(sql);
     }
 }
 

@@ -303,7 +303,10 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
             VALUES
                 (@id, @tenantId, @clientEntityId, @subjectId, @codeHash, ARRAY['glucose.read','treatments.read'], @redirectUri, @codeChallenge, @expiresAt, @createdAt, false);
             """,
-            ("id", Guid.CreateVersion7()), ("tenantId", _tenantId), ("clientEntityId", clientEntityId), ("subjectId", _subjectId), ("codeHash", codeHash), ("redirectUri", "http://localhost:9999/callback"), ("codeChallenge", codeChallenge), ("expiresAt", DateTime.UtcNow.AddMinutes(-5)), ("createdAt", DateTime.UtcNow.AddMinutes(-15)));
+            ("id", Guid.CreateVersion7()), ("tenantId", _tenantId), ("clientEntityId", clientEntityId),
+            ("subjectId", _subjectId), ("codeHash", codeHash), ("redirectUri", "http://localhost:9999/callback"),
+            ("codeChallenge", codeChallenge), ("expiresAt", DateTime.UtcNow.AddMinutes(-5)),
+            ("createdAt", DateTime.UtcNow.AddMinutes(-15)));
 
         // Act - try to exchange the expired code
         var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>

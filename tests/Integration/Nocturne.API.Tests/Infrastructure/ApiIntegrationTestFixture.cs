@@ -367,7 +367,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             SELECT @passkey, @owner, @credential, @credential, 0, '{}', 'integration fixture', now()
             WHERE NOT EXISTS (SELECT 1 FROM passkey_credentials WHERE subject_id = @owner);
             """,
-            ("tenant", TenantId), ("owner", OwnerSubjectId), ("passkey", Guid.CreateVersion7()), ("credential", Guid.NewGuid().ToByteArray()));
+            ("tenant", TenantId), ("owner", OwnerSubjectId), ("passkey", Guid.CreateVersion7()),
+            ("credential", Guid.NewGuid().ToByteArray()));
 
         await ClearApiCachesAsync(Services, TenantId);
 

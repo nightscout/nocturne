@@ -52,14 +52,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         new(instant.Ticks - instant.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
 
     private NocturneDbContext Context(IAuditContext? actor = null, Guid? tenant = null, bool retry = true) =>
-        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql =>
-            {
-                if (retry)
-                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null);
-            })
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant ?? Guid.Empty }.ActingAs(actor);
+        TestContexts.Context(
+            database.AppConnectionString, tenant ?? Guid.Empty, npgsql: retry ? TestContexts.RetryingBriefly : null).ActingAs(actor);
 
     private SuppliedContextFactory Contexts(Guid? actor = null) =>
         new(() => Context(actor is { } id ? new TestAuditActor { SubjectId = id } : null));

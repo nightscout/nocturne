@@ -222,10 +222,8 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
     {
         var tenant = Guid.NewGuid();
         using (await fixture.BeginTenantScopeAsync(tenant)) { }
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(new NpgsqlConnectionStringBuilder(fixture.AppConnectionString) { MaxPoolSize = 1 }.ConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(
+            new NpgsqlConnectionStringBuilder(fixture.AppConnectionString) { MaxPoolSize = 1 }.ConnectionString);
 
         await using (var pinned = new NocturneDbContext(options) { TenantId = tenant })
             (await ApplicationNameAsync(pinned)).Should().Be(HistoryHorizon.SessionTag(tenant));
@@ -240,10 +238,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         var tenant = Guid.NewGuid();
         using (await fixture.BeginTenantScopeAsync(tenant)) { }
         var pool = new SlowPool();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(fixture.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), pool)
-            .Options;
+        var options = TestContexts.Options(fixture.AppConnectionString, [pool]);
         var reading = new SensorGlucoseEntity
         {
             Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = T0, Mgdl = 120, DataSource = "xdrip",
@@ -263,10 +258,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
     {
         var tenant = Guid.NewGuid();
         using var scope = await fixture.BeginTenantScopeAsync(tenant);
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(fixture.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(fixture.AppConnectionString);
         var written = await CreateAsync(scope, T0, "xdrip");
 
         var first = await ProductionHistoryAsync(options, tenant);

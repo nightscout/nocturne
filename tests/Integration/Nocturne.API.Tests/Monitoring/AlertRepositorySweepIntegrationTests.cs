@@ -45,10 +45,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         // As the runtime role: the bootstrap superuser bypasses the policies under test, and the
         // interceptor refuses it.
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(dataSource);
         var factory = new InterceptingContextFactory(options);
 
         // Seed rules through EF so the enum/jsonb mapping matches the live schema. The interceptor
@@ -84,10 +81,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var tenant = await AuthTestHelpers.SeedTenantAsync(Fixture, $"on-unknown-{suffix}", "On unknown");
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var factory = new InterceptingContextFactory(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        var factory = new InterceptingContextFactory(TestContexts.Options(dataSource));
         var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant), TimeProvider.System);
         var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
         static NewAlertRule Rule(string name, string? onUnknown) => new(
@@ -118,10 +112,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var other = await AuthTestHelpers.SeedTenantAsync(Fixture, $"other-{suffix}", "Other");
 
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(dataSource);
         var factory = new InterceptingContextFactory(options);
 
         await SeedRuleAsync(factory, stale, "Readable", AlertConditionType.Threshold);

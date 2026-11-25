@@ -24,10 +24,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     private static readonly DateTime Start = new(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private sealed record Seeded(Guid Tenant, Guid Member, Guid Actor, MemberHistoryReader Reader);
 

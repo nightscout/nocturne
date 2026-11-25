@@ -280,10 +280,12 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)
     {
         await using var conn = await OpenPostgresAsync();
-        await conn.PinTenantAsync(await AuthTestHelpers.GetTenantIdAsync(conn));
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(await AuthTestHelpers.GetTenantIdAsync(conn), local: true);
         (await conn.ExecuteAsync(
             "UPDATE oauth_grants SET limit_to_24_hours = @limited, scopes = @scopes WHERE subject_id = @subject;",
             ("limited", limitTo24Hours), ("scopes", scopes), ("subject", subject))).Should().Be(1);
+        await transaction.CommitAsync();
     }
 
     /// <summary>

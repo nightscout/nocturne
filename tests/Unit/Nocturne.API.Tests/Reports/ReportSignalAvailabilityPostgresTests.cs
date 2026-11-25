@@ -105,10 +105,7 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         public Task DisposeAsync() => Task.CompletedTask;
 
         public DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString);
 
         private async Task<Guid> TenantAsync()
         {

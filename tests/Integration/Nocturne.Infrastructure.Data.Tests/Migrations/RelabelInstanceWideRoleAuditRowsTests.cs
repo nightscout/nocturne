@@ -39,7 +39,7 @@ public class RelabelInstanceWideRoleAuditRowsFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "relabel_role_audit");
         _migrator = database.MigratorConnectionString;
 
-        await ExecuteAsync($$"""
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, $$"""
             INSERT INTO auth_audit_log (id, event_type, tenant_id, details, success, created_at)
             VALUES ('{{KindlessAssigned}}', 'role_assigned', '{{Tenant}}', '{"role":"admin"}', true, now()),
                    ('{{KindlessRemoved}}', 'role_removed', '{{Tenant}}', '{"role":"admin"}', true, now()),
@@ -53,14 +53,11 @@ public class RelabelInstanceWideRoleAuditRowsFixture : IAsyncLifetime
             """);
         Before = await ReadAsync();
 
-        await using (var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migrator, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options))
+        await using (var context = new NocturneDbContext(TestContexts.MigrationsOptions(_migrator)))
             await context.GetService<IMigrator>().MigrateAsync();
 
         After = await ReadAsync();
-        RowsChangedBySecondRun = await ExecuteAsync(RelabelInstanceWideRoleAuditRows.RelabelSql);
+        RowsChangedBySecondRun = await NpgsqlTestCommands.ExecuteAsync(_migrator, RelabelInstanceWideRoleAuditRows.RelabelSql);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -77,9 +74,6 @@ public class RelabelInstanceWideRoleAuditRowsFixture : IAsyncLifetime
                 reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2));
         return rows;
     }
-
-    private Task<int> ExecuteAsync(string sql) =>
-        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 }
 
 [Trait("Category", "Integration")]

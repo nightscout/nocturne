@@ -63,14 +63,17 @@ public static class AuthTestHelpers
             INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
             VALUES (@id, @subjectId, @credentialId, @publicKey, 0, '{}', now());
             """,
-            ("id", Guid.CreateVersion7()), ("subjectId", subjectId), ("credentialId", Encoding.UTF8.GetBytes($"cred-{subjectId:N}")), ("publicKey", Encoding.UTF8.GetBytes($"pk-{subjectId:N}")));
+            ("id", Guid.CreateVersion7()), ("subjectId", subjectId),
+            ("credentialId", Encoding.UTF8.GetBytes($"cred-{subjectId:N}")),
+            ("publicKey", Encoding.UTF8.GetBytes($"pk-{subjectId:N}")));
 
         await conn.ExecuteAsync(
             """
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
             VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
             """,
-            ("id", Guid.CreateVersion7()), ("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess])), ("tenantId", tenantId), ("subjectId", subjectId));
+            ("id", Guid.CreateVersion7()), ("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess])),
+            ("tenantId", tenantId), ("subjectId", subjectId));
 
         await conn.ExecuteAsync(
             """
@@ -83,14 +86,18 @@ public static class AuthTestHelpers
 
         // Without the grant the returned token matches nothing, and a caller sending it alongside an
         // api-secret would silently authenticate as the api-secret's principal instead.
-        await conn.PinTenantAsync(tenantId);
-        await conn.ExecuteAsync(
-            """
-            INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
-            VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], @label, @hash, now());
-            """,
-            ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", subjectId),
-            ("label", name), ("hash", HashUtils.Sha256Hex(accessToken)));
+        await using (var transaction = await conn.BeginTransactionAsync())
+        {
+            await conn.PinTenantAsync(tenantId, local: true);
+            await conn.ExecuteAsync(
+                """
+                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
+                VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], @label, @hash, now());
+                """,
+                ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", subjectId),
+                ("label", name), ("hash", HashUtils.Sha256Hex(accessToken)));
+            await transaction.CommitAsync();
+        }
 
         return (subjectId, accessToken);
     }
@@ -106,10 +113,12 @@ public static class AuthTestHelpers
     {
         var seeded = await SeedAuthenticatedSubjectAsync(conn, tenantId, name);
 
-        await conn.PinTenantAsync(tenantId);
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(tenantId, local: true);
         var clamped = await conn.ExecuteAsync(
             "UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;",
             ("subject", seeded.SubjectId));
+        await transaction.CommitAsync();
         if (clamped != 1)
             throw new InvalidOperationException($"Clamping subject {seeded.SubjectId} updated {clamped} grants, expected 1.");
 
@@ -146,7 +155,8 @@ public static class AuthTestHelpers
             INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, legacy_secret_hash, created_at)
             VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, @legacySecretHash, now());
             """,
-            ("id", grantId), ("tenantId", tenantId), ("subjectId", subjectId), ("grantType", OAuthGrantTypes.Direct), ("scopes", new[] { Scope.FullAccess }), ("legacySecretHash", apiSecret.ToLowerInvariant()));
+            ("id", grantId), ("tenantId", tenantId), ("subjectId", subjectId), ("grantType", OAuthGrantTypes.Direct),
+            ("scopes", new[] { Scope.FullAccess }), ("legacySecretHash", apiSecret.ToLowerInvariant()));
 
         return grantId;
     }
@@ -177,7 +187,8 @@ public static class AuthTestHelpers
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
             VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
             """,
-            ("id", Guid.CreateVersion7()), ("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess])), ("tenantId", tenantId), ("subjectId", subjectId));
+            ("id", Guid.CreateVersion7()), ("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess])),
+            ("tenantId", tenantId), ("subjectId", subjectId));
 
         await conn.ExecuteAsync(
             """

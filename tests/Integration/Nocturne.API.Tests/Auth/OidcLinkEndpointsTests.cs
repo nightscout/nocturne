@@ -244,13 +244,17 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 
         // The credential itself. Device and service tokens are grants on oauth_grants; subjects
         // carry no token of their own.
-        await conn.PinTenantAsync(_tenantId);
-        await conn.ExecuteAsync("""
-            INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
-            VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], 'OIDC test token', @hash, now());
-            """,
-            ("id", Guid.CreateVersion7()), ("tenantId", _tenantId), 
-            ("subjectId", subjectId), ("hash", tokenHash));
+        await using (var transaction = await conn.BeginTransactionAsync())
+        {
+            await conn.PinTenantAsync(_tenantId, local: true);
+            await conn.ExecuteAsync("""
+                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
+                VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], 'OIDC test token', @hash, now());
+                """,
+                ("id", Guid.CreateVersion7()), ("tenantId", _tenantId),
+                ("subjectId", subjectId), ("hash", tokenHash));
+            await transaction.CommitAsync();
+        }
 
         // Grant admin role to the subject on the tenant
         await conn.ExecuteAsync("""

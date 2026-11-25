@@ -90,10 +90,7 @@ public class V4ToLegacyProjectionPostgresTests(V4ToLegacyProjectionPostgresTests
             NullLogger<V4ToLegacyProjectionService>.Instance);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Guid> SeedTenantAsync()
     {

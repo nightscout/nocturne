@@ -1,9 +1,9 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -58,7 +58,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
 
         foreach (var tenant in Tenants)
         {
-            await SetTenantAsync(conn, tenant);
+            await conn.PinTenantAsync(tenant);
             foreach (var actor in new[] { _leaver, _bystander })
             {
                 await conn.ExecuteAsync("""
@@ -246,7 +246,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         {
             foreach (var tenant in Tenants)
             {
-                await SetTenantAsync(conn, tenant);
+                await conn.PinTenantAsync(tenant);
                 var request = _requests[(tenant, _leaver)].ToString();
                 await InsertNoticeAsync(conn, tenant, _bystander, "membership.requested",
                     $"Membership request from {Name(_leaver)}", Message(_leaver), request, createdDaysAgo: 10);
@@ -269,7 +269,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var notices = new List<(string, string, string?, string, string?)>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT user_id, type, source_id, title, subtitle FROM in_app_notifications WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -296,7 +296,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var requesters = new List<Guid>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT subject_id FROM membership_requests WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -326,7 +326,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var rows = new Dictionary<Guid, (string?, string?)>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT actor_subject_id, actor_name, ip_address FROM mutation_audit_log WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -340,7 +340,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var rows = new Dictionary<Guid, (string?, string?, string?)>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT actor_subject_id, actor_name, ip_address, user_agent FROM read_access_log WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -360,7 +360,4 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
 
     private static string? Text(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant) =>
-        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenant, false)", ("tenant", tenant.ToString()));
 }

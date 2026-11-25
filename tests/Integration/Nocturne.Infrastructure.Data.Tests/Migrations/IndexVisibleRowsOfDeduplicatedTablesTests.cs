@@ -53,10 +53,7 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
 
     private async Task MigrateToAsync(string? target)
     {
-        await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.MigratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        await using var context = new NocturneDbContext(TestContexts.MigrationsOptions(_database.MigratorConnectionString));
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
 
@@ -76,7 +73,6 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
             indexes[reader.GetString(0)] = reader.GetString(1);
         return indexes;
     }
-
 }
 
 [Trait("Category", "Integration")]

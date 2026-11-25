@@ -219,12 +219,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     {
         if (extra is null)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddHttpContextAccessor();
-            services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-
-            var provider = services.BuildServiceProvider();
+            var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
             _owned.Add(provider);
             return provider.GetRequiredService<INocturneDbContextFactory>();
         }
@@ -232,10 +227,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         var dataSource = new NpgsqlDataSourceBuilder(_fx.AppConnectionString).Build();
         _owned.Add(dataSource);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor(), extra)
-            .Options;
+        var options = TestContexts.Options(dataSource, [extra]);
         return new SuppliedContextFactory(() => new NocturneDbContext(options));
     }
 

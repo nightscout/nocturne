@@ -38,10 +38,7 @@ public class RawMmolProfileDetectorPostgresTests(RawMmolProfileDetectorPostgresT
     private sealed class Contexts(string connectionString, Guid tenant) : IDbContextFactory<NocturneDbContext>
     {
         public NocturneDbContext CreateDbContext() =>
-            new(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options) { TenantId = tenant };
+            TestContexts.Context(connectionString, tenant);
     }
 
     private sealed record Store(Guid TargetId, Guid SensitivityId);

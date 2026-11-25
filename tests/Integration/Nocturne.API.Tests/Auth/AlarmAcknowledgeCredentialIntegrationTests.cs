@@ -57,7 +57,10 @@ public class AlarmAcknowledgeCredentialIntegrationTests : ApiIntegrationTestBase
             INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, is_migrated, created_at)
             VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, 'imported', @hash, true, now());
             """,
-            ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", subjectId), ("grantType", OAuthGrantTypes.Direct), ("scopes", ScopeTranslator.FromPermissions(["notifications:*:ack"]).ToArray()), ("hash", HashUtils.Sha256Hex(_importedToken)));
+            ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", subjectId),
+            ("grantType", OAuthGrantTypes.Direct),
+            ("scopes", ScopeTranslator.FromPermissions(["notifications:*:ack"]).ToArray()),
+            ("hash", HashUtils.Sha256Hex(_importedToken)));
     }
 
     [Theory]

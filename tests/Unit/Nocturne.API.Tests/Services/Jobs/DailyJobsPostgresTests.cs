@@ -187,13 +187,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options)
-        {
-            TenantId = tenant,
-        };
+        TestContexts.Context(_app, tenant);
 
     private JobScheduler Scheduler(string job)
     {
@@ -202,8 +196,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();

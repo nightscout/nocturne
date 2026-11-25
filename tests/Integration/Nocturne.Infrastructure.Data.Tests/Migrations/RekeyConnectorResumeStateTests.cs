@@ -58,7 +58,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
         _app = database.AppConnectionString;
 
         foreach (var tenant in new[] { TenantA, TenantB, TenantC })
-            await ExecuteAsync($"""
+            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
                 INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
                 VALUES ('{tenant}', 'rekey-{tenant:N}', 'rekey', true, now(), now());
                 """);
@@ -111,7 +111,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
             await context.GetService<IMigrator>().MigrateAsync();
 
         RowsAfter = await ReadRowsAsync();
-        await ExecuteAsync(RekeyConnectorResumeState.RekeySql);
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, RekeyConnectorResumeState.RekeySql);
         RowsAfterSecondRun = await ReadRowsAsync();
 
         await using (var db = new NocturneDbContext(Options(_app)) { TenantId = TenantA })
@@ -144,7 +144,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
     private Task InsertAsync(
         Guid tenant, string connector, string? vendor = null, string? resume = null,
         string secrets = "{}", string configuration = "{}") =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             SELECT set_config('app.current_tenant_id', '{tenant}', false);
             INSERT INTO connector_configurations
                 (id, tenant_id, connector_name, configuration, secrets, schema_version, last_modified,
@@ -161,10 +161,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
         json is null ? "NULL" : $"'{json.Replace("'", "''")}'::jsonb";
 
     private DbContextOptions<NocturneDbContext> Options(string connectionString) =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(connectionString);
 
     private async Task<Dictionary<(Guid, string), StoredRow>> ReadRowsAsync()
     {
@@ -190,9 +187,6 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
 
         return rows;
     }
-
-    private Task<int> ExecuteAsync(string sql) =>
-        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 }
 
 [Trait("Category", "Integration")]

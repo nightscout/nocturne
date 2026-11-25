@@ -57,10 +57,12 @@ public static class NpgsqlTestCommands
     /// <summary>
     /// Sets <c>app.current_tenant_id</c> for the rest of the connection's life, as the runtime does when it
     /// opens a connection, so a connection that bypasses the context filter reads and writes as that tenant.
+    /// With <paramref name="local"/> the pin ends with the open transaction, and outside one it ends at once.
     /// </summary>
-    public static Task PinTenantAsync(this NpgsqlConnection conn, Guid tenantId) =>
+    public static Task PinTenantAsync(this NpgsqlConnection conn, Guid tenantId, bool local = false) =>
         conn.ExecuteAsync(
-            "SELECT set_config('app.current_tenant_id', @tenantId, false);", ("tenantId", tenantId.ToString()));
+            "SELECT set_config('app.current_tenant_id', @tenantId, @local);",
+            ("tenantId", tenantId.ToString()), ("local", local));
 
     public static async Task<int> ExecuteAsync(
         this NpgsqlDataSource dataSource, string sql, params (string Name, object Value)[] parameters)
@@ -106,7 +108,7 @@ public static class NpgsqlTestCommands
         return await conn.QueryAsync(sql, read, parameters);
     }
 
-    private static async Task<NpgsqlConnection> OpenAsync(string connectionString)
+    public static async Task<NpgsqlConnection> OpenAsync(string connectionString)
     {
         var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();

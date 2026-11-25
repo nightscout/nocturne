@@ -2,8 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -60,10 +60,7 @@ public class ScopeReferencedClientIdKeysToTenantFixture : IAsyncLifetime
         if (notices is not null)
             conn.Notice += (_, e) => notices.Add(e.Notice.MessageText);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(conn, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(conn);
 
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(targetMigration);
@@ -80,13 +77,10 @@ public class ScopeReferencedClientIdKeysToTenantFixture : IAsyncLifetime
         return conn;
     }
 
-    internal async Task<T?> ScalarAsync<T>(Guid? tenantId, string sql)
+    internal async Task<T> ScalarAsync<T>(Guid? tenantId, string sql)
     {
         await using var conn = await OpenPinnedAsync(tenantId);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        var result = await cmd.ExecuteScalarAsync();
-        return result is null or DBNull ? default : (T)result;
+        return await conn.ScalarAsync<T>(sql);
     }
 
     /// <summary>Runs <paramref name="sql"/> for a tenant and returns the error it raised, if any.</summary>
