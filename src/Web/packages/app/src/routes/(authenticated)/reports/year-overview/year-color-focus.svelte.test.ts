@@ -136,7 +136,7 @@ describe("year overview page color focus integration", () => {
     yearOverviewMocks.days.mockResolvedValue({ days: [] });
     render(YearOverviewPage);
     await selectMetric("TDD");
-    await minimum().fill("0.2");
+    await expect.element(minimum()).toBeDisabled();
     expect(collectPreferences().yearOverviewColors ?? {}).toEqual({});
   });
 

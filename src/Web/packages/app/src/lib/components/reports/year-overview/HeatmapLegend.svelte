@@ -23,6 +23,7 @@
     unit,
     scale,
     limits,
+    windowEditable = true,
     onWindowChange,
     onRangeChange,
     onBoundariesChange,
@@ -38,6 +39,7 @@
     unit: string;
     scale: MetricScale;
     limits: Range;
+    windowEditable?: boolean;
     onWindowChange: (window: Range | null) => void;
     onRangeChange: (range: Range | null) => void;
     onBoundariesChange: (boundaries: ColorBoundary[] | null) => void;
@@ -127,7 +129,8 @@
           {glucose}
           {units}
           {unit}
-          {onWindowChange}
+          {windowEditable}
+        {onWindowChange}
           {onRangeChange}
           {onBoundariesChange}
           {onEndsChange}

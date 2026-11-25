@@ -34,6 +34,7 @@
     glucose = false,
     units = "mg/dl",
     unit = "",
+    windowEditable = true,
     onWindowChange,
     onRangeChange,
     onBoundariesChange,
@@ -51,6 +52,7 @@
     glucose?: boolean;
     units?: GlucoseUnits;
     unit?: string;
+    windowEditable?: boolean;
     onWindowChange: (window: ColorFocusRange | null) => void;
     /** Moves the ramp's ends, apart from the dimming window. */
     onRangeChange: (range: ColorFocusRange | null) => void;
@@ -294,6 +296,7 @@
             value={display(scale.window[index])}
             oninput={(event: Event & { currentTarget: HTMLInputElement }) => typeWindow(index, event)}
             aria-label={`${metricLabel} focus ${index === 0 ? "minimum" : "maximum"}`}
+            disabled={!windowEditable}
             aria-invalid={invalid === "window"}
             size="xs"
             class={[
@@ -316,6 +319,7 @@
           step={sliderSteps}
           autoSort={false}
           thumbPositioning="exact"
+          disabled={!windowEditable}
           bind:value={() => [...windowValues], moveWindow}
           class="pointer-events-none absolute inset-x-0 top-0 flex h-10 touch-none select-none items-center"
           aria-label={`${metricLabel} focus window`}

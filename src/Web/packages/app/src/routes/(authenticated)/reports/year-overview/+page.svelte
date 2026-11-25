@@ -657,6 +657,7 @@
       unit={METRIC_UNITS[selectedMetric]}
       scale={scale}
       limits={scaleLimits}
+      windowEditable={Number.isFinite(scaleLimits[1]) || metricMax > 0 || !!colorPreferences[scaleKeys.range] || !!colorPreferences[scaleKeys.band]}
       onWindowChange={setScaleWindow}
       onRangeChange={setScaleRange}
       onBoundariesChange={setScaleBoundaries}
