@@ -165,8 +165,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
-        enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, ct);
-        enriched = await EnrichPhase2FactsAsync(enriched, needs, now, ct);
+        var pumpModeSpans = new Lazy<Task<IReadOnlyList<StateSpan>>>(() => ReadPumpModeSpansAsync(now, isReplay, ct));
+        enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, pumpModeSpans, ct);
+        enriched = await EnrichPhase2FactsAsync(enriched, needs, now, pumpModeSpans, ct);
 
         // DND state is fetched unconditionally — engine-level suppression in the orchestrator
         // applies to every rule regardless of whether its tree references the do_not_disturb
@@ -223,7 +224,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// pump-mode and generic state-span snapshots) when their corresponding needs flags are set.
     /// </summary>
     private async Task<SensorContext> EnrichPhase2FactsAsync(
-        SensorContext baseCtx, DataNeedsSet needs, DateTime now, CancellationToken ct)
+        SensorContext baseCtx, DataNeedsSet needs, DateTime now,
+        Lazy<Task<IReadOnlyList<StateSpan>>> pumpModeSpans, CancellationToken ct)
     {
         var enriched = baseCtx;
 
@@ -278,7 +280,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsPumpModes)
         {
-            enriched = enriched with { ActivePumpModes = await ActivePumpModesAsync(now, ct) };
+            enriched = enriched with { ActivePumpModes = ActivePumpModes(await pumpModeSpans.Value) };
         }
 
         if (needs.ReferencedStateSpans.Count > 0)
@@ -390,7 +392,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// and freshness gating landed.
     /// </summary>
     private async Task<SensorContext> EnrichLoopingFactsAsync(
-        SensorContext baseCtx, DataNeedsSet needs, DateTime now, bool isReplay, CancellationToken ct)
+        SensorContext baseCtx, DataNeedsSet needs, DateTime now, bool isReplay,
+        Lazy<Task<IReadOnlyList<StateSpan>>> pumpModeSpans, CancellationToken ct)
     {
         var enriched = baseCtx;
 
@@ -447,11 +450,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 var pumpFresh = (now - pump.Timestamp) < _deps.Options.Value.PumpFreshnessThreshold;
                 if (pumpFresh)
                 {
-                    var span = await _deps.StateSpans.GetActiveAtAsync(
-                        StateSpanCategory.PumpMode,
-                        state: PumpModeState.Suspended.ToString(),
-                        at: now,
-                        ct);
+                    var span = OpenSuspension(await pumpModeSpans.Value);
                     if (span is not null)
                     {
                         enriched = enriched with
@@ -705,23 +704,51 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     }
 
     /// <summary>
-    /// Every pump-mode span active at <paramref name="now"/>, its state as written. Spans of
-    /// different modes overlap (a Suspended span runs on top of an Automatic or Manual one), so none is chosen over another; the
+    /// The pump-mode spans the facts read at <paramref name="now"/>: those open at it, and live, per mode with
+    /// none open, the soonest open span starting no later than <see cref="AlertReadings.Bound"/> after it, as
+    /// the engine-semantics.md section 5.4 Host paragraph states. The ahead spans are a separate read, so
+    /// they cannot use up the cap of the current one. Read once for every pump-mode fact.
+    /// </summary>
+    private async Task<IReadOnlyList<StateSpan>> ReadPumpModeSpansAsync(DateTime now, bool isReplay, CancellationToken ct)
+    {
+        var current = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct))
+            .Where(s => s.EndTimestamp is null || s.EndTimestamp > now)
+            .ToList();
+        if (isReplay)
+            return current;
+
+        var ahead = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, to: AlertReadings.Bound(now), active: true, cancellationToken: ct))
+            .Where(s => s.StartTimestamp > now && s.EndTimestamp is null);
+        var covered = current.Select(s => s.State).ToHashSet(StringComparer.Ordinal);
+        return
+        [
+            .. current,
+            .. ahead
+                .Where(s => !covered.Contains(s.State))
+                .GroupBy(s => s.State, StringComparer.Ordinal)
+                .Select(g => g.MinBy(s => s.StartTimestamp)!),
+        ];
+    }
+
+    /// <summary>
+    /// Every span <see cref="ReadPumpModeSpansAsync"/> returned, its state as written. Spans of different modes
+    /// overlap (a Suspended span runs on top of an Automatic or Manual one), so none is chosen over another; the
     /// engine reads the entry for the mode each leaf names.
     /// </summary>
-    private async Task<IReadOnlyList<PumpModeSnapshot>> ActivePumpModesAsync(DateTime now, CancellationToken ct)
-    {
-        var active = await _deps.StateSpans.GetStateSpansAsync(
-            StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct);
-        return active
-            .Where(s => s.State is { Length: > 0 }
-                        && s.StartTimestamp <= now
-                        && (s.EndTimestamp is null || s.EndTimestamp > now))
+    private static IReadOnlyList<PumpModeSnapshot> ActivePumpModes(IReadOnlyList<StateSpan> spans) =>
+        spans
+            .Where(s => s.State is { Length: > 0 })
             .OrderBy(s => s.StartTimestamp)
             .ThenBy(s => s.State, StringComparer.Ordinal)
             .Select(s => new PumpModeSnapshot(s.State!, s.StartTimestamp))
             .ToList();
-    }
+
+    private static StateSpan? OpenSuspension(IReadOnlyList<StateSpan> spans) =>
+        spans
+            .Where(s => string.Equals(s.State, nameof(PumpModeState.Suspended), StringComparison.Ordinal))
+            .MaxBy(s => s.StartTimestamp);
 
     /// <summary>
     /// When the profile activation in force at <paramref name="now"/> started, for a
