@@ -174,7 +174,7 @@ public interface IStateSpanService
     Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
         StateSpanCategory category,
         DateTime from,
-        DateTime to,
+        DateTime? to,
         CancellationToken cancellationToken = default);
 
     /// <summary>

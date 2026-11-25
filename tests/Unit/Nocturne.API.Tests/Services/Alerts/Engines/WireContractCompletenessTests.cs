@@ -39,9 +39,10 @@ public class WireContractCompletenessTests
             // The host matches a reported sensor state to the reading's source before it sends
             // the state; the engine reads only the state.
             nameof(SensorContext.LatestSource),
-            // The host reports a pump-mode span the engine was not sent; the engine reads only the
-            // spans it is sent.
+            // The host reports a pump-mode span or an override the engine was not sent; the engine
+            // reads only the spans it is sent.
             nameof(SensorContext.PumpModesRead),
+            nameof(SensorContext.OverridesRead),
         ]),
         new(typeof(PredictedGlucosePoint), "WirePrediction", typeof(ScenarioPrediction), []),
         // AlertId travels as the wire record's extra field (it is the dictionary key on

@@ -701,7 +701,7 @@ public class SensorContextEnricherTests
 
     /// <summary>
     /// The reads of a live pass: the spans open at <paramref name="at"/>, apart from them the open ones starting
-    /// after it within the tolerance, and the newest open one alone. A replay pass makes only the first.
+    /// after it within the tolerance, and the newest one not ended before it alone. A replay pass makes only the first.
     /// </summary>
     private void PumpModeReads(Times times, DateTime? at = null, bool replay = false)
     {
@@ -713,7 +713,7 @@ public class SensorContextEnricherTests
             StateSpanCategory.PumpMode, null, now, AlertReadings.Bound(now), null, true, It.IsAny<int>(), It.IsAny<int>(),
             It.IsAny<bool>(), It.IsAny<CancellationToken>()), replay ? Times.Never() : times);
         _stateSpanService.Verify(s => s.GetStateSpansAsync(
-            StateSpanCategory.PumpMode, null, now, null, null, true, 1, It.IsAny<int>(),
+            StateSpanCategory.PumpMode, null, now, null, null, null, 1, It.IsAny<int>(),
             It.IsAny<bool>(), It.IsAny<CancellationToken>()), replay ? Times.Never() : times);
     }
 
@@ -747,12 +747,12 @@ public class SensorContextEnricherTests
                 .Take(count)
                 .ToList());
         _stateSpanService.Setup(s => s.GetAllCopiesAsync(
-                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpanCategory category, DateTime from, DateTime to, CancellationToken _) =>
+                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpanCategory category, DateTime from, DateTime? to, CancellationToken _) =>
                 (IReadOnlyList<StateSpan>)spans
                     .Where(s => s.Category == category
                                 && (s.EndTimestamp is null || s.EndTimestamp >= from)
-                                && s.StartTimestamp <= to)
+                                && (to is null || s.StartTimestamp <= to))
                     .OrderBy(s => s.StartTimestamp)
                     .ToList());
         _stateSpanService.Setup(s => s.GetActiveAtAsync(
@@ -1102,6 +1102,83 @@ public class SensorContextEnricherTests
         context.ActiveOverride.Should().BeNull();
     }
 
+    [Fact]
+    public async Task A_device_status_override_dated_beyond_the_tolerance_is_reported_at_its_start()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var (context, _) = await OverrideRuleOverAsync(
+            OverrideSpan(now.AddMinutes(20), StateSpanMetadataExtensions.DeviceStatusCollection));
+
+        context.OverridesRead.Should().Be(new SpansRead(now, now.AddMinutes(20)));
+    }
+
+    [Fact]
+    public async Task A_finished_device_status_override_dated_beyond_the_tolerance_is_reported_at_its_start()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var span = OverrideSpan(now.AddMinutes(20), StateSpanMetadataExtensions.DeviceStatusCollection);
+        span.EndTimestamp = now.AddMinutes(80);
+
+        var (context, _) = await OverrideRuleOverAsync(span);
+
+        context.ActiveOverride.Should().BeNull();
+        context.OverridesRead.Should().Be(new SpansRead(now, now.AddMinutes(20)));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(StateSpanMetadataExtensions.TreatmentsCollection)]
+    public async Task An_override_planned_beyond_the_tolerance_is_not_reported_as_a_device_clock(string? collection)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var (context, _) = await OverrideRuleOverAsync(OverrideSpan(now.AddMinutes(20), collection));
+
+        context.OverridesRead.Should().Be(new SpansRead(now, null));
+    }
+
+    [Fact]
+    public async Task A_device_status_override_ahead_is_reported_while_another_override_is_in_force()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var (context, _) = await OverrideRuleOverAsync(
+            OverrideSpan(now.AddMinutes(-30), null),
+            OverrideSpan(now.AddMinutes(20), StateSpanMetadataExtensions.DeviceStatusCollection));
+
+        context.ActiveOverride!.StartedAt.Should().Be(now.AddMinutes(-30));
+        context.OverridesRead.Should().Be(new SpansRead(now, now.AddMinutes(20)));
+    }
+
+    [Fact]
+    public async Task A_pass_that_needs_no_override_reads_no_override_and_reports_none()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        SpansStored(OverrideSpan(now.AddMinutes(20), StateSpanMetadataExtensions.DeviceStatusCollection));
+
+        var enriched = await BuildEnricher().EnrichAsync(
+            BaseContext(), [MakeRule(AlertConditionType.PumpState, SuspendedModeRule)], CancellationToken.None);
+
+        enriched.OverridesRead.Should().BeNull();
+        _stateSpanService.Verify(s => s.GetAllCopiesAsync(
+            StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task A_replay_tick_reads_no_override_copies_and_reports_none()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        SpansStored(OverrideSpan(now.AddMinutes(20), StateSpanMetadataExtensions.DeviceStatusCollection));
+        var rule = MakeRule(AlertConditionType.OverrideActive, SuspendedRule);
+
+        var enriched = await BuildEnricher().EnrichAsOfAsync(BaseContext(), [rule], now, CancellationToken.None);
+
+        enriched.OverridesRead.Should().BeNull();
+        _stateSpanService.Verify(s => s.GetAllCopiesAsync(
+            StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
     [NativeFact]
     public async Task A_device_status_override_whose_copy_deduplication_hid_behind_a_treatment_one_is_still_sent()
     {
@@ -1110,7 +1187,7 @@ public class SensorContextEnricherTests
         var deviceStatus = OverrideSpan(now.AddMinutes(2).AddSeconds(5), StateSpanMetadataExtensions.DeviceStatusCollection);
         SpansStored(treatment);
         _stateSpanService.Setup(s => s.GetAllCopiesAsync(
-                StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([treatment, deviceStatus]);
         var rule = MakeRule(AlertConditionType.OverrideActive, SuspendedRule);
 
@@ -1143,7 +1220,7 @@ public class SensorContextEnricherTests
             BaseContext(), [MakeRule(AlertConditionType.PumpState, SuspendedModeRule)], CancellationToken.None);
 
         enriched.ActivePumpModes.Should().Equal(new PumpModeSnapshot("Manual", now.AddMinutes(2)));
-        enriched.PumpModesRead.Should().Be(new PumpModeSpansRead(now, now.AddMinutes(114)));
+        enriched.PumpModesRead.Should().Be(new SpansRead(now, now.AddMinutes(114)));
     }
 
     [Fact]
@@ -1192,8 +1269,38 @@ public class SensorContextEnricherTests
         var enriched = await BuildEnricher().EnrichAsync(
             BaseContext(), [MakeRule(AlertConditionType.PumpState, SuspendedModeRule)], CancellationToken.None);
 
-        enriched.PumpModesRead.Should().Be(new PumpModeSpansRead(now, now.AddMinutes(20)));
+        enriched.PumpModesRead.Should().Be(new SpansRead(now, now.AddMinutes(20)));
         enriched.ActivePumpModes.Should().Equal(new PumpModeSnapshot("Automatic", now.AddMinutes(-60)));
+    }
+
+    [Fact]
+    public async Task A_closed_pump_mode_span_starting_beyond_the_tolerance_is_reported_and_not_sent()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var finished = PumpSpan("Suspended", now.AddMinutes(20));
+        finished.EndTimestamp = now.AddMinutes(50);
+        SpansStored(PumpSpan("Automatic", now.AddMinutes(-60)), finished);
+
+        var enriched = await BuildEnricher().EnrichAsync(
+            BaseContext(), [MakeRule(AlertConditionType.PumpState, SuspendedModeRule)], CancellationToken.None);
+
+        enriched.PumpModesRead.Should().Be(new SpansRead(now, now.AddMinutes(20)));
+        enriched.ActivePumpModes.Should().Equal(new PumpModeSnapshot("Automatic", now.AddMinutes(-60)));
+    }
+
+    [Fact]
+    public async Task A_closed_pump_mode_span_starting_within_the_tolerance_is_reported_at_its_start_and_not_sent()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var finished = PumpSpan("Suspended", now.AddMinutes(3));
+        finished.EndTimestamp = now.AddMinutes(30);
+        SpansStored(finished);
+
+        var enriched = await BuildEnricher().EnrichAsync(
+            BaseContext(), [MakeRule(AlertConditionType.PumpState, SuspendedModeRule)], CancellationToken.None);
+
+        enriched.PumpModesRead.Should().Be(new SpansRead(now, now.AddMinutes(3)));
+        enriched.ActivePumpModes.Should().BeEmpty();
     }
 
     [Fact]
@@ -1204,7 +1311,7 @@ public class SensorContextEnricherTests
         var enriched = await BuildEnricher().EnrichAsync(
             BaseContext(), [MakeRule(AlertConditionType.PumpState, SuspendedModeRule)], CancellationToken.None);
 
-        enriched.PumpModesRead.Should().Be(new PumpModeSpansRead(_timeProvider.GetUtcNow().UtcDateTime, null));
+        enriched.PumpModesRead.Should().Be(new SpansRead(_timeProvider.GetUtcNow().UtcDateTime, null));
     }
 
     [Fact]
@@ -1382,14 +1489,12 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        _stateSpanService.Setup(s => s.GetActiveAtAsync(
-                StateSpanCategory.Override, null, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StateSpan
-            {
-                Category = StateSpanCategory.Override,
-                StartTimestamp = now.AddMinutes(-15),
-                EndTimestamp = now.AddMinutes(45),
-            });
+        SpansStored(new StateSpan
+        {
+            Category = StateSpanCategory.Override,
+            StartTimestamp = now.AddMinutes(-15),
+            EndTimestamp = now.AddMinutes(45),
+        });
         var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);

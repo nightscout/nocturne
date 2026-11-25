@@ -277,6 +277,20 @@ public class StateSpanDedupSupersessionTests : IDisposable
     }
 
     [Fact]
+    public async Task TheAllCopiesRead_WithNoLaterBound_KeepsEverySpanNotEndedBeforeItsStart()
+    {
+        var kept = LoopOverrideTreatment(null);
+        var earlier = Preset(StateSpanCategory.Override, "ended-before", -3600, "X Exercise");
+        earlier.EndTimestamp = T.AddMinutes(-30);
+        var later = Preset(StateSpanCategory.Override, "starts-after", 3600, "R Run");
+        await UpsertInOrderAsync([kept, earlier, later]);
+
+        var copies = await _repository.GetAllCopiesAsync(StateSpanCategory.Override, T.AddMinutes(-2), to: null);
+
+        copies.Select(c => c.OriginalId).Should().Equal("treatment-1", "starts-after");
+    }
+
+    [Fact]
     public async Task AGroupStoredWithAClosedPrimaryAndAnOpenCopy_IsRepairedOnce()
     {
         await StoreSupersededPrimaryAsync(copyEnd: null);

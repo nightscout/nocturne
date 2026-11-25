@@ -1004,7 +1004,7 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
         StateSpanCategory category,
         DateTime from,
-        DateTime to,
+        DateTime? to,
         CancellationToken cancellationToken = default)
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
@@ -1012,7 +1012,7 @@ public class StateSpanRepository : IStateSpanRepository
         var entities = await db.StateSpans
             .AsNoTracking()
             .Where(s => s.Category == categoryString
-                        && s.StartTimestamp <= to
+                        && (to == null || s.StartTimestamp <= to)
                         && (s.EndTimestamp == null || s.EndTimestamp >= from))
             .OrderBy(s => s.StartTimestamp)
             .ToListAsync(cancellationToken);
