@@ -316,6 +316,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_alert_excursions_tenant_owed")
+                        .HasFilter("opened_owed_at IS NOT NULL OR closed_owed_at IS NOT NULL");
+
                     b.HasIndex("AlertRuleId", "EndedAt")
                         .HasDatabaseName("ix_alert_excursions_rule_ended_at");
 
