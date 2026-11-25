@@ -75,6 +75,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         else
         {
             StateSpanMapper.UpdateEntity(entity, span);
+            (entity.EndTimestamp, entity.SupersededById) = (span.EndTimestamp, null);
         }
 
         _context.SaveChanges();
