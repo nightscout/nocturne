@@ -318,6 +318,26 @@ describe("CommandPalette", () => {
     await expect.element(iob).toHaveAttribute("aria-selected", "true");
   });
 
+  it("moves the highlight to a rendered item when a stat's new value no longer matches the search", async () => {
+    store.pillsData = { iob: { display: "1.2 U" }, cob: { display: "25 g" } };
+    render(CommandPalette, { open: true });
+
+    const iob = page.getByRole("option", { name: /^IOB/ });
+    await page.getByPlaceholder("Search commands...").fill("2");
+    await expect.element(iob).toBeVisible();
+    await userEvent.hover(iob);
+    await expect.element(iob).toHaveAttribute("aria-selected", "true");
+
+    store.pillsData = { iob: { display: "1.3 U" }, cob: { display: "25 g" } };
+
+    await expect.element(iob).not.toBeInTheDocument();
+    await new Promise((settle) => setTimeout(settle, 150));
+    await expect.element(page.getByRole("option", { name: /^COB/ })).toBeVisible();
+    await expect
+      .element(page.getByRole("option", { selected: true }))
+      .toBeInTheDocument();
+  });
+
   it("keeps the highlight on a quick setting after Enter, so Enter cycles it again", async () => {
     pinnedItemIds.current = ["stat-iob"];
     recentItemIds.current = ["qs-chart-lookback"];

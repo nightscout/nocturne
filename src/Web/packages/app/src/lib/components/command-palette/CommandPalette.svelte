@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Command from "#lib/components/ui/command/index.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { computeCommandScore } from "bits-ui";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -49,9 +50,17 @@
 
   // An item whose label changes, a toggled setting or a live stat, registers again under its new
   // label, and bits-ui then selects the first item, more than once. Until the person moves again,
-  // a selection goes to the item that was highlighted.
+  // a selection goes to the item that was highlighted, unless the search no longer renders it: its
+  // new label may stop matching, and bits-ui draws no item whose score is zero.
   function setHighlighted(next: string) {
-    const kept = visibleItems.find((item) => item.id === restoreHighlightTo)?.label;
+    const keptItem = visibleItems.find((item) => item.id === restoreHighlightTo);
+    const kept =
+      keptItem &&
+      (!searchValue ||
+        computeCommandScore(keptItem.label, searchValue, keptItem.keywords) > 0)
+        ? keptItem.label
+        : undefined;
+    if (!kept) restoreHighlightTo = null;
     highlighted = kept ?? next;
     if (restoreHighlightTo === null) {
       highlightedId = visibleItems.find((item) => item.label === next)?.id ?? null;
