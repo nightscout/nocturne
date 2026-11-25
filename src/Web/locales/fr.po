@@ -49772,3 +49772,57 @@ msgstr ""
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "No address"
 msgstr ""
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed what the team {1} can do on this site."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed what a team that was deleted can do on this site."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The detail is no longer stored."
+msgstr ""
+
+#. 0: teamRoles; 1: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the role {0} to the last 24 hours only, until {1}."
+msgstr ""
+
+#. 0: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the role {0} to the last 24 hours only."
+msgstr ""
+
+#. 0: teamRoles; 1: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the role {0} until {1}."
+msgstr ""
+
+#. 0: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the role {0}."
+msgstr ""
+
+#. 0: teamRoles; 1: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the roles {0} to the last 24 hours only, until {1}."
+msgstr ""
+
+#. 0: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the roles {0} to the last 24 hours only."
+msgstr ""
+
+#. 0: teamRoles; 1: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the roles {0} until {1}."
+msgstr ""
+
+#. 0: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "After this change, the team had access with the roles {0}."
+msgstr ""
