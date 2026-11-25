@@ -88,7 +88,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
             .UseNpgsql(dataSource)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options);
-        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant));
+        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant), TimeProvider.System);
         var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
         static NewAlertRule Rule(string name, string? onUnknown) => new(
             onUnknown is null

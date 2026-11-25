@@ -104,7 +104,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
-            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory()),
+            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory(), _time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,

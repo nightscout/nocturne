@@ -211,7 +211,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
                 new TenantMembershipRepository(Contexts, AccountLinkRoutes.Off),
                 new SubjectRepository(Contexts, AccountLinkRoutes.Off),
                 new AlertRepository(Contexts),
-                new AlertRuleRepository(Contexts),
+                new AlertRuleRepository(Contexts, TimeProvider.System),
                 MockTenantAccessor.Create(Id).Object,
                 Mock.Of<IAlertReferenceService>(),
                 Mock.Of<IAlertDeliveryService>(),
@@ -240,7 +240,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
             Mock.Of<ITenantGlucoseUnits>(u => u.ResolveAsync(It.IsAny<CancellationToken>()) == Task.FromResult("mg/dl")),
             new TenantMembershipRepository(Contexts, AccountLinkRoutes.Off),
             new SubjectRepository(Contexts, AccountLinkRoutes.Off),
-            new AlertRuleRepository(Contexts),
+            new AlertRuleRepository(Contexts, TimeProvider.System),
             Classifier(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<IAlertDeliveryService>(),
@@ -487,7 +487,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         await tenant.Setup().SaveAsync(Guid.NewGuid(), null, request, CancellationToken.None);
         await tenant.SettledAsync();
 
-        var starters = await new AlertRuleRepository(tenant.Contexts).GetStarterRulesAsync(CancellationToken.None);
+        var starters = await new AlertRuleRepository(tenant.Contexts, TimeProvider.System).GetStarterRulesAsync(CancellationToken.None);
         tenant.Passes.Should().ContainSingle().Which.Should().BeEquivalentTo(
             [starters[StarterAlertKind.UrgentLow].Rule.Id, starters[StarterAlertKind.Low].Rule.Id, starters[StarterAlertKind.NoReadings].Rule.Id],
             "the disabled high is not evaluated");

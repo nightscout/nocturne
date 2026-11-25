@@ -122,7 +122,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             new TrackerRepository(contexts, time),
-            new AlertRuleRepository(contexts),
+            new AlertRuleRepository(contexts, time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,
