@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -47,7 +48,8 @@ public partial class TeamAccessEndPostgresTests
         var team = await TeamAsync("Clinic");
         var staff = await NewSubjectAsync("staff");
         var token = await StaffInviteLinkAsync(team, new TeamStaffNarrowing(null, false, Now.AddHours(1)));
-        await ExecuteAsync($"UPDATE team_staff_invites SET staff_ends_at = '{Sql(Passed)}' WHERE token_hash = '{HashUtils.Sha256Hex(token)}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_staff_invites SET staff_ends_at = '{Sql(Passed)}' WHERE token_hash = '{HashUtils.Sha256Hex(token)}'");
 
         var result = await StaffInviteController(staff).AcceptStaffInvite(token, Service(Guid.Empty, staff), Ct);
 

@@ -128,8 +128,7 @@ public class ProfileBatchEquivalenceTests : ApiIntegrationTestBase
 
     private async Task<Dictionary<string, List<string>>> DecomposeAsync(Func<IServiceProvider, Task> decompose, bool liveOnly)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
 
         await WithTenantScopeAsync(async services =>

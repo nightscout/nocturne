@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -80,7 +81,7 @@ public class ImportedRoleDefinitionIntegrationTests
 
             await ImportAsOwnerAsync(conn, tenantA);
 
-            (await RoleCountAsync(conn, CustomRole)).Should().Be(instance == Instance.OneTenant ? 1 : 0);
+            (await AuthTestHelpers.RoleCountAsync(conn, CustomRole)).Should().Be(instance == Instance.OneTenant ? 1 : 0);
             (await GrantScopesAsync(conn, tenantA, "Reader")).Should().BeEquivalentTo(ReaderScopes);
         }
         finally
@@ -157,18 +158,13 @@ public class ImportedRoleDefinitionIntegrationTests
 
     private static async Task<string[]> GrantScopesAsync(NpgsqlConnection conn, Guid tenantId, string label)
     {
-        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenant, false);", ("tenant", tenantId.ToString()));
+        await conn.PinTenantAsync(tenantId);
         return await conn.ScalarAsync<string[]>("SELECT scopes FROM oauth_grants WHERE tenant_id = @tenant AND label = @label;", ("tenant", tenantId), ("label", label));
     }
 
     private static async Task RemoveImportedRolesAsync(NpgsqlConnection conn) =>
         await conn.ExecuteAsync("DELETE FROM roles WHERE name = @custom OR lower(name) = @reserved;",
             ("custom", CustomRole), ("reserved", PlatformAdminCredentials.RoleName));
-
-    private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
-    {
-        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE name = @name;", ("name", name));
-    }
 
     private static async Task<long> ReservedRoleCountAsync(NpgsqlConnection conn)
     {

@@ -35,10 +35,7 @@ public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationC
         public Task DisposeAsync() => Task.CompletedTask;
 
         private DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(AppConnectionString, o => o.EnableRetryOnFailure())
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString, npgsql: TestContexts.Retrying);
 
         public async Task<(InAppNotificationRepository Repository, NocturneDbContext Reader)> TenantAsync()
         {

@@ -352,33 +352,23 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "DELETE FROM tenants WHERE id <> @id";
-            cmd.Parameters.AddWithValue("id", TenantId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync("DELETE FROM tenants WHERE id <> @id", ("id", TenantId));
 
         // Back to the seeded tenant as the seed left it: active, its owner and Public its only
         // members, the owner holding a passkey. Tests deactivate it, delete passkeys and add
         // members without one, and any of those leaves every later test facing the setup gate.
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                UPDATE tenants SET is_active = true WHERE id = @tenant;
-                DELETE FROM tenant_members m USING subjects s
-                WHERE m.subject_id = s.id AND m.tenant_id = @tenant
-                  AND m.subject_id <> @owner AND NOT s.is_system_subject;
-                INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, label, created_at)
-                SELECT @passkey, @owner, @credential, @credential, 0, '{}', 'integration fixture', now()
-                WHERE NOT EXISTS (SELECT 1 FROM passkey_credentials WHERE subject_id = @owner);
-                """;
-            cmd.Parameters.AddWithValue("tenant", TenantId);
-            cmd.Parameters.AddWithValue("owner", OwnerSubjectId);
-            cmd.Parameters.AddWithValue("passkey", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("credential", Guid.NewGuid().ToByteArray());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            UPDATE tenants SET is_active = true WHERE id = @tenant;
+            DELETE FROM tenant_members m USING subjects s
+            WHERE m.subject_id = s.id AND m.tenant_id = @tenant
+              AND m.subject_id <> @owner AND NOT s.is_system_subject;
+            INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, label, created_at)
+            SELECT @passkey, @owner, @credential, @credential, 0, '{}', 'integration fixture', now()
+            WHERE NOT EXISTS (SELECT 1 FROM passkey_credentials WHERE subject_id = @owner);
+            """,
+            ("tenant", TenantId), ("owner", OwnerSubjectId), ("passkey", Guid.CreateVersion7()),
+            ("credential", Guid.NewGuid().ToByteArray()));
 
         await ClearApiCachesAsync(Services, TenantId);
 

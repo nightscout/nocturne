@@ -48,10 +48,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     }
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private sealed record Site(
         string App, string Migrator, Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner,
@@ -63,7 +60,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     {
         var (app, migrator) = on ?? (database.AppConnectionString, database.MigratorConnectionString);
         var tenant = Guid.NewGuid();
-        await ExecuteAsync(migrator, $"""
+        await NpgsqlTestCommands.ExecuteAsync(migrator, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-lapse', true, now(), now());
             """);
@@ -104,7 +101,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var reason = Guid.CreateVersion7();
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(site.Tenant, "Camp");
-        return ExecuteAsync(site.Migrator, $"""
+        return NpgsqlTestCommands.ExecuteAsync(site.Migrator, $"""
             {teamAccessSql}
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
             VALUES ('{reason}', '{member}', 'team', '{teamAccess}', false, {ends});
@@ -182,7 +179,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var subjects = new SubjectRepository(site.Factory, AccountLinkRoutes.Off);
         var username = $"lapse-{lapsing.Subject:N}";
         var email = $"{username}@example.com";
-        await ExecuteAsync(site.Migrator, $"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $"""
             UPDATE subjects SET username = '{username}', email = '{email}', email_confirmed_at = now()
              WHERE id = '{lapsing.Subject}';
             """);
@@ -231,7 +228,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var site = await SiteAsync("sweep", (fresh.AppConnectionString, fresh.MigratorConnectionString));
         var bad = await LapsingAsync(site, "sweep-bad");
         var good = await LapsingAsync(site, "sweep-good");
-        await ExecuteAsync(site.Migrator, $$"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $$"""
             UPDATE tenant_member_reasons SET direct_permissions = '{"not":"a list"}'::jsonb
              WHERE tenant_member_id = '{{bad.Member}}' AND kind = 'direct';
             """);
@@ -399,7 +396,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var site = await SiteAsync("fails");
         var bad = await LapsingAsync(site, "fails-bad");
         var good = await LapsingAsync(site, "fails-good");
-        await ExecuteAsync(site.Migrator, $$"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $$"""
             UPDATE tenant_member_reasons SET direct_permissions = '{"not":"a list"}'::jsonb
              WHERE tenant_member_id = '{{bad.Member}}' AND kind = 'direct';
             """);
@@ -454,7 +451,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var site = await SiteAsync("resync", (fresh.AppConnectionString, fresh.MigratorConnectionString));
         var written = await DirectOnlyAsync(site, "resync-written");
         var started = await DirectOnlyAsync(site, "resync-started");
-        await ExecuteAsync(site.Migrator, $"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $"""
             UPDATE tenant_members SET next_reason_lapse_at = '{CampEnds:O}' WHERE id IN ('{written}', '{started}');
             """);
 
@@ -531,14 +528,6 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         (await site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, subject, [site.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct))
             .Should().BeTrue();
         return (await site.Members.FindMemberAsync(site.Tenant, subject, Ct))!.Id;
-    }
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private sealed class RecordingLogger : ILogger

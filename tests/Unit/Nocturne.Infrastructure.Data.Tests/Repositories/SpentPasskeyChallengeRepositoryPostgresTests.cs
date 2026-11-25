@@ -27,10 +27,7 @@ public class SpentPasskeyChallengeRepositoryPostgresTests(SpentPasskeyChallengeR
     }
 
     private NocturneDbContext Context() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        TestContexts.Context(database.AppConnectionString);
 
     private SuppliedContextFactory Contexts() => new(Context);
 

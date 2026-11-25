@@ -503,10 +503,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>Holds the first flag statement until <see cref="Release"/>, its links written.</summary>
     private sealed class PauseBeforeFlagWrite : DbCommandInterceptor
@@ -954,8 +951,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
     }
 

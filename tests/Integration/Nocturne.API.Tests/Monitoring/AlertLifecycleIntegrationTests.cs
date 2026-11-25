@@ -7,6 +7,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -40,9 +41,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the alert lifecycle tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
@@ -74,9 +73,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task GetActiveAlerts_WithSeededExcursion_ReturnsIt()
     {
         // Arrange
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (excursionId, _) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -104,9 +101,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task AcknowledgeAlerts_SetsAcknowledgedTimestamp()
     {
         // Arrange
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -138,9 +133,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task SnoozeInstance_ValidInstance_Returns204()
     {
         // Arrange
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (_, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -159,9 +152,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task SnoozeInstance_IsReportedOnActiveAlerts()
     {
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (excursionId, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -190,9 +181,7 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task SnoozeInstance_MaxSnoozesExceeded_Returns409()
     {
         // Arrange
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (_, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -237,35 +226,19 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task GetAlertHistory_ReturnsPaginatedResults()
     {
         // Arrange
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (excursionId, _) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
 
         // Close the excursion so it appears in history
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(_tenantId);
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "UPDATE alert_excursions SET ended_at = now() WHERE id = @excursionId;";
-            cmd.Parameters.AddWithValue("excursionId", excursionId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync("UPDATE alert_excursions SET ended_at = now() WHERE id = @excursionId;", ("excursionId", excursionId));
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText =
-                "UPDATE alert_instances SET status = 'resolved', resolved_at = now() WHERE alert_excursion_id = @excursionId;";
-            cmd.Parameters.AddWithValue("excursionId", excursionId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            "UPDATE alert_instances SET status = 'resolved', resolved_at = now() WHERE alert_excursion_id = @excursionId;",
+            ("excursionId", excursionId));
 
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 

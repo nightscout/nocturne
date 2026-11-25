@@ -108,8 +108,7 @@ public class ActivityBatchEquivalenceTests : ApiIntegrationTestBase
     {
         string[] tables = ["sleep_sessions", "state_spans", "heart_rates"];
         const string deletedId = "5b00000000000000000000d1";
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, tables);
         await SeedDeletedSleepSessionAsync(deletedId);
         var start = XDripMills(1, 0);
@@ -176,8 +175,7 @@ public class ActivityBatchEquivalenceTests : ApiIntegrationTestBase
     private async Task<(Dictionary<string, List<string>> Rows, List<string> Stored)> DecomposeAsync(
         int seed, Func<IServiceProvider, Task<List<string>>> decompose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
         await SeedTombstonesAsync(seed);
 

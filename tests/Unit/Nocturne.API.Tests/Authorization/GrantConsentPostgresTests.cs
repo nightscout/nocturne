@@ -111,10 +111,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] staged) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, staged);
 
     private sealed record Seeded(Guid Tenant, Guid Client, Guid Subject, SuppliedContextFactory Contexts);
 

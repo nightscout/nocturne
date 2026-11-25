@@ -38,10 +38,7 @@ public class SubjectUnclaimedTeamRowsPostgresTests(SubjectUnclaimedTeamRowsPostg
     }
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private static string Issuer(Guid provider) => $"https://{provider:N}.example";
 

@@ -4,6 +4,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -24,8 +25,7 @@ public class RecoveryCodePurposeIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_recovery_code_is_refused_at_handoff_and_redeems_at_recovery_mode()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         // The member still has a passkey at first, so the tenant is not in recovery mode and the

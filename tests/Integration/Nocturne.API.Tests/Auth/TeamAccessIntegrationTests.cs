@@ -5,6 +5,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -128,8 +129,7 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
 
     private async Task<Guid> TenantIdAsync()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return await AuthTestHelpers.GetTenantIdAsync(conn);
     }
 
@@ -139,8 +139,7 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, permissions);
         if (owner)

@@ -38,11 +38,7 @@ public class OAuthClientRepositoryPostgresTests(OAuthClientRepositoryPostgresTes
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly);
 
     private sealed record Seeded(Guid Tenant, string Referenced, string Unreferenced);
 

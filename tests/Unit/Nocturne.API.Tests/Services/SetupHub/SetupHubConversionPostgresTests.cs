@@ -51,10 +51,7 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, o => o.EnableRetryOnFailure())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.Retrying);
 
     private async Task<Guid> SeedTenantAsync()
     {

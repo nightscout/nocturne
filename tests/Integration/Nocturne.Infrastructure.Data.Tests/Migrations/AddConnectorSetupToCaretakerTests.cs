@@ -63,7 +63,7 @@ public class AddConnectorSetupToCaretakerFixture : IAsyncLifetime
         Before = await ReadAsync(_migrator);
         await MigrateAsync(_migrator, null);
         After = await ReadAsync(_migrator);
-        RowsChangedBySecondRun = await ExecuteAsync(_migrator, AddConnectorSetupToCaretaker.UpSql);
+        RowsChangedBySecondRun = await NpgsqlTestCommands.ExecuteAsync(_migrator, AddConnectorSetupToCaretaker.UpSql);
         AfterSecondRun = await ReadAsync(_migrator);
 
         var down = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "caretaker_connectors_down");
@@ -97,7 +97,7 @@ public class AddConnectorSetupToCaretakerFixture : IAsyncLifetime
         foreach (var (id, slug, isSystem, permissions) in roles)
         {
             var tenant = Guid.CreateVersion7();
-            await ExecuteAsync(connectionString, $"""
+            await NpgsqlTestCommands.ExecuteAsync(connectionString, $"""
                 INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
                 VALUES ('{tenant}', 'caretaker-{tenant:N}', 'Site', true, now(), now());
                 INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
@@ -118,20 +118,9 @@ public class AddConnectorSetupToCaretakerFixture : IAsyncLifetime
         return rows;
     }
 
-    private static async Task<int> ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
-
     private static async Task MigrateAsync(string connectionString, string? target)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(connectionString);
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(target);
     }

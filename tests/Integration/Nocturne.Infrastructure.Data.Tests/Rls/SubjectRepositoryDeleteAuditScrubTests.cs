@@ -1,9 +1,9 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -38,7 +38,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         foreach (var tenant in Tenants)
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
                 VALUES (@id, @slug, 'audit-scrub', true, now(), now())
                 """, ("id", tenant), ("slug", $"scrub-{tenant:N}"));
@@ -46,11 +46,11 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
 
         foreach (var subject in new[] { _leaver, _bystander })
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
                 VALUES (@id, @name, true, false, now(), now(), 'Approved')
                 """, ("id", subject), ("name", Name(subject)));
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
                 VALUES (@id, @tenant, @subject, '[]'::jsonb, now(), now(), false)
                 """, ("id", Guid.CreateVersion7()), ("tenant", _memberTenant), ("subject", subject));
@@ -58,19 +58,19 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
 
         foreach (var tenant in Tenants)
         {
-            await SetTenantAsync(conn, tenant);
+            await conn.PinTenantAsync(tenant);
             foreach (var actor in new[] { _leaver, _bystander })
             {
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO mutation_audit_log (id, tenant_id, entity_type, action, actor_subject_id, actor_name, ip_address, created_at)
                     VALUES (gen_random_uuid(), @tenant, 'SensorGlucose', 'update', @actor, @name, @ip, now())
                     """, ("tenant", tenant), ("actor", actor), ("name", Name(actor)), ("ip", Ip(actor)));
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO read_access_log (id, tenant_id, endpoint, status_code, actor_subject_id, actor_name, ip_address, user_agent, created_at)
                     VALUES (gen_random_uuid(), @tenant, 'GET /api/v4/sensor-glucoses', 200, @actor, @name, @ip, @agent, now())
                     """, ("tenant", tenant), ("actor", actor), ("name", Name(actor)), ("ip", Ip(actor)), ("agent", Agent(actor)));
                 var request = _requests[(tenant, actor)] = Guid.CreateVersion7();
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO membership_requests (id, tenant_id, subject_id, message, status, created_at)
                     VALUES (@id, @tenant, @actor, @message, 'pending', now())
                     """, ("id", request), ("tenant", tenant), ("actor", actor), ("message", Message(actor)));
@@ -246,7 +246,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         {
             foreach (var tenant in Tenants)
             {
-                await SetTenantAsync(conn, tenant);
+                await conn.PinTenantAsync(tenant);
                 var request = _requests[(tenant, _leaver)].ToString();
                 await InsertNoticeAsync(conn, tenant, _bystander, "membership.requested",
                     $"Membership request from {Name(_leaver)}", Message(_leaver), request, createdDaysAgo: 10);
@@ -269,7 +269,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var notices = new List<(string, string, string?, string, string?)>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT user_id, type, source_id, title, subtitle FROM in_app_notifications WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -282,7 +282,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     private static Task InsertNoticeAsync(
         NpgsqlConnection conn, Guid tenant, Guid holder, string type, string title, string? subtitle, string sourceId,
         int createdDaysAgo = 0, int? archivedDaysAgo = null, string? metadata = null) =>
-        ExecuteAsync(conn, """
+        conn.ExecuteAsync("""
             INSERT INTO in_app_notifications (id, tenant_id, user_id, type, category, urgency, title, subtitle, source_id, created_at, is_archived, archived_at, metadata_json)
             VALUES (gen_random_uuid(), @tenant, @holder, @type, 'ActionRequired', 'Info', @title, @subtitle, @source,
                 now() - make_interval(days => @created), @archived::int IS NOT NULL, now() - make_interval(days => @archived::int),
@@ -296,7 +296,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var requesters = new List<Guid>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT subject_id FROM membership_requests WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -326,7 +326,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var rows = new Dictionary<Guid, (string?, string?)>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT actor_subject_id, actor_name, ip_address FROM mutation_audit_log WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -340,7 +340,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     {
         var rows = new Dictionary<Guid, (string?, string?, string?)>();
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT actor_subject_id, actor_name, ip_address, user_agent FROM read_access_log WHERE tenant_id = @tenant";
         cmd.Parameters.AddWithValue("tenant", tenant);
@@ -360,16 +360,4 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
 
     private static string? Text(NpgsqlDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant) =>
-        await ExecuteAsync(conn, "SELECT set_config('app.current_tenant_id', @tenant, false)", ("tenant", tenant.ToString()));
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
 }

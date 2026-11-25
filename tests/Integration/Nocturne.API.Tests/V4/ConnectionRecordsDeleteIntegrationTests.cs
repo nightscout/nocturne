@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -28,11 +29,13 @@ public class ConnectionRecordsDeleteIntegrationTests(ApiIntegrationTestFixture f
     {
         var grantId = Guid.CreateVersion7();
         await using var conn = await OpenPostgresAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(Fixture.TenantId, local: true);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
             INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, created_at)
             VALUES (@id, @tenant, @subject, 'direct', ARRAY['*'], 'uploader', now());
-            """, ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("id", grantId), ("subject", Fixture.OwnerSubjectId));
+            """, ("tenant", Fixture.TenantId), ("id", grantId), ("subject", Fixture.OwnerSubjectId));
+        await transaction.CommitAsync();
         return grantId;
     }
 
@@ -45,14 +48,18 @@ public class ConnectionRecordsDeleteIntegrationTests(ApiIntegrationTestFixture f
         var clientId = Guid.CreateVersion7();
         var grantId = Guid.CreateVersion7();
         await using var conn = await OpenPostgresAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(Fixture.TenantId, local: true);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
             INSERT INTO oauth_clients (id, tenant_id, client_id, software_id, display_name, is_known, redirect_uris)
             VALUES (@client, @tenant, @clientKey, @software, 'Companion', true, '[]');
             INSERT INTO oauth_grants (id, tenant_id, client_id, subject_id, grant_type, scopes, created_at, revoked_at)
             VALUES (@id, @tenant, @client, @subject, 'app', ARRAY['*'], now() - interval '90 days',
                     CASE WHEN @revoked THEN now() - interval '45 days' END);
-            """, ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("client", clientId), ("clientKey", $"companion-{clientId:N}"), ("software", softwareId), ("id", grantId), ("subject", Fixture.OwnerSubjectId), ("revoked", revoked));
+            """,
+            ("tenant", Fixture.TenantId), ("client", clientId), ("clientKey", $"companion-{clientId:N}"),
+            ("software", softwareId), ("id", grantId), ("subject", Fixture.OwnerSubjectId), ("revoked", revoked));
+        await transaction.CommitAsync();
         return grantId;
     }
 
@@ -61,11 +68,13 @@ public class ConnectionRecordsDeleteIntegrationTests(ApiIntegrationTestFixture f
     {
         await using var conn = await OpenPostgresAsync();
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Other member");
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(Fixture.TenantId, local: true);
         var grants = await conn.QueryAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
             SELECT id FROM oauth_grants WHERE subject_id = @subject;
             """,
-            reader => reader.GetGuid(0), ("tenantText", Fixture.TenantId.ToString()), ("subject", subjectId));
+            reader => reader.GetGuid(0), ("subject", subjectId));
+        await transaction.CommitAsync();
         grants.Should().NotBeEmpty();
         return grants[0];
     }

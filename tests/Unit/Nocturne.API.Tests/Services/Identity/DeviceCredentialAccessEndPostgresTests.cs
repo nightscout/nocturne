@@ -73,10 +73,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private sealed record Seeded(Guid Tenant, Guid Maker, SuppliedContextFactory Contexts);
 
@@ -421,10 +418,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
     }
 
     private NocturneDbContext ContextRefusingGrantSaves(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), new RefuseGrantSaves())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, [new RefuseGrantSaves()]);
 
     [Fact]
     public async Task ADateChangeThatRollsBackCapsNothing()
@@ -840,7 +834,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
     {
         var provider = MigrationJobHarness.BuildProvider(
             new OneTokenSite(),
-            database: o => o.UseNpgsql(database.AppConnectionString).AddInterceptors(new TenantConnectionInterceptor()));
+            database: o => o.UseTenantInterceptor(database.AppConnectionString));
         var service = MigrationJobHarness.CreateService(provider);
         var tenant = new TenantContext(seeded.Tenant, "device", "Device", IsActive: true, IsDemo: false);
         var job = await service.StartMigrationAsync(

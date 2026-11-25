@@ -8,8 +8,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -34,7 +34,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var ruleId = await SeedRuleAsync(provider, tenant);
 
         await using var first = await ContextAsync(provider, tenant);
@@ -73,7 +73,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var ruleA = await SeedRuleAsync(provider, tenant);
         var ruleB = await SeedRuleAsync(provider, tenant);
 
@@ -108,7 +108,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var context = await ContextAsync(provider, tenant);
 
         var act = () => new AlertTrackerRepository(DbUnitOfWork.Own(context)).LockRuleAsync(Guid.NewGuid());
@@ -121,7 +121,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var ruleId = await SeedRuleAsync(provider, tenant);
 
         await using var context = await ContextAsync(provider, tenant);
@@ -146,15 +146,6 @@ public class AlertTrackerTransitionLockTests
         State = state,
         UpdatedAt = DateTime.UtcNow,
     };
-
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
-    }
 
     private static async Task<NocturneDbContext> ContextAsync(ServiceProvider provider, Guid tenantId)
     {

@@ -63,10 +63,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
@@ -556,10 +553,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
     }
 
     private NocturneDbContext ContextRefusingGrantSaves(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), new RefuseGrantSaves())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, [new RefuseGrantSaves()]);
 
     [Fact]
     public async Task ASetMemberAccessEndThatFailsAfterTheCapIsStagedChangesNothingAndEvictsNothing()

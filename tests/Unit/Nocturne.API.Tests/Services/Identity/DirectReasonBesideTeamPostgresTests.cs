@@ -76,10 +76,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
 
     private NocturneDbContext Context(Guid tenant, Guid? actor)
     {
-        var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
+        var context = TestContexts.Context(database.AppConnectionString)
             .ActingAs(actor is { } subject ? new TestAuditActor { SubjectId = subject } : null);
         context.TenantId = tenant;
         return context;
@@ -90,7 +87,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     private async Task<Seeded> SeedAsync(string slug, bool personPending = false)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'direct-beside-team', true, now(), now());
             """);
@@ -144,7 +141,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
                 VALUES ('{Guid.CreateVersion7()}', '{access}', '{teamMember}', 'approved');
                 """
             : string.Empty;
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{at}', false);
             INSERT INTO teams (id, name) VALUES ('{team}', '{teamName}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
@@ -339,13 +336,14 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         return (await GuestLinkByPersonAsync(s), await MadeByPersonAsync(s));
     }
 
-    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => ExecuteAsync($"""
+    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => NpgsqlTestCommands.ExecuteAsync(
+        database.MigratorConnectionString, $"""
         SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
         UPDATE alert_rule_channels SET channel_type = '{channelType}' WHERE id = '{channel}';
         """);
 
     /// <summary>Clears the end of <see cref="Seeded.Person"/>'s row, as a build that knows nothing of reasons would.</summary>
-    private Task ClearAccessEndAsync(Seeded s) => ExecuteAsync($"""
+    private Task ClearAccessEndAsync(Seeded s) => NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
         SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
         UPDATE tenant_members SET access_ends_at = NULL WHERE tenant_id = '{s.Tenant}' AND subject_id = '{s.Person}';
         """);
@@ -943,16 +941,6 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         (await AccessEndAsync(s)).Should().Be(teamEnds);
         (await LinkStateAsync(s, link)).Should().Be(((DateTime?)null, false));
         (await MadeStateAsync(s, made)).Should().Be(((DateTime?)null, false, (DateTime?)null));
-    }
-
-    private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private Task<List<string>> ReadAsync(string sql) => ReadInTenantAsync(null, sql);

@@ -812,8 +812,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>(sql);
     }
 
     private async Task ExecuteAsync(Guid tenant, string sql)
@@ -822,8 +821,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
     }
 
@@ -835,10 +833,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     private AsyncServiceScope Scope(Guid tenant)
     {

@@ -98,7 +98,7 @@ public partial class TeamAccessEndPostgresTests
     private async Task LapseDirectReasonAsync(Site site, Guid subject)
     {
         var lapsed = Now.AddDays(-1);
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             UPDATE tenant_member_reasons SET access_ends_at = '{lapsed:O}'
              WHERE kind = 'direct' AND tenant_member_id = (SELECT id FROM tenant_members WHERE tenant_id = '{site.Tenant}' AND subject_id = '{subject}');
@@ -269,7 +269,7 @@ public partial class TeamAccessEndPostgresTests
         await HoldsOnlyTheDirectReasonAsync(site, site.Owner);
         var member = await MemberIdAsync(site, site.Owner);
         var reason = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
             VALUES ('{reason}', '{member}', 'team', '{access}', false, NULL);
@@ -291,7 +291,7 @@ public partial class TeamAccessEndPostgresTests
     public async Task An_owner_whose_row_has_no_reason_yet_is_read_as_an_owner_from_the_row()
     {
         var (site, team, _, _) = await SiteAndTeamAsync("owner-row-only");
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             DELETE FROM tenant_member_reasons
              WHERE tenant_member_id = (SELECT id FROM tenant_members WHERE tenant_id = '{site.Tenant}' AND subject_id = '{site.Owner}');

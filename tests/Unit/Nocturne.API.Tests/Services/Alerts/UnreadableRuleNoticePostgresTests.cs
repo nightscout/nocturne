@@ -54,10 +54,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
     private static readonly DateTime Now = new(2026, 11, 22, 8, 0, 0, DateTimeKind.Utc);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private sealed class Harness
     {

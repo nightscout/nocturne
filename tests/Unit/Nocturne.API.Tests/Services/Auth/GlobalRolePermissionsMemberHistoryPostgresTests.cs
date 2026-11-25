@@ -42,10 +42,7 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
     }
 
     private NocturneDbContext Context(Guid tenant, Guid? actor = null) =>
-        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant }
+        TestContexts.Context(database.AppConnectionString, tenant)
             .ActingAs(new TestAuditActor { SubjectId = actor });
 
     [Fact]

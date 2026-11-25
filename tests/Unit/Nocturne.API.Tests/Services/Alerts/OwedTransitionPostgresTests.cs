@@ -61,10 +61,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>
     /// One tenant with one enabled rule sending to one Home Assistant instance, and the pieces of

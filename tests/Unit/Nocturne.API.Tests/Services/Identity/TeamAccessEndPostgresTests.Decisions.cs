@@ -218,7 +218,8 @@ public partial class TeamAccessEndPostgresTests
     public async Task The_startup_check_removes_the_team_reason_of_a_declined_row()
     {
         var (site, _, access, staff) = await StaffWithReasonAsync("check-declined");
-        await ExecuteAsync($"UPDATE team_site_staff SET status = 'declined' WHERE team_tenant_access_id = '{access}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_site_staff SET status = 'declined' WHERE team_tenant_access_id = '{access}'");
 
         await ReconcileAsync();
 

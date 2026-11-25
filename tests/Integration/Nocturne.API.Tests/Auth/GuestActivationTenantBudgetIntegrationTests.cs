@@ -122,8 +122,7 @@ public class GuestActivationTenantBudgetIntegrationTests : ApiIntegrationTestBas
         var slug = $"{prefix}-{Guid.NewGuid():N}"[..20];
         var tenantId = await AuthTestHelpers.SeedTenantAsync(Fixture, slug, prefix);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, $"{prefix} owner");
         var (_, code) = await AuthTestHelpers.SeedGuestLinkAsync(conn, subjectId);
 

@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Migrations;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -103,10 +102,7 @@ public class ShowNightscoutSourcesByHostFixture : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     private static DbContextOptions<NocturneDbContext> Options(string connectionString) =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(connectionString);
 
     private async Task<IReadOnlyList<SourceRow>> ReadSourcesAsync()
     {

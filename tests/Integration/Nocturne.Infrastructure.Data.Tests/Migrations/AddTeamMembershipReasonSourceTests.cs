@@ -38,18 +38,18 @@ public class AddTeamMembershipReasonSourceFixture : IAsyncLifetime
     {
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(BeforeReasons, "team_reason_source");
         Migrator = database.MigratorConnectionString;
-        await ExecuteAsync(Migrator, $"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{Tenant}', 'team-reason-{Tenant:N}', 'Site', true, now(), now());
             """);
         await SeedMemberAsync(Migrator, Tenant, PlainMember, "NULL", "NULL");
         await SeedMemberAsync(Migrator, Tenant, EndingMember, "'[\"glucose.read\"]'", "'2026-12-01T00:00:00Z'");
         await MigrateAsync(Migrator);
-        DirectWithoutSourceAfterUpgrade = (long)(await ScalarAsync(Migrator, $"""
+        DirectWithoutSourceAfterUpgrade = (long)(await NpgsqlTestCommands.ScalarAsync<object?>(Migrator, $"""
             SELECT count(*) FROM tenant_member_reasons
              WHERE tenant_member_id IN ('{PlainMember}', '{EndingMember}') AND kind = 'direct' AND source_id IS NULL
             """))!;
-        OtherReasonsAfterUpgrade = (long)(await ScalarAsync(
+        OtherReasonsAfterUpgrade = (long)(await NpgsqlTestCommands.ScalarAsync<object?>(
             Migrator, "SELECT count(*) FROM tenant_member_reasons WHERE kind <> 'direct' OR source_id IS NOT NULL"))!;
 
         var down = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "team_reason_source_down");
@@ -60,29 +60,14 @@ public class AddTeamMembershipReasonSourceFixture : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    internal static async Task<object?> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteScalarAsync();
-    }
-
-    internal static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     /// <summary>A team with access to <see cref="Tenant"/>; returns the access's id.</summary>
     internal async Task<Guid> NewTeamAccessAsync()
     {
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
-        await ExecuteAsync(Migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        await using var conn = await NpgsqlTestCommands.OpenAsync(Migrator);
+        await conn.PinTenantAsync(Tenant);
+        await conn.ExecuteAsync($"""
             INSERT INTO teams (id, name) VALUES ('{team}', 'Clinic');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{Tenant}', false);
@@ -90,7 +75,7 @@ public class AddTeamMembershipReasonSourceFixture : IAsyncLifetime
         return access;
     }
 
-    internal Task InsertReasonAsync(Guid member, string kind, Guid? source) => ExecuteAsync(Migrator, $"""
+    internal Task InsertReasonAsync(Guid member, string kind, Guid? source) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours)
         VALUES ('{Guid.CreateVersion7()}', '{member}', '{kind}', {(source is { } s ? $"'{s}'" : "NULL")}, false);
         """);
@@ -98,7 +83,7 @@ public class AddTeamMembershipReasonSourceFixture : IAsyncLifetime
     private static async Task SeedMemberAsync(string connectionString, Guid tenant, Guid member, string permissions, string endsAt)
     {
         var subject = Guid.CreateVersion7();
-        await ExecuteAsync(connectionString, $"""
+        await NpgsqlTestCommands.ExecuteAsync(connectionString, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{subject}', 'member-{subject:N}', true, false, now(), now(), 'Approved');
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, limit_to_24_hours, access_ends_at, sys_created_at, sys_updated_at)
@@ -108,10 +93,7 @@ public class AddTeamMembershipReasonSourceFixture : IAsyncLifetime
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(connectionString);
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
@@ -129,7 +111,7 @@ public class AddTeamMembershipReasonSourceTests(AddTeamMembershipReasonSourceFix
     {
         fixture.DirectWithoutSourceAfterUpgrade.Should().Be(2);
         fixture.OtherReasonsAfterUpgrade.Should().Be(0);
-        (await AddTeamMembershipReasonSourceFixture.ScalarAsync(fixture.Migrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.Migrator,
             $"SELECT convalidated FROM pg_constraint WHERE conname = '{Check}'")).Should().Be(true);
     }
 
@@ -153,10 +135,12 @@ public class AddTeamMembershipReasonSourceTests(AddTeamMembershipReasonSourceFix
         (await nowhere.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
 
         await fixture.InsertReasonAsync(fixture.PlainMember, "team", access);
-        var delete = () => AddTeamMembershipReasonSourceFixture.ExecuteAsync(fixture.Migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{fixture.Tenant}', false);
-            DELETE FROM team_tenant_access WHERE id = '{access}';
-            """);
+        var delete = async () =>
+        {
+            await using var conn = await NpgsqlTestCommands.OpenAsync(fixture.Migrator);
+            await conn.PinTenantAsync(fixture.Tenant);
+            await conn.ExecuteAsync($"DELETE FROM team_tenant_access WHERE id = '{access}';");
+        };
 
         (await delete.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
     }
@@ -164,9 +148,9 @@ public class AddTeamMembershipReasonSourceTests(AddTeamMembershipReasonSourceFix
     [Fact]
     public async Task Down_drops_the_check_the_foreign_key_and_its_index()
     {
-        (await AddTeamMembershipReasonSourceFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             $"SELECT count(*) FROM pg_constraint WHERE conname IN ('{Check}', '{ForeignKey}')")).Should().Be(0L);
-        (await AddTeamMembershipReasonSourceFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'IX_tenant_member_reasons_source_id'")).Should().Be(0L);
     }
 }

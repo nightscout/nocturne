@@ -72,10 +72,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private sealed class Site(Guid tenant, string slug, Guid guest, SuppliedContextFactory contexts, FakeTimeProvider clock, BotService bot)
     {

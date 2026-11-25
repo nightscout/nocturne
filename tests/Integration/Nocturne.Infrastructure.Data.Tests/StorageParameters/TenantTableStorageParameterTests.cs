@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.StorageParameters;
@@ -198,8 +199,7 @@ public class TenantTableStorageParameterTests
     private async Task ExecuteAsMigratorAsync(string sql)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
     }
 
     private async Task<string?> ReadStoredValueAsync(string table, string parameter) =>

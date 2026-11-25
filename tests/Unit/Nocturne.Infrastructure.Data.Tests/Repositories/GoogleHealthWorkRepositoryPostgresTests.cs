@@ -35,10 +35,7 @@ public class GoogleHealthWorkRepositoryPostgresTests(GoogleHealthWorkRepositoryP
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private GoogleHealthWorkRepository Work(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
 

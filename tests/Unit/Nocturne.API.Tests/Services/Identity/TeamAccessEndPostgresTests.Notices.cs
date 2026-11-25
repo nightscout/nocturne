@@ -12,8 +12,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -346,11 +346,12 @@ public partial class TeamAccessEndPostgresTests
         var recount = new StaffNotices([new TeamSiteKey(site.Tenant, team.Id)], []);
         var past = $"{Now.AddHours(-1):yyyy-MM-dd HH:mm:ss}";
 
-        await ExecuteAsync($"UPDATE team_members SET ends_at = '{past}' WHERE team_id = '{team.Id}' AND subject_id = '{ended}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_members SET ends_at = '{past}' WHERE team_id = '{team.Id}' AND subject_id = '{ended}'");
         await Announcer(Contexts(Guid.Empty)).AnnounceAsync(recount);
         CountOf(Waiting(site.Owner)).Should().Be(1);
 
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             UPDATE team_tenant_access SET access_ends_at = '{past}' WHERE id = '{access}';
             """);
@@ -380,7 +381,7 @@ public partial class TeamAccessEndPostgresTests
     }
 
     private Task ApproveRowAsync(Site site, Guid access, Guid staff) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             UPDATE team_site_staff SET status = '{TeamSiteStaffStatus.Approved}'
              WHERE team_tenant_access_id = '{access}'

@@ -30,15 +30,15 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
         await MigrateToAsync(null);
         AfterUp = await ListIndexesAsync();
 
-        await ExecuteAsync(_database.SuperuserConnectionString, """
+        await NpgsqlTestCommands.ExecuteAsync(_database.SuperuserConnectionString, """
             UPDATE pg_index SET indisvalid = false
             WHERE indexrelid = 'public.ix_notes_tenant_visible_timestamp_id'::regclass
             """);
-        await ExecuteAsync(_database.MigratorConnectionString, """
+        await NpgsqlTestCommands.ExecuteAsync(_database.MigratorConnectionString, """
             CREATE INDEX ix_boluses_tenant_timestamp_id ON boluses (tenant_id, "timestamp" DESC, id DESC)
             WHERE deleted_at IS NULL
             """);
-        await ExecuteAsync(_database.MigratorConnectionString,
+        await NpgsqlTestCommands.ExecuteAsync(_database.MigratorConnectionString,
             $"DELETE FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = '{Migration}'");
         await MigrateToAsync(null);
         AfterRestart = await ListIndexesAsync();
@@ -53,10 +53,7 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
 
     private async Task MigrateToAsync(string? target)
     {
-        await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.MigratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        await using var context = new NocturneDbContext(TestContexts.MigrationsOptions(_database.MigratorConnectionString));
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
 
@@ -75,14 +72,6 @@ public class IndexVisibleRowsOfDeduplicatedTablesFixture : IAsyncLifetime
         while (await reader.ReadAsync())
             indexes[reader.GetString(0)] = reader.GetString(1);
         return indexes;
-    }
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 }
 
