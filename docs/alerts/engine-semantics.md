@@ -711,18 +711,31 @@ in §3 plus:
   bound) before `now`, its arrival being the earlier of its timestamp and when the host stored it;
   reports are ordered by that arrival, and `until` is that arrival plus 11 minutes. So a report
   dated ahead lasts 11 minutes from when it came, and an old report backfilled now never counts.
+  Of reports that arrived at the same instant, a state that is not ok is the newest, then a report
+  with no state, then an ok one, then the lower id, so the choice never depends on the order rows
+  are read in. Only a state that is not ok holds a glucose leaf, so a report that flagged the sensor
+  is not outvoted by one that arrived with it, and no state ranks above ok since it claims nothing
+  about the sensor. Only the newest report speaks: when it has no state, the sensor's state is
+  absent (a `sensor_state` leaf reads unknown and the glucose leaves are not held), whatever an
+  older report said.
 - When the backend stores a device status, it reads the status's CareLink `cgm.sensorState`
   (Medtronic Guardian sensors), then its `xdripjs.state` session code (Dexcom G5 and G6 through
-  Lookout, Logger and xdrip-js), each through an allowlist where every other value is no state, and
-  writes a sensor state report (`SensorStateReport`) for the first value an allowlist maps, under
-  the status's device and the data source it was stored under. A status with neither writes none.
-  The host reads the state only from these reports. A newest report whose state this build cannot
-  read is no state, and an older report does not stand in for it. An entry is added only from a real
+  Lookout, Logger and xdrip-js), each through an allowlist, and writes a sensor state report
+  (`SensorStateReport`) under the status's device and the data source it was stored under: with the
+  first value an allowlist maps, that state; with neither value mapped, a report with no state for
+  the first value stated, CareLink's first. A value the allowlists do not map is a state Nocturne
+  does not recognise, and it replaces the older state, since the sensor has moved on from what it
+  said before: the engine then sees the sensor's state absent (a `sensor_state` leaf reads unknown
+  and the glucose leaves are not held), never the older state and never a state name it does not
+  know. A status that states neither field (or an empty CareLink value) writes
+  none, as it says nothing new. The host reads the state only from these reports. A newest report
+  whose state this build cannot read is no state in the same way. An entry is added only from a real
   upload. CareLink's: `NO_ERROR_MESSAGE` ok, `WARM_UP` warming up, `CALIBRATION_REQUIRED`
   calibration needed, `SENSOR_ERROR` and `CHANGE_SENSOR` error, `SENSOR_END_OF_LIFE` expired.
   xdripjs: `0x02` warming up, `0x06` ok, `0x04`, `0x05`, `0x08` to `0x0a`, `0x0d` calibration
   needed, `0x0b`, `0x0c`, `0x10` to `0x12` error, `0x0f` expired. The routine calibration prompts
-  (`0x07`, `0x0e`), a stopped session (`0x01`) and excess noise (`0x03`) are no state. CareLink
+  (`0x07`, `0x0e`), a stopped session (`0x01`) and excess noise (`0x03`) are not mapped, so they
+  write a report with no state. CareLink
   writes a status and its readings under one device name (`CareLink {family}`) and its connector's
   data source, so they match. An upload through the v1 API names no data source on its readings or
   its statuses, so an xdripjs report has no source to match and is no state. Neither source gives a
