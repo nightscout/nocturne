@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -76,13 +77,46 @@ public class AlertDeliveryTimeoutTests
     {
         const string Refused = "https://203.0.113.20/hook";
         const string Answers = "https://203.0.113.21/hook";
-        var handler = new RefusesOneAnswersTheRest(Refused);
+        var handler = new Scripted(refuse: Refused);
         var sender = WebhookTestHarness.Sender(handler);
 
         var failures = await sender.SendAsync([Refused, Answers], "{}", null, CancellationToken.None);
 
         failures.Should().Equal(Refused);
-        handler.Requested.Should().Equal(Refused, Answers);
+        handler.Requested.Should().BeEquivalentTo([Refused, Answers]);
+    }
+
+    [Fact]
+    public async Task Webhook_sender_ends_within_one_timeout_when_no_url_answers()
+    {
+        string[] urls = ["https://203.0.113.30/hook", "https://203.0.113.31/hook", "https://203.0.113.32/hook"];
+        var clock = new FakeTimeProvider();
+        var handler = new Scripted(hang: urls);
+        var sender = WebhookTestHarness.Sender(handler, timeProvider: clock);
+
+        var send = sender.SendAsync(urls, "{}", null, CancellationToken.None);
+        await handler.AllHanging.WaitAsync(Eventually.DefaultPatience);
+        clock.Advance(AlertDeliveryClient.Timeout);
+
+        (await send.WaitAsync(Eventually.DefaultPatience)).Should().Equal(urls);
+    }
+
+    [Fact]
+    public async Task Webhook_sender_reports_each_failed_url_in_order_and_not_the_one_that_answered()
+    {
+        const string Refused = "https://203.0.113.40/hook";
+        const string Answers = "https://203.0.113.41/hook";
+        const string Silent = "https://203.0.113.42/hook";
+        var clock = new FakeTimeProvider();
+        var handler = new Scripted(refuse: Refused, hang: [Silent]);
+        var sender = WebhookTestHarness.Sender(handler, timeProvider: clock);
+
+        var send = sender.SendAsync([Silent, Answers, Refused], "{}", null, CancellationToken.None);
+        await handler.AllHanging.WaitAsync(Eventually.DefaultPatience);
+        clock.Advance(AlertDeliveryClient.Timeout);
+
+        (await send.WaitAsync(Eventually.DefaultPatience)).Should().Equal(Silent, Refused);
+        handler.Requested.Should().BeEquivalentTo([Silent, Answers, Refused]);
     }
 
     [Fact]
@@ -92,7 +126,7 @@ public class AlertDeliveryTimeoutTests
         const string Answers = "https://203.0.113.21/hook";
         var clock = new FakeTimeProvider();
         var resolverStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var handler = new RefusesOneAnswersTheRest(refuse: null);
+        var handler = new Scripted();
         var sender = WebhookTestHarness.Sender(
             handler,
             timeProvider: clock,
@@ -167,18 +201,32 @@ public class AlertDeliveryTimeoutTests
 
     private const string WebhookRequestSenderName = Nocturne.API.Services.Alerts.Webhooks.WebhookRequestSender.HttpClientName;
 
-    private sealed class RefusesOneAnswersTheRest(string? refuse) : HttpMessageHandler
+    /// <summary>Refuses <c>refuse</c>, never answers the <c>hang</c> URLs, and answers 200 to the rest.</summary>
+    private sealed class Scripted(string? refuse = null, string[]? hang = null) : HttpMessageHandler
     {
-        public List<string> Requested { get; } = [];
+        private readonly ConcurrentQueue<string> _requested = new();
+        private readonly TaskCompletionSource _allHanging = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _hanging;
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        public IReadOnlyCollection<string> Requested => _requested;
+
+        /// <summary>Completes once every <c>hang</c> URL has been requested and is waiting.</summary>
+        public Task AllHanging => _allHanging.Task;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var url = request.RequestUri!.ToString();
-            Requested.Add(url);
-            return url == refuse
-                ? throw new HttpRequestException(HttpRequestError.ConnectionError)
-                : Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+            _requested.Enqueue(url);
+            if (url == refuse)
+                throw new HttpRequestException(HttpRequestError.ConnectionError);
+            if (hang?.Contains(url) == true)
+            {
+                if (Interlocked.Increment(ref _hanging) == hang.Length)
+                    _allHanging.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
         }
     }
 

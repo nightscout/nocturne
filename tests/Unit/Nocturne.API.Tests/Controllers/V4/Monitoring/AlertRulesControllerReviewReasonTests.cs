@@ -69,7 +69,7 @@ public class AlertRulesControllerReviewReasonTests
             new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
-            new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(db), TimeProvider.System),
             MockTenantAccessor.Create(db.TenantId).Object,
             referenceService.Object,
             Mock.Of<IAlertDeliveryService>(),

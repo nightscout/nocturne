@@ -134,7 +134,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             ActiveDnd = dnd,
             Notice = new UnevaluableRuleNotice(
                 repository,
-                new AlertRuleRepository(contexts),
+                new AlertRuleRepository(contexts, TimeProvider.System),
                 accessor.Object,
                 delivery.Object,
                 enricher.Object,

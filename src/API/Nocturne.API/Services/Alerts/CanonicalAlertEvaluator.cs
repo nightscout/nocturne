@@ -27,7 +27,8 @@ namespace Nocturne.API.Services.Alerts;
 /// A reading dated beyond the clock tolerance is not selected, so its arrival evaluates nothing new:
 /// the selected reading is the one evaluated before it, and the watermark skips it as such. The
 /// arrival is reported to <see cref="IClockAnomalyNotice"/> after the evaluation, whatever the
-/// watermark says, and a failure of the notice is only logged.
+/// watermark says, unless the caller reports it (<see cref="ReadingReport.ByCaller"/>), and a failure
+/// of the notice is only logged.
 /// Writers publish in chunks and re-publish readings they have already stored, so the same
 /// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
 /// those repeats to one pass per reading per <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>,
@@ -114,7 +115,8 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     };
 
     /// <inheritdoc />
-    public async Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+    public async Task<bool> EvaluateAsync(
+        MovedFacts moved, ReadingReport report = ReadingReport.Here, CancellationToken ct = default)
     {
         var ran = false;
         try
@@ -122,9 +124,9 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             var (readAt, now) = _decisions.BeginRead();
             var selection = await AlertReadings.SelectAsync(_canonicalGlucose, now, ct);
             ran = await EvaluateSelectedAsync(selection.Selected, readAt, moved, ct);
-            await _clockAnomalyNotice.ReportReadingIsolatedAsync(selection, now, _logger, ct);
+            if (report == ReadingReport.Here)
+                await _clockAnomalyNotice.ReportReadingIsolatedAsync(selection, now, _logger, ct);
         }
-        catch (OperationCanceledException) { throw; }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
@@ -133,7 +135,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         {
             _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             // The write is already stored, and the evaluation runs off its request: a fault here
             // must not stop the next one.

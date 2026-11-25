@@ -149,7 +149,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
             new TenantMembershipRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
             new SubjectRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
             new AlertRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
-            new AlertRuleRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
+            new AlertRuleRepository(new SuppliedContextFactory(() => Context(tenant, failure)), TimeProvider.System),
             MockTenantAccessor.Create(tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

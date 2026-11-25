@@ -33,7 +33,7 @@ public class AlertRulesControllerSettingOptionsTests
             new TenantMembershipRepository(factory, AccountLinkRoutes.Off),
             new SubjectRepository(factory, AccountLinkRoutes.Off),
             new AlertRepository(factory),
-            new AlertRuleRepository(factory),
+            new AlertRuleRepository(factory, TimeProvider.System),
             MockTenantAccessor.Create(db.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

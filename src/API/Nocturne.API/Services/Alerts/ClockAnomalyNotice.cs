@@ -305,7 +305,7 @@ internal static class ClockAnomalyNoticeIsolation
         {
             await notice.ReportReadingAsync(selection, now, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "The clock-anomaly notice could not be updated for a reading selection");
         }
@@ -319,7 +319,7 @@ internal static class ClockAnomalyNoticeIsolation
         {
             await notice.ReportAsync(context, anomalies, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "The clock-anomaly notice could not be updated for an evaluation pass");
         }

@@ -192,7 +192,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                     var tz = await _deps.TherapySettings.GetTimezoneAsync(ct: ct);
                     enriched = enriched with { TenantTimeZoneId = tz };
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
                     _logger.LogWarning(ex, "Failed to resolve tenant timezone for DND scheduling; scheduled window will fall back to UTC");
                 }
@@ -243,7 +243,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 var tz = await _deps.TherapySettings.GetTimezoneAsync(ct: ct);
                 enriched = enriched with { TenantTimeZoneId = tz };
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 _logger.LogWarning(ex, "Failed to resolve tenant timezone; time-of-day/day-of-week/glucose-bucket evaluators will fall back to UTC");
             }
@@ -333,7 +333,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             var sessions = await _deps.Sleep.GetSessionsAsync(from: now, to: now, limit: 1, cancellationToken: ct);
             return sessions.Any();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to resolve active sleep session for alert evaluation; treating as inactive");
             return false;
@@ -572,7 +572,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             return await _deps.IobCob.ReadInputsAsync(now.ToMills(), ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to read treatments for IOB and COB for alert evaluation; leaving both null");
             return null;
@@ -592,7 +592,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 now, inputs.Boluses.Count, inputs.TempBasals.Count, result.Iob, result.Source ?? "(none)");
             return result.Iob.ToDecimal();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to compute IOB for alert evaluation; leaving null");
             return null;
@@ -610,7 +610,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 now, inputs.CarbIntakes.Count, result.Cob, result.Source ?? "(none)");
             return result.Cob.ToDecimal();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to compute COB for alert evaluation; leaving null");
             return null;
@@ -644,7 +644,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             _logger.LogWarning(ex, "Prediction service had insufficient data; returning empty predictions");
             return NoPredictions;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Prediction service failed; returning empty predictions");
             return NoPredictions;

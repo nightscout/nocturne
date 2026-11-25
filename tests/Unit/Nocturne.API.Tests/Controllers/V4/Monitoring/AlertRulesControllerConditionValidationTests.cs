@@ -40,7 +40,7 @@ public class AlertRulesControllerConditionValidationTests
             new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
             new SubjectRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(ctx)),
-            new AlertRuleRepository(new TestNocturneDbContextFactory(ctx)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(ctx), TimeProvider.System),
             MockTenantAccessor.Create(ctx.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

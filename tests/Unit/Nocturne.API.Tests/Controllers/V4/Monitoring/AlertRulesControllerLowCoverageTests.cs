@@ -89,7 +89,7 @@ public class AlertRulesControllerLowCoverageTests
             new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
-            new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(db), TimeProvider.System),
             MockTenantAccessor.Create(db.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

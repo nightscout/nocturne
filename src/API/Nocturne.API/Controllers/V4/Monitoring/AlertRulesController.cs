@@ -317,7 +317,7 @@ public class AlertRulesController : ControllerBase
             SmartSnoozeConfig.StoredConditions(trees.ClientConfiguration));
         var wasEnabled = rule.IsEnabled;
 
-        var rules = new AlertRuleRepository(unit);
+        var rules = new AlertRuleRepository(unit, _time);
         var write = new AlertRuleWrite(
             request.Name,
             request.Description,
@@ -409,7 +409,7 @@ public class AlertRulesController : ControllerBase
         await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
         var db = unit.Context;
 
-        if (await new AlertRuleRepository(unit).ToggleEnabledAsync(id, ct) is not { } wasEnabled)
+        if (await new AlertRuleRepository(unit, _time).ToggleEnabledAsync(id, ct) is not { } wasEnabled)
             return NotFound();
 
         await _rearm.SaveAndClearAsync(unit, id, ct);
@@ -471,7 +471,7 @@ public class AlertRulesController : ControllerBase
         var rule = await _alerts.GetRuleAsync(id, ct);
         if (rule is null) return NotFound();
 
-        await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, DateTime.UtcNow), ct);
+        await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, _time.GetUtcNow().UtcDateTime), ct);
         return Accepted();
     }
 
@@ -512,7 +512,7 @@ public class AlertRulesController : ControllerBase
                 c.DestinationLabel, i, AlertRuleChannelWriter.SerializeMetadata(c.Metadata), _channels.EncryptSecret(c.Secret)))
             .ToList();
 
-        var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, DateTime.UtcNow);
+        var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, _time.GetUtcNow().UtcDateTime);
 
         var notSent = await _deliveryService.TestFireDryRunAsync(channels, payload, ct);
         return Accepted(new TestFireDryRunResponse { NotSent = [.. notSent ?? []] });

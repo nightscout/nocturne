@@ -40,7 +40,7 @@ internal sealed class HomeAssistantProvider(
 
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Failed to dispatch HA alert to instance {Destination} for alert instance {InstanceId}",
