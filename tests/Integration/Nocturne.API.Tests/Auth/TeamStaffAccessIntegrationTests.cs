@@ -127,9 +127,8 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var (manager, _) = await SeedSubjectAsync("Refused Manager");
         var (owner, ownerToken) = await SeedSubjectAsync("Refused Owner", owner: true);
         string managingToken;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             (_, managingToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
                 conn, await AuthTestHelpers.GetTenantIdAsync(conn), "Member Manager", [Scope.MembersManage]);
         }
@@ -164,9 +163,8 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var (owner, ownerToken) = await SeedSubjectAsync("Editing Owner", owner: true);
         string managingToken;
         Guid viewer, admin;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
             (_, managingToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Editing Member Manager", [Scope.MembersManage]);
             viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Viewer);
@@ -230,9 +228,8 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var teamId = await TeamWithStaffAsync(managerClient, staff);
         await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
         Guid viewer;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, await AuthTestHelpers.GetTenantIdAsync(conn), RoleSeeds.Viewer);
         }
 
@@ -265,9 +262,8 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var teamId = await TeamWithStaffAsync(managerClient, staff);
         await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
         Guid viewer;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, await AuthTestHelpers.GetTenantIdAsync(conn), RoleSeeds.Viewer);
         }
         (await ownerOnSite.PutAsJsonAsync(
@@ -283,12 +279,11 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
 
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        (await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            UPDATE oauth_grants SET limit_to_24_hours = @limited, scopes = @scopes WHERE subject_id = @subject;
-            """, ("tenant", (await AuthTestHelpers.GetTenantIdAsync(conn)).ToString()), ("limited", limitTo24Hours), ("scopes", scopes), ("subject", subject))).Should().Be(1);
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(await AuthTestHelpers.GetTenantIdAsync(conn));
+        (await conn.ExecuteAsync(
+            "UPDATE oauth_grants SET limit_to_24_hours = @limited, scopes = @scopes WHERE subject_id = @subject;",
+            ("limited", limitTo24Hours), ("scopes", scopes), ("subject", subject))).Should().Be(1);
     }
 
     /// <summary>
@@ -455,8 +450,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
     private async Task<Guid> SeedBareSubjectAsync(string name)
     {
         var subject = Guid.CreateVersion7();
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await conn.ExecuteAsync("""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES (@id, @name, true, false, now(), now(), 'Approved');
@@ -469,8 +463,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, [Scope.GlucoseRead]);
         if (owner)

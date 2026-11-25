@@ -157,13 +157,8 @@ public class RetireInvalidUploadedTreatmentRowsFixture : IAsyncLifetime
         return rows;
     }
 
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private Task ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 }
 
 [Trait("Category", "Integration")]

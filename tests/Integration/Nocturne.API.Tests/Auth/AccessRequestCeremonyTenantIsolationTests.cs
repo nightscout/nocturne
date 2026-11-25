@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -49,14 +50,13 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         await base.InitializeAsync();
         _baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         (_ownerA, _ownerAToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Owner A");
 
         _slugB = $"tenant-b-{Guid.NewGuid():N}"[..20];
         _tenantB = await AuthTestHelpers.SeedTenantAsync(Fixture, _slugB, "Tenant B");
         (_, _ownerBToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantB, "Owner B");
-        await SetTenantAsync(conn, _tenantB);
+        await conn.PinTenantAsync(_tenantB);
         _roleB = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantB, RoleSeeds.Viewer);
     }
 
@@ -67,8 +67,7 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
 
         var requesterId = await RunTheCeremonyOnTenantAAsync(displayName, "I am the school nurse");
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         using var ownerA = AuthTestHelpers.CreateTenantBearerClient(Fixture, ApiIntegrationTestFixture.TenantSlug, _baseDomain, _ownerAToken);
         var listedForA = await ownerA.GetFromJsonAsync<List<MembershipRequestDto>>("/api/v4/membership-requests");
@@ -196,29 +195,22 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         return enrolling!.Value;
     }
 
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenant, false);", ("tenant", tenantId.ToString()));
-    }
-
     private static async Task<long> RequestsVisibleUnderAsync(NpgsqlConnection conn, Guid tenantId, Guid requestId)
     {
-        await SetTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
         return await conn.ScalarAsync<long>("SELECT count(*) FROM membership_requests WHERE id = @id AND tenant_id = @tenant;", ("id", requestId), ("tenant", tenantId));
     }
 
     private static async Task<long> RequestNotificationsAsync(NpgsqlConnection conn, Guid tenantId, Guid? recipient, Guid requestId)
     {
-        await SetTenantAsync(conn, tenantId);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.PinTenantAsync(tenantId);
+        return await conn.ScalarAsync<long>(
+            """
             SELECT count(*) FROM in_app_notifications
-            WHERE tenant_id = @tenant AND type = 'membership.requested' AND source_id = @source AND (@recipient IS NULL OR user_id = @recipient);
-            """;
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        cmd.Parameters.AddWithValue("source", requestId.ToString());
-        cmd.Parameters.Add(new NpgsqlParameter("recipient", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)recipient?.ToString() ?? DBNull.Value });
-        return (long)(await cmd.ExecuteScalarAsync())!;
+            WHERE tenant_id = @tenant AND type = 'membership.requested' AND source_id = @source
+              AND (@recipient::text IS NULL OR user_id = @recipient::text);
+            """,
+            ("tenant", tenantId), ("source", requestId.ToString()), ("recipient", (object?)recipient?.ToString() ?? DBNull.Value));
     }
 
     private static async Task<long> CredentialsOfAsync(NpgsqlConnection conn, Guid subjectId)
@@ -231,7 +223,7 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         long total = 0;
         foreach (var tenantId in new[] { Fixture.TenantId, _tenantB })
         {
-            await SetTenantAsync(conn, tenantId);
+            await conn.PinTenantAsync(tenantId);
             total += await conn.ScalarAsync<long>(
                 "SELECT count(*) FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;",
                 ("tenant", tenantId), ("subject", subjectId));

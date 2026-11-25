@@ -70,23 +70,10 @@ public class AddTeamsFixture : IAsyncLifetime
         VALUES ('{Guid.CreateVersion7()}', '{team}', 'manager', '{createdBy}', '{Guid.NewGuid():N}', now() + interval '1 day', 0);
         """);
 
-    internal Task<long> ScalarAsync(string sql) => ScalarAsync(_migrator, sql);
+    internal Task<long> ScalarAsync(string sql) => NpgsqlTestCommands.ScalarAsync<long>(_migrator, sql);
 
-    internal static async Task<long> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    internal async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
+    internal Task<int> ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
@@ -186,13 +173,13 @@ public class AddTeamsTests(AddTeamsFixture fixture) : IClassFixture<AddTeamsFixt
     [Fact]
     public async Task Down_drops_the_tables_their_policies_and_the_columns()
     {
-        (await AddTeamsFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.tables
              WHERE table_schema = 'public' AND table_name IN ('teams', 'team_members', 'team_invites')
             """)).Should().Be(0);
-        (await AddTeamsFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_policies WHERE tablename IN ('teams', 'team_members', 'team_invites')")).Should().Be(0);
-        (await AddTeamsFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.columns
              WHERE (table_name = 'platform_policy' AND column_name = 'restrict_team_creation_to_admins')
                 OR (table_name = 'auth_audit_log' AND column_name = 'team_id')

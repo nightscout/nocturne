@@ -100,23 +100,10 @@ public class AddTeamAccessFixture : IAsyncLifetime
         VALUES ('{Guid.CreateVersion7()}', '{access}', '{role}');
         """);
 
-    internal Task<long> ScalarAsync(string sql) => ScalarAsync(_migrator, sql);
+    internal Task<long> ScalarAsync(string sql) => NpgsqlTestCommands.ScalarAsync<long>(_migrator, sql);
 
-    internal static async Task<long> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    internal async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
+    internal Task<int> ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 
     private static string Sql(Guid? id) => id is { } value ? $"'{value}'" : "NULL";
 
@@ -238,13 +225,13 @@ public class AddTeamAccessTests(AddTeamAccessFixture fixture) : IClassFixture<Ad
     [Fact]
     public async Task Down_drops_the_tables_and_their_policies()
     {
-        (await AddTeamAccessFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.tables
              WHERE table_schema = 'public' AND table_name IN ('team_access_links', 'team_tenant_access', 'team_tenant_access_roles')
             """)).Should().Be(0);
-        (await AddTeamAccessFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_policies WHERE tablename IN ('team_tenant_access', 'team_tenant_access_roles')")).Should().Be(0);
-        (await AddTeamAccessFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator,
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'teams'")).Should().Be(1);
     }
 }

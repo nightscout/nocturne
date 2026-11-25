@@ -39,14 +39,6 @@ public class AddMembershipNextReasonLapseFixture : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    internal static async Task<object?> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteScalarAsync();
-    }
-
     private static async Task SeedMemberAsync(string connectionString, Guid member)
     {
         var tenant = Guid.CreateVersion7();
@@ -82,16 +74,16 @@ public class AddMembershipNextReasonLapseTests(AddMembershipNextReasonLapseFixtu
     [Fact]
     public async Task An_existing_membership_has_no_next_lapse_and_keeps_its_end()
     {
-        (await AddMembershipNextReasonLapseFixture.ScalarAsync(fixture.Migrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.Migrator,
             $"SELECT next_reason_lapse_at IS NULL FROM tenant_members WHERE id = '{fixture.ExistingMember}'")).Should().Be(true);
-        (await AddMembershipNextReasonLapseFixture.ScalarAsync(fixture.Migrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.Migrator,
             $"SELECT access_ends_at = '2026-12-01T00:00:00Z' FROM tenant_members WHERE id = '{fixture.ExistingMember}'")).Should().Be(true);
     }
 
     [Fact]
     public async Task The_next_lapse_is_indexed_only_where_it_is_set()
     {
-        var definition = (string?)await AddMembershipNextReasonLapseFixture.ScalarAsync(fixture.Migrator,
+        var definition = (string?)await NpgsqlTestCommands.ScalarAsync<object?>(fixture.Migrator,
             "SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_tenant_members_next_reason_lapse_at'");
         definition.Should().NotBeNull();
         definition.Should().NotContain("UNIQUE").And.Contain("WHERE (next_reason_lapse_at IS NOT NULL)");
@@ -100,13 +92,13 @@ public class AddMembershipNextReasonLapseTests(AddMembershipNextReasonLapseFixtu
     [Fact]
     public async Task Down_drops_the_column_and_its_index_and_keeps_the_membership()
     {
-        (await AddMembershipNextReasonLapseFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.columns
              WHERE table_name = 'tenant_members' AND column_name = 'next_reason_lapse_at'
             """)).Should().Be(0L);
-        (await AddMembershipNextReasonLapseFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_tenant_members_next_reason_lapse_at'")).Should().Be(0L);
-        (await AddMembershipNextReasonLapseFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             $"SELECT count(*) FROM tenant_members WHERE id = '{fixture.DownMember}'")).Should().Be(1L);
     }
 }

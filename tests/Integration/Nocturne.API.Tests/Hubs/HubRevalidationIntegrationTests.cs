@@ -58,8 +58,7 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
     private async Task ExecuteAsync(string sql, Guid id)
     {
         await using var conn = await OpenPostgresAsync();
-        await conn.ExecuteAsync(
-            "SELECT set_config('app.current_tenant_id', @tenantId, false);", ("tenantId", _tenantId.ToString()));
+        await conn.PinTenantAsync(_tenantId);
         (await conn.ExecuteAsync(sql, ("id", id))).Should().BeGreaterThan(0);
     }
 
@@ -236,17 +235,11 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
         await ShouldCloseAsync(upgradeClosed, "the upgrade credential's member's access ended");
         await ShouldCloseAsync(inBandClosed, "the in-band credential's member's access ended");
         await using var conn = await OpenPostgresAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenantId, false);
-            SELECT revoked_at IS NULL FROM oauth_grants WHERE id = @id;
-            """;
-        cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
-        cmd.Parameters.AddWithValue("id", grantId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        (await reader.ReadAsync()).Should().BeTrue();
-        reader.GetBoolean(0).Should().BeTrue("an ended membership revokes nothing");
+        await conn.PinTenantAsync(_tenantId);
+        var unrevoked = await conn.QueryAsync(
+            "SELECT revoked_at IS NULL FROM oauth_grants WHERE id = @id;", reader => reader.GetBoolean(0), ("id", grantId));
+        unrevoked.Should().NotBeEmpty();
+        unrevoked[0].Should().BeTrue("an ended membership revokes nothing");
     }
 
     [Fact]

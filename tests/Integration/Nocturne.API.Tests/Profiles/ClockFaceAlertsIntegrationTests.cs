@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -29,17 +30,15 @@ public class ClockFaceAlertsIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (ownerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Clock Owner");
         _owner = AuthTestHelpers.CreateBearerClient(
             Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, ownerId));
 
         var ruleId = Guid.CreateVersion7();
         _excursionId = Guid.CreateVersion7();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT set_config('app.current_tenant_id', '{Fixture.TenantId}', false);
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync($"""
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
                                      sort_order, created_at, updated_at)
@@ -47,8 +46,7 @@ public class ClockFaceAlertsIntegrationTests : ApiIntegrationTestBase
                     'critical', '{"{}"}', true, false, 'undirected', 1, now(), now());
             INSERT INTO alert_excursions (id, tenant_id, alert_rule_id, started_at)
             VALUES ('{_excursionId}', '{Fixture.TenantId}', '{ruleId}', now() - interval '5 minutes');
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 
     public override async Task DisposeAsync()

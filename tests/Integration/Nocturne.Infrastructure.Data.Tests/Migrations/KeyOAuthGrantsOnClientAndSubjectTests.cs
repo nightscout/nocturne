@@ -78,14 +78,6 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    internal static async Task<object?> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteScalarAsync();
-    }
-
     internal static async Task<string?> InsertSqlStateAsync(
         string connectionString, Guid tenant, Guid client, string grantType, DateTime? revokedAt)
     {
@@ -309,7 +301,7 @@ public class KeyOAuthGrantsOnClientAndSubjectTests(KeyOAuthGrantsOnClientAndSubj
     [Fact]
     public async Task The_key_is_a_valid_partial_unique_index_over_tenant_client_and_subject()
     {
-        var definition = (string?)await KeyOAuthGrantsOnClientAndSubjectFixture.ScalarAsync(fixture.UpMigrator, """
+        var definition = (string?)await NpgsqlTestCommands.ScalarAsync<object?>(fixture.UpMigrator, """
             SELECT pg_get_indexdef(i.indexrelid)
             FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
             WHERE c.relname = 'ix_oauth_grants_tenant_client_subject_active' AND i.indisunique AND i.indisvalid
@@ -345,7 +337,7 @@ public class KeyOAuthGrantsOnClientAndSubjectTests(KeyOAuthGrantsOnClientAndSubj
     {
         fixture.GrantsAfterDown.Select(g => (g.Key, Revoked: g.Value is not null))
             .Should().BeEquivalentTo(fixture.RevokedAfterUp.Select(g => (g.Key, Revoked: g.Value is not null)));
-        (await KeyOAuthGrantsOnClientAndSubjectFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_oauth_grants_tenant_client_subject_active'"))
             .Should().Be(0L);
         (await KeyOAuthGrantsOnClientAndSubjectFixture.InsertSqlStateAsync(

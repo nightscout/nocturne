@@ -78,13 +78,8 @@ public class RelabelInstanceWideRoleAuditRowsFixture : IAsyncLifetime
         return rows;
     }
 
-    private async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
+    private Task<int> ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 }
 
 [Trait("Category", "Integration")]

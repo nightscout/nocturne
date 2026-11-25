@@ -4,6 +4,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 using Xunit;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -234,13 +235,8 @@ public class RlsEnforcementTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<long> CountInvitesByTokenHashAsync(NpgsqlConnection conn, string tokenHash)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM member_invites WHERE token_hash = @hash";
-        AddParameter(cmd, "@hash", tokenHash);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountInvitesByTokenHashAsync(NpgsqlConnection conn, string tokenHash) =>
+        conn.ScalarAsync<long>("SELECT COUNT(*) FROM member_invites WHERE token_hash = @hash", ("hash", tokenHash));
 
     private static void AddParameter(NpgsqlCommand cmd, string name, object value)
     {
@@ -285,11 +281,6 @@ public class RlsEnforcementTests
         await cmd.ExecuteScalarAsync();
     }
 
-    private static async Task<long> CountForTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {SampleTable} WHERE tenant_id = @tid";
-        AddParameter(cmd, "@tid", tenantId);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountForTenantAsync(NpgsqlConnection conn, Guid tenantId) =>
+        conn.ScalarAsync<long>($"SELECT COUNT(*) FROM {SampleTable} WHERE tenant_id = @tid", ("tid", tenantId));
 }

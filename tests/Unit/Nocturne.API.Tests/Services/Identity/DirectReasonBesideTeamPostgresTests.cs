@@ -945,15 +945,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         (await MadeStateAsync(s, made)).Should().Be(((DateTime?)null, false, (DateTime?)null));
     }
 
-    private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private Task ExecuteAsync(string sql) => NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, sql);
 
     private Task<List<string>> ReadAsync(string sql) => ReadInTenantAsync(null, sql);
 

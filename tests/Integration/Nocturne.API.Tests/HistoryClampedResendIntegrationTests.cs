@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -161,8 +162,7 @@ public class HistoryClampedResendIntegrationTests : ApiIntegrationTestBase
     private async Task<NpgsqlConnection> TenantConnectionAsync()
     {
         var conn = await OpenPostgresAsync();
-        await conn.ExecuteAsync(
-            "SELECT set_config('app.current_tenant_id', @tenant, false)", ("tenant", Fixture.TenantId.ToString()));
+        await conn.PinTenantAsync(Fixture.TenantId);
         return conn;
     }
 }

@@ -5,6 +5,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 using Xunit;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -580,13 +581,8 @@ public class RlsShareCategoryTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        AddParam(cmd, "@tid", tenantId);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private static Task ExecuteAsync(NpgsqlConnection conn, string sql, Guid tenantId) =>
+        conn.ExecuteAsync(sql, ("tid", tenantId));
 
     private static async Task SetCurrentTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
@@ -617,13 +613,8 @@ public class RlsShareCategoryTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<long> CountAsync(NpgsqlConnection conn, string table, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {table} WHERE tenant_id = @tid";
-        AddParam(cmd, "@tid", tenantId);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountAsync(NpgsqlConnection conn, string table, Guid tenantId) =>
+        conn.ScalarAsync<long>($"SELECT COUNT(*) FROM {table} WHERE tenant_id = @tid", ("tid", tenantId));
 
     private static void AddParam(NpgsqlCommand cmd, string name, object value)
     {

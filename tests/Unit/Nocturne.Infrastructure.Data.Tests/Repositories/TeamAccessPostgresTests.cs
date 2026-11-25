@@ -655,8 +655,8 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     [Theory]

@@ -149,8 +149,8 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
     {
         var id = Guid.CreateVersion7();
         await using var conn = await dataSource.OpenConnectionAsync();
+        await conn.PinTenantAsync(tenantId);
         await conn.ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{tenantId}', false);
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
                                      sort_order, created_at, updated_at)

@@ -529,15 +529,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
             .Should().Equal("0");
     }
 
-    private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private Task ExecuteAsync(string sql) => NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, sql);
 
     private async Task<List<string>> ReadAsync(string sql)
     {

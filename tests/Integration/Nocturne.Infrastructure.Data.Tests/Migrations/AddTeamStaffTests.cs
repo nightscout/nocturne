@@ -121,23 +121,10 @@ public class AddTeamStaffFixture : IAsyncLifetime
         VALUES ('{Guid.CreateVersion7()}', '{access}', '{member}', '{status}');
         """);
 
-    internal Task<long> ScalarAsync(string sql) => ScalarAsync(_migrator, sql);
+    internal Task<long> ScalarAsync(string sql) => NpgsqlTestCommands.ScalarAsync<long>(_migrator, sql);
 
-    internal static async Task<long> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    internal async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
+    internal Task<int> ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
@@ -370,21 +357,21 @@ public class AddTeamStaffTests(AddTeamStaffFixture fixture) : IClassFixture<AddT
     [Fact]
     public async Task Down_drops_the_tables_the_columns_and_the_checks_and_restores_the_teams_policy()
     {
-        (await AddTeamStaffFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.tables
              WHERE table_schema = 'public' AND table_name IN ('team_staff_invites', 'team_site_staff')
             """)).Should().Be(0);
-        (await AddTeamStaffFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.columns
              WHERE table_schema = 'public'
                AND ((table_name = 'team_members' AND column_name IN ('role_ceiling_slug', 'limit_to_24_hours', 'ends_at', 'created_from_staff_invite_id'))
                  OR (table_name = 'team_tenant_access' AND column_name = 'team_manages_staff'))
             """)).Should().Be(0);
-        (await AddTeamStaffFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM pg_constraint
              WHERE conname IN ('ck_team_members_kind', 'ck_team_members_staff_columns', 'ck_team_invites_kind')
             """)).Should().Be(0);
-        (await AddTeamStaffFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM pg_policies
              WHERE tablename = 'teams' AND policyname = 'subject_pin' AND with_check NOT LIKE '%manager%'
             """)).Should().Be(1);

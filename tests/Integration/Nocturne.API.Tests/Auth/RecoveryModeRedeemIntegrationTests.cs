@@ -5,6 +5,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -46,8 +47,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
     [InlineData(Refusal.DemoSubject, "OperatorRecovery")]
     public async Task A_refused_redemption_leaves_the_code_unspent(Refusal refusal, string purpose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = refusal == Refusal.MemberCanStillSignIn
@@ -102,8 +102,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_operators_code_redeems_for_a_member_who_still_has_a_passkey()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Recovering Member");
@@ -127,8 +126,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_code_presented_twice_at_once_redeems_once()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Recovering Member");

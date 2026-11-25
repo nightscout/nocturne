@@ -202,13 +202,8 @@ public class SleepSessionTombstoneTests(RlsCompletenessFixture fx)
         OriginalId = originalId,
     };
 
-    private static async Task<long> CountRowsAsync(NpgsqlConnection conn, string originalId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM sleep_sessions WHERE original_id = @id";
-        cmd.Parameters.AddWithValue("id", originalId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
+    private static Task<long> CountRowsAsync(NpgsqlConnection conn, string originalId) =>
+        conn.ScalarAsync<long>("SELECT count(*) FROM sleep_sessions WHERE original_id = @id", ("id", originalId));
 
     private Guid _tenant;
 

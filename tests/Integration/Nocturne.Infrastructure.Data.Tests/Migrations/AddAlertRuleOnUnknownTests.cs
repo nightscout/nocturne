@@ -93,21 +93,11 @@ public class AddAlertRuleOnUnknownFixture : IAsyncLifetime
         return rows;
     }
 
-    private async Task<long> ScalarAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
+    private Task<long> ScalarAsync(string sql) =>
+        NpgsqlTestCommands.ScalarAsync<long>(_migrator, sql);
 
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private Task ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 }
 
 [Trait("Category", "Integration")]

@@ -4,6 +4,7 @@ using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -46,7 +47,7 @@ public class SubjectPinRlsTests : IAsyncLifetime
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         foreach (var tenant in _tenants.Append(_otherTenant))
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
                 VALUES (@id, @slug, 'subject-pin', true, now(), now())
                 """, ("id", tenant), ("slug", $"pin-{tenant:N}"));
@@ -54,18 +55,18 @@ public class SubjectPinRlsTests : IAsyncLifetime
 
         foreach (var subject in Subjects)
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
                 VALUES (@id, @name, true, false, now(), now(), 'Approved')
                 """, ("id", subject), ("name", $"pin-{subject:N}"));
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO refresh_tokens (id, token_hash, subject_id, issued_at, expires_at, created_at, updated_at)
                 VALUES (@id, @hash, @subject, now(), now() + interval '1 day', now(), now())
                 """, ("id", Guid.CreateVersion7()), ("hash", $"{subject:N}"), ("subject", subject));
 
             foreach (var tenant in _tenants)
             {
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
                     VALUES (@id, @tenant, @subject, '[]'::jsonb, now(), now(), false)
                     """, ("id", Guid.CreateVersion7()), ("tenant", tenant), ("subject", subject));
@@ -74,12 +75,12 @@ public class SubjectPinRlsTests : IAsyncLifetime
 
         foreach (var team in Teams)
         {
-            await ExecuteAsync(conn, "INSERT INTO teams (id, name) VALUES (@id, 'subject-pin')", ("id", team));
+            await conn.ExecuteAsync("INSERT INTO teams (id, name) VALUES (@id, 'subject-pin')", ("id", team));
         }
 
         foreach (var (team, subject) in TeamMemberships)
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'manager')
                 """, ("id", Guid.CreateVersion7()), ("team", team), ("subject", subject));
         }
@@ -89,26 +90,26 @@ public class SubjectPinRlsTests : IAsyncLifetime
 
     private async Task SeedStaffTeamAsync(NpgsqlConnection conn)
     {
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES (@id, @name, true, false, now(), now(), 'Approved')
             """, ("id", _staffSubject), ("name", $"pin-{_staffSubject:N}"));
-        await ExecuteAsync(conn, "INSERT INTO teams (id, name) VALUES (@id, 'subject-pin')", ("id", _staffTeam));
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("INSERT INTO teams (id, name) VALUES (@id, 'subject-pin')", ("id", _staffTeam));
+        await conn.ExecuteAsync("""
             INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'manager')
             """, ("id", Guid.CreateVersion7()), ("team", _staffTeam), ("subject", _subjectA));
         var staffMember = Guid.CreateVersion7();
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'staff')
             """, ("id", staffMember), ("team", _staffTeam), ("subject", _staffSubject));
 
         for (var i = 0; i < _tenants.Length; i++)
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
                 VALUES (@id, @team, @tenant, false)
                 """, ("id", _accesses[i]), ("team", _staffTeam), ("tenant", _tenants[i]));
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
                 VALUES (@id, @access, @member, 'approved')
                 """, ("id", Guid.CreateVersion7()), ("access", _accesses[i]), ("member", staffMember));
@@ -455,15 +456,6 @@ public class SubjectPinRlsTests : IAsyncLifetime
             if (!wasOpen)
                 await context.Database.CloseConnectionAsync();
         }
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private static void AddParam(DbCommand cmd, string name, object value)

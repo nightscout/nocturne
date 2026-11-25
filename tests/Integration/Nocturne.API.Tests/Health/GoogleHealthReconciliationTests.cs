@@ -581,8 +581,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         if (db.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
             await db.Database.OpenConnectionAsync();
         await db.Database.ExecuteSqlRawAsync("SET ROLE nocturne_app");
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.current_tenant_id', {tenant.ToString()}, false)");
-        db.TenantId = tenant;
+        await db.PinTenantAsync(tenant);
     }
 
     private static HealthRecordTransactions Transactions(NocturneDbContext db) =>

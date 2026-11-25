@@ -73,8 +73,7 @@ public class ClientAddressRecordingIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Recorded> RecordedAddressesAsync()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var lastUsed = await Eventually.ValueAsync(
             "the grant's last used address to be recorded",

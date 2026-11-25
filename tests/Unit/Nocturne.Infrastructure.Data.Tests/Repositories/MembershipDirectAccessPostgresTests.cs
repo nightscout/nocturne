@@ -297,11 +297,6 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
         return kinds;
     }
 
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private Task ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, sql);
 }

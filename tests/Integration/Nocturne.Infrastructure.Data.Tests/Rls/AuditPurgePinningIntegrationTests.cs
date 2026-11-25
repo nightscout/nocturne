@@ -138,14 +138,14 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
 
         await using (var conn = await _fx.OpenMigratorConnectionAsync())
         {
-            await ExecAsync(conn, $"""
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"""
                 CREATE TABLE IF NOT EXISTS {ProbeTable} (
                     id uuid PRIMARY KEY,
                     tenant_id uuid NOT NULL,
                     created_at timestamptz NOT NULL)
                 """);
-            await ExecAsync(conn, $"TRUNCATE {ProbeTable}");
-            await ExecAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"TRUNCATE {ProbeTable}");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
 
             foreach (var owner in new[] { tenant, neighbour })
             {
@@ -174,7 +174,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         finally
         {
             await using var conn = await _fx.OpenMigratorConnectionAsync();
-            await ExecAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
         }
     }
 
@@ -304,13 +304,6 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
         AddParam(cmd, "@tid", tenant.ToString());
         await cmd.ExecuteScalarAsync();
-    }
-
-    private static async Task ExecAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task<long> ProbeCountAsync(Guid tenant)

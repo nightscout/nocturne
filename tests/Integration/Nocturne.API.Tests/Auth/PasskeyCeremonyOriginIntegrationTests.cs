@@ -27,8 +27,7 @@ public class PasskeyCeremonyOriginIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task Sign_ins_from_many_hosts_leave_the_configured_origins_as_they_were()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Origin Member");
         var credentialId = Encoding.UTF8.GetBytes($"cred-{memberId:N}");

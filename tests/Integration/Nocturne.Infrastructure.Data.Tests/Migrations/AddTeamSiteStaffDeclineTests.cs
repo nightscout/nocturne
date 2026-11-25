@@ -100,23 +100,10 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
         VALUES ('{Guid.CreateVersion7()}', '{access}', '{subject}');
         """);
 
-    internal Task<long> ScalarAsync(string sql) => ScalarAsync(_migrator, sql);
+    internal Task<long> ScalarAsync(string sql) => NpgsqlTestCommands.ScalarAsync<long>(_migrator, sql);
 
-    internal static async Task<long> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    internal async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
+    internal Task<int> ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(_migrator, sql);
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
@@ -248,10 +235,10 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
     [Fact]
     public async Task Down_drops_the_declines_and_restores_the_status_check()
     {
-        (await AddTeamSiteStaffDeclineFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'team_site_declines'
             """)).Should().Be(0);
-        (await AddTeamSiteStaffDeclineFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM pg_constraint
              WHERE conname = 'ck_team_site_staff_status' AND pg_get_constraintdef(oid) NOT LIKE '%declined%'
             """)).Should().Be(1);

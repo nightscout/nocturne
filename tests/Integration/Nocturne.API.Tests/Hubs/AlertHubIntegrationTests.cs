@@ -41,9 +41,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the alert hub tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertHub Test User");
@@ -118,9 +116,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task Acknowledge_BroadcastsToSubscribers()
     {
         // Arrange — seed an alert rule and excursion
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -166,9 +162,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task Acknowledge_ViaHub_BroadcastsToSubscribers()
     {
         // Arrange — seed an alert rule and excursion
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -192,9 +186,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task MultipleSubscribers_AllReceiveBroadcast()
     {
         // Arrange — seed data
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -230,9 +222,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task TenantIsolation_AlertsNotCrossLeaked()
     {
         // Arrange — seed tenant B with its own subject, rule, and excursion
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var tenantBSlug = $"alert-hub-b-{Guid.NewGuid():N}"[..24];
         var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Alert Hub Tenant B");
@@ -264,9 +254,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task Snooze_Returns204_ForValidInstance()
     {
         // Arrange — seed rule + excursion (which creates an instance)
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (_, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);

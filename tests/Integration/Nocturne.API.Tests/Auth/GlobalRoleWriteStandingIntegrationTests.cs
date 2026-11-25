@@ -8,6 +8,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -183,16 +184,16 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
             switch (write)
             {
                 case Write.Create:
-                    (await RoleCountAsync(conn, target.Name)).Should().Be(1);
+                    (await AuthTestHelpers.RoleCountAsync(conn, target.Name)).Should().Be(1);
                     break;
                 case Write.Rename:
-                    (await RoleCountAsync(conn, target.Renamed)).Should().Be(1);
+                    (await AuthTestHelpers.RoleCountAsync(conn, target.Renamed)).Should().Be(1);
                     break;
                 case Write.Repermission:
                     (await PermissionsOfAsync(conn, Readable)).Should().Be("[\"*\"]");
                     break;
                 default:
-                    (await RoleCountAsync(conn, target.Name)).Should().Be(0);
+                    (await AuthTestHelpers.RoleCountAsync(conn, target.Name)).Should().Be(0);
                     break;
             }
         }
@@ -217,7 +218,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
         switch (write)
         {
             case Write.Repermission:
-                return new Target(await RoleIdAsync(conn, Readable), Readable, Readable, Seeded: false);
+                return new Target(await AuthTestHelpers.RoleIdAsync(conn, Readable), Readable, Readable, Seeded: false);
             case Write.Create:
                 return new Target(Guid.Empty, name, renamed, Seeded: false);
             default:
@@ -337,16 +338,6 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
     private static async Task<string> PermissionsOfAsync(NpgsqlConnection conn, string name)
     {
         return await conn.ScalarAsync<string>("SELECT permissions::text FROM roles WHERE name = @name;", ("name", name));
-    }
-
-    private static async Task<Guid> RoleIdAsync(NpgsqlConnection conn, string name)
-    {
-        return await conn.ScalarAsync<Guid>("SELECT id FROM roles WHERE name = @name;", ("name", name));
-    }
-
-    private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
-    {
-        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE name = @name;", ("name", name));
     }
 
     private static async Task<string> ShapeOfAsync(HttpResponseMessage response)

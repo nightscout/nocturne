@@ -61,7 +61,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     {
         var tenant = Guid.NewGuid();
         var slug = $"{name}-{tenant:N}";
-        await ExecuteAsync(database.MigratorConnectionString, $"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}', 'setup-claim', true, now(), now());
             """);
@@ -258,11 +258,4 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         return await db.Tenants.AsNoTracking().Where(t => t.Id == tenant).Select(t => t.SetupOwnerSubjectId).SingleAsync();
     }
 
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
 }

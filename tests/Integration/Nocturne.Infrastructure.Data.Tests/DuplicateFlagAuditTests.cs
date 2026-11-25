@@ -306,8 +306,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
     }
 

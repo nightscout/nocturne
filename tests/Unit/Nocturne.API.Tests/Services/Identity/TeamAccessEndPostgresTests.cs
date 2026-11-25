@@ -602,13 +602,8 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         await behind.WaitAsync(Eventually.DefaultPatience);
     }
 
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    private Task ExecuteAsync(string sql) =>
+        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, sql);
 
     private async Task<List<string>> ReadAsync(string sql)
     {

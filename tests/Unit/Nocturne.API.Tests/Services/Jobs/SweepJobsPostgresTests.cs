@@ -294,8 +294,8 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     private async Task<bool> ReconcileCursorExistsAsync(Guid tenant)

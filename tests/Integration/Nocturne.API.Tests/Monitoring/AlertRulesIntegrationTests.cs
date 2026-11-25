@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -37,9 +38,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the alert rule tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertRules Test User");
@@ -300,9 +299,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Seed tenant B with its own subject
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var tenantBSlug = $"tenant-b-{Guid.NewGuid():N}"[..20];
         var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Tenant B");
@@ -408,26 +405,19 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
     public async Task GetInAppRecipients_ClinicianWithAlertsRead_IsForbidden()
     {
         // Arrange - a member whose only role is clinician, which grants alerts.read
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (clinicianId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Clinician");
         var clinicianRole = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantId, "clinician");
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM subject_roles WHERE subject_id = @subjectId;
-                UPDATE tenant_members SET direct_permissions = '[]'::jsonb
-                 WHERE tenant_id = @tenantId AND subject_id = @subjectId;
-                INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
-                SELECT gen_random_uuid(), id, @roleId FROM tenant_members
-                 WHERE tenant_id = @tenantId AND subject_id = @subjectId;
-                """;
-            cmd.Parameters.AddWithValue("subjectId", clinicianId);
-            cmd.Parameters.AddWithValue("tenantId", _tenantId);
-            cmd.Parameters.AddWithValue("roleId", clinicianRole);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            DELETE FROM subject_roles WHERE subject_id = @subjectId;
+            UPDATE tenant_members SET direct_permissions = '[]'::jsonb
+             WHERE tenant_id = @tenantId AND subject_id = @subjectId;
+            INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
+            SELECT gen_random_uuid(), id, @roleId FROM tenant_members
+             WHERE tenant_id = @tenantId AND subject_id = @subjectId;
+            """,
+            ("subjectId", clinicianId), ("tenantId", _tenantId), ("roleId", clinicianRole));
         using var client = AuthTestHelpers.CreateBearerClient(Fixture, token);
 
         // Act

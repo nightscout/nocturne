@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -180,10 +181,10 @@ public class V1EntryResendIntegrationTests : ApiIntegrationTestBase
     private async Task<string> RowVersionAsync()
     {
         await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
         var versions = await conn.QueryAsync(
-            "SELECT set_config('app.current_tenant_id', @tenant, false);"
-            + "SELECT xmin::text FROM sensor_glucose WHERE device = @device AND deleted_at IS NULL;",
-            reader => reader.GetString(0), ("tenant", Fixture.TenantId.ToString()), ("device", Device));
+            "SELECT xmin::text FROM sensor_glucose WHERE device = @device AND deleted_at IS NULL;",
+            reader => reader.GetString(0), ("device", Device));
         return versions.Should().ContainSingle().Subject;
     }
 }
