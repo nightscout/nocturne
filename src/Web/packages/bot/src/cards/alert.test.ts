@@ -24,7 +24,8 @@ const TELEGRAM_CALLBACK_DATA_LIMIT_BYTES = 64;
 const telegramCallbackBytes = (actionId: string, value: string) =>
   Buffer.byteLength(`chat:${JSON.stringify({ a: actionId, v: value })}`, "utf8");
 
-const payload = {
+const payload: AlertPayload = {
+  severity: "",
   tenantId: TENANT,
   excursionId: EXCURSION,
   ruleName: "Urgent low",
@@ -33,7 +34,7 @@ const payload = {
   trend: "SingleDown",
   trendRate: -1.4,
   readingTimestamp: "2026-01-01T00:00:00.000Z",
-} as AlertPayload;
+};
 
 const buttons = () => cardButtons(AlertCard({ payload }));
 
@@ -69,14 +70,14 @@ describe("AlertCard button values", () => {
 });
 
 describe("AlertCard for a rule that cannot run", () => {
-  const notice = {
+  const notice: AlertPayload = {
     ...payload,
     kind: "unevaluable",
-    glucoseValue: null,
-    trend: null,
-    trendRate: null,
+    glucoseValue: undefined,
+    trend: undefined,
+    trendRate: undefined,
     severity: "critical",
-  } as AlertPayload;
+  };
 
   it("names the rule, says it cannot run, and shows no reading or action", () => {
     const card = AlertCard({ payload: notice });
@@ -90,7 +91,7 @@ describe("AlertCard for a rule that cannot run", () => {
   });
 
   it("renders the notice for a rule whose condition type the engine does not know", () => {
-    const card = AlertCard({ payload: { ...notice, alertType: null } });
+    const card = AlertCard({ payload: { ...notice, alertType: undefined } });
 
     expect(cardTitle(card)).toBe("CRITICAL: Urgent low");
     expect(cardButtons(card)).toHaveLength(0);
@@ -98,18 +99,18 @@ describe("AlertCard for a rule that cannot run", () => {
 });
 
 describe("AlertCard for a rule held for 24 hours", () => {
-  const held = {
+  const held: AlertPayload = {
     ...payload,
     kind: "held",
-    glucoseValue: null,
-    trend: null,
-    trendRate: null,
+    glucoseValue: undefined,
+    trend: undefined,
+    trendRate: undefined,
     severity: "warning",
     heldFacts: [
       { fact: "glucose", reason: "stale" },
       { fact: "pump", reason: "absent" },
     ],
-  } as AlertPayload;
+  };
 
   it("names the rule, says it waits for data, lists each fact, and offers no action", () => {
     const card = AlertCard({ payload: held });
@@ -139,14 +140,14 @@ describe("AlertCard for a rule held for 24 hours", () => {
 });
 
 describe("AlertCard with no glucose reading", () => {
-  const signalLoss = {
+  const signalLoss: AlertPayload = {
     ...payload,
     alertType: "signal_loss",
     ruleName: "Signal loss",
-    glucoseValue: null,
-    trend: null,
-    trendRate: null,
-  } as AlertPayload;
+    glucoseValue: undefined,
+    trend: undefined,
+    trendRate: undefined,
+  };
 
   it("says the same for a staleness alert", () => {
     const card = AlertCard({ payload: { ...signalLoss, alertType: "staleness" } });
