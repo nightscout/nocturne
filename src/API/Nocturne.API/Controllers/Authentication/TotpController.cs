@@ -272,7 +272,7 @@ public class TotpController : ControllerBase
     /// <response code="200">Login successful with access token.</response>
     /// <response code="400">Invalid step-up token or code.</response>
     /// <response code="403">Both factors passed, but this host does not admit the subject;
-    /// <c>detail</c> is <see cref="NotAMember"/>.</response>
+    /// <c>detail</c> is <c>not_a_member</c>.</response>
     /// <response code="429">Too many attempts from this client address, or the account has no wrong codes left until
     /// its window ends. <c>Retry-After</c> says when to try again.</response>
     [HttpPost("login")]

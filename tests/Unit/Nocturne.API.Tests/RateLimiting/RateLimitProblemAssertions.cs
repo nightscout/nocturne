@@ -35,5 +35,7 @@ internal static class RateLimitProblemAssertions
         root.GetProperty("code").GetString().Should().Be("rate_limit_exceeded");
         root.GetProperty("error").GetString().Should().Be("rate_limit_exceeded");
         root.GetProperty("error_description").GetString().Should().Be("Too many requests. Please try again later.");
+        root.GetProperty("detail").GetString().Should().Be("Too many requests. Please try again later.");
+        root.GetProperty("traceId").GetString().Should().NotBeNullOrEmpty();
     }
 }

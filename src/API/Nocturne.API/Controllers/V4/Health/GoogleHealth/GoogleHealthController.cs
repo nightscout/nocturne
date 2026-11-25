@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -85,7 +84,7 @@ public class GoogleHealthController(
         catch (GoogleHealthException ex)
         {
             if (ex.Message == "rate_limited" && ex.RetryAfter is { TotalSeconds: > 0 } retryAfter)
-                Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+                Response.SetRetryAfter(retryAfter);
             return Problem(
                 statusCode: ex.Message switch
                 {

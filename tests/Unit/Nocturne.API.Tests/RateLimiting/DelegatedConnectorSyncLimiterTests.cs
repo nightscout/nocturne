@@ -13,6 +13,7 @@ using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.RateLimiting;
@@ -158,7 +159,7 @@ public class DelegatedConnectorSyncLimiterTests : IDisposable
 
     private static async Task<HttpContext> ExecuteAsync(IActionResult result)
     {
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.Response.Body = new MemoryStream();
         await result.ExecuteResultAsync(new ActionContext(http, new RouteData(), new ActionDescriptor()));
         return http;
