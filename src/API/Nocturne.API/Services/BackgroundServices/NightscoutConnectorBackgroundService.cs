@@ -7,7 +7,6 @@ using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
 using System.Collections.Specialized;
-using System.Net.WebSockets;
 using System.Web;
 using SocketIOClient;
 using Nocturne.Infrastructure.Data.Services;
@@ -207,13 +206,15 @@ public class NightscoutConnectorBackgroundService
     /// Its polling transport sends through the
     /// <see cref="NightscoutConnectorInstaller.RealtimeHttpClientName"/> connector client, which keeps
     /// the site's path out of telemetry, in place of the <see cref="HttpClient"/> the library would
-    /// build itself. The WebSocket it upgrades to opens its own connection, outside that client.
+    /// build itself. The client stays on polling, because a WebSocket would open its own connection
+    /// outside that client's telemetry mark and its outbound guard.
     /// </summary>
     internal static SocketIO NewClient(NightscoutAddress address, IHttpClientFactory clients)
     {
         var options = new SocketIOOptions
         {
             Path = address.SocketIoPath,
+            AutoUpgrade = false,
             Reconnection = true,
             ReconnectionAttempts = ReconnectionAttempts,
             ReconnectionDelayMax = ReconnectionDelayMaxMs,
@@ -260,7 +261,7 @@ public class NightscoutConnectorBackgroundService
         catch (Exception ex) when (ex is SocketIOClient.Exceptions.ConnectionException
                                        or SocketIOClient.Session.ConnectionFailedException
                                        or InvalidOperationException or ObjectDisposedException or IOException
-                                       or HttpRequestException or WebSocketException or TimeoutException
+                                       or HttpRequestException or TimeoutException
                                        or OperationCanceledException)
         {
             Logger.LogWarning(

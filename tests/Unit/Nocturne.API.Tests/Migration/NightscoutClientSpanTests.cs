@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Nocturne.Tests.Shared.Infrastructure;
 using Activity = System.Diagnostics.Activity;
 using FluentAssertions;
@@ -77,9 +78,9 @@ public class NightscoutClientSpanTests
     }
 
     [Fact]
-    public async Task The_spans_of_the_realtime_listeners_polling_hold_the_masked_url()
+    public async Task The_realtime_listener_stays_on_polling_against_a_site_that_offers_the_websocket_upgrade()
     {
-        var site = new EngineIoPollingSite();
+        var site = new EngineIoPollingSite("websocket");
         await using var app = await StartSiteAsync(site.AnswerAsync);
 
         var (spans, port) = await ObserveAsync(
@@ -91,16 +92,23 @@ public class NightscoutClientSpanTests
                     services.GetRequiredService<IHttpClientFactory>());
                 using var deadline = new CancellationTokenSource(Eventually.DefaultPatience);
 
-                await client.ConnectAsync(deadline.Token);
-                await polled.WaitAsync(deadline.Token);
+                try
+                {
+                    await client.ConnectAsync(deadline.Token);
+                    await polled.WaitAsync(deadline.Token);
 
-                client.Connected.Should().BeTrue();
+                    client.Connected.Should().BeTrue();
+                }
+                finally
+                {
+                    site.WebSocketRequests.Should().Be(0);
+                }
             },
             spans => spans.Any(span => span.DisplayName == "GET") && spans.Any(span => span.DisplayName == "POST"));
 
-        spans.Select(span => span.DisplayName).Should().Contain(["GET", "POST"]);
         spans.Should().AllSatisfy(span =>
         {
+            span.DisplayName.Should().BeOneOf("GET", "POST");
             span.GetTagItem("url.full").Should().Be($"127.0.0.1:{port}/AGYL…/socket.io");
             HoldsNoCredential(span);
         });
@@ -184,14 +192,26 @@ public class NightscoutClientSpanTests
 
     /// <summary>
     /// An Engine.IO server, polling only, as far as a client's connect: it opens a session that offers
-    /// no upgrade, takes the namespace connect, answers it on the next poll, and holds every poll after.
+    /// <paramref name="upgrades"/>, takes the namespace connect, answers it on the next poll, and holds
+    /// every poll after. It refuses a WebSocket request and counts it.
     /// </summary>
-    private sealed class EngineIoPollingSite
+    private sealed class EngineIoPollingSite(params string[] upgrades)
     {
         private int _polls;
+        private int _webSocketRequests;
+
+        public int WebSocketRequests => Volatile.Read(ref _webSocketRequests);
 
         public async Task AnswerAsync(HttpContext context)
         {
+            if (context.Request.Query["transport"] == "websocket"
+                || context.Request.Headers.Upgrade.Count > 0)
+            {
+                Interlocked.Increment(ref _webSocketRequests);
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
             context.Response.ContentType = "text/plain; charset=UTF-8";
             if (HttpMethods.IsPost(context.Request.Method))
             {
@@ -202,7 +222,7 @@ public class NightscoutClientSpanTests
             if (!context.Request.Query.ContainsKey("sid"))
             {
                 await context.Response.WriteAsync(
-                    "0{\"sid\":\"session\",\"upgrades\":[],\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}");
+                    $"0{{\"sid\":\"session\",\"upgrades\":{JsonSerializer.Serialize(upgrades)},\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}}");
                 return;
             }
 
