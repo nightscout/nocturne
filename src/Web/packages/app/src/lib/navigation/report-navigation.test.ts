@@ -10,6 +10,7 @@ import {
   reportSubRouteTitle,
   reportTitle,
   type ReportViewer,
+  withEnglishWords,
 } from "./report-navigation.svelte";
 
 /** Seed-role grants, as `MemberScopeMiddleware` resolves them. */
@@ -212,6 +213,20 @@ describe("report search keywords", () => {
       expect(report.keywords?.length).toBeGreaterThan(0);
       expect(new Set(report.keywords).size).toBe(report.keywords?.length);
     }
+  });
+});
+
+describe("withEnglishWords", () => {
+  it("puts the locale's words first, then the English ones", () => {
+    expect(withEnglishWords(["Uebersicht"], ["overview", "summary"])).toEqual(["Uebersicht", "overview", "summary"]);
+  });
+
+  it("lists a word once when both lists hold it", () => {
+    expect(withEnglishWords(["spread", "Verteilung"], ["spread"])).toEqual(["spread", "Verteilung"]);
+  });
+
+  it("falls back to the English words when there is no translation", () => {
+    expect(withEnglishWords([], ["overview"])).toEqual(["overview"]);
   });
 });
 
