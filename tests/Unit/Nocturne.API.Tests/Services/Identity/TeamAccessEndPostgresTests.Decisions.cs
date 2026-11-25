@@ -255,16 +255,16 @@ public partial class TeamAccessEndPostgresTests
     }
 
     [Fact]
-    public async Task The_site_reads_the_switch_and_each_staff_member_and_the_managers_read_only_the_switch_and_the_counts()
+    public async Task The_site_reads_the_switch_and_each_staff_member_waiting_first_and_the_managers_read_only_the_switch_and_the_counts()
     {
         var site = await SiteAsync("reads");
         var team = await TeamAsync("Clinic");
         await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var approved = await JoinStaffAsync(team);
+        var declined = await JoinStaffAsync(team);
         var pending = await NewSubjectAsync("pending");
         var end = Now.AddDays(3);
         (await JoinAsync(team, pending, new TeamStaffNarrowing(RoleSeeds.Viewer, true, end))).Refusal.Should().BeNull();
-        var approved = await JoinStaffAsync(team);
-        var declined = await JoinStaffAsync(team);
         (await ApproveStaffAsync(site, team, site.Owner, approved)).Should().Be(OwnerDecision.Decided);
         (await DeclineStaffAsync(site, team, site.Owner, declined)).Should().Be(OwnerDecision.Decided);
 
@@ -274,6 +274,7 @@ public partial class TeamAccessEndPostgresTests
             (pending, TeamSiteStaffStatus.Pending), (approved, TeamSiteStaffStatus.Approved), (declined, TeamSiteStaffStatus.Declined));
         seen.Staff[0].Narrowing.Should().Be(new TeamStaffNarrowing(RoleSeeds.Viewer, true, end));
         seen.Staff[0].HasEnded.Should().BeFalse();
+        seen.Staff.Select(s => s.RoleCeilingName).Should().Equal("Viewer", null, null);
 
         var detail = (await Teams(team.Manager).GetAsync(team.Id, team.Manager, Now, Ct))!;
         var managed = detail.Sites.Should().ContainSingle().Subject;

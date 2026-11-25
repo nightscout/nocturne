@@ -198,6 +198,12 @@ public record TenantRoleDto(
     /// which is all the caller may choose when <see cref="OnlyOwnersMayWiden"/> holds. Null otherwise.
     /// </summary>
     public IReadOnlyList<string>? CoveredPermissions { get; init; }
+
+    /// <summary>
+    /// Whether the caller the role was read for may give it to a team: they may confer it, and it holds
+    /// permissions for data only.
+    /// </summary>
+    public bool CanGiveToTeam { get; init; }
 }
 
 /// <summary>

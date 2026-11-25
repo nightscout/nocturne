@@ -194,7 +194,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
             $"/api/v4/member-invites/team-access/{teamId}", new { roleIds = new[] { admin }, limitTo24Hours = false, accessEndsAt = (DateTimeOffset?)null });
         administrative.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await administrative.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_access_role_administrative");
-        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}", new { roleIds = new[] { viewer }, limitTo24Hours = false }))
+        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}", new { roleIds = new[] { viewer } }))
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -251,6 +251,34 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         (await limitedOnSite.PutAsJsonAsync(
                 $"/api/v4/member-invites/team-access/{teamId}", new { roleIds = new[] { viewer }, limitTo24Hours = true, accessEndsAt = (DateTimeOffset?)null }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task An_owners_edit_that_sends_no_end_takes_away_the_end_of_the_access()
+    {
+        var (manager, _) = await SeedSubjectAsync("Endless Manager");
+        var (owner, ownerToken) = await SeedSubjectAsync("Endless Owner", owner: true);
+        var staff = await SeedBareSubjectAsync("Endless Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        Guid viewer;
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, await AuthTestHelpers.GetTenantIdAsync(conn), RoleSeeds.Viewer);
+        }
+        (await ownerOnSite.PutAsJsonAsync(
+                $"/api/v4/member-invites/team-access/{teamId}", new { roleIds = new[] { viewer }, limitTo24Hours = false, accessEndsAt = _now.AddDays(30) }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("accessEndsAt").ValueKind.Should().Be(JsonValueKind.String);
+
+        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}", new { roleIds = new[] { viewer }, limitTo24Hours = false }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("accessEndsAt").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)

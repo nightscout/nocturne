@@ -53,3 +53,27 @@ export function teamAccessProblemMessages(): ProblemCodeMessages {
       "The access cannot last longer than your own access. Choose an earlier end date.",
   };
 }
+
+/**
+ * The sentence for each problem code an owner's decision about a team's staff at their site can meet:
+ * approve, decline, and the switch for the team's own staff decisions.
+ */
+export function teamStaffDecisionProblemMessages(): ProblemCodeMessages {
+  return {
+    team_staff_decision_not_owner: "Only an owner of this site can decide which staff of a team can see this site.",
+    caller_access_from_team:
+      "You have access to this site only through a team, so you cannot change the access of a team or its staff.",
+  };
+}
+
+/**
+ * The sentence for each problem code an owner's edit of a team's access to their site can meet. The
+ * approval's sentences read the same for an edit, except the refusal of a person who is not an owner.
+ */
+export function teamAccessEditProblemMessages(): ProblemCodeMessages {
+  return {
+    ...teamAccessProblemMessages(),
+    ...teamStaffDecisionProblemMessages(),
+    team_access_not_owner: "Only an owner of this site can change the access of a team.",
+  };
+}

@@ -125,6 +125,10 @@ public static class TeamSuggestableRoles
     /// <summary>The permissions of the suggestable role <paramref name="slug"/>, or null when it is not one.</summary>
     public static IReadOnlyList<string>? PermissionsOf(string slug) =>
         All.FirstOrDefault(r => r.Slug == slug)?.Permissions;
+
+    /// <summary>The name of the suggestable role <paramref name="slug"/>, or null when it is not one.</summary>
+    public static string? NameOf(string? slug) =>
+        All.FirstOrDefault(r => r.Slug == slug)?.Name;
 }
 
 /// <summary>A manager invite as it is stored, before it has an id.</summary>
@@ -353,8 +357,9 @@ public sealed record TenantTeamAccess(
 /// <summary>A staff member of a team with access to a site, as the site reads them.</summary>
 /// <param name="Status">Whether the site approved them, a <see cref="TeamSiteStaffStatus"/> value.</param>
 /// <param name="HasEnded">Whether <see cref="TeamStaffNarrowing.EndsAt"/> has passed.</param>
+/// <param name="RoleCeilingName">The name of <see cref="TeamStaffNarrowing.RoleCeilingSlug"/>; null when there is no ceiling.</param>
 public sealed record TenantTeamStaff(
-    Guid SubjectId, string DisplayName, string Status, TeamStaffNarrowing Narrowing, bool HasEnded);
+    Guid SubjectId, string DisplayName, string Status, TeamStaffNarrowing Narrowing, bool HasEnded, string? RoleCeilingName);
 
 /// <summary>
 /// What an owner's decision at their site found: about a team's access to it, or about the team's staff there.
