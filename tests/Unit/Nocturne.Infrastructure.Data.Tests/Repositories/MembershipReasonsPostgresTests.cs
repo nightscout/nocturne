@@ -150,13 +150,13 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await s.Members.SetLimitTo24HoursAsync(s.Tenant, member, false, Now, Ct);
         await AssertEveryMemberMatchesAsync(s);
 
-        (await s.Members.SetAccessEndUnlessOwnerAsync(s.Tenant, member, null, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, null, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
 
         (await s.Members.ReplaceRolesAsync(s.Tenant, member, [s.ViewerRole], [s.OwnerRole], Now, Ct)).Should().BeTrue();
         await AssertEveryMemberMatchesAsync(s);
 
-        (await s.Members.ReplaceRolesUnlessLastOwnerAsync(s.Tenant, member, [s.OwnerRole], [s.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, [s.OwnerRole], [s.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
         (await s.Members.GetMemberAsync(s.Tenant, member, Ct))!.Roles.Select(r => r.RoleId)
@@ -167,7 +167,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_role_id = '{s.CaretakerRole}'")).Should().Be(0);
 
-        (await s.Members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, member, MembershipEndHow.Removed, Now, Ct)).Outcome.Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, MembershipEndHow.Removed, Now, Ct)).Outcome.Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'")).Should().Be(0);
@@ -405,7 +405,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
                 expected = [AuthAuditEventType.HistoryLimitChanged];
                 break;
             case StaleWrite.LostRoleThenEnd:
-                (await s.Members.SetAccessEndUnlessOwnerAsync(s.Tenant, member, Now.AddDays(10), Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+                (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(s.Factory, AccountLinkRoutes.Off, s.Tenant, member, Now.AddDays(10), Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
                 expected = [AuthAuditEventType.AccessEndChanged];
                 break;
             case StaleWrite.LostPermissionThenRoles:

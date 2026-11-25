@@ -238,7 +238,8 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
             Mock.Of<IInAppNotificationService>(),
             new FakeTimeProvider(Now),
             NullLogger<AccessRequestService>.Instance,
-            AccountLinkRoutes.Off);
+            AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
 
         (await service.ApproveAsync(pending, s.Tenant, [s.CaretakerRole], null, false, [Scope.FullAccess], s.Manager))
             .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);

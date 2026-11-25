@@ -134,6 +134,7 @@ public partial class TenantService : ITenantService
         var members = new TenantMembershipRepository(unit, _linkRoute);
         var tenantId = await unit.CommitAsync(async token =>
         {
+            await unit.LockSubjectRowSharedAsync(ownerSubjectId, token);
             var id = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
 
             var ownerRoleId = await members.FindRoleIdBySlugAsync(id, RoleSeeds.Owner, token)
@@ -350,14 +351,32 @@ public partial class TenantService : ITenantService
         TenantCacheEviction.Evict(_cache, tenant.Slug, tenant.ShareTokenHash);
     }
 
-    public Task<bool> AddMemberAsync(
+    public async Task<bool> AddMemberAsync(
         Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null,
-        string? label = null, bool limitTo24Hours = false, CancellationToken ct = default) =>
-        _members.AddDirectMemberAsync(
-            new NewTenantMember(tenantId, subjectId, roleIds, directPermissions, label, LimitTo24Hours: limitTo24Hours)
-            { How = MembershipJoinHow.Direct, By = null },
-            _time.GetUtcNow().UtcDateTime,
-            ct);
+        string? label = null, bool limitTo24Hours = false, CancellationToken ct = default)
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
+        var (added, lost) = await unit.CommitAsync<(bool, IReadOnlyList<OAuthGrantRecord>)>(
+            async token =>
+            {
+                await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, subjectId, token);
+                if (!await members.AddDirectMemberAsync(
+                        new NewTenantMember(tenantId, subjectId, roleIds, directPermissions, label, LimitTo24Hours: limitTo24Hours)
+                        { How = MembershipJoinHow.Direct, By = null },
+                        now,
+                        token))
+                    return (false, []);
+
+                await unit.Context.SaveChangesAsync(token);
+                return (true, await TeamReasonWrites.SyncOwnerChangeAsync(unit, _grantRevocation, tenantId, subjectId, now, token));
+            },
+            ct: ct);
+
+        _grantRevocation.EvictSessions(lost);
+        return added;
+    }
 
     public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
@@ -375,10 +394,17 @@ public partial class TenantService : ITenantService
         if (member.IsSystemSubject)
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
-        var (outcome, grants) = await unit.CommitAsync(
-            token => MembershipRemoval.StageAsync(
-                unit, members, _grantRevocation, tenantId, member, MembershipEndHow.Removed,
-                _time.GetUtcNow().UtcDateTime, token),
+        var now = _time.GetUtcNow().UtcDateTime;
+        var (outcome, grants) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
+            async token =>
+            {
+                await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, subjectId, token);
+                var (change, lost) = await MembershipRemoval.StageAsync(
+                    unit, members, _grantRevocation, tenantId, member, MembershipEndHow.Removed, now, token);
+                return change == OwnerGuardedChange.Changed
+                    ? (change, [.. lost, .. await TeamReasonWrites.SyncOwnerChangeAsync(unit, _grantRevocation, tenantId, subjectId, now, token)])
+                    : (change, lost);
+            },
             ct: ct);
 
         if (outcome == OwnerGuardedChange.LastOwner)
@@ -395,26 +421,57 @@ public partial class TenantService : ITenantService
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var members = new TenantMembershipRepository(unit, _linkRoute);
-        var (outcome, capped) = await unit.CommitAsync(
+        var (outcome, capped) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
             async token =>
             {
-                var change = await members.SetAccessEndUnlessOwnerAsync(tenantId, memberId, accessEndsAt, now, token);
                 IReadOnlyList<OAuthGrantRecord> lowered = [];
+                if (await members.GetMemberAsync(tenantId, memberId, token) is not { } target)
+                    return (OwnerGuardedChange.NotFound, lowered);
+
+                await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, target.SubjectId, token);
+                var change = await members.SetAccessEndUnlessOwnerAsync(tenantId, memberId, accessEndsAt, now, token);
                 if (change != OwnerGuardedChange.Changed)
                     return (change, lowered);
 
                 await unit.Context.SaveChangesAsync(token);
                 if (accessEndsAt is not null
-                    && await members.GetMemberAsync(tenantId, memberId, token) is { AccessEndsAt: { } end } member)
+                    && await members.GetMemberAsync(tenantId, memberId, token) is { AccessEndsAt: { } end })
                 {
-                    lowered = await MemberCreations.CapAsync(unit, member.SubjectId, end, now, token);
+                    lowered = await MemberCreations.CapAsync(unit, target.SubjectId, end, now, token);
                     await unit.Context.SaveChangesAsync(token);
                 }
-                return (change, lowered);
+                return (change, [.. lowered, .. await TeamReasonWrites.SyncOwnerChangeAsync(unit, _grantRevocation, tenantId, target.SubjectId, now, token)]);
             },
             ct: ct);
 
         _grantRevocation.EvictSessions(capped);
+        return outcome;
+    }
+
+    public async Task<OwnerGuardedChange> ReplaceMemberRolesAsync(
+        Guid tenantId, Guid memberId, IReadOnlyCollection<Guid> removedRoleIds, IReadOnlyCollection<Guid> addedRoleIds,
+        CancellationToken ct)
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
+        var (outcome, lost) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
+            async token =>
+            {
+                if (await members.GetMemberAsync(tenantId, memberId, token) is not { } target)
+                    return (OwnerGuardedChange.NotFound, []);
+
+                await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, target.SubjectId, token);
+                var change = await members.ReplaceRolesUnlessLastOwnerAsync(tenantId, memberId, removedRoleIds, addedRoleIds, now, token);
+                if (change != OwnerGuardedChange.Changed)
+                    return (change, []);
+
+                await unit.Context.SaveChangesAsync(token);
+                return (change, await TeamReasonWrites.SyncOwnerChangeAsync(unit, _grantRevocation, tenantId, target.SubjectId, now, token));
+            },
+            ct: ct);
+
+        _grantRevocation.EvictSessions(lost);
         return outcome;
     }
 
@@ -473,8 +530,6 @@ public partial class TenantService : ITenantService
         var passkeys = new PasskeyCredentialRepository(unit);
         var provisioned = await unit.CommitAsync(async token =>
         {
-            var tenantId = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
-
             // Resolve the owner subject. An OIDC account maps to one subject reused across
             // tenants, so an already-linked identity names the owner even when the checkout email
             // differs. Nothing else does: the owner email is never matched to an existing subject,
@@ -483,6 +538,10 @@ public partial class TenantService : ITenantService
             var existingIdentity = oidcIdentity is null
                 ? null
                 : await subjects.FindByOidcIdentityAsync(oidcIdentity.OidcSubjectId, normalizedIssuer!, token);
+            if (existingIdentity is not null)
+                await unit.LockSubjectRowSharedAsync(existingIdentity.Subject.Id, token);
+
+            var tenantId = await CreateSeededTenantAsync(unit, tenants, members, slug, displayName, token);
 
             Guid ownerSubjectId;
             if (existingIdentity is null)

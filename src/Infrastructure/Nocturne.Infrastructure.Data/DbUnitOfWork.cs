@@ -71,6 +71,15 @@ public sealed class DbUnitOfWork : IAsyncDisposable
     public Task CommitAsync(Func<CancellationToken, Task> work, CancellationToken ct = default) =>
         Context.ExecuteInTransactionAsync(work, ct);
 
+    /// <summary>
+    /// Holds the subject's row <c>FOR KEY SHARE</c> to the commit
+    /// (<see cref="TenantOwnerLock.LockSubjectRowSharedAsync"/>): what a unit that may insert a row naming
+    /// the subject takes before any lock <see cref="MembershipLock"/> orders. Called inside the work.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public Task LockSubjectRowSharedAsync(Guid subjectId, CancellationToken ct) =>
+        Context.LockSubjectRowSharedAsync(subjectId, ct);
+
     /// <inheritdoc />
     public ValueTask DisposeAsync() => Context.DisposeAsync();
 }

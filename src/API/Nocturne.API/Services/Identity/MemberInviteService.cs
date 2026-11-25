@@ -42,6 +42,9 @@ public class MemberInviteService : IMemberInviteService
     private static readonly AcceptMemberInviteResult AccessEnded =
         new(false, "access_ended", "The access this invite gives has already ended.");
 
+    private static readonly AcceptMemberInviteResult AccepterGone =
+        new(false, "not_found", "Your account no longer exists.");
+
     private readonly ITenantMembershipRepository _members;
     private readonly IMemberInviteRepository _invites;
     private readonly ISubjectRepository _subjects;
@@ -248,6 +251,10 @@ public class MemberInviteService : IMemberInviteService
             {
                 await unit.CommitAsync(async token =>
                 {
+                    await TenantMembershipRepository.LockOwnerChangeAsync(unit, invite.TenantId, acceptingSubjectId, token);
+                    if (await new SubjectRepository(unit, _linkRoute, _time).GetAsync(acceptingSubjectId, token) is null)
+                        throw new RefusedCommitException<AcceptMemberInviteResult>(AccepterGone);
+
                     revoked = await MembershipRemoval.ReplaceEndedAsync(
                             unit, members, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)
                         ?? throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
@@ -277,6 +284,8 @@ public class MemberInviteService : IMemberInviteService
                             claim == MemberInviteClaim.Exhausted ? Exhausted : Revoked);
 
                     await unit.Context.SaveChangesAsync(token);
+                    revoked = [.. revoked, .. await TeamReasonWrites.SyncOwnerChangeAsync(
+                        unit, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)];
                 });
             }
             catch (RefusedCommitException<AcceptMemberInviteResult> refused)

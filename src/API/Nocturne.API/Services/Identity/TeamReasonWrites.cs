@@ -116,6 +116,19 @@ internal static class TeamReasonWrites
             grantRevocation, now, ct);
 
     /// <summary>
+    /// Brings <paramref name="subjectId"/>'s team reasons on <paramref name="tenantId"/> into line with the
+    /// team's rows (<see cref="TeamReasonChanges.SyncAsync"/>) and applies them (<see cref="ApplyAsync"/>),
+    /// after a write on <paramref name="unit"/> that can change whether the subject owns the site, since an
+    /// owner holds none. The caller has saved its write, holds what
+    /// <see cref="TenantMembershipRepository.LockOwnerChangeAsync"/> takes, and evicts the sessions of the
+    /// grants returned once the unit commits.
+    /// </summary>
+    public static async Task<IReadOnlyList<OAuthGrantRecord>> SyncOwnerChangeAsync(
+        DbUnitOfWork unit, GrantRevocationService grantRevocation, Guid tenantId, Guid subjectId, DateTime now,
+        CancellationToken ct) =>
+        await ApplyAsync(unit, await TeamReasonChanges.SyncAsync(unit, [(tenantId, subjectId)], now, ct), grantRevocation, now, ct);
+
+    /// <summary>
     /// Stages and saves <paramref name="changes"/> on <paramref name="unit"/>, inside its commit: for each
     /// site, pinned to it, the stop of what each member whose membership ends made there
     /// (<see cref="MadeByStop"/>), the reasons, and the rest of what those members lose; then the write the

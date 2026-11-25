@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
@@ -137,6 +138,26 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var listed = (await managerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/{teamId}"))
             .GetProperty("staff").EnumerateArray().Should().ContainSingle().Subject;
         listed.GetRawText().Should().Contain(RoleSeeds.Viewer);
+    }
+
+    [Fact]
+    public async Task An_owner_who_is_staff_of_a_team_the_site_approves_is_listed_once_as_owner_and_not_under_the_team()
+    {
+        var (manager, _) = await SeedSubjectAsync("Owning Manager");
+        var (owner, ownerToken) = await SeedSubjectAsync("Owning Nurse", owner: true);
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
+        var teamId = await TeamWithStaffAsync(managerClient, owner);
+
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+
+        var listed = (await MembersAsync(ownerOnSite)).Should().ContainSingle(m => m.GetProperty("subjectId").GetGuid() == owner).Subject;
+        listed.GetProperty("hasDirect").GetBoolean().Should().BeTrue();
+        listed.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("slug").GetString()).Should().Contain(RoleSeeds.Owner);
+        listed.GetProperty("reasons").EnumerateArray().Select(r => r.GetProperty("kind").GetString())
+            .Should().Equal(nameof(MemberReasonKind.Direct));
+        listed.GetProperty("reasons").EnumerateArray().Should().OnlyContain(r => r.GetProperty("teamId").ValueKind == JsonValueKind.Null);
     }
 
     /// <summary>A new team run by the manager, with <paramref name="staff"/> joined through a staff invite; returns the team.</summary>

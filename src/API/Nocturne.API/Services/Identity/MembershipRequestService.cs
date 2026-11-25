@@ -176,6 +176,7 @@ public class MembershipRequestService : IMembershipRequestService
                 await unit.CommitAsync(async token =>
                 {
                     activated = false;
+                    await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, request.SubjectId, token);
                     switch (await subjects.GetAsync(request.SubjectId, token))
                     {
                         case null:
@@ -211,6 +212,8 @@ public class MembershipRequestService : IMembershipRequestService
                         throw new RefusedCommitException<DecideMembershipRequestResult>(NoLongerPending);
 
                     await unit.Context.SaveChangesAsync(token);
+                    revoked = [.. revoked, .. await TeamReasonWrites.SyncOwnerChangeAsync(
+                        unit, _grantRevocation, tenantId, request.SubjectId, _time.GetUtcNow().UtcDateTime, token)];
                 }, ct);
             }
             catch (RefusedCommitException<DecideMembershipRequestResult> refused)

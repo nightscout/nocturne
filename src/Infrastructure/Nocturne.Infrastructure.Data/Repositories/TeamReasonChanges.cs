@@ -135,9 +135,10 @@ public sealed class TeamReasonChanges
     /// The caller holds, in the order <see cref="MembershipLock"/> states, the row of every subject named
     /// (<see cref="TenantOwnerLock.LockSubjectRowsSharedAsync"/>), since adding a reason can add the
     /// membership, and the team access lock of every site named, which every writer of the rows read here
-    /// takes, so they hold still to the commit.
+    /// takes, so they hold still to the commit. Whether the subject owns the site is read under the
+    /// membership's lock, which every writer of a direct reason holds.
     /// </remarks>
-    internal static async Task<TeamReasonChanges> SyncAsync(
+    public static async Task<TeamReasonChanges> SyncAsync(
         DbUnitOfWork unit, IEnumerable<(Guid TenantId, Guid SubjectId)> memberships, DateTime now, CancellationToken ct)
     {
         var db = unit.Context;
@@ -148,7 +149,7 @@ public sealed class TeamReasonChanges
         var given = new List<Given>();
         foreach (var (tenantId, subjectId) in pairs)
         {
-            var desired = await TeamReasons.DesiredAsync(db, tenantId, subjectId, ct);
+            var desired = await TeamReasons.DesiredAsync(db, tenantId, subjectId, now, ct);
             var member = await db.TenantMembers.AsNoTracking()
                 .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId)
                 .Select(m => new
