@@ -50347,7 +50347,6 @@ msgstr ""
 msgid "{0} did not get the test alert."
 msgstr ""
 
-
 #. 0: formatLongDate(zoom[0]); 1: formatLongDate(zoom[1])
 #: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
 msgid "Showing {0} to {1}"
