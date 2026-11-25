@@ -33,4 +33,32 @@ public static class HashUtils
         var hashBytes = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
+
+    public const string HmacSha256Prefix = "hmac-sha256:";
+
+    /// <summary>
+    ///     Returns whether <paramref name="value"/> is already wrapped with the HMAC-SHA256 prefix.
+    /// </summary>
+    public static bool IsHmacSha256(string? value) =>
+        value is not null && value.StartsWith(HmacSha256Prefix, StringComparison.Ordinal);
+
+    /// <summary>
+    ///     Computes HMAC-SHA256 over an existing lowercase hex SHA-256 digest, keyed with
+    ///     <paramref name="key"/>, prefixed with <see cref="HmacSha256Prefix"/>.
+    /// </summary>
+    public static string HmacSha256OverDigest(string key, string sha256Hex)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        var bytes = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(key),
+            Encoding.UTF8.GetBytes(sha256Hex));
+        return HmacSha256Prefix + Convert.ToHexStringLower(bytes);
+    }
+
+    /// <summary>
+    ///     Computes HMAC-SHA256 over the SHA-256 hex digest of <paramref name="input"/>,
+    ///     keyed with <paramref name="key"/>.
+    /// </summary>
+    public static string HmacSha256OverSha256Hex(string key, string input) =>
+        HmacSha256OverDigest(key, Sha256Hex(input));
 }
