@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MigrationJobState, MigrationMode, MigrationPhase } from "#lib/api/index.js";
 import type { MigrationJobInfo } from "#lib/api/index.js";
 
@@ -17,6 +17,7 @@ const remote = vi.hoisted(() => ({
   startResult: undefined as { id: string } | undefined,
   enhanceCallback: undefined as undefined | ((args: { submit: () => Promise<void> }) => Promise<void>),
   onCancel: undefined as undefined | (() => void),
+  pending: { hasPendingConfig: false } as Record<string, unknown>,
 }));
 
 // The factory is hoisted above every declaration in this file, so anything it evaluates eagerly
@@ -26,7 +27,7 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", async () => {
   const inertForm = { enhance: () => ({}), pending: 0, result: undefined, fields: remoteFormFields() };
 
   return {
-    getPendingConfig: () => createQueryResource(() => Promise.resolve({ hasPendingConfig: false })),
+    getPendingConfig: () => createQueryResource(() => Promise.resolve(remote.pending)),
     getSources: () => createQueryResource(() => Promise.resolve([])),
     getHistory: () =>
       createQueryResource(() => {
@@ -354,6 +355,54 @@ describe("settings/migration running job", () => {
       .toBeVisible();
     expect(remote.statusCalls).toBeGreaterThan(1);
   }, 20000);
+});
+
+describe("settings/migration source the server gives", () => {
+  const sentUrls = () =>
+    Array.from(document.querySelectorAll<HTMLInputElement>('input[name="nightscoutUrl"]'), (input) => input.value);
+
+  beforeEach(() => {
+    history = [];
+    polled = null;
+    remote.pending = { hasPendingConfig: true, mode: MigrationMode.Api, nightscoutUrl: "mine.example/AGYL…" };
+  });
+
+  afterEach(() => {
+    remote.pending = { hasPendingConfig: false };
+  });
+
+  it("shows the server's address masked and sends no URL, so the API reads its own", async () => {
+    render(MigrationPage, {});
+
+    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/AGYL…");
+    await expect.element(page.getByRole("button", { name: "Change address" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
+    expect(page.getByRole("textbox", { name: "Nightscout URL" }).elements()).toHaveLength(0);
+    expect(sentUrls()).toEqual([]);
+  });
+
+  it("sends the typed URL once the viewer presses Change address", async () => {
+    render(MigrationPage, {});
+
+    await page.getByRole("button", { name: "Change address" }).click();
+    const input = page.getByRole("textbox", { name: "Nightscout URL" });
+    await expect.element(input).toHaveValue("");
+    await expect.element(page.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await input.fill("https://other.example/ns");
+
+    await expect.poll(sentUrls).toEqual(["https://other.example/ns", "https://other.example/ns"]);
+  });
+
+  it("goes back to the server's address when the viewer keeps it", async () => {
+    render(MigrationPage, {});
+
+    await page.getByRole("button", { name: "Change address" }).click();
+    await page.getByRole("textbox", { name: "Nightscout URL" }).fill("https://other.example/ns");
+    await page.getByRole("button", { name: "Keep current address" }).click();
+
+    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/AGYL…");
+    expect(sentUrls()).toEqual([]);
+  });
 });
 
 describe("settings/migration status", () => {
