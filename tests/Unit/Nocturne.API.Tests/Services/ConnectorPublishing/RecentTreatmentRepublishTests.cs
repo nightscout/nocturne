@@ -252,7 +252,146 @@ public class RecentTreatmentRepublishTests : IDisposable
         (await StoredSpanAsync()).UpdatedAt.Should().Be(rewritten.UpdatedAt);
     }
 
+    [Fact]
+    public async Task A_shortened_profile_switch_is_served_with_its_new_end()
+    {
+        await CrawlAsync(ProfileSwitch("ps-1", At, "Sick", duration: 60));
+
+        var written = await PublishAsync(ProfileSwitch("ps-1", At, "Sick", duration: 30));
+
+        written.Should().Be(1);
+        (await ActivationsAsync()).Should().ContainSingle().Which.EndTimestamp.Should().Be(At.AddMinutes(30));
+        (await ServedAsync("ps-1")).Duration.Should().Be(30);
+    }
+
+    [Fact]
+    public async Task A_profile_switch_that_changes_profile_is_rewritten_in_place()
+    {
+        await CrawlAsync(ProfileSwitch("ps-1", At, "Sick"));
+        var before = (await ActivationsAsync()).Single();
+
+        (await PublishAsync(ProfileSwitch("ps-1", At, "Exercise"))).Should().Be(1);
+
+        var after = (await ActivationsAsync()).Single();
+        after.Id.Should().Be(before.Id);
+        after.BaseProfileName.Should().Be("Exercise");
+    }
+
+    [Fact]
+    public async Task A_profile_switch_moved_at_the_source_settles_the_activations_around_it()
+    {
+        await CrawlAsync(ProfileSwitch("ps-0", At, "Weekday"));
+        await CrawlAsync(ProfileSwitch("ps-1", At.AddHours(1), "Weekend"));
+        await CrawlAsync(ProfileSwitch("ps-2", At.AddHours(2), "Holiday"));
+        (await ActivationsAsync()).Select(a => (a.LegacyId, a.EndTimestamp)).Should().BeEquivalentTo(new (string?, DateTime?)[]
+        {
+            ("ps-0", At.AddHours(1)), ("ps-1", At.AddHours(2)), ("ps-2", null),
+        });
+
+        (await PublishAsync(ProfileSwitch("ps-1", At.AddHours(3), "Weekend"))).Should().Be(1);
+
+        (await ActivationsAsync()).Select(a => (a.LegacyId, a.Timestamp, a.EndTimestamp)).Should().BeEquivalentTo(new (string?, DateTime, DateTime?)[]
+        {
+            ("ps-0", At, At.AddHours(2)),
+            ("ps-2", At.AddHours(2), At.AddHours(3)),
+            ("ps-1", At.AddHours(3), null),
+        });
+    }
+
+    [Fact]
+    public async Task An_unchanged_profile_switch_is_not_written_again()
+    {
+        await CrawlAsync(ProfileSwitch("ps-1", At, "Sick", duration: 60));
+        var before = (await ActivationsAsync()).Single();
+
+        (await PublishAsync(ProfileSwitch("ps-1", At, "Sick", duration: 60))).Should().Be(0);
+
+        (await ActivationsAsync()).Single().SysUpdatedAt.Should().Be(before.SysUpdatedAt);
+    }
+
+    [Fact]
+    public async Task A_profile_switch_edited_in_nocturne_keeps_the_edit_until_the_source_changes_it()
+    {
+        await CrawlAsync(ProfileSwitch("ps-1", At, "Sick", duration: 60));
+        var edited = await _context.ProfileActivations.SingleAsync(a => a.LegacyId == "ps-1");
+        edited.BaseProfileName = "Edited";
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        (await PublishAsync(ProfileSwitch("ps-1", At, "Sick", duration: 60))).Should().Be(0);
+        (await ActivationsAsync()).Single().BaseProfileName.Should().Be("Edited");
+
+        (await PublishAsync(ProfileSwitch("ps-1", At, "Sick", duration: 30))).Should().Be(1);
+        (await ActivationsAsync()).Single().BaseProfileName.Should().Be("Sick", "the source changed the record, so the source wins");
+    }
+
+    [Fact]
+    public async Task A_profile_switch_the_user_deleted_stays_deleted()
+    {
+        await CrawlAsync(ProfileSwitch("ps-1", At, "Sick", duration: 60));
+        var row = await _context.ProfileActivations.SingleAsync(a => a.LegacyId == "ps-1");
+        row.DeletedAt = DateTime.UtcNow;
+        _context.Entry(row).Property("DeletedByUser").CurrentValue = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        (await PublishAsync(ProfileSwitch("ps-1", At, "Sick", duration: 30))).Should().Be(0);
+
+        (await ActivationsAsync()).Should().BeEmpty();
+        (await _context.ProfileActivations.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task An_effective_profile_switch_republished_with_a_new_length_stays_linked_to_its_request()
+    {
+        await CrawlAsync(AapsRequest());
+        await CrawlAsync(AapsEffective(durationMs: 3_600_000));
+        var request = (await ActivationsAsync()).Single(a => a.LegacyId == "aaps-request");
+
+        (await PublishAsync(AapsEffective(durationMs: 1_800_000))).Should().Be(1);
+
+        var activations = await ActivationsAsync();
+        activations.Should().HaveCount(2);
+        var effective = activations.Single(a => a.LegacyId == "aaps-effective");
+        effective.RequestedActivationId.Should().Be(request.Id);
+        effective.EndTimestamp.Should().Be(RequestStart.AddMinutes(30), "AAPS reports the end of an effective switch from the request's start");
+        activations.Single(a => a.LegacyId == "aaps-request").EndTimestamp.Should().Be(EffectiveStart);
+    }
+
+    private const long RequestMills = 1700000000000;
+
+    private static readonly DateTime RequestStart = DateTimeOffset.FromUnixTimeMilliseconds(RequestMills).UtcDateTime;
+
+    private static readonly DateTime EffectiveStart = RequestStart.AddSeconds(90);
+
+    private static Treatment AapsRequest() => new()
+    {
+        Id = "aaps-request", EventType = "Profile Switch", Mills = RequestMills, EnteredBy = "openaps://AndroidAPS",
+        Profile = "Rhys (110%,1h)", OriginalProfileName = "Rhys", OriginalDuration = 3_600_000, Percentage = 110,
+        Timeshift = 3_600_000, Duration = 60, DataSource = Source,
+    };
+
+    private static Treatment AapsEffective(int durationMs) => new()
+    {
+        Id = "aaps-effective", EventType = "Note", Mills = RequestMills + 90_000, EnteredBy = "openaps://AndroidAPS",
+        Notes = $"Rhys (110%,{durationMs / 60_000}m)", OriginalProfileName = "Rhys", OriginalPercentage = 110,
+        OriginalTimeshift = 3_600_000, OriginalDuration = durationMs, OriginalEnd = RequestMills + durationMs,
+        DataSource = Source,
+    };
+
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    private static Treatment ProfileSwitch(string id, DateTime at, string profile, double duration = 0) => new()
+    {
+        Id = id, EventType = "Profile Switch", Profile = profile, Duration = duration,
+        Created_at = at.ToString("yyyy-MM-ddTHH:mm:ss.000Z"), DataSource = Source,
+    };
+
+    private Task<List<ProfileActivationEntity>> ActivationsAsync() =>
+        _context.ProfileActivations.AsNoTracking().OrderBy(a => a.Timestamp).ToListAsync();
+
+    private async Task<Treatment> ServedAsync(string legacyId) =>
+        (await _treatments.GetTreatmentsAsync(count: 10)).Single(t => t.LegacyId == legacyId);
 
     private static Treatment Override(double duration) => new()
     {

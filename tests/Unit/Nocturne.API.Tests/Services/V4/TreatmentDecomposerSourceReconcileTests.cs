@@ -242,22 +242,59 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_changed_profile_switch_is_still_not_republished()
+    public async Task A_changed_profile_switch_is_selected_and_an_unchanged_one_is_not()
     {
         _context.ProfileActivations.Add(new ProfileActivationEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "switch", DataSource = Connector,
             Timestamp = At, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Default",
-            UpstreamFingerprint = "an-older-fingerprint",
+            UpstreamFingerprint = TreatmentDecomposer.UpstreamFingerprint(UpstreamSwitch(60)),
         });
         await _context.SaveChangesAsync();
 
-        var selected = await _decomposer.SelectForRepublishAsync(Connector,
-            [new Treatment { Id = "switch", EventType = "Profile Switch", Profile = "Default", Duration = 30,
-                Created_at = "2026-03-01T12:00:00.000Z", DataSource = Connector }]);
+        var unchanged = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamSwitch(60)]);
+        var changed = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamSwitch(30)]);
+
+        unchanged.Count.Should().Be(0);
+        changed.Decompose.Should().ContainSingle(t => t.Id == "switch");
+        changed.Spans.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_profile_switch_with_no_fingerprint_is_stamped_and_not_selected()
+    {
+        var row = Guid.CreateVersion7();
+        _context.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = row, TenantId = TenantId, LegacyId = "switch", DataSource = Connector,
+            Timestamp = At, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Default",
+        });
+        await _context.SaveChangesAsync();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamSwitch(30)]);
 
         selected.Count.Should().Be(0);
+        (await _context.ProfileActivations.AsNoTracking().Where(a => a.Id == row).Select(a => a.UpstreamFingerprint).SingleAsync())
+            .Should().Be(TreatmentDecomposer.UpstreamFingerprint(UpstreamSwitch(30)));
     }
+
+    [Fact]
+    public void An_effective_profile_switch_follows_the_rule_of_a_profile_switch()
+    {
+        var effective = new Treatment
+        {
+            Id = "eps-1", EventType = "Note", OriginalProfileName = "Rhys", Created_at = "2026-03-01T12:00:00.000Z",
+        };
+
+        _decomposer.CanRepublish(effective, stored: true).Should().BeTrue();
+        _decomposer.CanRepublish(effective, stored: false).Should().BeTrue();
+    }
+
+    private static Treatment UpstreamSwitch(double duration) => new()
+    {
+        Id = "switch", EventType = "Profile Switch", Profile = "Default", Duration = duration,
+        Created_at = "2026-03-01T12:00:00.000Z", DataSource = Connector,
+    };
 
     [Fact]
     public async Task A_row_stored_before_fingerprints_is_stamped_and_not_overwritten()
@@ -329,7 +366,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     [InlineData("Temporary Override", false, true)]
     [InlineData("Temporary Override", true, false)]
     [InlineData("Temporary Target", true, false)]
-    [InlineData("Profile Switch", true, false)]
+    [InlineData("Profile Switch", true, true)]
     [InlineData("Pump Suspend", false, true)]
     [InlineData("Pump Suspend", true, false)]
     [InlineData("Pump Resume", true, false)]

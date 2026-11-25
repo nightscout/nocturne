@@ -2502,8 +2502,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
     /// uploader restated. A treatment the user deleted stays deleted.
     /// <para>
-    /// A stored treatment <see cref="CanRepublish"/> refuses is not decomposed again: a profile switch,
-    /// an override, a temporary target, a pump suspend or resume. Of those, an override or temporary
+    /// A stored treatment <see cref="CanRepublish"/> refuses is not decomposed again: an override, a
+    /// temporary target, a pump suspend or resume. Of those, an override or temporary
     /// target the source changed is selected for <see cref="RepublishSpansAsync"/> by the same rule,
     /// over the fingerprint its state span carries alone, unless it is an upstream edit of a record
     /// write-back sent. The bolus or carbs such a treatment also writes keep the fingerprint they were
@@ -2648,8 +2648,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// <summary>
     /// Whether decomposing <paramref name="treatment"/> again is safe and worthwhile. A treatment
     /// that stores nothing is not. Nor is a <paramref name="stored"/> one whose type re-derives state
-    /// that later writes have moved on. A profile switch, override or temporary target resets its
-    /// span's end, and a pump suspend or resume reopens or closes the current suspension.
+    /// that later writes have moved on. An override or temporary target resets its span's end, and a
+    /// pump suspend or resume reopens or closes the current suspension. A stored profile switch is
+    /// decomposed again: <see cref="ProfileActivationWriter"/> rewrites its row in place and settles
+    /// the ends of its neighbours.
     /// </summary>
     internal bool CanRepublish(Treatment treatment, bool stored)
     {
@@ -2657,7 +2659,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (c.ProducesNothing)
             return false;
 
-        var rewritesLaterState = c.IsProfileSwitch || c.IsOverride || c.IsTemporaryTarget
+        var rewritesLaterState = c.IsOverride || c.IsTemporaryTarget
             || (c.ProduceDeviceEvent
                 && c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume);
 
