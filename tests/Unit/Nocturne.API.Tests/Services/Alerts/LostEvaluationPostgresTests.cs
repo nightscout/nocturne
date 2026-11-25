@@ -465,7 +465,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         await WaitForPassAsync(tenant, low);
         tenant.Hold = null;
         await abandon.CancelAsync();
-        await write;
+        await write.Awaiting(t => t).Should().ThrowAsync<OperationCanceledException>("the shutdown stops the pass");
         (await tenant.RecordedAsync()).Should().BeNull();
 
         await process.SweepAsync(Stored + PastGrace);

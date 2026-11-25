@@ -163,7 +163,7 @@ internal sealed class UnevaluableRuleNotice(
         {
             await NotifyAsync(rule, record, tenantId, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Sending the notice that alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
@@ -186,7 +186,7 @@ internal sealed class UnevaluableRuleNotice(
         {
             await ResolveNoticeAsync(notice.ExcursionId, reason, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Resolving notice {ExcursionId} that alert rule {AlertRuleId} cannot be evaluated failed",

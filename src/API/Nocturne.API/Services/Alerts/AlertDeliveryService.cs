@@ -182,7 +182,7 @@ internal sealed class AlertDeliveryService(
             {
                 await DispatchToProviderAsync(delivery, channel, states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Failed to dispatch delivery {DeliveryId} via {ChannelType}",
                     delivery.Id, delivery.ChannelType);
@@ -329,7 +329,7 @@ internal sealed class AlertDeliveryService(
             {
                 await DispatchToProviderAsync(delivery, channels[i], states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Test-fire delivery {DeliveryId} via {ChannelType} failed",
                     delivery.Id, delivery.ChannelType);
@@ -370,7 +370,7 @@ internal sealed class AlertDeliveryService(
                 };
                 await DispatchToProviderAsync(fauxDelivery, channel, states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Test-fire dry-run dispatch via {ChannelType} failed", channel.ChannelType);
             }

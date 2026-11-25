@@ -244,6 +244,37 @@ public class AlertOrchestratorConditionIssueTests
             It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task A_pass_cancelled_during_a_rule_stops_without_an_error_and_evaluates_no_further_rule()
+    {
+        var harness = new Harness();
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        using var shutdown = new CancellationTokenSource();
+        var first = Rule("""{"direction": "below", "value": 54}""");
+        var second = first with { Id = Guid.Parse("85385385-0000-7000-8000-0000000000a2") };
+        harness.Engine
+            .Setup(e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == first.Id), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(async (AlertRuleSnapshot _, SensorContext _, AlertEngineOptions _, CancellationToken ct) =>
+            {
+                await shutdown.CancelAsync();
+                ct.ThrowIfCancellationRequested();
+                return new AlertEngineEvaluation();
+            });
+
+        var pass = () => harness.EvaluateAsync(shutdown.Token, first, second);
+
+        await pass.Should().ThrowAsync<OperationCanceledException>();
+        harness.OrchestratorLogger.Entries.Should().NotContain(e => e.Level >= LogLevel.Error);
+        harness.Engine.Verify(
+            e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == second.Id), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static AlertRuleSnapshot Rule(string conditionParams, AlertConditionType type = AlertConditionType.Threshold) =>
         new(RuleId, Tenant, "Urgent Low", type, conditionParams,
             AlertRuleSeverity.Critical, "{}", 0, false, null);
@@ -256,6 +287,7 @@ public class AlertOrchestratorConditionIssueTests
         public Mock<IAlertRepository> NoticeRows { get; } = new();
         public Mock<IAlertDeliveryService> Delivery { get; } = new();
         public Mock<IClockAnomalyNotice> ClockNotice { get; } = new();
+        public ListLogger<AlertOrchestrator> OrchestratorLogger { get; } = new();
 
         private readonly AlertOrchestrator _orchestrator;
 
@@ -296,10 +328,12 @@ public class AlertOrchestratorConditionIssueTests
                 Mock.Of<IExcursionResolutionHandler>(),
                 notice,
                 ClockNotice.Object,
-                new ListLogger<AlertOrchestrator>());
+                OrchestratorLogger);
         }
 
-        public Task EvaluateAsync(params AlertRuleSnapshot[] rules) =>
-            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), readAt: null, CancellationToken.None);
+        public Task EvaluateAsync(params AlertRuleSnapshot[] rules) => EvaluateAsync(CancellationToken.None, rules);
+
+        public Task EvaluateAsync(CancellationToken ct, params AlertRuleSnapshot[] rules) =>
+            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), readAt: null, ct);
     }
 }

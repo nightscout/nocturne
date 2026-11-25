@@ -119,7 +119,7 @@ internal sealed class InAppProvider(
                 payload.InstanceId, userId, urgency);
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Failed to create InApp notification for instance {InstanceId}, user {UserId}",

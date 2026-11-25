@@ -329,7 +329,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                     closedCount++;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex,
                     "Error closing hysteresis excursion {ExcursionId} for rule {AlertRuleId}",
@@ -531,7 +531,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             };
             return await enricher.EnrichAsync(baseContext, syntheticRules, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Failed to enrich sensor context for snooze evaluation on tenant {TenantId}", sweep.TenantId);
             return null;
@@ -551,7 +551,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         {
             return await engine.EvaluateSnoozeAsync(instance.AlertRuleId, conditions, enrichedContext, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Snooze conditions evaluation failed for instance {InstanceId}", instance.InstanceId);
             return false;
@@ -615,7 +615,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             {
                 transition = await engine.EvaluateAutoResolveAsync(entry.Rule, enriched, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Auto-resolve evaluation failed for rule {AlertRuleId}", entry.Rule.Id);
                 continue;
