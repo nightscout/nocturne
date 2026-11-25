@@ -1,7 +1,9 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
+import { setMode } from "mode-watcher";
+import { glucoseChartLookback } from "#lib/stores/appearance-store.svelte.js";
 
 const { goto, store, NOW } = vi.hoisted(() => {
   const NOW = Date.UTC(2026, 9, 25, 12, 0, 0);
@@ -45,6 +47,11 @@ describe("CommandPalette", () => {
     store.legacyFallbacks = [];
     store.legacyCoverage = [];
     store.trackerInstances = [];
+  });
+
+  afterEach(() => {
+    setMode("system");
+    glucoseChartLookback.current = 12;
   });
 
   // The palette's ages run on the store's clock from the timestamps the server sent.
@@ -202,5 +209,69 @@ describe("CommandPalette", () => {
 
     await expect.element(report("Day-by-day view")).toBeVisible();
     await expect.element(report("Battery")).not.toBeInTheDocument();
+  });
+
+  it("gives a quick setting one label for its text, its search value and its pin, and follows a toggle", async () => {
+    setMode("dark");
+    render(CommandPalette, { open: true });
+
+    const option = () => page.getByRole("option", { name: /^Dark mode: / });
+    await expect.element(option()).toHaveTextContent(/^Dark mode: On/);
+    await expect.element(option()).toHaveAttribute("data-value", "Dark mode: On");
+    await expect
+      .element(page.getByRole("button", { name: "Pin Dark mode: On" }))
+      .toBeInTheDocument();
+
+    await option().click();
+
+    await expect.element(option()).toHaveTextContent(/^Dark mode: Off/);
+    await expect.element(option()).toHaveAttribute("data-value", "Dark mode: Off");
+    await expect
+      .element(page.getByRole("button", { name: "Pin Dark mode: Off" }))
+      .toBeInTheDocument();
+  });
+
+  it("keeps the highlight on a quick setting after Enter, so Enter cycles it again", async () => {
+    pinnedItemIds.current = ["stat-iob"];
+    recentItemIds.current = ["qs-chart-lookback"];
+    glucoseChartLookback.current = 12;
+    render(CommandPalette, { open: true });
+
+    const lookback = page.getByRole("option", { name: /^Chart lookback: / });
+    await expect
+      .element(page.getByRole("option", { name: /^IOB/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+
+    await userEvent.keyboard("{Enter}");
+    await expect.element(lookback).toHaveTextContent(/^Chart lookback: 24h/);
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+
+    await userEvent.keyboard("{Enter}");
+    await expect.element(lookback).toHaveTextContent(/^Chart lookback: 48h/);
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+    expect(glucoseChartLookback.current).toBe(48);
+  });
+
+  it("hands the highlight back to search when text arrives without a key press", async () => {
+    pinnedItemIds.current = ["stat-iob"];
+    recentItemIds.current = ["qs-chart-lookback"];
+    glucoseChartLookback.current = 12;
+    render(CommandPalette, { open: true });
+
+    const lookback = page.getByRole("option", { name: /^Chart lookback: / });
+    await expect
+      .element(page.getByRole("option", { name: /^IOB/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{Enter}");
+    await expect.element(lookback).toHaveTextContent(/^Chart lookback: 24h/);
+
+    await page.getByPlaceholder("Search commands...").fill("dark");
+
+    await expect
+      .element(page.getByRole("option", { selected: true }))
+      .toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { glucoseChartLookback, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import {
   paletteItems,
   paletteItemsFor,
@@ -195,5 +196,37 @@ describe("search keywords", () => {
     for (const item of paletteItems()) {
       expect(item.keywords?.length, item.id).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("quick-settings labels", () => {
+  const labelOf = (id: string) => paletteItems().find((item) => item.id === id)?.label;
+
+  afterEach(() => {
+    glucoseUnits.current = "mg/dl";
+    glucoseChartLookback.current = 12;
+  });
+
+  it("shows the unit in use", () => {
+    expect(labelOf("qs-glucose-units")).toBe("Units: mg/dL");
+
+    glucoseUnits.current = "mmol";
+    expect(labelOf("qs-glucose-units")).toBe("Units: mmol/L");
+  });
+
+  it("shows the chart lookback in use", () => {
+    glucoseChartLookback.current = 6;
+    expect(labelOf("qs-chart-lookback")).toBe("Chart lookback: 6h");
+  });
+
+  it("still finds the units and lookback items by the verbs they once carried", () => {
+    const keywords = (id: string) => paletteItems().find((item) => item.id === id)?.keywords;
+
+    expect(keywords("qs-glucose-units")).toContain("switch");
+    expect(keywords("qs-chart-lookback")).toContain("change");
+  });
+
+  it("shows a dark mode that follows the system", () => {
+    expect(labelOf("qs-dark-mode")).toBe("Dark mode: System");
   });
 });
