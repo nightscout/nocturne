@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -82,9 +83,9 @@ public static class DemoHealthDataGenerator
                 // earlier seeds wrote it once, at the standard offset, so only the
                 // daylight occurrence carries a suffix.
                 SyncIdentifier = clock.Zone.IsAmbiguousTime(t) && clock.Zone.IsDaylightSavingTime(utc)
-                    ? $"{dataSource}:hr:{t:yyyyMMddTHHmmss}:dst"
-                    : $"{dataSource}:hr:{t:yyyyMMddTHHmmss}",
-                CreatedAt = utc.ToString("o"),
+                    ? $"{dataSource}:hr:{t.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture)}:dst"
+                    : $"{dataSource}:hr:{t.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture)}",
+                CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             });
         }
 
@@ -116,8 +117,8 @@ public static class DemoHealthDataGenerator
                 Device = WearableDevice,
                 EnteredBy = dataSource,
                 DataSource = dataSource,
-                SyncIdentifier = $"{dataSource}:steps:{localDay:yyyyMMdd}:{hour:D2}",
-                CreatedAt = utc.ToString("o"),
+                SyncIdentifier = $"{dataSource}:steps:{localDay.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}:{hour:D2}",
+                CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             });
         }
 
@@ -241,11 +242,11 @@ public static class DemoHealthDataGenerator
                 Hrv = rng.Next(40, 90),
                 Spo2 = rng.Next(94, 99),
                 RespirationRate = rng.Next(12, 17),
-                Movement = (float)Math.Round(rng.NextDouble(), 2),
+                Movement = (float)ScaledRounding.Round(rng.NextDouble(), 2),
             });
         }
 
-        var efficiency = durationMs > 0 ? (float)Math.Round(100.0 * totalSleepMs / durationMs, 1) : 0f;
+        var efficiency = durationMs > 0 ? (float)ScaledRounding.Round(100.0 * totalSleepMs / durationMs, 1) : 0f;
         var restfulPct = totalSleepMs > 0 ? (deepMs + remMs) * 100.0 / totalSleepMs : 0;
         var score = (short)Math.Clamp((int)Math.Round(efficiency * 0.5 + restfulPct * 0.5), 50, 98);
 
@@ -269,13 +270,13 @@ public static class DemoHealthDataGenerator
             Efficiency = efficiency,
             RestlessPeriods = stages.Count(s => s.Stage == SleepStageType.Awake) - 1, // exclude sleep-onset latency
             SleepScore = score,
-            AvgHeartRate = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.HeartRate!.Value), 1) : null,
+            AvgHeartRate = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.HeartRate!.Value), 1) : null,
             MinHeartRate = samples.Count > 0 ? samples.Min(s => s.HeartRate!.Value) : null,
-            AvgHrv = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.Hrv!.Value), 1) : null,
-            AvgBreathRate = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.RespirationRate!.Value), 1) : null,
-            AvgSpo2 = samples.Count > 0 ? (float)Math.Round(samples.Average(s => s.Spo2!.Value), 1) : null,
+            AvgHrv = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.Hrv!.Value), 1) : null,
+            AvgBreathRate = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.RespirationRate!.Value), 1) : null,
+            AvgSpo2 = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.Spo2!.Value), 1) : null,
             // Stable per-night key so re-seeding upserts rather than duplicates.
-            OriginalId = $"{sourceApp}:sleep:{start:yyyy-MM-dd}",
+            OriginalId = $"{sourceApp}:sleep:{start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}",
             Stages = stages,
             BiometricSamples = samples,
         };

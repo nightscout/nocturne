@@ -4,4 +4,10 @@
 export * from './meal-times';
 
 // Re-export the single glucose threshold set
-export * from './glucose-thresholds';
+export {
+  FALLBACK_GLUCOSE_THRESHOLDS,
+  FALLBACK_GLUCOSE_Y_MAX,
+  resolveChartThresholds,
+  type ChartThresholds,
+  type GlucoseThresholds,
+} from '@nocturne/charts/core';

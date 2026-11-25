@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -8,15 +9,20 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.ApsSnapshot
 /// </summary>
 [Table("aps_snapshots")]
-public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
+public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// Stable per-source identifier for synchronization. Unlike <see cref="V4TimeSeriesEntityBase.LegacyId"/> (insert-only),
     /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
     /// uploader retries of the same loop cycle don't duplicate the snapshot.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>
@@ -161,6 +167,12 @@ public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
     /// </summary>
     [Column("loop_json", TypeName = "jsonb")]
     public string? LoopJson { get; set; }
+
+    /// <summary>
+    /// The override object Loop uploaded with the status, as it sent it
+    /// </summary>
+    [Column("override_json", TypeName = "jsonb")]
+    public string? OverrideJson { get; set; }
 
     /// <summary>
     /// Algorithm version string (e.g. Trio app version)

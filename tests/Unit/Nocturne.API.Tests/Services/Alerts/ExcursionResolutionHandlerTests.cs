@@ -96,6 +96,31 @@ public class ExcursionResolutionHandlerTests
     }
 
     [Fact]
+    public async Task HandleClosed_NoticeThatARuleCannotBeEvaluated_IsResolvedOnlyToTheHomeAssistantInstancesItReached()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionRuleSnapshot(_ruleId, "Urgent Low", IsUnevaluableNotice: true));
+        _repository.Setup(r => r.GetHomeAssistantInstancesSentExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["kitchen-ha"]);
+
+        await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.Manual),
+            _tenantId,
+            CancellationToken.None);
+
+        _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never,
+            "the alerts hub's subscribers were never sent the notice");
+        _broadcast.Verify(b => b.BroadcastAlertResolvedToHomeAssistantAsync(
+            It.Is<AlertResolvedEvent>(e => e.ExcursionId == _excursionId && e.AlertRuleId == _ruleId),
+            It.Is<IReadOnlyCollection<string>>(i => i.SequenceEqual(new[] { "kitchen-ha" }))), Times.Once);
+        _notification.Verify(n => n.ArchiveBySourceAsync(
+            It.IsAny<string>(), "alert.firing", It.IsAny<string>(), It.IsAny<NotificationArchiveReason>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task HandleClosed_ExcursionWithoutRule_ResolvesWithoutBroadcasting()
     {
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
@@ -133,6 +158,29 @@ public class ExcursionResolutionHandlerTests
         _alarmRelay.Verify(
             r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleClosed_RuleLookupFailure_ArchivesBothKindsOfInAppNotification()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["member"]);
+
+        await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.Manual),
+            _tenantId,
+            CancellationToken.None);
+
+        foreach (var type in new[] { "alert.firing", "alert.unevaluable" })
+        {
+            _notification.Verify(n => n.ArchiveBySourceAsync(
+                "member", type, _excursionId.ToString(), NotificationArchiveReason.ConditionMet,
+                It.IsAny<CancellationToken>()), Times.Once, "a notice's notification is cleared even when its rule cannot be read");
+        }
     }
 
     [Fact]

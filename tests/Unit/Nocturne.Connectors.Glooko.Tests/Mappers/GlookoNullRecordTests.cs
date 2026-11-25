@@ -39,7 +39,7 @@ public class GlookoNullRecordTests
             """{"readings":[{"display_time":"2026-06-20T12:00:00.000Z","bg_value":12000},null]}""");
 
         var readings = new GlookoSensorGlucoseMapper(
-                new GlookoConnectorConfiguration(), Source, _timeMapper, NullLogger.Instance, TimeProvider.System)
+                new GlookoConnectorConfiguration(), Source, _timeMapper, NullLogger.Instance)
             .TransformBatchDataToSensorGlucose(batch);
 
         readings.Should().ContainSingle().Which.Mgdl.Should().Be(120);
@@ -77,7 +77,7 @@ public class GlookoNullRecordTests
         var batch = Deserialize<GlookoBatchData>(
             """{"temporaryBasals":[null,{"timestamp":"2026-06-20T12:00:00.000Z","duration":1800,"rate":0.5}]}""");
 
-        var tempBasals = new GlookoTempBasalMapper(Source, _timeMapper, NullLogger.Instance, TimeProvider.System)
+        var tempBasals = new GlookoTempBasalMapper(Source, _timeMapper, NullLogger.Instance)
             .TransformV2ToTempBasals(batch);
 
         tempBasals.Should().ContainSingle().Which.Rate.Should().Be(0.5);
@@ -117,7 +117,7 @@ public class GlookoNullRecordTests
         mapper.TransformDeviceSettingsToProfileActivations(settings).Should().ContainSingle();
     }
 
-    private GlookoV4TreatmentMapper Treatments() => new(Source, _timeMapper, NullLogger.Instance, TimeProvider.System);
+    private GlookoV4TreatmentMapper Treatments() => new(Source, _timeMapper, NullLogger.Instance);
 
     private static T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json)!;
 }

@@ -12,6 +12,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -72,6 +73,7 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
             new TenantClockResolver(
                 _therapySettings.Object,
                 new CategoryReadContext(),
+                new ShareClockDouble(_therapySettings.Object),
                 NullLogger<TenantClockResolver>.Instance),
             statistics.Object,
             cacheService.Object,

@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import { createRawSnippet } from "svelte";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
 import { GlucoseValueIndicator } from "./index";
 

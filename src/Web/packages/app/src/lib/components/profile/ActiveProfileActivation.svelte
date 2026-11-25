@@ -4,7 +4,7 @@
     endActivation,
     renewActivation,
   } from "#lib/api/generated/profileActivations.generated.remote.js";
-  import { ProfileActivationOrigin, type ProfileActivationDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { ProfileActivationOrigin, type ProfileActivationDto } from "@nocturne/api-client";
   import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";

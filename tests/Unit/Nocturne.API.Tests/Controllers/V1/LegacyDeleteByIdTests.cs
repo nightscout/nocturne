@@ -41,17 +41,17 @@ public class LegacyDeleteByIdTests
     }
 
     [Fact]
-    public async Task DeleteTreatment_AFailedDelete_AnswersAServerErrorNotADeleteStatus()
+    public async Task DeleteTreatment_AFailedDelete_TheExceptionEscapesNotADeleteStatus()
     {
         var service = new Mock<ITreatmentService>();
         service
             .Setup(s => s.DeleteTreatmentAsync(StoredId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("rolled back"));
 
-        var result = await NewTreatmentsController(service.Object, "", Scope.TreatmentsReadWrite)
-            .DeleteTreatment(StoredId);
+        var controller = NewTreatmentsController(service.Object, "", Scope.TreatmentsReadWrite);
 
-        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        await FluentActions.Awaiting(() => controller.DeleteTreatment(StoredId))
+            .Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

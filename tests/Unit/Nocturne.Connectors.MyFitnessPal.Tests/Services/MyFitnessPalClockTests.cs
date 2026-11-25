@@ -7,14 +7,13 @@ using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests.Services;
 
@@ -63,10 +62,10 @@ public class MyFitnessPalClockTests
         await fixture.Service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.Food] }, fixture.Config, CancellationToken.None);
 
-        fixture.Config.LastFullWalkAt.Should().Be(FullWalkSchedule.Stamp(Now));
+        fixture.State.Resume[MyFitnessPalConstants.FullWalkStamp].Should().Be(Now.UtcDateTime);
     }
 
-    private sealed class Fixture
+    internal sealed class Fixture
     {
         internal MyFitnessPalAuthTokenProvider TokenProvider { get; }
         internal MyFitnessPalConnectorService Service { get; }
@@ -79,19 +78,28 @@ public class MyFitnessPalClockTests
 
         internal List<ConnectorFoodEntryImport> Imported { get; } = [];
 
-        internal Fixture(TimeProvider clock, IReadOnlyList<(string Id, string Date)> entries)
+        internal InMemoryConnectorStateStore State { get; }
+
+        /// <param name="publisher">
+        ///     The publisher the service writes to; when null, one that records the imports in
+        ///     <see cref="Imported"/> and keeps state in a fresh <see cref="State"/>.
+        /// </param>
+        /// <param name="source">MyFitnessPal's answers; when null, a <see cref="DiaryHandler"/> over <paramref name="entries"/>.</param>
+        internal Fixture(
+            TimeProvider clock,
+            IReadOnlyList<(string Id, string Date)> entries,
+            IConnectorPublisher? publisher = null,
+            HttpMessageHandler? source = null)
         {
-            var http = new HttpClient(new DiaryHandler(entries));
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.Setup(t => t.IsResolved).Returns(true);
-            tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var http = new HttpClient(source ?? new DiaryHandler(entries));
+            var tenant = ResolvedTenant.Accessor();
             var resolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null);
 
             TokenProvider = new MyFitnessPalAuthTokenProvider(
                 http,
                 new ConnectorTokenCache(clock),
                 resolver,
-                tenant.Object,
+                tenant,
                 NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 clock);
@@ -112,9 +120,11 @@ public class MyFitnessPalClockTests
                     Imported.AddRange(batch))
                 .ReturnsAsync(new List<ConnectorFoodEntry>());
 
-            var publisher = new Mock<IConnectorPublisher>();
-            publisher.Setup(p => p.IsAvailable).Returns(true);
-            publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+            State = publisher?.State as InMemoryConnectorStateStore ?? new InMemoryConnectorStateStore();
+            var recording = new Mock<IConnectorPublisher>();
+            recording.Setup(p => p.IsAvailable).Returns(true);
+            recording.Setup(p => p.Metadata).Returns(metadata.Object);
+            recording.Setup(p => p.State).Returns(State);
 
             Service = new MyFitnessPalConnectorService(
                 http,
@@ -123,12 +133,15 @@ public class MyFitnessPalClockTests
                 Mock.Of<IRetryDelayStrategy>(),
                 TokenProvider,
                 configService.Object,
-                publisher.Object,
+                publisher ?? recording.Object,
                 clock);
         }
     }
 
-    private sealed class DiaryHandler(IReadOnlyList<(string Id, string Date)> entries) : HttpMessageHandler
+    /// <param name="tokenAnswer">The token endpoint's status and body; when null, a token for user <c>u1</c>.</param>
+    internal sealed class DiaryHandler(
+        IReadOnlyList<(string Id, string Date)> entries,
+        (HttpStatusCode Status, string Body)? tokenAnswer = null) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -136,8 +149,9 @@ public class MyFitnessPalClockTests
             var path = request.RequestUri!.AbsolutePath;
 
             if (path == MyFitnessPalConstants.Endpoints.Token)
-                return Task.FromResult(Json(
-                    """{"access_token":"token","refresh_token":"refresh","expires_in":7200,"user_id":"u1"}"""));
+                return Task.FromResult(tokenAnswer is { } answer
+                    ? Json(answer.Body, answer.Status)
+                    : Json("""{"access_token":"token","refresh_token":"refresh","expires_in":7200,"user_id":"u1"}"""));
 
             if (path == MyFitnessPalConstants.Endpoints.GraphQl)
                 return Task.FromResult(Json(DiaryPage()));
@@ -164,7 +178,7 @@ public class MyFitnessPalClockTests
                 + "],\"pageInfo\":{\"hasPreviousPage\":false}}}}}";
         }
 
-        private static HttpResponseMessage Json(string body) =>
-            new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        private static HttpResponseMessage Json(string body, HttpStatusCode status = HttpStatusCode.OK) =>
+            new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
     }
 }

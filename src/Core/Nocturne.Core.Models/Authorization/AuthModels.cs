@@ -78,10 +78,6 @@ public class AuthContext
     /// </summary>
     public string? Email { get; set; }
 
-    public string? OidcSubjectId { get; set; }
-
-    public string? OidcIssuer { get; set; }
-
     /// <summary>
     /// Resolved Shiro-style permissions
     /// </summary>
@@ -107,6 +103,13 @@ public class AuthContext
     /// for a session token minted without one.
     /// </summary>
     public string? SessionId { get; set; }
+
+    /// <summary>
+    /// Whether a session login was redeemed from a login code someone else issued, rather than
+    /// signed in for by the subject. Such a session reads and writes as the subject but is not
+    /// their own sign-in until they sign in on it. False for every other credential.
+    /// </summary>
+    public bool IsHandedOff { get; set; }
 
     /// <summary>
     /// The OAuth client an access token was issued to; null for every other credential.
@@ -145,6 +148,22 @@ public class AuthContext
     /// last 24 hours" feature.
     /// </summary>
     public bool LimitTo24Hours { get; set; }
+
+    private bool? _credentialLimitTo24Hours;
+
+    /// <summary>
+    /// The credential's own 24-hour limit: <see cref="LimitTo24Hours"/> as the credential set it,
+    /// before <see cref="FoldMembershipLimit"/> folded the request tenant's membership into it. A
+    /// decision about a tenant other than the request's reads this.
+    /// </summary>
+    public bool CredentialLimitTo24Hours => _credentialLimitTo24Hours ?? LimitTo24Hours;
+
+    /// <summary>Sets <see cref="LimitTo24Hours"/> to the clamp the request tenant's membership resolved to.</summary>
+    public void FoldMembershipLimit(bool clamped)
+    {
+        _credentialLimitTo24Hours ??= LimitTo24Hours;
+        LimitTo24Hours = clamped;
+    }
 
     /// <summary>
     /// Whether this subject has platform-level admin access.
@@ -202,14 +221,6 @@ public class AuthContext
 
         return false;
     }
-
-    /// <summary>
-    /// Check if this context has a specific role (case-insensitive).
-    /// </summary>
-    /// <param name="role">The role name to check (e.g., <c>admin</c>, <c>readable</c>).</param>
-    /// <returns><c>true</c> if the context includes the specified <see cref="Role"/>.</returns>
-    public bool HasRole(string role) =>
-        Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 }
 
 public enum AuthType
@@ -220,12 +231,8 @@ public enum AuthType
     None,
 
     /// <summary>
-    /// OIDC opaque token
-    /// </summary>
-    OidcToken,
-
-    /// <summary>
-    /// Legacy JWT token (self-issued)
+    /// A first-party session JWT presented as a bearer token. A Nightscout exchange JWT carries its
+    /// grant and resolves as <see cref="OAuthAccessToken"/>. The member name is stored in audit rows.
     /// </summary>
     LegacyJwt,
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,9 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
 {
     private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqlite();
     private readonly Guid _subjectId = Guid.CreateVersion7();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero));
+
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
     public TenantServiceGetTenantsForSubjectTests()
     {
@@ -38,20 +42,20 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
         new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
-        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
-        new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-        TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>());
+        _clock,
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     /// <param name="role">A role seed slug, as every membership an invite creates carries one.</param>
     private void SeedMembership(
-        string slug, DateTime joinedAt, string? role = null, bool isActive = true)
+        string slug, DateTime joinedAt, string? role = null, bool isActive = true, DateTime? accessEndsAt = null)
     {
         var tenantId = Guid.CreateVersion7();
         using var db = _db.CreateContext(tenantId);
@@ -62,6 +66,7 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
             SubjectId = _subjectId,
+            AccessEndsAt = accessEndsAt,
         };
         db.TenantMembers.Add(member);
 
@@ -159,6 +164,39 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         var tenants = await Service().GetReachableTenantsForSubjectAsync(_subjectId);
 
         tenants.Select(t => t.Slug).Should().Equal("zulu", "alpha");
+    }
+
+    [Fact]
+    public async Task BothListsLeaveOutATenantWhoseMembershipHasEnded()
+    {
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), accessEndsAt: Now.AddSeconds(-1));
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), accessEndsAt: Now.AddSeconds(1));
+
+        (await Service().GetTenantsForSubjectAsync(_subjectId)).Select(t => t.Slug).Should().Equal("zulu");
+        (await Service().GetReachableTenantsForSubjectAsync(_subjectId)).Select(t => t.Slug).Should().Equal("zulu");
+    }
+
+    [Fact]
+    public async Task TheMemberListKeepsAnEndedMemberAndSaysItHasEnded()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var ended = Now.AddSeconds(-1);
+        var ahead = Now.AddSeconds(1);
+        var aheadSubject = Guid.CreateVersion7();
+        using (var db = _db.CreateContext(tenantId))
+        {
+            db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "members", DisplayName = "Members" });
+            db.Subjects.Add(new SubjectEntity { Id = aheadSubject, Name = "Ahead" });
+            db.TenantMembers.AddRange(
+                new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = _subjectId, AccessEndsAt = ended },
+                new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = aheadSubject, AccessEndsAt = ahead });
+            db.SaveChanges();
+        }
+
+        var members = (await Service().GetByIdAsync(tenantId))!.Members;
+
+        members.Single(m => m.SubjectId == _subjectId).Should().Match<TenantMemberDto>(m => m.AccessEndsAt == ended && m.HasEnded);
+        members.Single(m => m.SubjectId == aheadSubject).Should().Match<TenantMemberDto>(m => m.AccessEndsAt == ahead && !m.HasEnded);
     }
 
     public void Dispose() => _db.Dispose();

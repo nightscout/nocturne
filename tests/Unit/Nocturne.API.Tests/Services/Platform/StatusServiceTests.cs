@@ -224,7 +224,8 @@ public class StatusServiceTests
             new CacheFlights(),
             _mockDemoModeService.Object,
             tenantFactory.Object,
-            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
+            new CollectionLastModifiedReader(tenantFactory.Object),
+            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object, AccountLinkRoutes.Off), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
             _httpContextAccessor,
             tenantAccessor,
             TestPublicAccessCache.Create(),
@@ -525,7 +526,7 @@ public class StatusServiceTests
     }
 
     [Fact]
-    public async Task GetSystemStatusAsync_ReportsTheAppVersion()
+    public async Task GetSystemStatusAsync_ReportsTheNightscoutLevelAndTheNocturneRelease()
     {
         _mockCacheService
             .Setup(x => x.GetAsync<StatusResponse>("status:system:00000000-0000-0000-0000-000000000001", default))
@@ -533,7 +534,35 @@ public class StatusServiceTests
 
         var result = await _statusService.GetSystemStatusAsync();
 
-        result.Version.Should().Be(AppVersion.Current);
+        result.Version.Should().Be("15.0.3");
+        result.NocturneVersion.Should().Be(AppVersion.Current);
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_WithNoTenant_ReportsTheNightscoutLevelAndTheNocturneRelease()
+    {
+        var unresolved = new Mock<ITenantAccessor>();
+        unresolved.Setup(x => x.IsResolved).Returns(false);
+        var service = CreateStatusService(_configuration, tenantAccessor: unresolved.Object);
+
+        var result = await service.GetSystemStatusAsync();
+
+        result.Status.Should().Be("setup_required");
+        result.Version.Should().Be("15.0.3");
+        result.NocturneVersion.Should().Be(AppVersion.Current);
+    }
+
+    [Fact]
+    public async Task GetV3SystemStatusAsync_ReportsTheNightscoutLevelAndTheNocturneRelease()
+    {
+        _mockCacheService
+            .Setup(x => x.GetAsync<StatusResponse>("status:system:00000000-0000-0000-0000-000000000001", default))
+            .ReturnsAsync(new StatusResponse { Status = "ok", Name = "Cached", Version = "0.0.1", ServerTime = DateTime.UtcNow });
+
+        var result = await _statusService.GetV3SystemStatusAsync();
+
+        result.Version.Should().Be("15.0.3");
+        result.NocturneVersion.Should().Be(AppVersion.Current);
     }
 
     #endregion
@@ -717,6 +746,93 @@ public class StatusServiceTests
         result.Settings.Should().BeNull();
     }
 
+    /// <summary>The V4 record tables, each with the legacy collection whose stamp it moves, if any.</summary>
+    public static TheoryData<string, string?> LastModifiedTables => new()
+    {
+        { nameof(SensorGlucoseEntity), "entries" },
+        { nameof(MeterGlucoseEntity), "entries" },
+        { nameof(CalibrationEntity), "entries" },
+        { nameof(BolusEntity), "treatments" },
+        { nameof(CarbIntakeEntity), "treatments" },
+        { nameof(BGCheckEntity), "treatments" },
+        { nameof(NoteEntity), "treatments" },
+        { nameof(DeviceEventEntity), "treatments" },
+        { nameof(TempBasalEntity), "treatments" },
+        { nameof(BasalInjectionEntity), "treatments" },
+        { nameof(BolusCalculationEntity), "treatments" },
+        { nameof(TherapySettingsEntity), "profile" },
+        { nameof(BasalScheduleEntity), "profile" },
+        { nameof(CarbRatioScheduleEntity), "profile" },
+        { nameof(SensitivityScheduleEntity), "profile" },
+        { nameof(TargetRangeScheduleEntity), "profile" },
+        { nameof(ApsSnapshotEntity), "devicestatus" },
+        { nameof(PumpSnapshotEntity), "devicestatus" },
+        { nameof(UploaderSnapshotEntity), "devicestatus" },
+        { nameof(ProfileActivationEntity), null },
+        { nameof(HeartRateEntity), null },
+        { nameof(StepCountEntity), null },
+        { nameof(BodyWeightEntity), null },
+    };
+
+    [Theory]
+    [MemberData(nameof(LastModifiedTables))]
+    public async Task GetLastModifiedAsync_StampsOnlyTheCollectionATableBelongsTo(string table, string? collection)
+    {
+        var now = DateTime.UtcNow;
+        var dbName = $"nocturne_lastmod_{Guid.NewGuid()}";
+        await using var context = TestDbContextFactory.CreateInMemoryContext(dbName);
+        context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        ISystemTimestamped row = table switch
+        {
+            nameof(SensorGlucoseEntity) => new SensorGlucoseEntity { Id = Guid.CreateVersion7(), Timestamp = now, Mgdl = 100 },
+            nameof(MeterGlucoseEntity) => new MeterGlucoseEntity { Id = Guid.CreateVersion7(), Timestamp = now, Mgdl = 100 },
+            nameof(CalibrationEntity) => new CalibrationEntity { Id = Guid.CreateVersion7(), Timestamp = now },
+            nameof(BolusEntity) => new BolusEntity { Id = Guid.CreateVersion7(), Timestamp = now, Insulin = 1 },
+            nameof(CarbIntakeEntity) => new CarbIntakeEntity { Id = Guid.CreateVersion7(), Timestamp = now, Carbs = 10 },
+            nameof(BGCheckEntity) => new BGCheckEntity { Id = Guid.CreateVersion7(), Timestamp = now, Glucose = 100 },
+            nameof(NoteEntity) => new NoteEntity { Id = Guid.CreateVersion7(), Timestamp = now, Text = "note" },
+            nameof(DeviceEventEntity) => new DeviceEventEntity { Id = Guid.CreateVersion7(), Timestamp = now, EventType = "SiteChange" },
+            nameof(TempBasalEntity) => new TempBasalEntity { Id = Guid.CreateVersion7(), Timestamp = now, Rate = 0.5, Origin = "pump" },
+            nameof(BolusCalculationEntity) => new BolusCalculationEntity { Id = Guid.CreateVersion7(), Timestamp = now },
+            nameof(BasalInjectionEntity) => new BasalInjectionEntity { Id = Guid.CreateVersion7(), Timestamp = now, Units = 10 },
+            nameof(TherapySettingsEntity) => new TherapySettingsEntity { Id = Guid.CreateVersion7(), Timestamp = now, ProfileName = "Default" },
+            nameof(BasalScheduleEntity) => new BasalScheduleEntity { Id = Guid.CreateVersion7(), Timestamp = now, ProfileName = "Default" },
+            nameof(CarbRatioScheduleEntity) => new CarbRatioScheduleEntity { Id = Guid.CreateVersion7(), Timestamp = now, ProfileName = "Default" },
+            nameof(SensitivityScheduleEntity) => new SensitivityScheduleEntity { Id = Guid.CreateVersion7(), Timestamp = now, ProfileName = "Default" },
+            nameof(TargetRangeScheduleEntity) => new TargetRangeScheduleEntity { Id = Guid.CreateVersion7(), Timestamp = now, ProfileName = "Default" },
+            nameof(ApsSnapshotEntity) => new ApsSnapshotEntity { Id = Guid.CreateVersion7(), Timestamp = now, AidAlgorithm = "Loop" },
+            nameof(PumpSnapshotEntity) => new PumpSnapshotEntity { Id = Guid.CreateVersion7(), Timestamp = now },
+            nameof(UploaderSnapshotEntity) => new UploaderSnapshotEntity { Id = Guid.CreateVersion7(), Timestamp = now },
+            nameof(ProfileActivationEntity) => new ProfileActivationEntity { Id = Guid.CreateVersion7(), Timestamp = now, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Default" },
+            nameof(HeartRateEntity) => new HeartRateEntity { Id = Guid.CreateVersion7(), Timestamp = now, Bpm = 60 },
+            nameof(StepCountEntity) => new StepCountEntity { Id = Guid.CreateVersion7(), Timestamp = now, Metric = 10 },
+            nameof(BodyWeightEntity) => new BodyWeightEntity { Id = Guid.CreateVersion7(), Mills = new DateTimeOffset(now).ToUnixTimeMilliseconds(), WeightKg = 70 },
+            _ => throw new ArgumentOutOfRangeException(nameof(table), table, null),
+        };
+        context.Add(row);
+        context.SaveChanges();
+        var stamp = now.AddMinutes(-7);
+        row.SysUpdatedAt = stamp;
+        context.SaveChanges();
+        var service = CreateStatusService(_configuration, context, dbName);
+
+        var result = await service.GetLastModifiedAsync();
+
+        new Dictionary<string, DateTime?>
+        {
+            ["entries"] = result.Entries,
+            ["treatments"] = result.Treatments,
+            ["profile"] = result.Profile,
+            ["devicestatus"] = result.DeviceStatus,
+        }.Should().BeEquivalentTo(new Dictionary<string, DateTime?>
+        {
+            ["entries"] = collection == "entries" ? stamp : null,
+            ["treatments"] = collection == "treatments" ? stamp : null,
+            ["profile"] = collection == "profile" ? stamp : null,
+            ["devicestatus"] = collection == "devicestatus" ? stamp : null,
+        });
+    }
+
     [Fact]
     public async Task GetV3SystemStatusAsync_AnAuthenticatedCaller_IsToldCrudOnEveryCollection()
     {
@@ -746,6 +862,24 @@ public class StatusServiceTests
         var result = await service.GetV3SystemStatusAsync();
 
         result.ApiPermissions.Should().BeEquivalentTo(new Dictionary<string, string> { ["entries"] = "r" });
+    }
+
+    [Fact]
+    public async Task GetV3SystemStatusAsync_ReportsRolesThatDifferOnlyByCaseAsTwoRoles()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            Roles = ["Admin", "admin", "admin"],
+        });
+        httpContext.SetGrantedScopes(Scope.Normalize([Scope.GlucoseRead]));
+        var service = CreateStatusService(
+            _configuration, httpContextAccessor: new HttpContextAccessor { HttpContext = httpContext });
+
+        var result = await service.GetV3SystemStatusAsync();
+
+        result.Extended!.Authorization!.Roles.Should().Equal("Admin", "admin");
     }
 
     private static IHttpContextAccessor Caller(bool authenticated, params string[] scopes)
@@ -1055,7 +1189,7 @@ public class StatusServiceTests
                 .GetSystemStatusAsync())
             .ToList();
         held.SetResult(new UserDisplayPreferences());
-        var results = await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5));
+        var results = await Task.WhenAll(reads).WaitAsync(Eventually.DefaultPatience);
 
         runs.Should().Be(1);
         results.Should().AllSatisfy(r => r.Should().BeSameAs(results[0]));
@@ -1074,8 +1208,8 @@ public class StatusServiceTests
         var cache = TestTenantCache.Distributed(new MemoryCache(new MemoryCacheOptions()));
         var flights = new CacheFlights();
         StatusService Service() => new(
-            _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(),
-            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>()),
+            _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(), Mock.Of<ICollectionLastModifiedReader>(),
+            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>(), AccountLinkRoutes.Off),
             new RoleRepository(Mock.Of<INocturneDbContextFactory>()), new OidcProviderRepository(Mock.Of<INocturneDbContextFactory>()),
             _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(),
             new TenantGlucoseUnits(
@@ -1512,7 +1646,8 @@ public class StatusServiceTests
             flights ?? new CacheFlights(),
             _mockDemoModeService.Object,
             mockTenantDbContextFactory.Object,
-            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
+            new CollectionLastModifiedReader(mockTenantDbContextFactory.Object),
+            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object, AccountLinkRoutes.Off), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor,
             TestPublicAccessCache.Create(),

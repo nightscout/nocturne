@@ -70,7 +70,8 @@ public class WriteEndpointScopeEnforcementTests
                     method.GetCustomAttribute<RequireScopeAttribute>() != null
                     || method.GetCustomAttribute<RequirePermissionAttribute>() != null
                     || type.GetCustomAttribute<RequireScopeAttribute>() != null
-                    || type.GetCustomAttribute<RequirePermissionAttribute>() != null;
+                    || type.GetCustomAttribute<RequirePermissionAttribute>() != null
+                    || method.GetCustomAttributes<ScopeDecidedByAttribute>().Any();
 
                 if (!hasPerActionAuthz)
                     violations.Add($"{type.Name}.{method.Name} [{string.Join(",", verbs)}]");
@@ -83,7 +84,7 @@ public class WriteEndpointScopeEnforcementTests
             "the reflection scan should discover the V1/V3 write endpoints");
 
         violations.Should().BeEmpty(
-            "every V1/V2/V3 write endpoint must carry [RequireScope] or [RequirePermission] so a " +
+            "every V1/V2/V3 write endpoint must carry [RequireScope], [RequirePermission] or [ScopeDecidedBy] so a " +
             "read-only or public grant cannot create, update, or delete data. " +
             "Unprotected: " + string.Join("; ", violations));
     }

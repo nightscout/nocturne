@@ -5,7 +5,8 @@ import { errorStatus } from "#lib/forms/submit-error.js";
  *
  * - `rejected` — the code itself was refused. The API answers the same way for
  *   expired, revoked, already-used and mistyped codes.
- * - `rate-limited` — too many attempts from this address.
+ * - `rate-limited` — too many attempts from this address, or the tenant's
+ *   activation budget is exhausted.
  * - `unavailable` — we couldn't get an answer: a server fault or a transport
  *   failure. Distinct from `rejected` so a broken backend is never reported to
  *   the reader as a bad code.
@@ -20,3 +21,4 @@ export function classifyActivationError(err: unknown): ActivationFailure {
 
   return "unavailable";
 }
+

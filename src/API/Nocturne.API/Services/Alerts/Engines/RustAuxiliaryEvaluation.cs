@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
@@ -22,7 +23,7 @@ internal static class RustAuxiliaryEvaluation
         string pathRoot,
         SensorContext context,
         DateTime now,
-        IReadOnlyDictionary<string, DateTime> timers)
+        ConditionTimers timers)
     {
         var request = new RustEvaluateNodeRequest
         {
@@ -31,7 +32,8 @@ internal static class RustAuxiliaryEvaluation
             Root = pathRoot,
             Context = RustEnvelopeMapper.BuildContext(context),
             Now = now,
-            Timers = RustEnvelopeMapper.BuildTimers(timers),
+            Timers = RustEnvelopeMapper.BuildTimers(timers.FirstTrue),
+            NotTrue = RustEnvelopeMapper.BuildTimers(timers.NotTrue),
         };
         return errors.Track("evaluate_node", () => RustAlertEngine.EvaluateNode(request));
     }
@@ -56,7 +58,7 @@ internal static class RustAuxiliaryEvaluation
         AlertRuleSnapshot rule,
         SensorContext context,
         DateTime now,
-        IReadOnlyDictionary<string, DateTime> timers,
+        ConditionTimers timers,
         AlertTrackerState? state,
         ILogger logger)
     {

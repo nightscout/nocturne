@@ -24,6 +24,9 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class AlertOrchestratorConditionIssueTests
 {
+    // Evaluation must not wait on a notice's delivery; this is how long it has, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
     private static readonly Guid Tenant = Guid.Parse("85385385-0000-7000-8000-0000000000aa");
     private static readonly Guid RuleId = Guid.Parse("85385385-0000-7000-8000-0000000000a1");
     private static readonly DateTime Now = new(2026, 10, 22, 8, 0, 0, DateTimeKind.Utc);
@@ -46,7 +49,7 @@ public class AlertOrchestratorConditionIssueTests
             RustEnvelopeMapper.WrapPayload(AlertConditionTypeNames.ToWireString(type), conditionParams));
         var errors = new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System);
         return RustAuxiliaryEvaluation.EvaluateNode(
-            errors, RuleId, node, "condition", context, Now, new Dictionary<string, DateTime>()).Value!.Value;
+            errors, RuleId, node, "condition", context, Now, ConditionTimers.None).Value!.Value;
     }
 
     [NativeFact]
@@ -185,6 +188,93 @@ public class AlertOrchestratorConditionIssueTests
         harness.Logger.Entries.Should().Contain(e => e.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task Evaluation_over_a_rule_whose_body_cannot_be_evaluated_records_and_sends_nothing()
+    {
+        var harness = new Harness();
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([new RustValidationIssue("condition", "threshold", "field_missing", "value")]);
+        harness.Delivery
+            .Setup(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+                It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .Returns(new TaskCompletionSource().Task);
+
+        var evaluation = harness.EvaluateAsync(Rule(WizardUrgentLow));
+
+        (await Task.WhenAny(evaluation, Task.Delay(MustNotWaitLongerThan))).Should().BeSameAs(evaluation,
+            "evaluation of a reading never waits on the notice's delivery");
+        await evaluation;
+        harness.Delivery.VerifyNoOtherCalls();
+        harness.NoticeRows.VerifyNoOtherCalls();
+        harness.Logger.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task An_evaluation_that_read_an_anchor_ahead_of_the_clock_reports_it()
+    {
+        var harness = new Harness();
+        IReadOnlyList<ClockAnomaly> anomalies = [new("last_reading_at", TimeSpan.FromHours(1))];
+        harness.Engine
+            .Setup(e => e.EvaluateRuleAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertEngineEvaluation { ConditionUnknown = true, ClockAnomalies = anomalies });
+
+        await harness.EvaluateAsync(Rule("""{"timeout_minutes":20}""", AlertConditionType.SignalLoss));
+
+        harness.ClockNotice.Verify(n => n.ReportAsync(
+            It.IsAny<SensorContext>(),
+            It.Is<IReadOnlyCollection<ClockAnomaly>>(a => a.SequenceEqual(anomalies)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_failing_clock_notice_does_not_fail_the_pass()
+    {
+        var harness = new Harness();
+        harness.ClockNotice
+            .Setup(n => n.ReportAsync(It.IsAny<SensorContext>(), It.IsAny<IReadOnlyCollection<ClockAnomaly>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("store down"));
+
+        var pass = () => harness.EvaluateAsync(Rule("""{"timeout_minutes":20}""", AlertConditionType.SignalLoss));
+
+        await pass.Should().NotThrowAsync();
+        harness.Engine.Verify(e => e.EvaluateRuleAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<SensorContext>(),
+            It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_pass_cancelled_during_a_rule_stops_without_an_error_and_evaluates_no_further_rule()
+    {
+        var harness = new Harness();
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        using var shutdown = new CancellationTokenSource();
+        var first = Rule("""{"direction": "below", "value": 54}""");
+        var second = first with { Id = Guid.Parse("85385385-0000-7000-8000-0000000000a2") };
+        harness.Engine
+            .Setup(e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == first.Id), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(async (AlertRuleSnapshot _, SensorContext _, AlertEngineOptions _, CancellationToken ct) =>
+            {
+                await shutdown.CancelAsync();
+                ct.ThrowIfCancellationRequested();
+                return new AlertEngineEvaluation();
+            });
+
+        var pass = () => harness.EvaluateAsync(shutdown.Token, first, second);
+
+        await pass.Should().ThrowAsync<OperationCanceledException>();
+        harness.OrchestratorLogger.Entries.Should().NotContain(e => e.Level >= LogLevel.Error);
+        harness.Engine.Verify(
+            e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == second.Id), It.IsAny<SensorContext>(),
+                It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static AlertRuleSnapshot Rule(string conditionParams, AlertConditionType type = AlertConditionType.Threshold) =>
         new(RuleId, Tenant, "Urgent Low", type, conditionParams,
             AlertRuleSeverity.Critical, "{}", 0, false, null);
@@ -193,7 +283,11 @@ public class AlertOrchestratorConditionIssueTests
     {
         public Mock<IAlertEvaluationEngine> Engine { get; } = new();
         public Mock<IAlertRuleConditionValidator> Validator { get; } = new();
-        public ListLogger<AlertOrchestrator> Logger { get; } = new();
+        public ListLogger<UnevaluableRuleNotice> Logger { get; } = new();
+        public Mock<IAlertRepository> NoticeRows { get; } = new();
+        public Mock<IAlertDeliveryService> Delivery { get; } = new();
+        public Mock<IClockAnomalyNotice> ClockNotice { get; } = new();
+        public ListLogger<AlertOrchestrator> OrchestratorLogger { get; } = new();
 
         private readonly AlertOrchestrator _orchestrator;
 
@@ -212,22 +306,34 @@ public class AlertOrchestratorConditionIssueTests
                 .Setup(x => x.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => c);
 
-            _orchestrator = new AlertOrchestrator(
-                Engine.Object,
-                Mock.Of<IAlertRepository>(),
+            var notice = new UnevaluableRuleNotice(
+                NoticeRows.Object,
                 Mock.Of<IAlertRuleRepository>(),
                 tenant.Object,
-                Mock.Of<IAlertDeliveryService>(),
+                Delivery.Object,
                 enricher.Object,
-                Mock.Of<IAlertAcknowledgementService>(),
                 Mock.Of<IExcursionResolutionHandler>(),
                 new ConditionVersionLog(),
                 Validator.Object,
                 TimeProvider.System,
                 Logger);
+
+            _orchestrator = new AlertOrchestrator(
+                Engine.Object,
+                new AlertRuleEvaluationGate(),
+                new AlertRuleDecisions(TimeProvider.System),
+                tenant.Object,
+                enricher.Object,
+                Mock.Of<IExcursionOpenedHandler>(),
+                Mock.Of<IExcursionResolutionHandler>(),
+                notice,
+                ClockNotice.Object,
+                OrchestratorLogger);
         }
 
-        public Task EvaluateAsync(params AlertRuleSnapshot[] rules) =>
-            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), CancellationToken.None);
+        public Task EvaluateAsync(params AlertRuleSnapshot[] rules) => EvaluateAsync(CancellationToken.None, rules);
+
+        public Task EvaluateAsync(CancellationToken ct, params AlertRuleSnapshot[] rules) =>
+            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), readAt: null, ct);
     }
 }

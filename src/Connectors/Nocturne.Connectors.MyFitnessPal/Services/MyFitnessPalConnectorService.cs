@@ -12,7 +12,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Mappers;
 using Nocturne.Connectors.MyFitnessPal.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -24,14 +23,13 @@ namespace Nocturne.Connectors.MyFitnessPal.Services;
 /// Reads the authenticated user's own diary through the mobile Apollo "query-envoy" GraphQL API,
 /// which works for private diaries and is reachable where the <c>www</c> host is Cloudflare-blocked.
 /// </summary>
-public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalConnectorConfiguration>
+public class MyFitnessPalConnectorService
+    : TokenConnectorService<MyFitnessPalConnectorConfiguration, MyFitnessPalAuthTokenProvider>
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly MyFitnessPalAuthTokenProvider _tokenProvider;
     private readonly IConnectorConfigurationService _configService;
     private readonly MyFitnessPalFoodEntryMapper _mapper;
 
-    private string? _accessToken;
+    private TokenSession? _session;
     private string? _userId;
 
     public MyFitnessPalConnectorService(
@@ -44,43 +42,26 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy =
-            retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _configService = configService ?? throw new ArgumentNullException(nameof(configService));
         _mapper = new MyFitnessPalFoodEntryMapper(logger);
     }
 
-    protected override string ConnectorSource => DataSources.MyFitnessPalConnector;
     public override string ServiceName => "MyFitnessPal";
 
-    /// <summary>
-    /// Entry point for the scheduled sync.
-    /// </summary>
-    /// <remarks>
-    /// The base implementation derives the window from the tenant's most recent glucose reading,
-    /// which says nothing about how far back the food diary needs reading — with a live CGM it
-    /// resolves to roughly now, and nothing would ever be imported. The food diary's own window is
-    /// <see cref="MyFitnessPalConnectorConfiguration.LookbackDays"/>.
-    /// </remarks>
-    public override Task<SyncResult> SyncDataAsync(
-        MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null
-    ) =>
-        base.SyncDataAsync(
-            config,
-            cancellationToken,
-            since ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays),
-            progressReporter);
+    /// <inheritdoc />
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>> { [MyFitnessPalConstants.FullWalkStamp] = [SyncDataType.Food] };
 
     /// <inheritdoc />
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override bool NeedsSignIn(SyncRequest request, MyFitnessPalConnectorConfiguration config) =>
+        ResolveActiveTypes(request, config).Contains(SyncDataType.Food);
+
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         MyFitnessPalConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -95,10 +76,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             return result;
         }
 
-        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
-            return AuthenticationFailedResult();
-
-        // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
+        // The food diary has no stored record to resume from, so a run with no lower bound, the
+        // scheduled one included, reads the diary's own window. The request carries UTC instants;
+        // pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays));
 
         // A background sync leaves the end open on purpose: clamping to "now" would discard
@@ -109,7 +89,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             ? AsUtc(request.To.Value)
             : AsUtc(Clock.GetUtcNow().UtcDateTime.AddDays(1));
 
-        var walkToEnd = IsFullWalkDue(config);
+        var walkToEnd = await IsFullWalkDueAsync(cancellationToken);
         var read = await FetchDiaryAsync(config, from, walkToEnd, cancellationToken);
         if (read == null)
         {
@@ -122,8 +102,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         var foodEntryImports = _mapper.Map(read.Entries, config, from, to, mealNames);
 
-        await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes, foodEntryImports,
-            PublishFoodEntriesAsync, config, cancellationToken,
+        await PublishRecordTypeAsync(result, activeTypes, foodEntryImports,
+            config, cancellationToken,
             context: $"since {from:yyyy-MM-dd}");
 
         // Outside the publish branch: a window the user has emptied maps to no imports at all, and
@@ -135,38 +115,10 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             // Record the walk only once it has been acted on, so a run that failed before
             // reconciling is retried rather than counting against the schedule.
             if (read.WalkedEntireDiary)
-            {
-                config.LastFullWalkAt = FullWalkSchedule.Stamp(Clock.GetUtcNow());
-                await PersistSecretsIfChangedAsync(config, cancellationToken);
-            }
+                await SetResumeStampAsync(MyFitnessPalConstants.FullWalkStamp, Clock.GetUtcNow().UtcDateTime, cancellationToken);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Adapts the food-catalog publish to the shared publish path: the publisher reports a rejected
-    /// import with a null result rather than a flag, and returns an empty list when it reached the
-    /// catalog but nothing was accepted.
-    /// </summary>
-    private async Task<bool> PublishFoodEntriesAsync(
-        List<ConnectorFoodEntryImport> entries,
-        MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken)
-    {
-        if (Publisher is not { IsAvailable: true } publisher)
-        {
-            _logger.LogWarning("Publisher not available for connector food entry submission");
-            return false;
-        }
-
-        var imported = await publisher.Metadata.PublishConnectorFoodEntriesAsync(
-            entries,
-            ConnectorSource, WriteOrigin.Live,
-            cancellationToken
-        ); // Food is a dormant broadcast category — origin irrelevant until wired.
-
-        return imported != null;
     }
 
     private static DateTimeOffset AsUtc(DateTime value) =>
@@ -181,31 +133,27 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// </summary>
     /// <remarks>
     /// Withdrawing an entry requires proof it is gone, and only a read that reached the first entry
-    /// provides it. An unset or unparseable timestamp walks — a connector that has never completed
-    /// one has never reconciled.
+    /// provides it. A connector with no stamp walks: one that has never completed a walk has never
+    /// reconciled.
     /// </remarks>
-    public bool IsFullWalkDue(MyFitnessPalConnectorConfiguration config) =>
+    public async Task<bool> IsFullWalkDueAsync(CancellationToken cancellationToken) =>
         FullWalkSchedule.IsDue(
-            config.LastFullWalkAt, MyFitnessPalConstants.FullWalkInterval, Clock.GetUtcNow());
+            await ResumeStampAsync(MyFitnessPalConstants.FullWalkStamp, cancellationToken),
+            MyFitnessPalConstants.FullWalkInterval,
+            Clock.GetUtcNow());
 
     /// <summary>
-    /// Obtains an access token and the MyFitnessPal user id required by the GraphQL API.
+    /// Takes the session and the MyFitnessPal user id the GraphQL API requires.
     /// </summary>
-    private async Task<bool> AuthenticateWithConfigAsync(
+    protected override async Task<bool> CompleteSignInAsync(
         MyFitnessPalConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token))
-        {
-            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
-            return false;
-        }
+        var cached = await TokenProvider.GetCachedSessionAsync();
+        var metadata = cached?.Metadata;
 
-        var session = await _tokenProvider.GetCachedSessionAsync();
-        var metadata = session?.Metadata;
-
-        _accessToken = token;
+        _session = session;
         _userId = metadata?.GetValueOrDefault(MyFitnessPalAuthTokenProvider.UserIdMetadataKey)
                   ?? config.UserId;
 
@@ -257,7 +205,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             var cursor = before;
             var connection = await ExecuteWithRetryAsync(
                 async () => await FetchDiaryPageAsync(cursor, cancellationToken),
-                _retryDelayStrategy,
                 maxRetries: config.MaxRetryAttempts,
                 operationName: "FetchMyFitnessPalDiaryPage",
                 cancellationToken: cancellationToken
@@ -466,7 +413,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 // Same reasoning as the GraphQL path: only a 401 drops the token, since a 403 here
                 // is more likely a WAF block.
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
-                    _tokenProvider.InvalidateToken();
+                    TokenProvider.InvalidateToken();
 
                 _logger.LogWarning(
                     "MyFitnessPal diary for {Date} returned HTTP {StatusCode}",
@@ -483,8 +430,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 .ToList();
         }
         // Losing one day costs that day its meal names; it must never fail the whole sync.
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException ex) when (ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             // An HttpClient timeout surfaces as TaskCanceledException without the token being set.
             _logger.LogWarning(ex, "MyFitnessPal diary request for {Date} timed out", date);
@@ -531,7 +477,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             // a 403 here is more likely a WAF block, and re-minting a good token every cycle
             // risks MyFitnessPal rate-limiting the login itself.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
-                _tokenProvider.InvalidateToken();
+                TokenProvider.InvalidateToken();
 
             _logger.LogError(
                 "MyFitnessPal GraphQL returned HTTP {StatusCode}: {ResponseBody}",
@@ -592,7 +538,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// </summary>
     private void AddAuthHeaders(HttpRequestMessage request)
     {
-        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_accessToken}");
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_session!.Token}");
         request.Headers.TryAddWithoutValidation(MyFitnessPalConstants.Headers.UserId, _userId);
         request.Headers.TryAddWithoutValidation(
             MyFitnessPalConstants.Headers.ClientId, MyFitnessPalConstants.ClientId);
@@ -622,22 +568,19 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     {
         try
         {
-            // The secrets document doubles as the connector's runtime state, as the derived user id
-            // already does: MergeSecretsAsync merges, whereas writing configuration back from a
-            // background sync would replace the document the user edits.
+            // The derived user id is kept in the secrets document: MergeSecretsAsync merges, whereas
+            // writing configuration back from a background sync would replace the document the user
+            // edits.
             var updates = new Dictionary<string, string?>
             {
                 ["refreshToken"] = config.RefreshToken,
                 ["userId"] = config.UserId,
-                ["lastFullWalkAt"] = config.LastFullWalkAt,
             };
 
-            if (await _configService.MergeSecretsAsync(
-                    "MyFitnessPal", updates, "connector-runtime", _logger, cancellationToken))
+            if (await _configService.MergeSecretsAsync("MyFitnessPal", updates, _logger, cancellationToken))
                 _logger.LogInformation("[{ConnectorSource}] Persisted updated connector state", ConnectorSource);
         }
-        catch (OperationCanceledException) { throw; }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to persist connector state", ConnectorSource);
         }

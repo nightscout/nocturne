@@ -23,6 +23,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -113,7 +114,7 @@ public class V4BulkValidationTests
         var requests = Snapshots(3);
         requests[2].Timestamp = default;
 
-        Rejected((await ApsController().CreateApsSnapshots(requests)).Result, "Timestamp must be set on every snapshot");
+        Rejected((await ApsController().CreateApsSnapshots(requests)).Result, "Timestamp is required");
         NothingPersisted();
     }
 
@@ -152,15 +153,17 @@ public class V4BulkValidationTests
     /// </summary>
     private static readonly Dictionary<Type, V4BulkNaming> ExpectedNaming = new()
     {
-        [typeof(BasalInjectionController)] = new("Basal injection", "injection", "injections"),
-        [typeof(BGCheckController)] = new("BG check", "check", "checks"),
-        [typeof(BolusCalculationController)] = new("Bolus calculation", "calculation", "calculations"),
-        [typeof(BolusController)] = new("Bolus", "bolus", "boluses"),
-        [typeof(CalibrationController)] = new("Calibration", "calibration", "calibrations"),
-        [typeof(DeviceEventController)] = new("Device event", "event", "events"),
-        [typeof(MeterGlucoseController)] = new("Meter glucose", "reading", "readings"),
-        [typeof(NoteController)] = new("Note", "note", "notes"),
-        [typeof(SensorGlucoseController)] = new("Sensor glucose", "reading", "readings"),
+        [typeof(BasalInjectionController)] = new("Basal injection", "injections"),
+        [typeof(BGCheckController)] = new("BG check", "checks"),
+        [typeof(BolusCalculationController)] = new("Bolus calculation", "calculations"),
+        [typeof(BolusController)] = new("Bolus", "boluses"),
+        [typeof(CalibrationController)] = new("Calibration", "calibrations"),
+        [typeof(CarbIntakeController)] = new("Carb intake", "intakes"),
+        [typeof(DeviceEventController)] = new("Device event", "events"),
+        [typeof(MeterGlucoseController)] = new("Meter glucose", "readings"),
+        [typeof(NoteController)] = new("Note", "notes"),
+        [typeof(SensorGlucoseController)] = new("Sensor glucose", "readings"),
+        [typeof(TempBasalController)] = new("Temp basal", "temp basals"),
     };
 
     /// <summary>
@@ -176,15 +179,13 @@ public class V4BulkValidationTests
 
         naming.Should().Be(ExpectedNaming[controllerType]);
         naming.Subject.Should().MatchRegex("^[A-Z]", "the subject opens a sentence");
-        naming.Singular.Should().Be(naming.Singular.ToLowerInvariant(), "the singular sits mid-sentence");
         naming.Plural.Should().Be(naming.Plural.ToLowerInvariant(), "the plural sits mid-sentence");
-        naming.Plural.Should().NotBe(naming.Singular, "one item and many read differently");
 
         Rejected(await DriveBulkAsync(controllerType, 0), $"{naming.Subject} data is required");
         Rejected(
             await DriveBulkAsync(controllerType, V4BulkValidation.MaxItems + 1),
             $"Bulk operations are limited to {V4BulkValidation.MaxItems} {naming.Plural} per request");
-        Rejected(await DriveBulkAsync(controllerType, 1), $"Timestamp must be set on every {naming.Singular}");
+        Rejected(await DriveBulkAsync(controllerType, 1), "Timestamp is required");
     }
 
     public static TheoryData<Type> CrudControllers()
@@ -260,8 +261,6 @@ public class V4BulkValidationTests
         Rejected((await ApsController().CreateApsSnapshots([])).Result, "APS snapshot data is required");
         Rejected((await PumpController().CreatePumpSnapshots([])).Result, "Pump snapshot data is required");
         Rejected((await UploaderController().CreateUploaderSnapshots([])).Result, "Uploader snapshot data is required");
-        Rejected((await CarbIntakes().CreateCarbIntakesBulk([])).Result, "Carb intake data is required");
-        Rejected((await TempBasals().CreateTempBasals([])).Result, "Temp basal data is required");
     }
 
     [Fact]
@@ -273,12 +272,6 @@ public class V4BulkValidationTests
         Rejected(
             (await UploaderController().CreateUploaderSnapshots(Fill(1001, () => new UpsertUploaderSnapshotRequest()))).Result,
             "Bulk operations are limited to 1000 snapshots per request");
-        Rejected(
-            (await CarbIntakes().CreateCarbIntakesBulk(Fill(1001, () => new CreateCarbIntakeRequest()))).Result,
-            "Bulk operations are limited to 1000 intakes per request");
-        Rejected(
-            (await TempBasals().CreateTempBasals(Fill(1001, () => new CreateTempBasalRequest()))).Result,
-            "Bulk operations are limited to 1000 temp basals per request");
     }
 
     [Fact]
@@ -519,18 +512,6 @@ public class V4BulkValidationTests
     private static UploaderSnapshotController UploaderController() =>
         WithContext(new UploaderSnapshotController(Mock.Of<IUploaderSnapshotRepository>()));
 
-    // The database context is only reached past the preamble, which is all these tests exercise.
-    private static NutritionController CarbIntakes() =>
-        WithContext(new NutritionController(
-            Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<IBolusRepository>(),
-            Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IDemoModeService>(),
-            contexts: Mock.Of<INocturneDbContextFactory>()));
-
-    private static TempBasalController TempBasals() =>
-        WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));
-
     private static ActivityController Activities(Mock<IActivityService> service) =>
         WithContext(new ActivityController(service.Object, Mock.Of<IActivityDecomposer>()));
 
@@ -550,7 +531,6 @@ public class V4BulkValidationTests
         WithContext(new SensorGlucoseController(
             (repo ?? new Mock<ISensorGlucoseRepository>()).Object,
             Mock.Of<IGlucoseProcessingResolver>(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             Mock.Of<IPatientDeviceRepository>(),
             Mock.Of<IPatientDeviceStamper>()));
 }

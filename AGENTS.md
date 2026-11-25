@@ -1,6 +1,6 @@
 ## Project Overview
 
-Nocturne is a .NET 10 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. v1, v2, and v3 are all earmarked for keeping with the original API.
+Nocturne is a .NET 11 rewrite of the Nightscout diabetes management API with 1:1 API compatibility with the legacy JavaScript implementation. v1, v2, and v3 are all earmarked for keeping with the original API.
 
 ## Running the application
 
@@ -54,7 +54,7 @@ src/
 ├── Connectors/                # Data source integrations (Dexcom, Glooko, Libre, etc.)
 ├── Core/
 │   ├── Nocturne.Core.Clinical     # Clinical calculators (statistics, IOB/COB, sleep)
-│   ├── Nocturne.Core.Contracts    # Service interfaces
+│   ├── Nocturne.Core.Contracts    # Interfaces used across projects
 │   ├── Nocturne.Core.Models       # Domain models
 │   ├── Nocturne.Core.Constants    # Shared constants (ServiceNames)
 │   └── oref                       # Oref rust library
@@ -74,15 +74,41 @@ tests/
 
 ## Key Patterns
 
-### Service Interface Pattern
+### Layers and where an interface lives
 
-Services are defined in `Core.Contracts` and registered as scoped:
+The dependency rule: nothing in `Core` references `Infrastructure`, `Connectors` or the API, and neither
+`Infrastructure` nor `Connectors` references the API. The API project is the host and also holds the application
+layer: `src/API/Nocturne.API/Services/` is the use cases, and `Controllers/` translates HTTP to them. A controller
+depends on services; a service never names a controller namespace (`ServicesDoNotNameControllersGuardTests`).
+
+Where a service interface goes follows from who is on the other side of it:
+
+- Anything outside the API implements or consumes it (Infrastructure, a connector, another host): it lives in
+  `Core.Contracts`.
+- Only host services and controllers use it: it lives beside its service in `Services/`.
+- A contract whose types live in `Core.Clinical` cannot be in `Core.Contracts`, which does not reference it. It lives
+  beside its service.
+
+Caching follows the second case. `ICacheService` (`Infrastructure.Cache`) is the store, usable from any layer.
+`ITenantCache` is the host's policy over it: every key names the tenant and the reader partition, so only readers who
+see the same rows share a value. Only host code uses it; Infrastructure clears it through
+`ILegacyReadCacheInvalidation` in `Core.Contracts`, which the host implements. What a cached value may contain is
+stated on `ITenantCache`.
 
 ```csharp
 // Interface: src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs
 // Implementation: src/API/Nocturne.API/Services/Entries/EntryService.cs
 builder.Services.AddScoped<IEntryService, EntryService>();
 ```
+
+### Where a request or response type lives
+
+- Used by one controller: in that controller's file.
+- Used by a service or by a second controller: in `src/API/Nocturne.API/Models/`.
+- `Core.Models` holds domain types only, not request or response shapes.
+
+The rule applies to new code and to a type you are already moving. Do not move types only to satisfy it: a type's name
+reaches the generated TypeScript client, and its namespace does not.
 
 ### Nightscout Endpoint Compatibility
 

@@ -8,6 +8,7 @@ using Nocturne.API.Controllers.V4.Connectors;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Connectors;
 using Xunit;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Controllers.V4.Connectors;
 
@@ -39,6 +40,9 @@ public class GoogleHealthGenericWriteTests
     public async Task The_generic_write_still_accepts_an_enabled_flag_for_other_connectors()
     {
         var service = new Mock<IConnectorConfigurationService>();
+        service
+            .Setup(s => s.GetBoundKeysAsync("Dexcom", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, Type> { ["enabled"] = typeof(bool) });
 
         var result = await SaveAsync(service, "Dexcom", """{"enabled":false}""");
 
@@ -59,7 +63,7 @@ public class GoogleHealthGenericWriteTests
 
         AssertGrantRefusal(result);
         service.Verify(s => s.SaveSecretsAsync(
-            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -70,9 +74,9 @@ public class GoogleHealthGenericWriteTests
         var result = await NewController(service).SaveSecrets(
             "Dexcom", new Dictionary<string, string> { ["password"] = "p" }, CancellationToken.None);
 
-        result.Should().BeOfType<NoContentResult>();
+        result.Should().BeOfType<OkObjectResult>();
         service.Verify(s => s.SaveSecretsAsync(
-            "Dexcom", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+            "Dexcom", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

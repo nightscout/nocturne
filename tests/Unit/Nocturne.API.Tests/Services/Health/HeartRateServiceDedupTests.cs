@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health;
+using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -33,10 +33,9 @@ public class HeartRateServiceDedupTests
             .Returns((IEnumerable<HeartRate> docs) => docs);
 
         var service = new HeartRateService(
-            context.AsFactory(),
+            new HeartRateRepository(context.AsFactory(), TimeProvider.System),
             processing.Object,
-            Mock.Of<ISignalRBroadcastService>(),
-            TimeProvider.System, NullLogger<HeartRateService>.Instance);
+            Mock.Of<ISignalRBroadcastService>());
 
         return (service, context);
     }

@@ -65,11 +65,11 @@ import {
   apsSnapshotClient,
   bgCheckClient,
   bolusClient,
+  carbIntakeClient,
   currentTherapyStateClient,
   deviceEventClient,
   noteClient,
   notificationsClient,
-  nutritionClient,
   profileClient,
   sensorGlucoseClient,
   trackerLegacyFallbacksClient,
@@ -82,13 +82,16 @@ import {
 } from "#lib/api/pills-processor.js";
 import { isEntryDocument, isRecordDocument } from "#lib/websocket/payloads.js";
 import { isRecord } from "#lib/utils/type-guards.js";
-import { SyncPhase } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  SyncPhase,
+  type V4BasalInjectionStatus,
+} from "@nocturne/api-client";
 import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "#lib/constants/glucose-thresholds.js";
+} from "@nocturne/charts/core";
 
 /** The tracker levels loud enough for the notifications list; Info stays on the pill. */
 const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | "hazard" | "urgent">> = {
@@ -99,9 +102,8 @@ const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | 
 
 /**
  * Normalize a V4 SensorGlucose DTO (REST shape: `id` + `mgdl`, no `_id`/`sgv`) into the Entry
- * shape the store uses. `_id` is the reading's uuid, which is not the ObjectId-form `_id` the
- * realtime broadcast carries, so REST-backfilled and live-pushed copies pair up through
- * {@link isSameEntry}.
+ * shape the store uses. `_id` is the id the reading is served under on the legacy surfaces, which
+ * is the one the realtime broadcast carries, so REST-backfilled and live-pushed copies pair by id.
  */
 export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
   // `trend` is dropped: SensorGlucose names it (GlucoseTrend) where Entry holds
@@ -110,7 +112,7 @@ export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
   return {
     ...rest,
     createdAt: toIsoString(createdAt) ?? undefined,
-    _id: sg.id,
+    _id: sg.legacyApiId,
     type: "sgv",
     sgv: sg.mgdl,
     data_source: sg.dataSource,
@@ -298,9 +300,18 @@ export class RealtimeStore {
   notes = $state.raw<Note[]>([]);
   deviceEvents = $state.raw<DeviceEvent[]>([]);
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
+  /** Server-calculated IOB for the IOB pill's fallback, set by the authenticated layout. */
+  calculatedIob = $state<number | undefined>();
+  /** Server-calculated COB for the COB pill's fallback, set by the authenticated layout. */
+  calculatedCob = $state<number | undefined>();
+  /** Server-read last long-acting dose for the Basal pill, set by the authenticated layout. */
+  calculatedBasalInjection = $state<V4BasalInjectionStatus | undefined>();
 
   /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
+
+  /** Latest battery voltage of the uploader's link to the pump, null when none is reported. */
+  currentLinkBatteryVoltage = $state<number | null>(null);
 
   /** Glucose thresholds in force now, from the current therapy state; null until its first load. */
   chartThresholds = $state.raw<ChartThresholdsDto | null>(null);
@@ -404,7 +415,12 @@ export class RealtimeStore {
       this.boluses,
       this.carbIntakes,
       this.profile,
-      { units: "mg/dL" }
+      {
+        units: "mg/dL",
+        calculatedIob: this.calculatedIob,
+        calculatedCob: this.calculatedCob,
+        basalInjection: this.calculatedBasalInjection,
+      }
     );
   });
 
@@ -518,7 +534,7 @@ export class RealtimeStore {
         trackersClient().getActiveInstances().catch(() => null),
         notificationsClient().getNotifications().catch(() => []),
         bolusClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
-        nutritionClient().getCarbIntakes(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
+        carbIntakeClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
         bgCheckClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
         noteClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
         deviceEventClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
@@ -539,6 +555,7 @@ export class RealtimeStore {
         }
         if (currentTherapyState) {
           this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.currentLinkBatteryVoltage = currentTherapyState.linkBatteryVoltage ?? null;
           this.chartThresholds = currentTherapyState.thresholds ?? null;
         }
         this.currentReadingLoaded = true;
@@ -810,7 +827,7 @@ export class RealtimeStore {
     if (colName === "treatments") this.treatmentRevision++;
 
     if (colName === "entries" && this.isEntry(doc)) {
-      const index = this.entries.findIndex(namedEntry(this.entries, doc));
+      const index = this.entries.findIndex(namedEntry(doc));
       if (index !== -1) {
         this.entries = [
           ...this.entries.slice(0, index),
@@ -836,7 +853,7 @@ export class RealtimeStore {
 
     if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));
-      const named = namedEntry(this.entries, doc);
+      const named = namedEntry(doc);
       this.entries = this.entries.filter((entry) => !named(entry));
     }
   }
@@ -1324,6 +1341,7 @@ export class RealtimeStore {
     try {
       const therapyState = await currentTherapyStateClient().getCurrentTherapyState();
       this.currentReservoir = therapyState?.reservoir ?? null;
+      this.currentLinkBatteryVoltage = therapyState?.linkBatteryVoltage ?? null;
       this.chartThresholds = therapyState?.thresholds ?? null;
     } catch {
       // Non-critical — the reservoir pill and thresholds keep their last values until the next refresh.
@@ -1384,7 +1402,7 @@ export class RealtimeStore {
         sensorGlucoseClient().getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
         Promise.resolve<DeviceStatus[]>([]),
         bolusClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
-        nutritionClient().getCarbIntakes(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
+        carbIntakeClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         bgCheckClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         noteClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         deviceEventClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),

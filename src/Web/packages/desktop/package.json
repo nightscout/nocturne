@@ -14,6 +14,7 @@
     "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   },
   "dependencies": {
+    "@nocturne/charts": "workspace:*",
     "@nocturne/ui": "workspace:*",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-process": "^2.3.0",
@@ -28,7 +29,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2.9.0",
-    "bits-ui": "^2.18.1",
+    "bits-ui": "^2.18.2",
     "clsx": "^2.1.1",
     "eslint": "^10.3.0",
     "svelte": "^5.57.2",

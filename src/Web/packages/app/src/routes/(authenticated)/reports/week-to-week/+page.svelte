@@ -13,7 +13,7 @@
   import { bg, bgLabel, formatShortDate, hourLabel } from "#lib/utils/formatting.js";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
-  import { dashClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { dashClass, type TextureKey } from "@nocturne/charts/core";
 
   type Weekday = keyof typeof DayOfWeek;
 

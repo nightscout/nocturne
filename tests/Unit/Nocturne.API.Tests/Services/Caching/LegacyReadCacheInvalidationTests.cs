@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.API.Extensions;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Treatments;
@@ -45,6 +44,9 @@ public class LegacyReadCacheInvalidationTests : IDisposable
 
     private static readonly Type[] GlucoseModels = [typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration)];
 
+    private static readonly Type[] ProfileScopedModels =
+        [typeof(TherapySettings), typeof(BasalSchedule), typeof(CarbRatioSchedule), typeof(SensitivitySchedule), typeof(TargetRangeSchedule)];
+
     private static IEnumerable<Type> TreatmentModels =>
         LegacyTreatmentTables.All.Select(t => t.Model)
             .Append(typeof(TreatmentFood)).Append(typeof(Nocturne.Core.Models.Food)).Distinct();
@@ -59,9 +61,9 @@ public class LegacyReadCacheInvalidationTests : IDisposable
     }
 
     [Fact]
-    public void Every_registry_table_and_the_food_breakdown_map_to_treatments_only()
+    public void Every_registry_table_but_the_activation_and_the_food_breakdown_map_to_treatments_only()
     {
-        foreach (var model in TreatmentModels)
+        foreach (var model in TreatmentModels.Where(m => m != typeof(ProfileActivation)))
             LegacyReadCacheInvalidation.FamiliesByModel[model].Should().Equal([TenantCacheFamily.Treatments], model.Name);
     }
 
@@ -73,10 +75,24 @@ public class LegacyReadCacheInvalidationTests : IDisposable
     }
 
     [Fact]
+    public void Every_profile_scoped_model_maps_to_profile_versions_only()
+    {
+        foreach (var model in ProfileScopedModels)
+            LegacyReadCacheInvalidation.FamiliesByModel[model].Should().Equal([TenantCacheFamily.ProfileVersions], model.Name);
+    }
+
+    [Fact]
+    public void A_profile_activation_maps_to_treatments_and_profile_activations()
+    {
+        LegacyReadCacheInvalidation.FamiliesByModel[typeof(ProfileActivation)]
+            .Should().BeEquivalentTo([TenantCacheFamily.Treatments, TenantCacheFamily.ProfileActivations]);
+    }
+
+    [Fact]
     public void Nothing_else_maps_to_a_family()
     {
         LegacyReadCacheInvalidation.FamiliesByModel.Keys
-            .Should().BeEquivalentTo(TreatmentModels.Concat(GlucoseModels));
+            .Should().BeEquivalentTo(TreatmentModels.Concat(GlucoseModels).Concat(ProfileScopedModels));
     }
 
     /// <summary>
@@ -87,16 +103,21 @@ public class LegacyReadCacheInvalidationTests : IDisposable
     public async Task The_api_registrations_give_a_repository_the_port_that_clears_the_cache()
     {
         var services = new ServiceCollection().AddDomainServices().AddV4Infrastructure();
+        Nocturne.Infrastructure.Data.Extensions.ServiceCollectionExtensions.AddV4Repositories(services);
         services.Should().ContainSingle(d => d.ServiceType == typeof(ILegacyReadCacheInvalidation))
             .Which.ImplementationType.Should().Be<LegacyReadCacheInvalidation>();
+        Nocturne.Infrastructure.Data.Extensions.ServiceCollectionExtensions.AddDataServices(new ServiceCollection())
+            .Should().ContainSingle(d => d.ServiceType == typeof(IRecordChangePublisher))
+            .Which.ImplementationType.Should().Be<RecordChangePublisher>();
 
         var cache = new Mock<ITenantCache>();
-        services.RemoveAll<IV4RecordBroadcaster<Bolus>>();
         services
             .AddLogging()
             .AddSingleton<INocturneDbContextFactory>(new TestNocturneDbContextFactory(_context))
-            .AddSingleton(Mock.Of<IDeduplicationService>())
+            .AddSingleton(Mock.Of<IDuplicateLinker>())
+            .AddScoped<IRecordChangePublisher, RecordChangePublisher>()
             .AddSingleton<IAuditContext>(new SystemAuditContext())
+            .AddSingleton(TimeProvider.System)
             .AddSingleton(cache.Object);
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -159,6 +180,42 @@ public class LegacyReadCacheInvalidationTests : IDisposable
         _written.Models.Should().NotBeEmpty().And.OnlyContain(written => written == model);
     }
 
+    public static TheoryData<Type> ProfileScopedRepositoryModels()
+    {
+        var data = new TheoryData<Type>();
+        foreach (var model in ProfileScopedModels)
+            data.Add(model);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(ProfileScopedRepositoryModels))]
+    public async Task A_profile_scoped_create_reports_its_model(Type model)
+    {
+        var repository = Repository(model);
+        var record = (IV4Record)Activator.CreateInstance(model)!;
+        record.Timestamp = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        record.LegacyId = "doc:1";
+        var interfaceType = typeof(IV4Repository<>).MakeGenericType(model);
+        await (Task)interfaceType.GetMethod("CreateAsync")!
+            .Invoke(repository, [record, WriteOrigin.Live, CancellationToken.None])!;
+        _written.Models.Should().NotBeEmpty().And.OnlyContain(written => written == model);
+    }
+
+    [Fact]
+    public async Task Setting_the_default_therapy_settings_reports_therapy_settings()
+    {
+        var repository = (TherapySettingsRepository)Repository(typeof(TherapySettings));
+        var settings = await repository.CreateAsync(
+            new TherapySettings { Timestamp = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc), ProfileName = "Default" },
+            WriteOrigin.Live);
+        _written.Models.Clear();
+
+        await repository.SetDefaultAsync(settings.Id);
+
+        _written.Models.Should().Equal(typeof(TherapySettings));
+    }
+
     [Fact]
     public async Task An_update_the_material_gate_does_not_count_still_reports()
     {
@@ -198,7 +255,7 @@ public class LegacyReadCacheInvalidationTests : IDisposable
             StartTimestamp = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
         });
 
-        _written.Models.Should().Equal(typeof(StateSpan));
+        _written.Models.Should().NotBeEmpty().And.OnlyContain(written => written == typeof(StateSpan));
     }
 
     [Fact]
@@ -235,9 +292,10 @@ public class LegacyReadCacheInvalidationTests : IDisposable
         new ServiceCollection()
             .AddLogging()
             .AddSingleton<INocturneDbContextFactory>(new TestNocturneDbContextFactory(_context))
-            .AddSingleton(Mock.Of<IDeduplicationService>())
+            .AddSingleton(Mock.Of<IDuplicateLinker>())
             .AddSingleton<IAuditContext>(new SystemAuditContext())
             .AddSingleton<ILegacyReadCacheInvalidation>(_written)
+            .AddSingleton(_written.AsRecordChanges())
             .BuildServiceProvider();
 
     /// <summary>The concrete repository of <paramref name="model"/>, built as DI builds it.</summary>

@@ -1,0 +1,19 @@
+T:System.Net.Sockets.Socket;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.Sockets.TcpClient;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.Sockets.TcpListener;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.Sockets.UdpClient;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.Sockets.NetworkStream;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.Sockets.SocketAsyncEventArgs;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.Dns;Core projects resolve no name. Network I/O belongs in an infrastructure project.
+T:System.Net.WebClient;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.WebRequest;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.HttpWebRequest;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.HttpClient;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.HttpClientHandler;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.HttpMessageInvoker;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.HttpMessageHandler;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.SocketsHttpHandler;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.Json.HttpClientJsonExtensions;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.Http.DelegatingHandler;Core projects make no HTTP request. Network I/O belongs in an infrastructure project.
+T:System.Net.WebSockets.ClientWebSocket;Core projects open no socket. Network I/O belongs in an infrastructure project.
+T:System.Net.NetworkInformation.Ping;Core projects send no network probe. Network I/O belongs in an infrastructure project.

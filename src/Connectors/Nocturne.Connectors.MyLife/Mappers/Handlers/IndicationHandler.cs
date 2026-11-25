@@ -36,7 +36,6 @@ internal sealed class IndicationHandler : IMyLifeHandler
         {
             var deviceEvent = MyLifeFactory.CreateDeviceEvent(
                 ev,
-                context.Now,
                 DeviceEventType.PumpBatteryChange,
                 notes
             );
@@ -44,7 +43,7 @@ internal sealed class IndicationHandler : IMyLifeHandler
         }
 
         // Other indications become notes
-        var note = MyLifeFactory.CreateNote(ev, context.Now, notes ?? string.Empty, "Indication");
+        var note = MyLifeFactory.CreateNote(ev, notes ?? string.Empty, "Indication");
         return [note];
     }
 

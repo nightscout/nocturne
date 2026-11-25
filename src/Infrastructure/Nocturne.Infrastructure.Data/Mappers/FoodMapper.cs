@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Common;
@@ -17,7 +18,7 @@ public static class FoodMapper
     {
         return new FoodEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(food.Id),
+            Id = RecordIdKey.ParseIdToGuid(food.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(food.Id) ? food.Id : null,
             Type = food.Type,
             Category = food.Category,
@@ -61,7 +62,7 @@ public static class FoodMapper
             Hidden = entity.Hidden,
             Position = entity.Position,
             // Map SysCreatedAt to created_at for Nightscout parity
-            CreatedAt = entity.SysCreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = entity.SysCreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             SrvModified = entity.SysUpdatedAt.ToMills(),
             SrvCreated = entity.SysCreatedAt.ToMills(),
         };

@@ -18,8 +18,8 @@
     TrackerCompletionDialog,
     TrackerStartDialog,
     ReservoirReportDialog,
-    type TrackerNotification,
   } from "#lib/components/trackers/index.js";
+  import { draftFrom, type TrackerDraft } from "#lib/components/trackers/draft.js";
   import { reachedUrgency } from "#lib/components/trackers/schedule.js";
   import ActiveTrackersTab from "#lib/components/trackers/ActiveTrackersTab.svelte";
   import TrackerHistoryTab from "#lib/components/trackers/TrackerHistoryTab.svelte";
@@ -33,6 +33,7 @@
   import Bookmark from "@lucide/svelte/icons/bookmark";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -46,10 +47,7 @@
     NotificationUrgency,
     TrackerCategory,
     CompletionReason,
-    DashboardVisibility,
-    TrackerMode,
     ReservoirReportKind,
-    PumpCapability,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -79,7 +77,6 @@
   // Dialog state
   let isDefinitionDialogOpen = $state(false);
   let editingDefinition = $state<TrackerDefinitionDto | null>(null);
-  let isNewDefinition = $state(false);
 
   // Delete confirmation dialog state
   let isDeleteDefinitionDialogOpen = $state(false);
@@ -96,53 +93,27 @@
   let formPresetDefinitionId = $state<string | undefined>(undefined);
   let formPresetDefaultStartNotes = $state("");
 
-  // Form references for form()-based remote functions
-
-  // Form state for definition
-  let formName = $state("");
-  let formDescription = $state("");
-  let formCategory = $state<TrackerCategory>(TrackerCategory.Consumable);
-  let formIcon = $state("activity");
-  let formLifespanHours = $state<number | undefined>(undefined);
-  let formLowReservoirUnits = $state<number | undefined>(undefined);
-  let formLowReservoirUrgency = $state<NotificationUrgency>(
-    NotificationUrgency.Warn
-  );
-  let formNotifications = $state<TrackerNotification[]>([]);
-  let formIsFavorite = $state(false);
-  let formDashboardVisibility = $state<DashboardVisibility>(
-    DashboardVisibility.Always
-  );
-  let formMode = $state<TrackerMode>(TrackerMode.Duration);
-  let formStartEventType = $state<string | undefined>(undefined);
-  let formCompletionEventType = $state<string | undefined>(undefined);
-  let formTriggerEventTypes = $state<string[]>([]);
-  let formEndEventTypes = $state<string[]>([]);
-  let formCovers = $state<PumpCapability[]>([]);
-  let formTriggerNotesContains = $state("");
-
-  // Helper to convert API format to notifications array
-  function definitionToNotifications(
-    def: TrackerDefinitionDto
-  ): TrackerNotification[] {
-    // Use notificationThresholds array from API
-    if (def.notificationThresholds && def.notificationThresholds.length > 0) {
-      return def.notificationThresholds.map((t, i) => ({
-        id: t.id,
-        urgency: t.urgency ?? NotificationUrgency.Info,
-        hours: t.hours,
-        description: t.description ?? "",
-        displayOrder: t.displayOrder ?? i,
-        alertRuleId: t.alertRuleId ?? undefined,
-      }));
-    }
-
-    return [];
-  }
+  let editDraft = $state<TrackerDraft | null>(null);
 
   // Start instance dialog
   let isStartDialogOpen = $state(false);
   let startDefinition = $state<TrackerDefinitionDto | null>(null);
+
+  // The tracker wizard hands over the definition it created, to ask when its first run started.
+  // The history entry keeps the id, so a way back to it asks again only while nothing runs.
+  let askedToStart: string | null = null;
+  $effect(() => {
+    const id = page.state.startTrackerId;
+    if (typeof id !== "string" || id === askedToStart) return;
+    const created = definitions.find((d) => d.id === id);
+    if (!created || activeInstances.some((i) => i.definitionId === id)) return;
+    askedToStart = id;
+    untrack(() => {
+      activeTab = "definitions";
+      startDefinition = created;
+      isStartDialogOpen = true;
+    });
+  });
 
   function openStartDialog(definition: TrackerDefinitionDto) {
     if (!requireAuth()) return;
@@ -265,56 +236,11 @@
     return true;
   }
 
-  // Open definition dialog
-  function openNewDefinition() {
-    if (!requireAuth()) return;
-
-    isNewDefinition = true;
-    editingDefinition = null;
-    formName = "";
-    formDescription = "";
-    formCategory = TrackerCategory.Consumable;
-    formIcon = "activity";
-    formLifespanHours = undefined;
-    formLowReservoirUnits = undefined;
-    formLowReservoirUrgency = NotificationUrgency.Warn;
-    formNotifications = [];
-    formIsFavorite = false;
-    formDashboardVisibility = DashboardVisibility.Always;
-    formMode = TrackerMode.Duration;
-    formStartEventType = undefined;
-    formCompletionEventType = undefined;
-    formTriggerEventTypes = [];
-    formEndEventTypes = [];
-    formCovers = [];
-    formTriggerNotesContains = "";
-    isDefinitionDialogOpen = true;
-  }
-
   function openEditDefinition(def: TrackerDefinitionDto) {
     if (!requireAuth()) return;
 
-    isNewDefinition = false;
     editingDefinition = def;
-    formName = def.name || "";
-    formDescription = def.description || "";
-    formCategory = def.category ?? TrackerCategory.Consumable;
-    formIcon = def.icon || "activity";
-    formLifespanHours = def.lifespanHours;
-    formLowReservoirUnits = def.lowReservoirUnits ?? undefined;
-    formLowReservoirUrgency =
-      def.lowReservoirUrgency ?? NotificationUrgency.Warn;
-    formNotifications = definitionToNotifications(def);
-    formIsFavorite = def.isFavorite ?? false;
-    formDashboardVisibility =
-      def.dashboardVisibility ?? DashboardVisibility.Always;
-    formMode = def.mode ?? TrackerMode.Duration;
-    formStartEventType = def.startEventType ?? undefined;
-    formCompletionEventType = def.completionEventType ?? undefined;
-    formTriggerEventTypes = [...def.triggerEventTypes ?? []];
-    formEndEventTypes = [...def.endEventTypes ?? []];
-    formCovers = [...def.covers ?? []];
-    formTriggerNotesContains = def.triggerNotesContains ?? "";
+    editDraft = draftFrom(def);
     isDefinitionDialogOpen = true;
   }
 
@@ -527,7 +453,6 @@
         definitions={definitions}
         categoryLabels={categoryLabels}
         categoryColors={categoryColors}
-        openNewDefinition={openNewDefinition}
         openStartDialog={openStartDialog}
         openEditDefinition={openEditDefinition}
         openDeleteDefinitionDialog={openDeleteDefinitionDialog}
@@ -547,31 +472,14 @@
 
 
 
-<!-- Definition Dialog -->
-<!-- Tracker Editor Dialog -->
-<TrackerEditorDialog
-  bind:open={isDefinitionDialogOpen}
-  isNewDefinition={isNewDefinition}
-  editingDefinition={editingDefinition}
-  bind:formName
-  bind:formDescription
-  bind:formCategory
-  bind:formIcon
-  bind:formLifespanHours
-  bind:formLowReservoirUnits
-  bind:formLowReservoirUrgency
-  bind:formNotifications
-  bind:formIsFavorite
-  bind:formDashboardVisibility
-  bind:formMode
-  bind:formStartEventType
-  bind:formCompletionEventType
-  bind:formTriggerEventTypes
-  bind:formEndEventTypes
-  bind:formCovers
-  bind:formTriggerNotesContains
-  categoryLabels={categoryLabels}
-/>
+{#if editDraft}
+  <TrackerEditorDialog
+    bind:open={isDefinitionDialogOpen}
+    definition={editingDefinition}
+    bind:draft={editDraft}
+    categoryLabels={categoryLabels}
+  />
+{/if}
 
 <!-- Start Instance Dialog -->
 <TrackerStartDialog

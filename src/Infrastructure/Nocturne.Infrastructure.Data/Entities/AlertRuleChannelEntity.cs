@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -76,6 +77,18 @@ public class AlertRuleChannelEntity : ITenantScoped
     /// </summary>
     [Column("metadata", TypeName = "jsonb")]
     public string? Metadata { get; set; }
+
+    /// <summary><see cref="AlertRuleChannelSnapshot.AddedBySubjectId"/>.</summary>
+    [Column("added_by_subject_id")]
+    public Guid? AddedBySubjectId { get; set; }
+
+    /// <summary><see cref="AlertRuleChannelSnapshot.StopsAt"/>.</summary>
+    [Column("stops_at")]
+    public DateTime? StopsAt { get; set; }
+
+    /// <summary><see cref="AlertRuleChannelSnapshot.RecipientSubjectId"/>.</summary>
+    [Column("recipient_subject_id")]
+    public Guid? RecipientSubjectId { get; set; }
 
     // Navigation
 

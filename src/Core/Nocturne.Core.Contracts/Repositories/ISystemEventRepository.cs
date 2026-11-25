@@ -20,6 +20,12 @@ public interface ISystemEventRepository
         int skip = 0,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The first <paramref name="limit"/> events in [<paramref name="from"/>, <paramref name="to"/>) Unix milliseconds,
+    /// oldest first: a range read from its start, where <see cref="GetSystemEventsAsync"/> pages from the newest.
+    /// </summary>
+    Task<IReadOnlyList<SystemEvent>> GetInRangeAsync(long from, long to, int limit, CancellationToken cancellationToken = default);
+
     Task<SystemEvent?> GetSystemEventByIdAsync(
         string id,
         CancellationToken cancellationToken = default);

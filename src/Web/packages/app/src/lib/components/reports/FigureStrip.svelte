@@ -9,6 +9,8 @@
     note?: string;
     /** A second caption line under the note, e.g. a breakdown of the figure. */
     detail?: string;
+    /** What a screen reader says in place of a value that is only a placeholder mark. */
+    valueLabel?: string;
   }
 
   interface Props {
@@ -37,7 +39,7 @@
       <div class="bg-card px-4 py-3">
         <dt class="text-xs text-muted-foreground">{figure.label}</dt>
         <dd class="m-0 mt-1 flex flex-wrap items-baseline gap-x-1">
-          <span class="text-xl font-semibold tabular-nums whitespace-nowrap">{figure.value}</span>
+          <span class="text-xl font-semibold tabular-nums whitespace-nowrap" role={figure.valueLabel ? "img" : undefined} aria-label={figure.valueLabel}>{figure.value}</span>
           {#if figure.unit}
             <span class="text-xs text-muted-foreground">{figure.unit}</span>
           {/if}

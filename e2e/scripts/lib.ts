@@ -39,9 +39,30 @@ export function dockerEnv(): NodeJS.ProcessEnv {
 
 const env = dockerEnv();
 
+const WINDOWS_SHIMS = new Set(["pnpm"]);
+
+/**
+ * pnpm is a `.cmd` shim on some Windows installs, which Node refuses to spawn without a shell. The
+ * shim goes through cmd as one command string, resolved by bare name so a `.exe` install works too.
+ * Everything else, and every other platform, spawns directly.
+ */
+function invocation(cmd: string, args: string[]): { file: string; args: string[]; options: { shell?: true } } {
+  if (process.platform !== "win32" || !WINDOWS_SHIMS.has(cmd)) return { file: cmd, args, options: {} };
+  return { file: [cmd, ...args.map(quoteForCmd)].join(" "), args: [], options: { shell: true } };
+}
+
+function quoteForCmd(arg: string): string {
+  if (/^[\w@+=:,./\\-]+$/.test(arg)) return arg;
+  // cmd expands %VAR% even inside quotes, and a quote cannot be escaped portably.
+  if (/["%\r\n]/.test(arg)) throw new Error(`cannot pass ${JSON.stringify(arg)} through cmd`);
+  // A backslash before the closing quote would escape it, so trailing backslashes are doubled.
+  return `"${arg.replace(/(\\+)$/, "$1$1")}"`;
+}
+
 export function run(cmd: string, args: string[], opts: SpawnOptions = {}): Promise<number> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(cmd, args, { stdio: "inherit", env, cwd: REPO_ROOT, ...opts });
+    const call = invocation(cmd, args);
+    const child = spawn(call.file, call.args, { stdio: "inherit", env, cwd: REPO_ROOT, ...call.options, ...opts });
     child.on("error", reject);
     child.on("exit", (code, signal) => resolvePromise(code ?? (signal ? 1 : 0)));
   });
@@ -53,7 +74,10 @@ export async function mustRun(cmd: string, args: string[], opts: SpawnOptions = 
 }
 
 export function capture(cmd: string, args: string[], opts: { cwd?: string } = {}): string {
-  const result = spawnSync(cmd, args, { env, cwd: opts.cwd ?? REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const call = invocation(cmd, args);
+  const result = spawnSync(call.file, call.args, {
+    env, cwd: opts.cwd ?? REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...call.options,
+  });
   if (result.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed: ${result.stderr}`);
   return result.stdout;
 }
@@ -147,6 +171,7 @@ const API_INPUTS = [
 ];
 const WEB_INPUTS = ["src/Web", "Dockerfile.web"];
 const GENERATED_CLIENT = join(REPO_ROOT, "src/Web/packages/app/src/lib/api");
+const CLIENT_PACKAGE_SRC = join(REPO_ROOT, "src/Web/packages/api-client/src");
 const CLIENT_STAMP = join(E2E_DIR, ".state", "client-generated-from");
 
 export interface Images {
@@ -192,7 +217,7 @@ async function buildApi(ref: string) {
 async function ensureClient(apiHash: string): Promise<string> {
   const generated = join(GENERATED_CLIENT, "generated");
   const stamp = existsSync(CLIENT_STAMP) ? readFileSync(CLIENT_STAMP, "utf8").trim() : "";
-  if (stamp !== apiHash || !existsSync(generated)) {
+  if (stamp !== apiHash || !existsSync(generated) || !existsSync(CLIENT_PACKAGE_SRC)) {
     console.log("[e2e] regenerating the API client for the web image");
     await mustRun("dotnet", [
       "build", "src/API/Nocturne.API/Nocturne.API.csproj",
@@ -202,7 +227,7 @@ async function ensureClient(apiHash: string): Promise<string> {
     writeFileSync(CLIENT_STAMP, apiHash);
   }
   const hash = createHash("sha256");
-  const files = [join(GENERATED_CLIENT, "api-client.generated.ts"), ...listFiles(generated)].sort();
+  const files = [join(GENERATED_CLIENT, "api-client.generated.ts"), ...listFiles(generated), ...listFiles(CLIENT_PACKAGE_SRC)].sort();
   for (const file of files) {
     if (!existsSync(file)) continue;
     hash.update(file.slice(REPO_ROOT.length));

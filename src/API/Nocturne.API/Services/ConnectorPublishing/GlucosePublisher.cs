@@ -1,10 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.Alerts;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -17,8 +15,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 
 /// <summary>
 /// Publishes CGM glucose readings from connectors into the Nocturne domain, writing to both the
-/// legacy <see cref="IEntryService"/> and the v4 <see cref="ISensorGlucoseRepository"/>, and
-/// triggering alert evaluation via <see cref="IAlertOrchestrator"/> after each successful write.
+/// legacy <see cref="IEntryService"/> and the v4 <see cref="ISensorGlucoseRepository"/>.
 /// </summary>
 /// <seealso cref="IGlucosePublisher"/>
 internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublisher
@@ -28,7 +25,6 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
-    private readonly ICanonicalAlertEvaluator _alertEvaluator;
 
     public GlucosePublisher(
         IEntryService entryService,
@@ -36,7 +32,6 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
         IPatientDeviceStamper patientDeviceStamper,
-        ICanonicalAlertEvaluator alertEvaluator,
         IAuditContext auditContext,
         PublishSkipTally skips,
         ITenantAccessor tenantAccessor,
@@ -48,13 +43,12 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         _meterGlucoseRepository = meterGlucoseRepository ?? throw new ArgumentNullException(nameof(meterGlucoseRepository));
         _calibrationRepository = calibrationRepository ?? throw new ArgumentNullException(nameof(calibrationRepository));
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
-        _alertEvaluator = alertEvaluator ?? throw new ArgumentNullException(nameof(alertEvaluator));
     }
 
     /// <remarks>
     /// Empty batches skip the write for the reason <see cref="ConnectorPublisherBase.PublishAsync"/>
     /// does: a connector sync that found nothing new still calls its publishers, and a write of no
-    /// records has nothing for the entry service or for an alert pass to decide against.
+    /// records has nothing for the entry service to decide against.
     /// </remarks>
     public async Task<bool> PublishEntriesAsync(
         IEnumerable<Entry> entries,
@@ -68,7 +62,6 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
 
             var written = await _entryService.CreateEntriesAsync(entryList, origin, cancellationToken);
             RecordSkippedDeleted(written.SkippedDeleted);
-            await _alertEvaluator.EvaluateForEntriesAsync(entryList, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -86,17 +79,13 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            entries, e => e.Id,
+            entries,
             unheld => PublishEntriesAsync(unheld, source, origin, cancellationToken),
             source,
-            ids => _sensorGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _meterGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
-            ids => _calibrationRepository.GetHeldLegacyIdsAsync(ids, cancellationToken));
+            ids => HeldAsync(_sensorGlucoseRepository, ids, cancellationToken),
+            ids => HeldAsync(_meterGlucoseRepository, ids, cancellationToken),
+            ids => HeldAsync(_calibrationRepository, ids, cancellationToken));
 
-    /// <remarks>
-    /// Alert evaluation after the write is this publisher's one addition to the shared shape.
-    /// </remarks>
-    /// <seealso cref="CanonicalAlertEvaluatorExtensions.EvaluateForReadingsAsync"/>
     public Task<bool> PublishSensorGlucoseAsync(
         IEnumerable<SensorGlucose> records,
         string source,
@@ -104,8 +93,7 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         => PublishAsync(
             records, _sensorGlucoseRepository, source, origin, cancellationToken,
             beforeWrite: recordList => _patientDeviceStamper.StampAsync(
-                recordList, DeviceAttributionCategories.SensorGlucose, source, cancellationToken),
-            afterWrite: recordList => _alertEvaluator.EvaluateForReadingsAsync(recordList, cancellationToken));
+                recordList, DeviceAttributionCategories.SensorGlucose, source, cancellationToken));
 
     /// <inheritdoc cref="ConnectorPublisherBase.LatestTimestampAsync" />
     /// <remarks>

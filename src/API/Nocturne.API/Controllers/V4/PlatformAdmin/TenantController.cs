@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -13,15 +14,20 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing tenants on the instance.
+/// Tenants on the instance. List, read, create, provision and update tenants. Deleting a tenant
+/// removes it and all of its data, and cannot be undone. To deactivate a tenant, update it. Add and
+/// remove members, manage their sign-in credentials, and issue login and recovery codes. Reading or
+/// updating one tenant, and the member actions, also need the caller to be an owner of that tenant,
+/// or the instance key.
 /// </summary>
 /// <remarks>
 /// In multi-tenant deployments, platform administrators can create new tenants, update tenant
-/// settings (display name, access-request flag), and deactivate tenants. Restricted to users
+/// settings (display name, access-request flag, active flag), and delete tenants. Restricted to users
 /// with the <c>platform_admin</c> role.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Tenants")]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/tenants")]
 [Produces("application/json")]
@@ -95,6 +101,9 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> AddMember(
         Guid id, [FromBody] AddMemberRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
@@ -109,12 +118,16 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveMember(Guid id, Guid subjectId, CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
         var result = await _tenantService.RemoveMemberAsync(id, subjectId, ct);
+        if (result.AccessFromTeam)
+            return this.ProblemWithCode(MemberAccessFromTeam.Code, MemberAccessFromTeam.Detail, StatusCodes.Status409Conflict);
+
         return result.Ok
             ? NoContent()
             : Problem(
@@ -154,6 +167,9 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> Provision(
         [FromBody] ProvisionRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (request.Credential is null && request.OidcIdentity is null)
             return Problem(detail: "Either Credential or OidcIdentity must be provided", statusCode: 400, title: "Bad Request");
         if (request.Credential is not null && request.OidcIdentity is not null)
@@ -217,7 +233,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var (outcome, _) = await subjectService.AttachOidcIdentityAsync(
-            subjectId, request.ProviderId, request.OidcSubjectId, request.Issuer, request.Email);
+            subjectId, request.ProviderId, request.OidcSubjectId, request.Issuer, request.Email, emailVerified: false);
 
         return outcome switch
         {
@@ -276,10 +292,13 @@ public class TenantController : ControllerBase
     /// has already established which browser the member is at.
     /// </summary>
     /// <remarks>
-    /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host. It grants no more than
-    /// the direct grant <see cref="TenantDirectGrantController"/> already mints for the same
-    /// member, and like that one it names the platform-admin caller as the actor in the audit
-    /// trail rather than the member.
+    /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host for a session that reads
+    /// and writes the member's data, without their second factor. A member whose access has ended
+    /// is refused as a non-member is, and a code issued before it ended stops redeeming when it
+    /// does. The session is not the member's own sign-in, so it cannot manage their sign-in factors
+    /// or issue credentials (<see cref="RequireInteractiveSessionAttribute"/>) and carries no
+    /// platform-admin standing until the member signs in on it. The issue row of the audit trail
+    /// names the platform-admin caller as the actor, and it and the redeem row both name the code.
     /// </remarks>
     [HttpPost("{id:guid}/members/{subjectId:guid}/login-code")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -291,17 +310,26 @@ public class TenantController : ControllerBase
         Guid id, Guid subjectId,
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] ISubjectRepository subjects,
+        [FromServices] ITenantMemberService tenantMembers,
         CancellationToken ct) =>
-        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, null, ct);
+        IssueCodeAsync(
+            id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService,
+            async token => await subjects.GetSignInStateAsync(subjectId, token) is { IsActive: true }
+                && await tenantMembers.IsMemberAsync(subjectId, id, token),
+            ct);
 
     /// <summary>
     /// Mints a single-use recovery code that lets a member enrol a passkey at
     /// <c>POST /api/auth/passkey/recovery-mode/redeem</c> on the tenant's host.
+    /// Returns 404 when the subject is not an active, non-system, non-demo member of the tenant, and
+    /// 409 when the tenant is inactive.
     /// </summary>
     /// <remarks>
-    /// The operator's way to recover a member nobody on the tenant may recover: the only owner, a
-    /// platform admin, or a member of another tenant
-    /// (<see cref="Identity.MemberRecoveryController.IssueRecoveryCode"/>).
+    /// The operator's way to recover any member, including one a member administrator may not
+    /// recover (<see cref="Identity.MemberRecoveryController.IssueRecoveryCode"/>) and one who still
+    /// holds a sign-in method on a device they have lost
+    /// (<see cref="MemberRecoveryEligibility.AdmitsOperatorRecoveryAsync"/>).
     /// </remarks>
     [HttpPost("{id:guid}/members/{subjectId:guid}/recovery-code")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -313,24 +341,94 @@ public class TenantController : ControllerBase
         Guid id, Guid subjectId,
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] ISubjectRepository subjects,
         [FromServices] MemberRecoveryEligibility eligibility,
         CancellationToken ct) =>
         IssueCodeAsync(
-            id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, ct);
+            id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService,
+            async token => await eligibility.AdmitsOperatorRecoveryAsync(
+                id, await subjects.GetAsync(subjectId, token), token),
+            ct);
 
-    /// <param name="eligibility">For a recovery code: refuses a member who can still sign in.</param>
-    private async Task<IActionResult> IssueCodeAsync(
-        Guid id, Guid subjectId, LoginCodePurpose purpose,
-        INocturneDbContextFactory dbContextFactory,
-        ILoginCodeService loginCodeService,
-        MemberRecoveryEligibility? eligibility,
+    /// <summary>
+    /// Marks the address a member holds as confirmed. For an operator that has its own evidence the
+    /// person controls the inbox. Never sets or changes the address: it confirms only the one
+    /// already on the account, and refuses with 409 when <see cref="AdminConfirmEmailRequest.Email"/>
+    /// is not that address. Confirming an address already confirmed answers the same and keeps the
+    /// first time.
+    /// </summary>
+    /// <remarks>
+    /// The refusal never names the address the account holds. Returns 404 when the subject is not a
+    /// live member of the tenant, whether or not they ever were one.
+    /// </remarks>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/email-confirmation")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(EmailConfirmedDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmMemberEmail(
+        Guid id, Guid subjectId,
+        [FromBody] AdminConfirmEmailRequest request,
+        [FromServices] ISubjectService subjectService,
+        [FromServices] IAuthAuditService auditService,
+        [FromServices] ITenantMemberService tenantMembers,
         CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
+        if (!await tenantMembers.IsMemberAsync(subjectId, id, ct))
+            return NotFound();
+
+        var result = await subjectService.ConfirmEmailAsync(subjectId, request.Email);
+        switch (result)
+        {
+            case EmailConfirmation.Confirmed confirmed:
+                await auditService.LogAsync(
+                    AuthAuditEventType.EmailConfirmedByOperator, subjectId, success: true,
+                    ipAddress: HttpContext.GetClientAddress(),
+                    userAgent: Request.Headers.UserAgent.ToString(),
+                    actor: AuthAuditActor.From(HttpContext.GetAuthContext()),
+                    tenantId: id);
+                return Ok(new EmailConfirmedDto(confirmed.At));
+            case EmailConfirmation.NotFound:
+                return NotFound();
+            default:
+                // An external client branches on this code.
+                return Problem(
+                    detail: "The address named is not the address on this account.",
+                    statusCode: 409,
+                    title: "Conflict",
+                    extensions: new Dictionary<string, object?> { ["error"] = nameof(EmailConfirmation.AddressMismatch) });
+        }
+    }
+
+    /// <param name="id">The tenant the member belongs to; the caller must own it.</param>
+    /// <param name="subjectId">The member the code is issued for.</param>
+    /// <param name="purpose">What the code may be redeemed for.</param>
+    /// <param name="dbContextFactory">Opens the context pinned to the tenant that the code is written through.</param>
+    /// <param name="loginCodeService">Issues the code.</param>
+    /// <param name="mayIssueFor">Whether the subject is a live member of the tenant who qualifies for a code of <paramref name="purpose"/>; when not, it is refused with 404 whether or not the subject was ever a member.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    private async Task<IActionResult> IssueCodeAsync(
+        Guid id, Guid subjectId, LoginCodePurpose purpose,
+        INocturneDbContextFactory dbContextFactory,
+        ILoginCodeService loginCodeService,
+        Func<CancellationToken, Task<bool>> mayIssueFor,
+        CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
         var tenant = await _tenantService.GetByIdAsync(id, ct);
-        if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+        if (tenant is null)
+            return NotFound();
+
+        if (!await mayIssueFor(ct))
             return NotFound();
 
         if (!tenant.IsActive)
@@ -338,13 +436,9 @@ public class TenantController : ControllerBase
 
         await using var dbContext = await dbContextFactory.CreateForTenantAsync(id, ct);
 
-        if (eligibility is not null
-            && await eligibility.CheckAsync(dbContext, id, subjectId, ct) == RecoveryEligibility.NotLockedOut)
-            return Problem(detail: "This member can still sign in", statusCode: 409, title: "Conflict");
-
         var issued = await loginCodeService.IssueAsync(
             dbContext, subjectId, purpose,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(HttpContext.GetAuthContext()),
             ct);
@@ -394,4 +488,6 @@ public record ProvisionRequest(
 public record SubjectCredentialsDto(List<PasskeyCredentialDto> Passkeys, List<OidcIdentityDto> OidcIdentities);
 public record PasskeyCredentialDto(Guid Id, string? DisplayName, DateTime CreatedAt);
 public record OidcIdentityDto(Guid Id, string Provider, string? Email);
+public record AdminConfirmEmailRequest(string Email);
+public record EmailConfirmedDto(DateTime ConfirmedAt);
 public record AdminAttachOidcRequest(Guid ProviderId, string OidcSubjectId, string Issuer, string? Email);

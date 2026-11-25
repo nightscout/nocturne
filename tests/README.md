@@ -56,7 +56,7 @@ build context holding only `src/Web/packages`, so a member outside it breaks the
 
 | Service | Image | Limits | Notes |
 |---|---|---|---|
-| `postgres` | `postgres:17.6-alpine` | 256 MB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
+| `postgres` | `postgres:17.6-alpine` | 1 GB, 1 CPU | the production role bootstrap (`docs/postgres/container-init/00-init.sh`); tmpfs data directory, fsync, synchronous commit and full-page writes off |
 | `mocks` | `node:24-alpine` + `e2e/mocks` | 96 MB | fake third-party vendors |
 | `api` | `nocturne-api:e2e` | 512 MB, 2 CPUs | the SDK container build, as released; `NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS=true` |
 | `web` | `nocturne-web:e2e` | 320 MB, 1 CPU | `Dockerfile.web`, as released |
@@ -105,7 +105,7 @@ To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
 redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
 steps, heart rate, weight and sleep. The stack configures one instance client
-(`GOOGLE_HEALTH_CLIENT_ID`/`_SECRET`) whose redirect URI is the apex of the TLS proxy, so every
+(configured by global setup through the platform-admin settings API) whose redirect URI is the apex of the TLS proxy, so every
 tenant shares it; each consent picks a fake Google account named after the tenant
 (`mock_account`), which keeps tenants' data apart. The browser spec intercepts only Google's
 external consent navigation; the apex callback, its relay to the tenant host, the web callback,
@@ -143,7 +143,8 @@ migration chain themselves. A migration test that seeds part-way along the chain
 it clones the nearest checkpoint at or below it and migrates the rest (at most 24 migrations). The
 checkpoints are template databases every 25 migrations, each built once per process on first use by
 cloning the one before it and migrating forward; the fully migrated template is built apart from
-them. A migration name not in the chain throws.
+them. A migration name not in the chain throws. The chain starts at the squashed baseline (see
+"Migration baseline" in `CLAUDE.md`), so a test can seed no earlier than it.
 
 **`ApiIntegrationTestFixture`** runs the API with `WebApplicationFactory` on a real Kestrel port
 (so HttpClient and SignalR connect over sockets) as Development, against its own `SharedPostgres`
@@ -212,13 +213,14 @@ A difference that is a Nocturne bug is quarantined instead.
 
 ## Coverage
 
-CI collects Cobertura coverage from the .NET jobs (`--settings tests/coverage.runsettings
---collect "XPlat Code Coverage"`, which excludes test assemblies, migrations and generated code)
-and from the web vitest suites (`--coverage`, the v8 provider). The `coverage` job merges the
-.NET reports with ReportGenerator and runs `.github/scripts/coverage-report.mjs`, which writes
-line and branch coverage per area (API, Infrastructure, Core, Connectors, Services, app, bot,
-portal, bridge, cms), the change against the last baseline main uploaded, and the coverage of the
-lines the pull request adds. The report goes to the job summary and to one comment on the pull
+CI collects Cobertura coverage from the .NET jobs (`unit`, `integration-db` and `integration-api`;
+`--settings tests/coverage.runsettings --collect "XPlat Code Coverage"`, which excludes test
+assemblies, migrations and generated code). The quarantined run in `integration-api` collects none.
+CI also collects coverage from the web vitest suites (`--coverage`, the v8 provider). The
+`coverage` job merges the .NET reports with ReportGenerator and runs
+`.github/scripts/coverage-report.mjs`, which writes line and branch coverage per area (API,
+Infrastructure, Core, Connectors, Services, app, bot, portal, bridge, cms), the change against
+the last baseline main uploaded, and the coverage of the lines the pull request adds. The report goes to the job summary and to one comment on the pull
 request that is updated on every push. The `coverage` job posts it for a pull request from this
 repository. A fork's pull request runs with a read-only token, so `coverage-comment.yml` posts it
 instead, on `workflow_run` with a write token; it never checks out the pull request and only

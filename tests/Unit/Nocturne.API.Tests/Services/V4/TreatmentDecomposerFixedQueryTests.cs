@@ -1,11 +1,8 @@
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -13,11 +10,8 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -30,10 +24,11 @@ namespace Nocturne.API.Tests.Services.V4;
 /// </summary>
 /// <remarks>
 /// A mock-level count cannot see a store's own statements; the set-based reads are capped per call
-/// against PostgreSQL in <c>TreatmentBatchReadsTests</c>. Two writes are one per record, and no batch
-/// here makes them: the drops of a reclassified treatment's spans, since a resend that changes a
-/// treatment's kind is rare; and keying a meal's carbs stored with no legacy id to its bolus, which
-/// only a meal entered in Nocturne and backfilled needs.
+/// against PostgreSQL in <c>TreatmentBatchReadsTests</c>. The drops of a reclassified treatment's
+/// spans run on the decomposer's own context, so their statements are counted in
+/// <see cref="TreatmentDecomposerReclassificationTests"/>. One write is one per record, and no batch
+/// here makes it: keying a meal's carbs stored with no legacy id to its bolus, which only a meal
+/// entered in Nocturne and backfilled needs.
 /// </remarks>
 public class TreatmentDecomposerFixedQueryTests : IDisposable
 {
@@ -208,25 +203,24 @@ public class TreatmentDecomposerFixedQueryTests : IDisposable
         carbs.Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        return new TreatmentDecomposer(
+        return TreatmentDecomposerDoubles.Build(
             new CountingContexts(new TestNocturneDbContextFactory(_context), () => _contextOpens++),
-            Table<IBolusRepository, V4Models.Bolus>().Object,
-            Table<ITempBasalRepository, V4Models.TempBasal>().Object,
-            carbs.Object,
-            Table<IBGCheckRepository, V4Models.BGCheck>().Object,
-            Table<INoteRepository, V4Models.Note>().Object,
-            Table<IDeviceEventRepository, V4Models.DeviceEvent>().Object,
-            Table<IBolusCalculationRepository, V4Models.BolusCalculation>().Object,
-            spans.Object,
-            activations.Object,
-            new ProfileActivationWriter(activations.Object, Double<ITenantCache>().Object, Double<ITempBasalRateReresolver>().Object),
-            foods.Object,
-            devices.Object,
-            Double<IPatientDeviceStamper>().Object,
-            profiles.Object,
-            Double<IPatientInsulinRepository>().Object,
-            new RelativeTempBasalRates(basal.Object),
-            Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+            keys: Double<IDecomposedTreatmentKeys>().Object,
+            bolus: Table<IBolusRepository, V4Models.Bolus>().Object,
+            tempBasal: Table<ITempBasalRepository, V4Models.TempBasal>().Object,
+            carbIntake: carbs.Object,
+            bgCheck: Table<IBGCheckRepository, V4Models.BGCheck>().Object,
+            note: Table<INoteRepository, V4Models.Note>().Object,
+            deviceEvent: Table<IDeviceEventRepository, V4Models.DeviceEvent>().Object,
+            bolusCalculation: Table<IBolusCalculationRepository, V4Models.BolusCalculation>().Object,
+            stateSpans: spans.Object,
+            profileActivations: activations.Object,
+            profileActivationWriter: new ProfileActivationWriter(activations.Object, Double<ITempBasalRateReresolver>().Object),
+            foods: foods.Object,
+            devices: devices.Object,
+            stamper: Double<IPatientDeviceStamper>().Object,
+            activeProfiles: profiles.Object,
+            insulin: Double<IPatientInsulinRepository>().Object,
+            relativeTempBasalRates: new RelativeTempBasalRates(basal.Object));
     }
 }

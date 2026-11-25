@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import { page as pageState } from "$app/state";
-import { AlertRuleSeverity, type ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertRuleSeverity, type ActiveExcursionResponse } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let activeAlerts = $state<ActiveExcursionResponse[]>([]);

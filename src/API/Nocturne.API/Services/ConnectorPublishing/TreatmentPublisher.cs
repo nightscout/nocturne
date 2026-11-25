@@ -1,3 +1,5 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -74,7 +76,9 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     /// <remarks>
     /// Every row written carries the fingerprint of the treatment it came from
     /// (<see cref="UpstreamFingerprintScope"/>), which <see cref="PublishRecentTreatmentsAsync"/>
-    /// compares against. Rows stored under a treatment's client id are moved onto its id first
+    /// compares against. The fingerprints are keyed by the id each treatment will be stored under
+    /// (<see cref="ITreatmentService.ResolveStoredIdentitiesAsync"/>), and write-back echoes are
+    /// dropped there. Rows stored under a treatment's client id are moved onto its id first
     /// (<see cref="ITreatmentService.RekeyClientIdRecordsAsync"/>), so the write lands on them.
     /// </remarks>
     public async Task<bool> PublishTreatmentsAsync(
@@ -85,12 +89,13 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         try
         {
             var list = treatments.ToList();
-            var fingerprints = new Dictionary<(string? Source, string LegacyId), string?>();
-            foreach (var treatment in list)
+            using (PushSystemAudit())
             {
-                if (treatment.Id is { Length: > 0 } id)
-                    fingerprints[(treatment.DataSource ?? source, id)] = TreatmentDecomposer.UpstreamFingerprint(treatment);
+                var echoes = await _treatmentService.ResolveStoredIdentitiesAsync(list, cancellationToken);
+                list.RemoveAll(echoes.Contains);
             }
+
+            var fingerprints = FingerprintsOf(list, source);
 
             using (PushSystemAudit())
                 await _treatmentService.RekeyClientIdRecordsAsync(source, list, cancellationToken);
@@ -294,6 +299,20 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Not a treatment type."),
         };
 
+    /// <summary>The fingerprint each of <paramref name="treatments"/> is written under, keyed as <see cref="UpstreamFingerprintScope"/> reads it.</summary>
+    private static Dictionary<(string? Source, string LegacyId), string?> FingerprintsOf(
+        IEnumerable<Treatment> treatments, string source)
+    {
+        var fingerprints = new Dictionary<(string? Source, string LegacyId), string?>();
+        foreach (var treatment in treatments)
+        {
+            if (treatment.Id is { Length: > 0 } id)
+                fingerprints[(treatment.DataSource ?? source, id)] = TreatmentDecomposer.UpstreamFingerprint(treatment);
+        }
+
+        return fingerprints;
+    }
+
     /// <inheritdoc />
     /// <remarks>The conflict rule is <see cref="TreatmentDecomposer.SelectForRepublishAsync"/>'s.</remarks>
     public async Task<int?> PublishRecentTreatmentsAsync(
@@ -301,7 +320,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<Treatment> selected;
+        TreatmentRepublish selected;
         try
         {
             using (PushSystemAudit())
@@ -317,13 +336,54 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         if (selected.Count == 0)
             return 0;
 
-        return await PublishTreatmentsAsync(selected, source, origin, cancellationToken) ? selected.Count : null;
+        var spansWritten = await RepublishSpansAsync(selected.Spans, source, origin, cancellationToken);
+        var decomposed = selected.Decompose.Count == 0
+                         || await PublishTreatmentsAsync(selected.Decompose, source, origin, cancellationToken);
+        return spansWritten && decomposed ? selected.Count : null;
+    }
+
+    /// <summary>
+    /// <see cref="ITreatmentService.RepublishSpansAsync"/>, each span stamped with the fingerprint of the
+    /// treatment it is written from.
+    /// </summary>
+    /// <returns>Whether the write succeeded.</returns>
+    private async Task<bool> RepublishSpansAsync(
+        IReadOnlyList<Treatment> treatments, string source, WriteOrigin origin, CancellationToken cancellationToken)
+    {
+        if (treatments.Count == 0)
+            return true;
+
+        try
+        {
+            using (PushSystemAudit())
+            using (UpstreamFingerprintScope.Open(FingerprintsOf(treatments, source)))
+                await _treatmentService.RepublishSpansAsync(source, treatments, origin, cancellationToken);
+            return true;
+        }
+        catch (Exception ex) when (ex is DbException or DbUpdateException)
+        {
+            Logger.LogError(ex, "Failed to write the changed overrides and temporary targets of {Source}", source);
+            return false;
+        }
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(
         string source, DateTime from, DateTime to, CancellationToken cancellationToken = default)
         => _treatmentService.GetStoredIdsFromSourceAsync(source, from, to, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken cancellationToken = default)
+        => _treatmentService.GetOpenSpansFromSourceAsync(source, after, limit, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken cancellationToken = default)
+    {
+        var stored = await _carbIntakeRepository.GetByLegacyIdsAsync(legacyIds, cancellationToken);
+        return stored.ToDictionary(c => c.LegacyId!, c => c.Id, StringComparer.Ordinal);
+    }
 
     /// <inheritdoc />
     public async Task<int> DeleteTreatmentsAsync(

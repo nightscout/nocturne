@@ -133,19 +133,20 @@ internal class EntryService : IEntryService
 
         var toWrite = new List<Entry>();
         var response = new List<Entry>(processed.Count);
-        var glucoseMoved = new List<Entry>();
         var stored = 0;
 
         for (var i = 0; i < processed.Count; i++)
         {
             var entry = processed[i];
-            var match = duplicates[i];
+            // NIGHTSCOUT-COMPAT: Nightscout upserts an entry onto the one stored at its time and type,
+            // so an isValid:false upload under another id would hide that reading. Here it names a
+            // reading only by its id (InvalidUploads in Services/V4).
+            var match = entry.IsValid == false ? null : duplicates[i];
 
             if (match is null)
             {
                 toWrite.Add(entry);
                 response.Add(entry);
-                glucoseMoved.Add(entry);
                 continue;
             }
 
@@ -157,13 +158,10 @@ internal class EntryService : IEntryService
                 continue;
             }
 
-            var storedMgdl = EntryDecomposer.WrittenMgdl(match.Entry);
             var merged = MergeOntoStored(match.Entry, entry);
             merged.Id = match.LegacyId;
             toWrite.Add(merged);
             response.Add(merged);
-            if (EntryDecomposer.WrittenMgdl(merged) != storedMgdl)
-                glucoseMoved.Add(merged);
         }
 
         LogReuploadLoop(processed.Count, stored, uploader);
@@ -172,7 +170,7 @@ internal class EntryService : IEntryService
 
         _logger.LogDebug("Wrote {Count} entries", written.Count);
 
-        return new EntryUploadResult(response, glucoseMoved);
+        return new EntryUploadResult(response);
     }
 
     /// <summary>
@@ -268,14 +266,17 @@ internal class EntryService : IEntryService
 
         var result = await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
 
-        return new BulkWrite<Entry>(validEntries, result.SkippedDeleted);
+        return new BulkWrite<Entry>(validEntries, result.SkippedDeleted)
+        {
+            Invalidated = [.. validEntries.Where(result.Invalidated.Contains)],
+        };
     }
 
     /// <inheritdoc />
-    public Task<DecompositionResult> ImportEntriesAsync(
+    public async Task<DecompositionResult> ImportEntriesAsync(
         IReadOnlyList<Entry> entries,
         CancellationToken cancellationToken = default) =>
-        _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill, cancellationToken);
+        await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill, cancellationToken);
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Entry"/>, or <see langword="null"/> if no entry with the given <paramref name="id"/> exists.</returns>

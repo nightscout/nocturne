@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import { remoteQuery, remoteQueryError } from "#lib/test-stubs/remote-resource.js";
-import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { ConnectorStatusDto } from "@nocturne/api-client";
 import FirstReadingEmptyStateLoader from "./FirstReadingEmptyStateLoader.svelte";
 
 const state = vi.hoisted(() => {

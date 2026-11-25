@@ -1,7 +1,6 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
@@ -19,6 +18,8 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 /// </summary>
 public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly GlookoTimeMapper _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -45,8 +46,8 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
                 var intensity = ex.Intensity?.ToString(CultureInfo.InvariantCulture);
 
                 var legacyId = !string.IsNullOrEmpty(ex.Guid)
-                    ? $"glooko_exercise_{ex.Guid}"
-                    : GenerateLegacyId("ssv2_exercise", rawTimestamp, $"name:{ex.Name}_dur:{ex.Duration}");
+                    ? LegacyIds.Of("exercise", ex.Guid)
+                    : LegacyIds.Hashed("ssv2_exercise", rawTimestamp.Ticks, $"name:{ex.Name}_dur:{ex.Duration}");
 
                 results.Add(BuildActivity(correctedTimestamp, legacyId, ex.Name, durationMinutes, intensity));
             }
@@ -85,8 +86,8 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
                 var durationMinutes = ev.Duration > 0 ? ev.Duration : (double?)null;
 
                 var legacyId = !string.IsNullOrEmpty(ev.Guid)
-                    ? $"glooko_exercise_event_{ev.Guid}"
-                    : GenerateLegacyId("ssv2_exercise_event", rawTimestamp, $"dur:{ev.Duration}_int:{ev.Intensity}");
+                    ? LegacyIds.Of("exercise_event", ev.Guid)
+                    : LegacyIds.Hashed("ssv2_exercise_event", rawTimestamp.Ticks, $"dur:{ev.Duration}_int:{ev.Intensity}");
 
                 results.Add(BuildActivity(correctedTimestamp, legacyId, name: null, durationMinutes, ev.Intensity));
             }
@@ -117,11 +118,4 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
             EnteredBy = _connectorSource,
         };
 
-    private static string GenerateLegacyId(string eventType, DateTime timestamp, string? additionalData = null)
-    {
-        var dataToHash = $"glooko_{eventType}_{timestamp.Ticks}_{additionalData ?? string.Empty}";
-        using var sha1 = SHA1.Create();
-        var hashBytes = sha1.ComputeHash(Encoding.UTF8.GetBytes(dataToHash));
-        return $"glooko_{Convert.ToHexString(hashBytes).ToLowerInvariant()}";
-    }
 }

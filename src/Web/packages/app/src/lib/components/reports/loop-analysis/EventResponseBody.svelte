@@ -20,7 +20,7 @@
   import { bg, bgDelta, bgLabel, convertToDisplayUnits } from "#lib/utils/formatting.js";
   import Info from "@lucide/svelte/icons/info";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
-  import PercentileBands from "./PercentileBands.svelte";
+  import { PercentileBands } from "@nocturne/charts";
   import AggregateReadout from "./AggregateReadout.svelte";
   import EventMetricsTable from "./EventMetricsTable.svelte";
   import EventList from "./EventList.svelte";
@@ -30,7 +30,8 @@
   import CohortDot from "./CohortDot.svelte";
   import { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
   import { axisEnd, axisStart, signedTwoPlaces as signedUnits } from "./daily-profile-view";
-  import { cohortBands, hourTicks, slotMinute } from "./event-response-view";
+  import { cohortBands } from "@nocturne/charts/core";
+  import { hourTicks, slotMinute } from "./event-response-view";
   import { cohortLabel, relativeHours, relativeMinutes } from "./event-labels.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
   import { eventOptionLabels } from "./filter-labels.svelte";
@@ -72,6 +73,15 @@
   function droppedText(result: EventCohortResult | undefined): string {
     const n = (count: number | undefined) => count ?? 0;
     return [
+      n(result?.mealsWithFoodRecord) + n(result?.mealsWithoutFoodRecord) > 0
+        ? `${plural(n(result?.mealsWithFoodRecord), ["# meal with a food record", "# meals with a food record"])}, ${plural(
+            n(result?.mealsWithoutFoodRecord),
+            [
+              "# meal with only carbs not included because the food filter cannot apply to it",
+              "# meals with only carbs not included because the food filter cannot apply to them",
+            ]
+          )}`
+        : null,
       n(result?.notIsolated) > 0
         ? plural(n(result?.notIsolated), ["# not included because of another event in its window", "# not included because of another event in their window"])
         : null,

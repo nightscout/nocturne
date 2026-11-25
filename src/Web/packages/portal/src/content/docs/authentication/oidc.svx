@@ -129,9 +129,11 @@ Oidc__Providers__0__ClientSecret=your-client-secret
 
 ## New accounts and roles
 
-When someone signs in through a provider for the first time, Nocturne creates an account
-and assigns the provider's **Default Roles** (`readable` unless you change it). Adjust this
-list to control what new users can do before an admin grants them more access.
+A provider sign-in does not create an account. Nocturne creates an account only from an
+invite, a tenant-creation link, or setup. A person who signs in through a provider with no
+account is refused. When an account is created with a provider, Nocturne assigns the
+provider's **Default Roles** (`readable` unless you change it). Adjust this list to control
+what new users can do before an admin grants them more access.
 
 Providers configured through the admin UI also support **claim mappings**, pairs of
 *(OIDC claim name → Nocturne claim name)*, for providers that emit non-standard claim

@@ -3,11 +3,11 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -22,6 +22,7 @@ public class MyLifeConnectorService(
     HttpClient httpClient,
     IConnectorServerResolver<MyLifeConnectorConfiguration> serverResolver,
     ILogger<MyLifeConnectorService> logger,
+    IRetryDelayStrategy retryDelayStrategy,
     MyLifeAuthTokenProvider tokenProvider,
     MyLifeEventProcessor eventProcessor,
     IMyLifeSessionCache sessionCache,
@@ -29,11 +30,11 @@ public class MyLifeConnectorService(
     MyLifeSyncService syncService,
     IConnectorPublisher? publisher = null,
     TimeProvider? timeProvider = null
-) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher, timeProvider)
+) : TokenConnectorService<MyLifeConnectorConfiguration, MyLifeAuthTokenProvider>(
+    httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
 {
 
     public override string ServiceName => "MyLife";
-    protected override string ConnectorSource => DataSources.MyLifeConnector;
 
     /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
@@ -70,13 +71,21 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
+    ///     The run starts at the earlier of the glucose and treatment points, which only an
+    ///     open-ended request reads.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, MyLifeConnectorConfiguration config) =>
+        request.To is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments] : [];
+
+    /// <summary>
     /// Performs sync by streaming one calendar month at a time, mapping and publishing
     /// each batch before moving on. A configurable overlap tail preserves cross-month
     /// carb-bolus and temp-basal consolidation context.
     /// </summary>
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         MyLifeConnectorConfiguration config,
+        TokenSession tokenSession,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -85,15 +94,10 @@ public class MyLifeConnectorService(
 
         try
         {
-            // Establish the MyLife session up front. AcquireTokenAsync (reached via the token
-            // provider) performs the SOAP login and populates the session cache as a side effect;
-            // the token is cached so subsequent cycles reuse it. Without this call the session cache
-            // is never populated and every sync fails with "session not established".
-            var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
-
+            // The sign-in that preceded this sync performed the SOAP login and populated the
+            // session cache as a side effect; without it every sync fails with "session not established".
             var session = sessionCache.Get(tenantAccessor.TenantId);
-            if (string.IsNullOrEmpty(token)
-                || session == null
+            if (session == null
                 || string.IsNullOrWhiteSpace(session.ServiceUrl)
                 || string.IsNullOrWhiteSpace(session.AuthToken)
                 || string.IsNullOrWhiteSpace(session.PatientId))
@@ -125,9 +129,9 @@ public class MyLifeConnectorService(
             // a range naming no lower bound; whether the source itself holds more is unverified.
             var floor = InitialSyncFloor ?? DefaultInitialSyncFloor();
             var glucoseSince = ResumeFrom(
-                request, await CalculateSinceTimestampAsync(config) ?? floor, floor);
+                request, () => request.Resume.Point(ResumeFamily.Glucose) ?? floor, floor);
             var treatmentSince = ResumeFrom(
-                request, await CalculateTreatmentSinceTimestampAsync(config) ?? floor, floor);
+                request, () => request.Resume.Point(ResumeFamily.Treatments) ?? floor, floor);
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var now = Clock.GetUtcNow().UtcDateTime;
@@ -160,11 +164,11 @@ public class MyLifeConnectorService(
                 if (needGlucose)
                 {
                     var sgList = eventProcessor
-                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks), now)
+                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
                         .ToList();
 
-                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                        sgList, PublishSensorGlucoseDataAsync, config, cancellationToken, batch.Month);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        sgList, config, cancellationToken, batch.Month);
                 }
 
                 // Shared treatment filtering and context for records + state spans
@@ -178,8 +182,7 @@ public class MyLifeConnectorService(
                         contextEvents,
                         config.EnableMealCarbConsolidation,
                         config.EnableTempBasalConsolidation,
-                        config.TempBasalConsolidationWindowMinutes,
-                        now);
+                        config.TempBasalConsolidationWindowMinutes);
 
                     // Treatment records
                     if (needRecords)
@@ -187,18 +190,18 @@ public class MyLifeConnectorService(
                         var records = eventProcessor.MapRecords(treatmentEvents, treatmentContext);
 
                         var monthCtx = batch.Month;
-                        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                            records.Boluses, PublishBolusDataAsync, config, cancellationToken, monthCtx);
-                        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                            records.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken, monthCtx);
-                        await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
-                            records.BGChecks, PublishBGCheckDataAsync, config, cancellationToken, monthCtx);
-                        await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
-                            records.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken, monthCtx);
-                        await PublishRecordTypeAsync(result, SyncDataType.Notes, activeTypes,
-                            records.Notes, PublishNoteDataAsync, config, cancellationToken, monthCtx);
-                        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                            records.DeviceEvents, PublishDeviceEventDataAsync, config, cancellationToken, monthCtx);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            records.Boluses, config, cancellationToken, monthCtx);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            records.CarbIntakes, config, cancellationToken, monthCtx);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            records.BGChecks, config, cancellationToken, monthCtx);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            records.BolusCalculations, config, cancellationToken, monthCtx);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            records.Notes, config, cancellationToken, monthCtx);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            records.DeviceEvents, config, cancellationToken, monthCtx);
                     }
 
                     // TempBasal state spans
@@ -206,8 +209,8 @@ public class MyLifeConnectorService(
                     {
                         var tempBasals = MyLifeStateSpanMapper.MapTempBasals(treatmentEvents, treatmentContext).ToList();
 
-                        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                            tempBasals, PublishTempBasalDataAsync, config, cancellationToken, batch.Month);
+                        await PublishRecordTypeAsync(result, activeTypes,
+                            tempBasals, config, cancellationToken, batch.Month, dataType: SyncDataType.StateSpans);
                     }
                 }
 
@@ -222,20 +225,20 @@ public class MyLifeConnectorService(
                 var readouts = await FetchPumpSettingsReadoutsAsync(cancellationToken);
 
                 var profiles = MyLifePumpSettingsMapper.MapToProfiles(readouts);
-                await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-                    profiles, PublishProfileDataAsync, config, cancellationToken);
+                await PublishRecordTypeAsync(result, activeTypes,
+                    profiles, config, cancellationToken);
 
-                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
-                await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                    activations, PublishProfileActivationDataAsync, config, cancellationToken, "from pump settings");
+                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts);
+                await PublishRecordTypeAsync(result, activeTypes,
+                    activations, config, cancellationToken, "from pump settings");
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             // A token MyLife has already rejected would otherwise stay cached until its nominal
             // 24-hour expiry, failing every sync in between.
             if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
-                tokenProvider.InvalidateToken();
+                TokenProvider.InvalidateToken();
 
             RecordSyncError(result, ex);
         }

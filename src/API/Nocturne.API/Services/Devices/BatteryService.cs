@@ -1,5 +1,7 @@
+using System.Globalization;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Battery;
 using Nocturne.Core.Models.V4;
 
@@ -129,10 +131,10 @@ public class BatteryService : IBatteryService
         try
         {
             var from = fromMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+                ? fromMills.Value.ToUtcDateTime()
                 : (DateTime?)null;
             var to = toMills.HasValue
-                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+                ? toMills.Value.ToUtcDateTime()
                 : (DateTime?)null;
 
             var uploaderSnapshots = await _uploaderSnapshots.GetAsync(
@@ -298,7 +300,7 @@ public class BatteryService : IBatteryService
             IsCharging = snapshot.IsCharging ?? false,
             Temperature = snapshot.Temperature,
             Mills = snapshot.Mills,
-            Timestamp = snapshot.CreatedAt.ToString("o"),
+            Timestamp = snapshot.CreatedAt.ToString("o", CultureInfo.InvariantCulture),
             Notification = GetNotificationStatus(snapshot.Battery),
         };
     }
@@ -321,7 +323,7 @@ public class BatteryService : IBatteryService
             Voltage = snapshot.BatteryVoltage,
             IsCharging = false, // Pumps typically don't have charging status
             Mills = snapshot.Mills,
-            Timestamp = snapshot.CreatedAt.ToString("o"),
+            Timestamp = snapshot.CreatedAt.ToString("o", CultureInfo.InvariantCulture),
             Notification = GetNotificationStatus(snapshot.BatteryPercent),
         };
     }

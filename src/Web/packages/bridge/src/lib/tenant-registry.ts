@@ -66,6 +66,12 @@ export default class TenantRegistry<C extends TenantConnection> {
     if (!this.bySlug.has(slug)) void this.refresh();
   }
 
+  /** Reads the tenant list again when any of `ids` has no connection. */
+  ensureIds(ids: readonly string[]): void {
+    const held = new Set([...this.bySlug.values()].map((tenant) => tenant.id));
+    if (ids.some((id) => !held.has(id))) void this.refresh();
+  }
+
   /** Whether `slug` names the tenant `id`, reading the tenant list again first when it names no tenant or another. */
   async holds(slug: string, id: string): Promise<boolean> {
     if (this.holdsNow(slug, id)) return true;

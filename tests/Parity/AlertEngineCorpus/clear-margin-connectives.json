@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "name": "clear-margin-connectives",
+  "description": "the margin applies under and, or and not: and and or widen with the rule while open; not over a margined leaf moves its limit to the leaf's false side, so the rule's truth widens too",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70,
+              "clear_margin": 5
+            }
+          },
+          {
+            "type": "iob",
+            "iob": {
+              "operator": ">",
+              "value": 1
+            }
+          }
+        ]
+      },
+      "hysteresis_minutes": 0
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70,
+              "clear_margin": 5
+            }
+          },
+          {
+            "type": "iob",
+            "iob": {
+              "operator": ">",
+              "value": 5
+            }
+          }
+        ]
+      },
+      "hysteresis_minutes": 0
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value": 70,
+            "clear_margin": 5
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 69,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 72,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 74,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 66,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-01-05T12:20:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:20:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 72,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:25:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 69,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    },
+    {
+      "at": "2026-01-05T12:35:00Z",
+      "context": {
+        "latest_value": 72,
+        "latest_timestamp": "2026-01-05T12:35:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:35:00Z",
+        "trend_bucket": "flat",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2
+      }
+    }
+  ]
+}

@@ -56,20 +56,42 @@ public class LoopAnalysisEnvelopeIntegrationTests(ApiIntegrationTestFixture fixt
         var body = await GetOkAsync(clamped, $"{Path}?{Week}&compare=previous");
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeTrue("the week asked for ended long before the last 24 hours");
         Absent(body, "comparisonRange").Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("daily-profile")]
+    [InlineData("prediction-accuracy")]
+    [InlineData("loop-health")]
+    [InlineData("settings-evidence")]
+    [InlineData("event-response")]
+    public async Task Every_page_serves_a_clamped_member_an_empty_range_before_its_window(string page)
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        using var clamped = await CreateHistoryClampedClientAsync();
+
+        var body = await GetOkAsync(clamped, $"/api/v4/loop-analysis/{page}?{Week}");
+
+        body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeTrue();
+        var range = body.GetProperty("primaryRange");
+        range.GetProperty("to").GetDateTime().Should().Be(range.GetProperty("from").GetDateTime());
+        if (page == "settings-evidence")
+            body.GetProperty("withheldReason").GetString().Should().Be("HistoryClamped");
+    }
+
     [Fact]
-    public async Task A_share_gets_its_reason_no_ranges_and_no_profiles()
+    public async Task A_share_gets_its_ranges_but_no_profiles()
     {
         await SeedProfileAsync("Australia/Sydney");
         using var share = await CreateShareClientAsync();
 
         var body = await GetOkAsync(share, $"{Path}?{Week}&compare=previous");
 
-        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("Share");
-        Absent(body, "primaryRange").Should().BeTrue();
-        Absent(body, "comparisonRange").Should().BeTrue();
+        Absent(body, "timeZoneUnavailableReason").Should().BeTrue();
+        Absent(body, "primaryRange").Should().BeFalse();
+        Absent(body, "comparisonRange").Should().BeFalse();
         body.GetProperty("profileNames").EnumerateArray().Should().BeEmpty();
         body.GetProperty("withheldSeries").EnumerateArray().Select(s => s.GetString()).Should().Contain("ProfileNames");
     }

@@ -51,7 +51,6 @@ describe("reports overview", () => {
   });
 
   it.each([
-    [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/],
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/],
     [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/],
     [TimeZoneUnavailableReason.LookupFailed, /did not load/],

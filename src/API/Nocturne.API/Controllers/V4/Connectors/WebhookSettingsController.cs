@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,8 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Controller for testing outbound webhook delivery.
+/// Outbound webhook notifications. Send a test payload to a webhook. The read and update operations
+/// are not implemented and return <c>501</c>.
 /// </summary>
 /// <remarks>
 /// The <c>POST /test</c> endpoint sends a test payload via <see cref="WebhookRequestSender"/>.
@@ -27,8 +29,7 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 // caller-named host, are tenant administration. The GET is left on [Authorize] alone: it exposes
 // no tenant state.
 public class WebhookSettingsController(
-    WebhookRequestSender requestSender,
-    ILogger<WebhookSettingsController> logger)
+    WebhookRequestSender requestSender)
     : ControllerBase
 {
     /// <summary>
@@ -63,7 +64,11 @@ public class WebhookSettingsController(
         title: "Not Implemented"
     );
 
-    /// <summary>Tests webhook settings by sending test payloads to configured URLs.</summary>
+    /// <summary>
+    /// Tests webhook settings by sending test payloads to configured URLs. The server makes the
+    /// outbound POST; a destination on a private network is not called and is listed in
+    /// <c>failedUrls</c>. The demo's shared visitor cannot call it.
+    /// </summary>
     /// <remarks>
     /// Gated for the demo's shared visitor because the destination is caller-chosen: the server
     /// makes an outbound POST from its own address. <c>OutboundDestination</c> keeps it off private
@@ -75,67 +80,57 @@ public class WebhookSettingsController(
     [ProducesResponseType(typeof(WebhookTestResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<WebhookTestResult>> TestWebhookSettings(
         [FromBody] WebhookTestRequest request,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var urls = request.Urls;
+        var urls = request.Urls;
 
-            if (urls == null || urls.Count == 0)
+        if (urls == null || urls.Count == 0)
+        {
+            return Problem(detail: "Webhook URLs are required", statusCode: 400, title: "Bad Request");
+        }
+
+        var secret = request.Secret;
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            return Problem(detail: "Webhook secret is required", statusCode: 400, title: "Bad Request");
+        }
+
+        // The test payload attributes the dispatch to the caller. A subject-less caller (the
+        // instance key, a guest session) is reported as null rather than as a stand-in
+        // identity the receiving endpoint could mistake for a real subject.
+        var userId = HttpContext.GetSubjectIdString();
+        var payload = JsonSerializer.Serialize(
+            new
             {
-                return Problem(detail: "Webhook URLs are required", statusCode: 400, title: "Bad Request");
+                kind = "webhook_test",
+                userId
             }
+        );
 
-            var secret = request.Secret;
-            if (string.IsNullOrWhiteSpace(secret))
+        var failedUrls = await requestSender.SendAsync(
+            urls,
+            payload,
+            secret,
+            cancellationToken
+        );
+
+        return Ok(
+            new WebhookTestResult
             {
-                return Problem(detail: "Webhook secret is required", statusCode: 400, title: "Bad Request");
+                Ok = failedUrls.Count == 0,
+                FailedUrls = failedUrls.ToArray(),
             }
-
-            // The test payload attributes the dispatch to the caller. A subject-less caller (the
-            // instance key, a guest session) is reported as null rather than as a stand-in
-            // identity the receiving endpoint could mistake for a real subject.
-            var userId = HttpContext.GetSubjectIdString();
-            var payload = JsonSerializer.Serialize(
-                new
-                {
-                    kind = "webhook_test",
-                    userId
-                }
-            );
-
-            var failedUrls = await requestSender.SendAsync(
-                urls,
-                payload,
-                secret,
-                cancellationToken
-            );
-
-            return Ok(
-                new WebhookTestResult
-                {
-                    Ok = failedUrls.Count == 0,
-                    FailedUrls = failedUrls.ToArray(),
-                }
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to test webhook settings");
-            return Problem(detail: "Failed to test webhook settings", statusCode: 500, title: "Internal Server Error");
-        }
+        );
     }
 }
 
 public sealed class WebhookTestRequest
 {
+    [MaxLength(WebhookRequestSender.MaxUrls)]
     public List<string> Urls { get; set; } = [];
     public string? Secret { get; set; }
 }

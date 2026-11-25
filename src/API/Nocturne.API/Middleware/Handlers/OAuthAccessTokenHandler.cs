@@ -15,9 +15,9 @@ namespace Nocturne.API.Middleware.Handlers;
 public class OAuthAccessTokenHandler : IAuthHandler
 {
     /// <summary>
-    /// Handler priority (150 - after OIDC, before legacy JWT).
-    /// Must run before LegacyJwtHandler because both recognize JWTs, but
-    /// LegacyJwtHandler may use a different signing key (API_SECRET fallback)
+    /// Handler priority (150 - before the session bearer handler).
+    /// Must run before SessionBearerHandler because both recognize JWTs, but
+    /// SessionBearerHandler may use a different signing key (API_SECRET fallback)
     /// and returns Failure (not Skip) on validation errors, blocking the chain.
     /// </summary>
     public int Priority => 150;

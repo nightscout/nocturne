@@ -12,7 +12,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for clock face configuration management.
+/// Public clock faces that show a tenant's glucose to anyone holding the link. List, read, create, update,
+/// and delete faces. Read a face's glucose, and read the starter configuration for a new face.
 /// </summary>
 /// <remarks>
 /// A face serves glucose to anyone holding its link, so creating, changing or deleting one is
@@ -75,6 +76,7 @@ public class ClockFacesController : ControllerBase
 
     /// <summary>
     /// Get the latest glucose readings a public clock face displays (public, no authentication required).
+    /// The clock id acts as the credential. Only sensor glucose is returned, whatever the tenant's anonymous-read setting.
     /// </summary>
     /// <remarks>
     /// The clock UUID is the capability: a caller must hold a valid clock id for the host-resolved
@@ -164,6 +166,7 @@ public class ClockFacesController : ControllerBase
     [Authorize]
     [RequireScope(Scope.SharingManage)]
     [ProducesResponseType(typeof(ClockFace), 201)]
+    [ScopeDecidedBy(typeof(ClockFacesController), nameof(AlertsSettingWithoutScope))]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
@@ -204,6 +207,7 @@ public class ClockFacesController : ControllerBase
     [RemoteCommand(Invalidates = ["List", "GetById"])]
     [Authorize]
     [RequireScope(Scope.SharingManage)]
+    [ScopeDecidedBy(typeof(ClockFacesController), nameof(AlertsSettingWithoutScope))]
     [ProducesResponseType(typeof(ClockFace), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]

@@ -9,6 +9,10 @@ export type PropertyMeta = {
   label: string;
   description: string;
   category: PropertyCategory;
+  /** What to call each value of a property the schema offers as a choice, keyed by the value. */
+  optionLabels?: Record<string, string>;
+  /** Stands in for `description` where the schema offers the property as a choice. */
+  choiceDescription?: string;
 };
 
 /**
@@ -20,7 +24,7 @@ export const connectorPropertyMeta = {
   TimezoneOffset: {
     label: 'Timezone offset',
     description: 'Hours offset from UTC for timestamp adjustments',
-    category: 'General',
+    category: 'Advanced',
   },
   Enabled: {
     label: 'Enabled',
@@ -41,6 +45,13 @@ export const connectorPropertyMeta = {
     label: 'Sync interval',
     description: 'How often to sync data from the source (in minutes)',
     category: 'Sync',
+    optionLabels: {
+      1: '1 minute',
+      5: '5 minutes',
+      60: '1 hour',
+      240: '4 hours',
+    },
+    choiceDescription: 'How often to sync data from the source',
   },
 
   // Sync toggles
@@ -220,13 +231,26 @@ export const connectorPropertyMeta = {
   },
   ApiSecret: {
     label: 'API secret',
-    description: 'Nightscout API_SECRET for authentication',
+    description: 'The API_SECRET of the site',
     category: 'Credentials',
   },
   MaxCount: {
     label: 'Max count',
     description: 'Maximum number of records to fetch per request',
     category: 'Advanced',
+  },
+  HistoryDays: {
+    label: 'History to import',
+    description: 'How many days of history Nocturne imports the first time',
+    category: 'Sync',
+    optionLabels: {
+      30: 'Last 30 days',
+      90: 'Last 90 days',
+      365: 'Last year',
+      0: 'All history',
+    },
+    choiceDescription:
+      'How much history Nocturne imports the first time. A shorter range is imported sooner. To add older history later, run an import with a date range from Move from Nightscout in Settings.',
   },
 
   // Glooko-specific
@@ -291,11 +315,6 @@ export const connectorPropertyMeta = {
     description: 'How many days back each sync reaches',
     category: 'Sync',
   },
-  LastFullWalkAt: {
-    label: 'Last full walk',
-    description: 'When the diary was last read back to its first entry',
-    category: 'Advanced',
-  },
 
   // CareLink-specific
   CountryCode: {
@@ -324,6 +343,12 @@ export const connectorPropertyMeta = {
     label: 'Ignore zero-unit basal',
     description: 'Skip basal entries that resolve to a near-zero rate',
     category: 'Advanced',
+  },
+  TimeZoneId: {
+    label: 'Pump time zone',
+    description:
+      'The IANA time zone of the pump clock, for example America/Los_Angeles. Daylight saving time changes apply automatically. If you leave this empty, the timezone offset applies. If that is 0 too, your Timezone history applies. If you have no history, your Timezone setting applies.',
+    category: 'General',
   },
   // OAuth and Webhooks
   AccessToken: {
@@ -366,7 +391,7 @@ export const connectorPropertyMeta = {
   GlucoseProcessing: {
     label: 'Glucose processing',
     description: 'How the connector labels its glucose readings (smoothed or unsmoothed)',
-    category: 'General',
+    category: 'Advanced',
   },
 } satisfies Record<string, PropertyMeta>;
 

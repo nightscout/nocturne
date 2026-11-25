@@ -1,12 +1,14 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import Check from "@lucide/svelte/icons/check";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { FormError } from "#lib/forms/index.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import CreateInviteCard from "#lib/components/members/CreateInviteCard.svelte";
   import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
   import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
@@ -27,6 +29,7 @@
     type SharingAudienceId,
   } from "./audiences.svelte";
 
+  const handedOff = $derived(page.data.isHandedOffSession === true);
   const hubQuery = getSetupHub();
   const relationshipQuery = getPatientRelationship();
   const rolesQuery = getRoles();
@@ -98,7 +101,9 @@
       </p>
     </div>
 
-    {#if ownerChoices.length}
+    {#if handedOff}
+      <SignInGate reason="Sign in again to make an invite link." />
+    {:else if ownerChoices.length}
       <CreateInviteCard
         roles={rolesQuery.current ?? []}
         roleChoices={ownerChoices}
@@ -161,7 +166,9 @@
 
   {#each audiences.filter((a) => chosen.includes(a.id)) as audience (audience.id)}
     <section class="flex flex-col gap-3" data-testid="sharing-flow-{audience.id}">
-      {#if audience.id === "family"}
+      {#if audience.id === "family" && handedOff}
+        <SignInGate reason="Sign in again to make an invite link." />
+      {:else if audience.id === "family"}
         <CreateInviteCard
           roles={rolesQuery.current ?? []}
           roleChoices={roleChoices}
@@ -169,14 +176,14 @@
           onCancel={() => close("family")}
         />
       {:else if audience.id === "temporary"}
-        <GuestLinksSection onCreated={shared} />
+        <GuestLinksSection signInRequired={handedOff} onCreated={shared} />
       {:else if audience.id === "public"}
         <p class="text-sm leading-relaxed text-muted-foreground">
           The link stays off until you turn it on. Once it is on, the card spells out exactly what
           the link shows, and it shows only the last 24 hours unless you choose all history. Anyone
           who gets hold of the link can open it, so send it only to people you trust.
         </p>
-        <PublicAccessCard onEnabled={shared} />
+        <PublicAccessCard signInRequired={handedOff} onEnabled={shared} />
       {:else if audience.id === "just-me"}
         <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
           <p class="text-sm text-muted-foreground">

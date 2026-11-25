@@ -60,7 +60,7 @@ public static class DemoLifestyleSeeds
         var dayNumber = (int)(localDay.Date.Ticks / TimeSpan.TicksPerDay);
         var drift = 1.2 * Math.Sin(dayNumber / 120.0 * 2 * Math.PI);
         var wobble = (DayScenarios.Roll(localDay, "weight", 13) - 6) * 0.1;
-        return Math.Round(77.5 + drift + wobble, 1);
+        return ScaledRounding.Round(77.5 + drift + wobble, 1);
     }
 
     /// <summary>
@@ -76,6 +76,9 @@ public static class DemoLifestyleSeeds
         DateTime? EndLocal,
         IReadOnlyDictionary<string, object>? Metadata = null);
 
+    /// <summary>The activity an exercise day's workout is named as, chosen per day.</summary>
+    private static readonly string[] Workouts = ["Running", "Cycling", "Swimming", "Strength training"];
+
     /// <summary>The timezone-timeline trip: NYC for five days, three weeks back.</summary>
     public const string TripTimezone = "America/New_York";
     public const int TripStartDaysAgo = 21;
@@ -84,6 +87,8 @@ public static class DemoLifestyleSeeds
     /// <summary>
     /// State spans for the backfill window: pump mode (Automatic, with weekly
     /// Manual windows and Exercise mode during workouts), the active profile,
+    /// the workout itself as an exercise span (what a fitness connector's activity
+    /// import writes, and what the day filters read as a day with exercise),
     /// workout overrides + temporary targets, illness spans on sick days, and
     /// the travel span matching the timezone-timeline trip.
     /// </summary>
@@ -107,6 +112,8 @@ public static class DemoLifestyleSeeds
                 var (workoutStart, workoutEnd) = DemoHealthDataGenerator.WorkoutWindowFor(day);
                 interruptions.Add((workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10), nameof(PumpModeState.Exercise)));
 
+                spans.Add(new SpanSeed(StateSpanCategory.Exercise,
+                    Workouts[DayScenarios.Roll(day, "workout-kind", Workouts.Length)], workoutStart, workoutEnd));
                 spans.Add(new SpanSeed(StateSpanCategory.Override, "Workout Mode",
                     workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10)));
                 spans.Add(new SpanSeed(

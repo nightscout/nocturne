@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Platform;
 
@@ -496,9 +497,11 @@ public class AlexaService : IAlexaService
         return Translate(
             "virtAsstStatus",
             request.Locale,
-            GlucoseUnits.Scale(
+            GlucoseUnits.FromMgdl(
                 latest.GlucoseMgdl(),
                 await _glucoseUnits.UsesMmolAsync(request.CancellationToken)
+                    ? GlucoseUnit.Mmol
+                    : GlucoseUnit.MgDl
             ),
             Translate(latest.Direction ?? "NONE", request.Locale),
             MomentRelativeTime.From(
@@ -770,7 +773,7 @@ public class AlexaService : IAlexaService
         var mgdl = Convert.ToDouble(delta["mgdl"], CultureInfo.InvariantCulture);
         var useMmol = await _glucoseUnits.UsesMmolAsync(request.CancellationToken);
         var display = useMmol
-            ? $"{(mgdl >= 0 ? "+" : string.Empty)}{GlucoseUnits.Scale(mgdl, true).ToString("F1", CultureInfo.InvariantCulture)}"
+            ? $"{(mgdl >= 0 ? "+" : string.Empty)}{GlucoseUnits.FromMgdl(mgdl, GlucoseUnit.Mmol).ToString("F1", CultureInfo.InvariantCulture)}"
             : (string)delta["display"];
 
         return Translate(

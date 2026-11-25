@@ -1,3 +1,18 @@
+import type {
+  AlertAcknowledgementOutcome,
+  AlertMetPoint,
+  AlertPayload as GeneratedAlertPayload,
+  ChatAcknowledgeRequest,
+  DirectoryCandidate as GeneratedDirectoryCandidate,
+  HeartbeatRequest,
+  MarkDeliveredRequest,
+  MarkFailedRequest,
+  PaginatedResponseOfSensorGlucose,
+  PendingDeliveryResponse,
+  PendingLinkResponse,
+  ActiveExcursionResponse,
+} from "@nocturne/api-client";
+
 /**
  * Minimal interface matching the NSwag-generated ApiClient shape, whose date-times
  * are ISO 8601 strings.
@@ -15,11 +30,11 @@ export interface BotApiClient {
       device?: string | null,
       source?: string | null,
       signal?: AbortSignal,
-    ): Promise<PaginatedSensorGlucose>;
+    ): Promise<PaginatedResponseOfSensorGlucose>;
   };
   alerts: {
     /** Null when the response body is empty or its status is unmapped. */
-    getActiveAlerts(signal?: AbortSignal): Promise<ActiveExcursion[] | null>;
+    getActiveAlerts(signal?: AbortSignal): Promise<ActiveExcursionResponse[] | null>;
     /**
      * Acknowledges as the member behind the chat link, never as the bot: the
      * API decides on that member's authority whether this stops the alert for
@@ -58,44 +73,18 @@ export interface BotApiClient {
       tenantSlug: string | null,
       source: "connect-slash" | "oauth2-finalize",
       signal?: AbortSignal,
-    ): Promise<{ token: string }>;
+    ): Promise<Required<PendingLinkResponse>>;
   };
   system: {
     heartbeat(request: HeartbeatRequest, signal?: AbortSignal): Promise<void>;
   };
 }
 
-interface PaginatedSensorGlucose {
-  data?: SensorGlucoseReading[];
-  pagination?: { limit?: number; offset?: number; total?: number };
-}
-
-export interface SensorGlucoseReading {
-  id?: string;
-  mgdl?: number;
-  mmol?: number;
-  direction?: string;
-  trend?: string;
-  trendRate?: number;
-  mills?: number;
-  timestamp?: string;
-}
-
-export interface ChatAcknowledgeRequest {
-  /** The chat account on the link, which the API checks against it. */
-  platform: string;
-  platformUserId: string;
-  /** Null addresses every active alert of the link's tenant. */
-  excursionId: string | null;
-  acknowledgedBy: string;
-}
-
 /**
- * Wire form of `AlertAcknowledgementOutcome` (Core): `acknowledged` stopped the
- * alert for everyone, `muted` for the linked member only, and `closed` means
- * it had already ended.
+ * `acknowledged` stopped the alert for everyone, `muted` for the linked member
+ * only, and `closed` means it had already ended.
  */
-export type AcknowledgementOutcome = "acknowledged" | "muted" | "closed";
+export type AcknowledgementOutcome = `${AlertAcknowledgementOutcome}`;
 
 /**
  * An `acknowledged` result names who the API recorded as acknowledging, which
@@ -109,70 +98,29 @@ export type AcknowledgementResult =
     }
   | { outcome: "muted" | "closed" };
 
-export interface ActiveExcursion {
-  id?: string;
-  ruleName?: string;
-  startedAt?: string;
-  acknowledgedAt?: string | null;
-  /** Set while the server holds the alert's notifications back; null once it lapses. */
-  snoozedUntil?: string | null;
-}
+/** A candidate as the app adapter hands it over: a field the API left out is filled with an empty value. */
+export type DirectoryCandidate = Required<GeneratedDirectoryCandidate>;
 
-export interface MarkDeliveredRequest {
-  platformMessageId?: string;
-  platformThreadId?: string;
-}
+/**
+ * The generated payload as the dispatch boundary hands it on. The three enum fields are plain
+ * strings, so a member this build does not know yet still reaches the card, which degrades it.
+ * The strings a card prints are present; the boundary refuses a payload without one.
+ */
+export type AlertPayload = Omit<GeneratedAlertPayload, "kind" | "alertType" | "severity" | "metBy"> & {
+  kind?: string;
+  alertType?: string;
+  severity: string;
+  metBy?: MetPoint[];
+} & Required<
+    Pick<GeneratedAlertPayload, "ruleName" | "readingTimestamp" | "excursionId" | "tenantId" | "subjectName">
+  >;
 
-export interface MarkFailedRequest {
-  error?: string;
-}
-
-export interface PendingDeliveryResponse {
-  id?: string;
-  alertInstanceId?: string;
-  channelType?: string;
-  destination?: string;
-  payload?: string;
-  createdAt?: string;
-  retryCount?: number;
-}
-
-export interface DirectoryCandidate {
-  id: string;
-  tenantId: string;
-  tenantSlug: string;
-  nocturneUserId: string;
-  label: string;
-  displayName: string;
-  /**
-   * The link a bare, label-less invocation resolves to. At most one of a
-   * platform user's links carries it (`ux_directory_user_one_default`).
-   */
-  isDefault: boolean;
-}
-
-export interface HeartbeatRequest {
-  platforms?: string[];
-  service?: string;
-}
-
-/** Wire form of `AlertRuleSeverity` (Core), which serialises as these lowercase names. */
-export type AlertSeverity = "critical" | "warning" | "info";
-
-export interface AlertPayload {
-  alertType: string;
-  ruleName: string;
-  glucoseValue: number | null;
-  trend: string | null;
-  trendRate: number | null;
-  readingTimestamp: string;
-  excursionId: string;
-  instanceId: string;
-  tenantId: string;
-  subjectName: string;
-  activeExcursionCount: number;
-  severity: AlertSeverity;
-}
+/** A met point with its enum fields as plain strings, as the payload's other enum fields are. */
+export type MetPoint = Omit<AlertMetPoint, "kind" | "curve" | "limitFact"> & {
+  kind?: string;
+  curve?: string;
+  limitFact?: string;
+};
 
 export interface AlertDispatchEvent {
   deliveryId: string;

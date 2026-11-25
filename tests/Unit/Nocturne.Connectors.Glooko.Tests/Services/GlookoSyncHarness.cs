@@ -1,7 +1,8 @@
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -11,8 +12,10 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -38,42 +41,23 @@ internal static class GlookoSyncHarness
         PublishKind? rejected = null,
         IConnectorPublisher? publisher = null,
         StaticGlookoTokenProvider? tokenProvider = null,
-        IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? clock = null) =>
+        IConnectorStateStore? state = null,
+        TimeProvider? clock = null,
+        TimeSpan? endpointPause = null,
+        IMealMatchLinker? mealMatchLinker = null,
+        ILogger<GlookoConnectorService>? logger = null) =>
         new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(clock), rejected, publisher,
-            cursorStore, clock);
+            state, clock, endpointPause ?? TimeSpan.Zero, mealMatchLinker, logger);
 }
 
-/// <summary>
-/// Remembers what the sync persists between runs, standing in for the tenant's stored cursors.
-/// </summary>
-internal sealed class FakeCursorStore : IConnectorSyncCursorStore
+/// <summary>How Glooko answers a request whose session has expired.</summary>
+public enum ExpiredSessionAnswer
 {
-    public Dictionary<string, ConnectorSyncCursor> Saved { get; } = new(StringComparer.Ordinal);
+    /// <summary>A 200 carrying the sign-in page the redirect lands on.</summary>
+    SignInPage,
 
-    /// <summary>Observes each write as it happens, for tests that care when a stamp lands.</summary>
-    public Action<string>? OnSet { get; init; }
-
-    public Task<ConnectorSyncCursor?> GetAsync(
-        string connectorName, string resource, CancellationToken ct = default) =>
-        Task.FromResult(Saved.TryGetValue(resource, out var cursor) ? cursor : null);
-
-    public Task SetAsync(
-        string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken ct = default)
-    {
-        Saved[resource] = cursor;
-        OnSet?.Invoke(resource);
-        return Task.CompletedTask;
-    }
-
-    public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
-
-    public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
-
-    public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
+    /// <summary>A 401.</summary>
+    Unauthorized,
 }
 
 /// <summary>
@@ -91,74 +75,152 @@ public enum PublishKind
 }
 
 /// <summary>
-/// Accepts every publish except the one under test, and records which publishes were reached.
+/// Accepts the publishes a Glooko sync reaches in <see cref="PublishKind"/> except the one under
+/// test, and records which were reached. Every other publisher member goes to the publisher the
+/// test supplied, or answers with the default of its return type when none was.
 /// </summary>
 internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
 {
-    private readonly PublishKind? _rejected;
-
     public RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
-        IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? clock = null)
+        IConnectorPublisher? publisher = null, IConnectorStateStore? state = null,
+        TimeProvider? clock = null, TimeSpan endpointPause = default,
+        IMealMatchLinker? mealMatchLinker = null,
+        ILogger<GlookoConnectorService>? logger = null)
+        : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected, state), clock,
+            endpointPause, mealMatchLinker, logger)
+    {
+    }
+
+    private RecordingGlookoConnectorService(
+        HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
+        TimeProvider? clock, TimeSpan endpointPause,
+        IMealMatchLinker? mealMatchLinker, ILogger<GlookoConnectorService>? logger)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            NullLogger<GlookoConnectorService>.Instance,
+            logger ?? NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             tokenProvider,
             publisher,
-            cursorStore: cursorStore,
-            timeProvider: clock)
+            mealMatchLinker: mealMatchLinker,
+            timeProvider: clock,
+            endpointPause: endpointPause)
     {
-        _rejected = rejected;
+        Published = publisher.Published;
     }
+
+    public List<PublishKind> Published { get; }
+}
+
+/// <summary>Keeps every formatted message a service logs.</summary>
+internal sealed class MessageLogger<T> : ILogger<T>
+{
+    public List<string> Messages { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+}
+
+/// <summary>
+/// Stands in for the tenant's publisher, recording the publishes <see cref="PublishKind"/> names.
+/// Its state store is the one the test supplied, else the inner publisher's, else an empty one.
+/// </summary>
+internal sealed class InterceptingPublisher(
+    IConnectorPublisher? inner, PublishKind? rejected, IConnectorStateStore? state = null) : IConnectorPublisher
+{
+    private static readonly Dictionary<string, PublishKind> Kinds = new()
+    {
+        [nameof(IMetadataPublisher.PublishStateSpansAsync)] = PublishKind.StateSpans,
+        [nameof(IMetadataPublisher.PublishProfileActivationsAsync)] = PublishKind.ProfileActivations,
+        [nameof(ITreatmentPublisher.PublishTempBasalsAsync)] = PublishKind.TempBasals,
+        [nameof(IDevicePublisher.PublishDeviceEventsAsync)] = PublishKind.DeviceEvents,
+        [nameof(IMetadataPublisher.PublishSystemEventsAsync)] = PublishKind.SystemEvents,
+        [nameof(IMetadataPublisher.PublishProfilesAsync)] = PublishKind.Profiles,
+    };
 
     public List<PublishKind> Published { get; } = [];
 
-    protected override Task<bool> PublishStateSpanDataAsync(
-        IEnumerable<StateSpan> stateSpans, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.StateSpans);
+    public bool IsAvailable => inner?.IsAvailable ?? true;
 
-    protected override Task<bool> PublishProfileActivationDataAsync(
-        IEnumerable<ProfileActivation> activations, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.ProfileActivations);
+    public IGlucosePublisher Glucose => Wrap(inner?.Glucose);
 
-    protected override Task<bool> PublishTempBasalDataAsync(
-        IEnumerable<TempBasal> records, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.TempBasals);
+    public ITreatmentPublisher Treatments => Wrap(inner?.Treatments);
 
-    protected override Task<bool> PublishDeviceEventDataAsync(
-        IEnumerable<DeviceEvent> records, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.DeviceEvents);
+    public IDevicePublisher Device => Wrap(inner?.Device);
 
-    protected override Task<bool> PublishSystemEventDataAsync(
-        IEnumerable<SystemEvent> systemEvents, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.SystemEvents);
+    public IMetadataPublisher Metadata => Wrap(inner?.Metadata);
 
-    protected override Task<bool> PublishProfileDataAsync(
-        IEnumerable<Profile> profiles, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) => Record(PublishKind.Profiles);
+    public IConnectorStateStore State { get; } = state ?? inner?.State ?? new InMemoryConnectorStateStore();
+
+    public int SkippedDeleted => inner?.SkippedDeleted ?? 0;
+
+    public int Refused => inner?.Refused ?? 0;
+
+    private T Wrap<T>(T? target) where T : class
+    {
+        var proxy = DispatchProxy.Create<T, Interceptor<T>>();
+        var interceptor = (Interceptor<T>)(object)proxy;
+        interceptor.Target = target;
+        interceptor.Owner = this;
+        return proxy;
+    }
 
     private Task<bool> Record(PublishKind kind)
     {
-        Published.Add(kind);
-        return Task.FromResult(kind != _rejected);
+        lock (Published) Published.Add(kind);
+        return Task.FromResult(kind != rejected);
+    }
+
+    public class Interceptor<T> : DispatchProxy where T : class
+    {
+        public T? Target { get; set; }
+
+        public InterceptingPublisher Owner { get; set; } = null!;
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod!.Name is { } name && Kinds.TryGetValue(name, out var kind))
+                return Owner.Record(kind);
+            if (Target is not null)
+                return targetMethod.Invoke(Target, args);
+
+            var returned = targetMethod.ReturnType;
+            if (returned.IsGenericType && returned.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                var inner = returned.GetGenericArguments()[0];
+                var value = inner.IsValueType ? Activator.CreateInstance(inner) : null;
+                return typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(inner).Invoke(null, [value]);
+            }
+
+            return returned == typeof(Task) ? Task.CompletedTask
+                : returned.IsValueType && returned != typeof(void) ? Activator.CreateInstance(returned)
+                : null;
+        }
     }
 }
 
 /// <summary>
-/// Issues a fixed session cookie and patient code, standing in for a completed Glooko login.
+/// Issues a fixed session cookie and patient code, standing in for a completed Glooko login, or
+/// refuses every sign-in when built to.
 /// </summary>
 internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 {
     /// <summary>How many logins the sync has driven; a second one is a re-authentication.</summary>
     public int AcquireCount { get; private set; }
 
-    private readonly TimeProvider _clock;
+    /// <summary>The session cookie the <paramref name="login"/>th login (from one) issues.</summary>
+    public static string CookieFor(int login) => $"_logbook-web_session=sess{login}";
 
-    public StaticGlookoTokenProvider(TimeProvider? clock = null)
+    private readonly TimeProvider _clock;
+    private readonly bool _refuses;
+
+    public StaticGlookoTokenProvider(TimeProvider? clock = null, bool refuses = false)
         : base(
             new HttpClient(),
             new ConnectorTokenCache(clock),
@@ -169,14 +231,21 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
             clock)
     {
         _clock = clock ?? TimeProvider.System;
+        _refuses = refuses;
     }
 
     protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         GlookoConnectorConfiguration config, CancellationToken cancellationToken)
     {
         AcquireCount++;
+        if (_refuses)
+        {
+            RecordSignInRefused();
+            return Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
+                (null, _clock.GetUtcNow().UtcDateTime, null));
+        }
 
-        const string cookie = "_logbook-web_session=sess";
+        var cookie = CookieFor(AcquireCount);
         var userData = JsonSerializer.Serialize(
             new GlookoUserData { User = new GlookoUserLogin { GlookoCode = GlookoSyncHarness.PatientCode } });
 
@@ -222,9 +291,21 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     Whether every broken path starts serving normally once a 403 has been issued — the account
 ///     state a re-authentication repairs, and what tells a retried pass apart from the first.
 /// </param>
+/// <param name="expiredFirstSession">
+///     How Glooko answers a request carrying the first login's cookie, standing in for a session that
+///     expired while it was cached. Null serves it like any other.
+/// </param>
 /// <param name="withHistoryMeals">
 ///     Whether the histories endpoint carries one meal (one food, 30g of carbs), which is what
 ///     switches on the V3 path's meal carbs and food entries.
+/// </param>
+/// <param name="withBolusAndGlucose">
+///     Whether each window carries one normal bolus with carbs and one CGM reading, on the V3 graph
+///     and on the V2 endpoints alike.
+/// </param>
+/// <param name="withGuidlessFoods">
+///     Whether the foods carry no Glooko guid: the V2 foods, and the food of the V3 history meal,
+///     whose name ends in a space, so its entry id is stored trimmed.
 /// </param>
 internal sealed class GlookoEndpointHandler(
     Func<int, int>? recordsPerWindow = null,
@@ -232,13 +313,23 @@ internal sealed class GlookoEndpointHandler(
     IReadOnlyCollection<string>? forbiddenPaths = null,
     IReadOnlyCollection<string>? malformedPaths = null,
     bool recoversAfterForbidden = false,
-    bool withHistoryMeals = false) : HttpMessageHandler
+    bool withHistoryMeals = false,
+    ExpiredSessionAnswer? expiredFirstSession = null,
+    bool withBolusAndGlucose = false,
+    bool withGuidlessFoods = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<(string Start, string End)> _windows = [];
     private readonly List<string> _requested = [];
     private readonly Lock _gate = new();
     private bool _forbiddenIssued;
+    private int _expiredRequests;
+
+    /// <summary>How many requests were answered as an expired session.</summary>
+    public int ExpiredRequests
+    {
+        get { lock (_gate) return _expiredRequests; }
+    }
 
     private const string DeviceSettingsTimestamp = "2026-01-10T00:00:00Z";
 
@@ -272,6 +363,21 @@ internal sealed class GlookoEndpointHandler(
             healed = recoversAfterForbidden && _forbiddenIssued;
         }
 
+        if (expiredFirstSession is { } answer
+            && request.Headers.TryGetValues("Cookie", out var cookies)
+            && cookies.Contains(StaticGlookoTokenProvider.CookieFor(1)))
+        {
+            lock (_gate) _expiredRequests++;
+            return Task.FromResult(answer == ExpiredSessionAnswer.Unauthorized
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "<!DOCTYPE html><html><head><title>Sign in | Glooko</title></head><body></body></html>",
+                        Encoding.UTF8, "text/html"),
+                });
+        }
+
         if (!healed && forbiddenPaths?.Any(forbidden => Matches(path, forbidden)) == true)
         {
             lock (_gate) _forbiddenIssued = true;
@@ -297,12 +403,14 @@ internal sealed class GlookoEndpointHandler(
             return Json(DeviceSettingsPayload());
 
         if (Matches(path, GlookoConstants.V3HistoriesPath))
-            return Json(withHistoryMeals ? HistoryMealsPayload : "{\"histories\":[]}");
+            return Json(withHistoryMeals
+                ? withGuidlessFoods ? GuidlessHistoryMealsPayload : HistoryMealsPayload
+                : "{\"histories\":[]}");
 
         var window = ResolveWindow(request.RequestUri?.Query ?? string.Empty);
 
         if (Matches(path, GlookoConstants.V3GraphDataPath))
-            return Json(GraphPayload(window));
+            return Json(GraphPayload(window, withBolusAndGlucose));
 
         if (Matches(path, GlookoConstants.SuspendBasalsPath))
             return Json(Records("suspendBasals", window,
@@ -316,14 +424,20 @@ internal sealed class GlookoEndpointHandler(
             return Json("{\"scheduledBasals\":[]}");
 
         if (Matches(path, GlookoConstants.NormalBolusesPath))
-            return Json("{\"normalBoluses\":[]}");
+            return Json(withBolusAndGlucose
+                ? Records("normalBoluses", window,
+                    at => $"{{\"timestamp\":\"{Iso(at)}\",\"insulinDelivered\":2.5,\"carbsInput\":30.0}}")
+                : "{\"normalBoluses\":[]}");
 
         if (Matches(path, GlookoConstants.CgmReadingsPath))
-            return Json("{\"readings\":[]}");
+            return Json(withBolusAndGlucose
+                ? Records("readings", window,
+                    at => $"{{\"display_time\":\"{Iso(at)}\",\"bg_value\":12000.0}}")
+                : "{\"readings\":[]}");
 
         if (Matches(path, GlookoConstants.FoodsPath))
             return Json(Records("foods", window with { Records = 1 },
-                at => $"{{\"guid\":\"food_{at.Ticks}\",\"timestamp\":\"{Iso(at)}\",\"carbs\":30.0,\"name\":\"Toast\"}}"));
+                at => $"{{{(withGuidlessFoods ? string.Empty : $"\"guid\":\"food_{at.Ticks}\",")}\"timestamp\":\"{Iso(at)}\",\"carbs\":30.0,\"name\":\"Toast\"}}"));
 
         // MeterReadingsPath is a prefix of the CGM path's parent, so it is matched last.
         if (Matches(path, GlookoConstants.MeterReadingsPath))
@@ -362,12 +476,19 @@ internal sealed class GlookoEndpointHandler(
     /// One suspended basal per record (mapped to both a state span and a temp basal), one reservoir
     /// change (a device event) and one pump alarm (a system event).
     /// </summary>
-    private static string GraphPayload(Window window)
+    private static string GraphPayload(Window window, bool withBolusAndGlucose)
     {
         var series = string.Join(",",
             Property("suspendBasal", window, at => $"{{\"x\":{Unix(at)},\"duration\":1800,\"label\":\"Suspended\"}}"),
             Property("reservoirChange", window, at => $"{{\"x\":{Unix(at)},\"label\":\"Reservoir change\"}}"),
             Property("pumpAlarm", window, at => $"{{\"x\":{Unix(at)},\"alarmType\":\"OCCLUSION\",\"label\":\"Occlusion\"}}"));
+
+        if (withBolusAndGlucose)
+            series += "," + string.Join(",",
+                Property("deliveredBolus", window,
+                    at => $"{{\"x\":{Unix(at)},\"y\":2.5,\"label\":\"Normal\",\"data\":{{\"deliveredUnits\":2.5,\"carbsInput\":30.0}}}}"),
+                Property("cgmNormal", window,
+                    at => $"{{\"x\":{Unix(at)},\"y\":120.0,\"value\":12000}}"));
 
         return $"{{\"series\":{{{series}}}}}";
     }
@@ -390,6 +511,13 @@ internal sealed class GlookoEndpointHandler(
         {"histories":[{"type":"meals","guid":"meal-1","item":{
           "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
           "foods":[{"guid":"food-1","name":"Toast","carbs":30.0}]}}]}
+        """;
+
+    private const string GuidlessHistoryMealsPayload =
+        """
+        {"histories":[{"type":"meals","guid":"meal-1","item":{
+          "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
+          "foods":[{"name":"Toast ","carbs":30.0}]}}]}
         """;
 
     /// <summary>

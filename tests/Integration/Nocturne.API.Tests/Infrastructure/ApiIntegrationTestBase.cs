@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -203,30 +204,21 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Waits for a condition with timeout
-    /// </summary>
-    protected async Task<bool> WaitForEventAsync(Func<bool> condition, TimeSpan? timeout = null)
-    {
-        timeout ??= TimeSpan.FromSeconds(5);
-        var start = DateTime.UtcNow;
-
-        while (DateTime.UtcNow - start < timeout)
-        {
-            if (condition())
-                return true;
-
-            await Task.Delay(100);
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// Gets the connection string for the PostgreSQL database
     /// </summary>
     protected async Task<string?> GetPostgresConnectionStringAsync()
     {
         return await Fixture.GetConnectionStringAsync(ServiceNames.PostgreSql);
+    }
+
+    /// <summary>
+    /// An open connection to the PostgreSQL database, for the caller to dispose.
+    /// </summary>
+    protected async Task<NpgsqlConnection> OpenPostgresAsync()
+    {
+        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        return conn;
     }
 
     /// <summary>
@@ -236,8 +228,7 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
         string name = "Clamped Follower",
         Guid? tenantId = null)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (_, token) = await AuthTestHelpers.SeedHistoryClampedSubjectAsync(
             conn, tenantId ?? Fixture.TenantId, name);
         return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
@@ -254,6 +245,17 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
         return await action(scope.ServiceProvider);
     }
+
+    /// <summary>
+    /// Call before a v3 history read or a search by <c>srvModified</c> that follows a write; see
+    /// <see cref="HistorySettle"/>.
+    /// </summary>
+    protected Task SettleHistoryAsync() =>
+        WithTenantScopeAsync(async sp =>
+        {
+            await HistorySettle.UntilHorizonPassesAsync(sp);
+            return true;
+        });
 
     /// <summary>
     /// Logs a message to the test output

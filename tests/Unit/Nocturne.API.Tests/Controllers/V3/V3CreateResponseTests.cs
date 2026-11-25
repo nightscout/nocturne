@@ -60,6 +60,7 @@ public class V3CreateResponseTests
                 f.Select(x => { x.Id = StoredId; return x; }).ToList());
         var controller = WithContext(new FoodController(
             repository.Object,
+            FoodServices.Over(repository.Object),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance));
 
@@ -170,7 +171,6 @@ public class V3CreateResponseTests
         var controller = WithContext(new EntriesController(
             processing.Object,
             service.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance));
         return (controller, service);
     }

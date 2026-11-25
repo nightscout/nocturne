@@ -162,7 +162,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                 {
                     // Convert to UTC and set the ISO string
                     var utcDate = parsedDate.ToUniversalTime();
-                    document.CreatedAt = utcDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    document.CreatedAt = utcDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
 
                     // Set UTC offset in minutes (same as timezone offset)
                     document.UtcOffset = (int)parsedDate.Offset.TotalMinutes;
@@ -183,7 +183,7 @@ public class DocumentProcessingService : IDocumentProcessingService
             {
                 // Use existing Mills value to set CreatedAt
                 var dateFromMills = DateTimeOffset.FromUnixTimeMilliseconds(document.Mills);
-                document.CreatedAt = dateFromMills.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                document.CreatedAt = dateFromMills.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                 // The timestamp carried no zone; honor an offset the client sent directly
                 // (Nightscout entries may set utcOffset independently of date), else assume UTC.
                 document.UtcOffset ??= 0;
@@ -202,7 +202,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                     && UploaderTimestamp.TryParse(document.CreatedAt, out var zonelessDate)
                 )
                 {
-                    document.CreatedAt = zonelessDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    document.CreatedAt = zonelessDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                     document.Mills = zonelessDate.ToUnixTimeMilliseconds();
                     // The timestamp string carried no zone; honor a client-supplied offset, else assume UTC.
                     document.UtcOffset ??= 0;
@@ -211,7 +211,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                 {
                     // Convert to UTC and set the ISO string
                     var utcDate = parsedDate.ToUniversalTime();
-                    document.CreatedAt = utcDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    document.CreatedAt = utcDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
 
                     // Set UTC offset in minutes (same as timezone offset)
                     document.UtcOffset = (int)parsedDate.Offset.TotalMinutes;
@@ -231,7 +231,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                     _logger.LogWarning("Invalid timestamp format: {Timestamp}", document.CreatedAt);
                     // Set to current UTC time as fallback
                     var now = _time.GetUtcNow();
-                    document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                     document.Mills = now.ToUnixTimeMilliseconds();
                     document.UtcOffset = 0;
                 }
@@ -241,7 +241,7 @@ public class DocumentProcessingService : IDocumentProcessingService
             {
                 // Use existing Mills value to set CreatedAt
                 var dateFromMills = DateTimeOffset.FromUnixTimeMilliseconds(document.Mills);
-                document.CreatedAt = dateFromMills.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                document.CreatedAt = dateFromMills.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                 // mills fixes the instant (UTC); honor an independently-supplied utcOffset
                 // (e.g. AAPS/Loop send date + utcOffset with no created_at), else assume UTC.
                 document.UtcOffset ??= 0;
@@ -250,7 +250,7 @@ public class DocumentProcessingService : IDocumentProcessingService
             {
                 // No timestamp provided at all, set to current UTC time
                 var now = _time.GetUtcNow();
-                document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                 document.Mills = now.ToUnixTimeMilliseconds();
                 document.UtcOffset = 0;
             }
@@ -264,7 +264,7 @@ public class DocumentProcessingService : IDocumentProcessingService
             );
             // Fallback to current UTC time
             var now = _time.GetUtcNow();
-            document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            document.CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             document.Mills = now.ToUnixTimeMilliseconds();
             document.UtcOffset = 0;
         }

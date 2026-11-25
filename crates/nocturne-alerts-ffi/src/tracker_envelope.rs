@@ -12,7 +12,7 @@ use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, Transition,
 };
 
-use crate::envelope::{WireTracker, ok, one, read_request, tracker_json};
+use crate::envelope::{WireTracker, ok, read_request, tracker_json};
 
 /// The tracker is per rule; the calls carry one rule's state, so any fixed
 /// key serves.
@@ -20,8 +20,6 @@ const RULE: Uuid = Uuid::nil();
 
 #[derive(Deserialize)]
 struct WireConfig {
-    #[serde(default = "one")]
-    confirmation_readings: i32,
     #[serde(default)]
     hysteresis_minutes: i32,
 }
@@ -29,7 +27,6 @@ struct WireConfig {
 impl From<&WireConfig> for TrackerRuleConfig {
     fn from(c: &WireConfig) -> Self {
         TrackerRuleConfig {
-            confirmation_readings: c.confirmation_readings,
             hysteresis_minutes: c.hysteresis_minutes,
         }
     }

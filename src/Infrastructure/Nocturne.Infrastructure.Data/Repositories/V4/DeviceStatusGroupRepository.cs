@@ -6,6 +6,7 @@ using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -86,7 +87,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.IncludingDeleted(ctx);
-        var since = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var since = (cursorMills + 1).ToUtcDateTime();
         var horizon = await HistoryHorizon.GetAsync(ctx, _logger, ct) ?? DateTime.MaxValue;
 
         // A status's rows are written together, so a quarter more rows than the page usually settles
@@ -166,7 +167,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     }
 
     private static DateTime Millisecond(DateTime stamp) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(stamp.ToMills()).UtcDateTime;
+        stamp.ToMills().ToUtcDateTime();
 
     private static IEnumerable<AnchorRow> Ordered(IEnumerable<AnchorRow> anchors, bool descending) =>
         descending
@@ -237,11 +238,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         if (device != null)
             return arms;
 
-        var extrasInWindow = extras;
-        if (from.HasValue) extrasInWindow = extrasInWindow.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) extrasInWindow = extrasInWindow.Where(e => e.Timestamp <= to.Value);
-
-        arms.Add(extrasInWindow
+        arms.Add(extras.InWindow(e => e.Timestamp, from, to)
             .Where(e => !aps.Any(a => a.CorrelationId == e.CorrelationId && (a.DeletedAt == null || e.DeletedAt != null))
                 && !pumps.Any(p => p.CorrelationId == e.CorrelationId && (p.DeletedAt == null || e.DeletedAt != null))
                 && !uploaders.Any(u => u.CorrelationId == e.CorrelationId && (u.DeletedAt == null || e.DeletedAt != null)))

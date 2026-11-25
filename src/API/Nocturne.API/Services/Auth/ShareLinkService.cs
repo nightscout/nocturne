@@ -92,6 +92,7 @@ public sealed class ShareLinkService : IShareLinkService
     private readonly ISecretEncryptionService _secrets;
     private readonly ILogger<ShareLinkService> _logger;
     private readonly string _baseDomain;
+    private readonly IAccountLinkRoute _linkRoute;
 
     public ShareLinkService(
         INocturneDbContextFactory contexts,
@@ -102,7 +103,8 @@ public sealed class ShareLinkService : IShareLinkService
         PublicAccessCacheService publicAccessCache,
         ISecretEncryptionService secrets,
         ILogger<ShareLinkService> logger,
-        IOptions<BaseDomainOptions> baseDomain)
+        IOptions<BaseDomainOptions> baseDomain,
+        IAccountLinkRoute linkRoute)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
@@ -113,6 +115,7 @@ public sealed class ShareLinkService : IShareLinkService
         _secrets = secrets;
         _logger = logger;
         _baseDomain = baseDomain.Value.BaseDomain;
+        _linkRoute = linkRoute;
     }
 
     public async Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default)
@@ -141,7 +144,7 @@ public sealed class ShareLinkService : IShareLinkService
     {
         await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
         var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
         if (member is null)
             throw new InvalidOperationException("Public subject membership not found");
@@ -180,7 +183,7 @@ public sealed class ShareLinkService : IShareLinkService
     {
         await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
         var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
         var oldTokenHash = tenant.ShareTokenHash;
         var now = DateTime.UtcNow;
@@ -226,7 +229,7 @@ public sealed class ShareLinkService : IShareLinkService
 
         await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
         var (tenant, member) = await ReadAsync(tenants, members, tenantId, ct);
         if (member is null)
             throw new InvalidOperationException("Public subject membership not found");

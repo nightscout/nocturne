@@ -8,6 +8,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -184,6 +185,34 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
+    public async Task BroadcastAlertResolvedToHomeAssistantAsync_SendsOnlyToTheNamedInstancesGroups()
+    {
+        IReadOnlyList<string>? groups = null;
+        _mockHaClients
+            .Setup(x => x.Groups(It.IsAny<IReadOnlyList<string>>()))
+            .Callback<IReadOnlyList<string>>(g => groups = g)
+            .Returns(_mockHaProxy.Object);
+        var resolved = new AlertResolvedEvent
+        {
+            TenantId = Guid.NewGuid(),
+            ExcursionId = Guid.NewGuid(),
+            AlertRuleId = Guid.NewGuid(),
+            RuleName = "Urgent Low",
+            ResolvedAt = DateTime.UtcNow,
+            Reason = Nocturne.Core.Models.Alerts.ExcursionCloseReason.Manual,
+        };
+
+        await _service.BroadcastAlertResolvedToHomeAssistantAsync(resolved, ["kitchen-ha"]);
+
+        groups.Should().Equal(TenantAwareHub.FormatTenantGroup("00000000-0000-0000-0000-000000000001", "ha:kitchen-ha"));
+        _mockHaClients.Verify(x => x.Group(It.IsAny<string>()), Times.Never, "no instance it did not reach hears of it");
+        _mockAlertClients.Verify(x => x.Group(It.IsAny<string>()), Times.Never);
+        _mockHaProxy.Verify(
+            x => x.SendCoreAsync("alert_resolved", It.Is<object[]>(a => ReferenceEquals(a[0], resolved)), default),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task BroadcastHomeAssistantGlucoseAsync_SendsGlucoseReadingToTenantHomeAssistantGroup()
     {
         var reading = new GlucoseReadingEvent { Readings = [new SensorGlucose { Mgdl = 120 }] };
@@ -195,7 +224,7 @@ public class SignalRBroadcastServiceTests
         _mockHaProxy.Verify(
             x => x.SendCoreAsync(
                 "glucose_reading",
-                It.Is<object[]>(args => args.Length == 1 && args[0] == reading),
+                It.Is<object[]>(args => args.Length == 1 && ReferenceEquals(args[0], reading)),
                 default),
             Times.Once);
     }
@@ -454,7 +483,7 @@ public class SignalRBroadcastServiceTests
                     LogLevel.Error,
                     It.IsAny<EventId>(),
                     It.Is<It.IsAnyType>(
-                        (v, t) => v.ToString()!.Contains("Error broadcasting storage create event")
+                        (v, t) => v!.ToString()!.Contains("Error broadcasting storage create event")
                     ),
                     It.IsAny<Exception?>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()
@@ -738,5 +767,92 @@ public class SignalRBroadcastServiceTests
 
         sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha:ha-instance", "alert_dispatch"));
         sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", "alert_dispatch"));
+    }
+
+    public enum BroadcastFailure
+    {
+        SendFails,
+        HubUnreachable,
+        NoTenant,
+    }
+
+    public static TheoryData<string, BroadcastFailure> EveryBroadcastMethod()
+    {
+        var data = new TheoryData<string, BroadcastFailure>();
+        foreach (var method in typeof(ISignalRBroadcastService).GetMethods())
+        {
+            foreach (var failure in Enum.GetValues<BroadcastFailure>())
+                data.Add(method.Name, failure);
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// Callers do not wrap a broadcast, so every method of the interface must swallow a failure,
+    /// whether the send fails, the hub cannot hand out its clients, or the scope has no tenant. It
+    /// reflects over the
+    /// interface so a method added without a catch fails here.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryBroadcastMethod))]
+    public async Task EveryBroadcastMethod_SwallowsAHubFailure(string methodName, BroadcastFailure failure)
+    {
+        var (service, sends) = ServiceOverFailingHubs(failure);
+        var method = typeof(ISignalRBroadcastService).GetMethod(methodName)!;
+        var arguments = method.GetParameters().Select(p => ArgumentFor(p.ParameterType)).ToArray();
+
+        var act = () => (Task)method.Invoke(service, arguments)!;
+
+        await act.Should().NotThrowAsync();
+        if (failure == BroadcastFailure.SendFails)
+            sends[0].Should().BeGreaterThan(0, "the method must reach a hub, or this proves nothing");
+    }
+
+    private static (SignalRBroadcastService Service, int[] Sends) ServiceOverFailingHubs(BroadcastFailure failure)
+    {
+        var sends = new int[1];
+        var proxy = new Mock<ISingleClientProxy>();
+        proxy
+            .Setup(p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), It.IsAny<CancellationToken>()))
+            .Callback(() => sends[0]++)
+            .ThrowsAsync(new InvalidOperationException("hub down"));
+
+        IHubContext<THub> Hub<THub>() where THub : Hub
+        {
+            var clients = new Mock<IHubClients>();
+            clients.Setup(c => c.Group(It.IsAny<string>())).Returns(proxy.Object);
+            clients.Setup(c => c.Groups(It.IsAny<IReadOnlyList<string>>())).Returns(proxy.Object);
+            clients.Setup(c => c.Client(It.IsAny<string>())).Returns(proxy.Object);
+
+            var hub = new Mock<IHubContext<THub>>();
+            if (failure == BroadcastFailure.HubUnreachable)
+                hub.SetupGet(h => h.Clients).Throws(new InvalidOperationException("hub down"));
+            else
+                hub.SetupGet(h => h.Clients).Returns(clients.Object);
+            return hub.Object;
+        }
+
+        var service = new SignalRBroadcastService(
+            Hub<DataHub>(),
+            Hub<AlarmHub>(),
+            Hub<ConfigHub>(),
+            Hub<AlertHub>(),
+            Hub<HomeAssistantHub>(),
+            Hub<OverviewHub>(),
+            failure == BroadcastFailure.NoTenant ? new Mock<ITenantAccessor>().Object : MockTenantAccessor.Create().Object,
+            Options.Create(new JsonHubProtocolOptions()),
+            NullLogger<SignalRBroadcastService>.Instance);
+        return (service, sends);
+    }
+
+    private static object? ArgumentFor(Type type)
+    {
+        if (type == typeof(string)) return "value";
+        if (type == typeof(object)) return new object();
+        if (type == typeof(IReadOnlyCollection<string>)) return new[] { "instance" };
+        if (type.IsValueType) return Activator.CreateInstance(type);
+        if (type.IsAbstract) throw new NotSupportedException($"Teach ArgumentFor to build a {type}.");
+        return Activator.CreateInstance(type);
     }
 }

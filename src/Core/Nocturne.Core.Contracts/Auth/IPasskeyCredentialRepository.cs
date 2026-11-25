@@ -11,6 +11,15 @@ public interface IPasskeyCredentialRepository
     /// <summary>Stores a passkey and returns its id.</summary>
     Task<Guid> CreateAsync(NewPasskeyCredential credential, CancellationToken ct);
 
+    /// <summary>
+    /// Stores the first-run setup owner's passkey as the first credential store, which claims the
+    /// setup: only while <paramref name="tenantId"/>'s setup owner record
+    /// (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>) names the passkey's subject,
+    /// ending the record in the same transaction. Returns the passkey's id, or null, with nothing
+    /// stored, when the record no longer names that subject because another completion claimed it.
+    /// </summary>
+    Task<Guid?> CreateForSetupOwnerAsync(Guid tenantId, NewPasskeyCredential credential, CancellationToken ct);
+
     /// <summary>The passkey whose authenticator id is <paramref name="credentialId"/>, with its holder; null when there is none.</summary>
     Task<StoredPasskey?> FindByCredentialIdAsync(byte[] credentialId, CancellationToken ct);
 

@@ -95,13 +95,13 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
     }
 
     [Fact]
-    public async Task A_history_clamped_member_is_analysed_over_its_last_24_hours_whatever_it_asks_for()
+    public async Task A_history_clamped_member_is_analysed_over_the_part_of_its_range_in_the_last_24_hours()
     {
         await SeedProfileAsync("Australia/Sydney");
         using var clamped = await CreateHistoryClampedClientAsync();
         var now = DateTime.UtcNow;
 
-        var body = await GetOkAsync(clamped, Query($"{Week}&compare=previous"));
+        var body = await GetOkAsync(clamped, Query($"{RecentDays(3)}&compare=previous"));
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
         body.GetProperty("primaryRange").GetProperty("from").GetDateTime().ToUniversalTime()
@@ -124,7 +124,7 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
     }
 
     [Fact]
-    public async Task A_share_gets_its_reason_and_no_curves()
+    public async Task A_share_gets_the_tenants_clock_and_no_curves()
     {
         await SeedProfileAsync("Australia/Sydney");
         await SeedWeekAsync(WeekStart, predicted: 130);
@@ -132,7 +132,7 @@ public class LoopAnalysisPredictionAccuracyIntegrationTests(ApiIntegrationTestFi
 
         var body = await GetOkAsync(share, Query(Week));
 
-        body.GetProperty("timeZoneUnavailableReason").GetString().Should().Be("Share");
+        Absent(body, "timeZoneUnavailableReason").Should().BeTrue();
         body.GetProperty("primary").GetProperty("curves").GetArrayLength().Should().Be(0);
     }
 

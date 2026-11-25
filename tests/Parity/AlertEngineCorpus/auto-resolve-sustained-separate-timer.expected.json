@@ -16,8 +16,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "timer_ops": [
             {
@@ -44,9 +43,15 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
-          }
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "auto_resolve",
+              "at": "2026-01-05T12:05:00Z"
+            }
+          ]
         }
       ]
     },
@@ -65,14 +70,14 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T12:10:00Z"
           },
           "timer_ops": [
             {
               "op": "clear",
-              "path": "sustained"
+              "path": "sustained",
+              "at": "2026-01-05T12:10:00Z"
             },
             {
               "op": "set",
@@ -98,10 +103,16 @@
           "transition": "none",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T12:10:00Z"
-          }
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-01-05T12:15:00Z"
+            }
+          ]
         }
       ]
     },
@@ -119,10 +130,16 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
-          "auto_resolved": true
+          "auto_resolved": true,
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-01-05T12:20:00Z"
+            }
+          ]
         }
       ]
     }

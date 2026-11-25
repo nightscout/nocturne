@@ -23,9 +23,8 @@ public class ProfileActivationRepository
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<ProfileActivationRepository> logger,
-        IV4RecordBroadcaster<ProfileActivation>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 
@@ -97,8 +96,8 @@ public class ProfileActivationRepository
 
         var wanted = ids.ToList();
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.ProfileActivations.IgnoreQueryFilters().AsNoTracking()
-            .Where(e => e.TenantId == ctx.TenantId && wanted.Contains(e.Id))
+        var entities = await ctx.ProfileActivations.IncludingDeleted().AsNoTracking()
+            .Where(e => wanted.Contains(e.Id))
             .ToListAsync(ct);
         return entities.Select(ProfileActivationMapper.ToDomainModel).ToList();
     }

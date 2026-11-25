@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 
@@ -16,7 +17,7 @@ public class OpenApsService : IOpenApsService
             return null;
 
         return treatments
-            .Where(treatment => treatment.EventType == "OpenAPS Offline")
+            .Where(treatment => treatment.EventType == TreatmentTypes.OpenApsOffline)
             .Where(treatment =>
             {
                 var eventTime = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).DateTime;

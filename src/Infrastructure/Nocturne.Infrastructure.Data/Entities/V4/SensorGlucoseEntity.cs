@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -10,8 +11,27 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensorGlucose
 /// </summary>
 [Table("sensor_glucose")]
-public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity
+public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IDuplicateFlagged, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("is_duplicate")]
+    public bool IsDuplicate { get; set; }
+
+    /// <summary>
+    /// Whether another stream won this reading's bucket (<see cref="Core.Models.V4.CanonicalGlucoseStream"/>),
+    /// so canonical reads leave it out. Meaningful on visible rows only (live, not a duplicate); written
+    /// only by <see cref="Extensions.GlucoseStreamFlags"/>.
+    /// </summary>
+    [AuditIgnored]
+    [Column("is_secondary_stream")]
+    public bool IsSecondaryStream { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// FK to the patient's registered device record (resolved at ingest time)
     /// </summary>
@@ -24,7 +44,7 @@ public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevi
     /// timezone re-correction can move a reading's timestamp without duplicating it.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>

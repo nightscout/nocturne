@@ -16,6 +16,7 @@ import Footprints from "@lucide/svelte/icons/footprints";
 import Gauge from "@lucide/svelte/icons/gauge";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 import Layers from "@lucide/svelte/icons/layers";
+import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
 import Moon from "@lucide/svelte/icons/moon";
 import PieChart from "@lucide/svelte/icons/chart-pie";
 import Repeat from "@lucide/svelte/icons/repeat";
@@ -25,7 +26,7 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import Utensils from "@lucide/svelte/icons/utensils";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Target from "@lucide/svelte/icons/target";
-import SiteChangeIcon from "#lib/components/icons/SiteChangeIcon.svelte";
+import { SiteChangeIcon } from "@nocturne/charts/icons";
 import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
 
 export interface ReportItem {
@@ -92,12 +93,117 @@ export function estimatedA1cTitle(): string {
   return `Estimated ${a1cLabel()}`;
 }
 
+const ENGLISH_REPORT_KEYWORDS = {
+  executiveSummary: ["overview", "summary", "report card", "snapshot"],
+  agp: ["ambulatory glucose profile", "percentiles", "target range"],
+  glucoseDistribution: ["spread"],
+  dataQuality: ["compression", "signal", "sensor", "rejected uploads"],
+  ehba1c: ["a1c", "hba1c", "glycated hemoglobin"],
+  custom: ["custom", "saved", "builder", "report builder"],
+  yearOverview: ["annual", "yearly", "12 month", "heatmap"],
+  readings: ["glucose readings", "blood sugar", "log", "history"],
+  dayInReview: ["daily", "today", "yesterday"],
+  weekToWeek: ["comparison", "trend", "weekly"],
+  comparison: ["compare", "date ranges", "diff"],
+  hourlyStats: ["hourly", "time of day", "best hours", "worst hours"],
+  steps: ["activity", "walking", "exercise", "movement"],
+  heartRate: ["pulse", "bpm", "cardio"],
+  sleep: ["overnight", "night time", "sleeping"],
+  treatments: ["bolus", "carbs", "corrections", "insulin"],
+  basalAnalysis: ["basal rate", "background insulin", "temp basal"],
+  insulinDelivery: ["tdd", "total daily dose", "basal bolus ratio"],
+  siteChangeImpact: ["infusion site", "cannula", "rotation", "set change"],
+  idp: ["insulin dosing profile", "daily insulin", "dose adjustment"],
+  battery: ["pump battery", "phone battery", "charge"],
+  loopDailyProfile: ["loop analysis", "loopalyzer", "closed loop", "aid", "smb", "temp basal", "iob", "cob"],
+  loopMealsAndEvents: ["loop analysis", "meal response", "corrections", "unannounced meals"],
+  loopPredictionAccuracy: ["loop analysis", "predictions", "forecast", "uam", "zt"],
+  loopHealth: ["loop analysis", "closed loop", "open loop", "limits", "sensitivity ratio"],
+  loopSettingsEvidence: ["loop analysis", "basal", "isf", "carb ratio", "profile settings"],
+} satisfies Record<string, string[]>;
+
+export type ReportKeywordKey = keyof typeof ENGLISH_REPORT_KEYWORDS;
+
+/**
+ * The other words a search finds a report by, in the current locale, keyed by the report. A search also matches
+ * the English words, which `ENGLISH_REPORT_KEYWORDS` keeps in step with these; "blood sugar" is only there, as
+ * {@link searchTermWords} explains, and so is "diff", a short form with nothing to translate. Abbreviations are
+ * written in capitals, as the interface writes them, so they share their translation with it; the search ignores case.
+ */
+export function reportKeywordWords(): Record<ReportKeywordKey, string[]> {
+  return {
+    // @wc-include
+    executiveSummary: ["overview", "summary", "report card", "snapshot"],
+    // @wc-include
+    agp: ["ambulatory glucose profile", "percentiles", "target range"],
+    // @wc-include
+    glucoseDistribution: ["spread"],
+    // @wc-include
+    dataQuality: ["compression", "signal", "sensor", "rejected uploads"],
+    // @wc-include
+    ehba1c: ["a1c", "hba1c", "glycated hemoglobin"],
+    // @wc-include
+    custom: ["custom", "saved", "builder", "report builder"],
+    // @wc-include
+    yearOverview: ["annual", "yearly", "12 month", "heatmap"],
+    // @wc-include
+    readings: ["glucose readings", "log", "history"],
+    // @wc-include
+    dayInReview: ["daily", "today", "yesterday"],
+    // @wc-include
+    weekToWeek: ["comparison", "trend", "weekly"],
+    // @wc-include
+    comparison: ["compare", "date ranges"],
+    // @wc-include
+    hourlyStats: ["hourly", "time of day", "best hours", "worst hours"],
+    // @wc-include
+    steps: ["activity", "walking", "exercise", "movement"],
+    // @wc-include
+    heartRate: ["pulse", "BPM", "cardio"],
+    // @wc-include
+    sleep: ["overnight", "night time", "sleeping"],
+    // @wc-include
+    treatments: ["bolus", "carbs", "corrections", "insulin"],
+    // @wc-include
+    basalAnalysis: ["basal rate", "background insulin", "temp basal"],
+    // @wc-include
+    insulinDelivery: ["TDD", "total daily dose", "basal bolus ratio"],
+    // @wc-include
+    siteChangeImpact: ["infusion site", "cannula", "rotation", "set change"],
+    // @wc-include
+    idp: ["insulin dosing profile", "daily insulin", "dose adjustment"],
+    // @wc-include
+    battery: ["pump battery", "phone battery", "charge"],
+    // @wc-include
+    loopDailyProfile: ["loop analysis", "loopalyzer", "closed loop", "AID", "SMB", "temp basal", "IOB", "COB"],
+    // @wc-include
+    loopMealsAndEvents: ["loop analysis", "meal response", "corrections", "unannounced meals"],
+    // @wc-include
+    loopPredictionAccuracy: ["loop analysis", "predictions", "forecast", "UAM", "ZT"],
+    // @wc-include
+    loopHealth: ["loop analysis", "closed loop", "open loop", "limits", "sensitivity ratio"],
+    // @wc-include
+    loopSettingsEvidence: ["loop analysis", "basal", "ISF", "carb ratio", "profile settings"],
+  };
+}
+
+/** Search words: the locale's, then the English ones it does not repeat. */
+export function withEnglishWords(translated: readonly string[], english: readonly string[]): string[] {
+  const found = [...translated, ...english];
+  return found.filter((word, i) => found.indexOf(word) === i);
+}
+
+/** A report's search words. */
+export function reportKeywords(key: ReportKeywordKey, translated: Partial<Record<ReportKeywordKey, string[]>>): string[] {
+  return withEnglishWords(translated[key] ?? [], ENGLISH_REPORT_KEYWORDS[key]);
+}
+
 /**
  * Built per call so the titles are read in the current locale: wuchale
  * translates strings inside a function on each call, and a module-level
  * constant only once.
  */
-export function reportCategories(): ReportCategory[] {
+export function reportCategories(words: Partial<Record<ReportKeywordKey, string[]>> = reportKeywordWords()): ReportCategory[] {
   return [
     {
       id: "overview",
@@ -109,7 +215,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Executive summary",
           description: "Time in range, average glucose and data completeness",
           href: "/reports/executive-summary",
-          keywords: ["overview", "summary", "report card", "snapshot"],
+          keywords: reportKeywords("executiveSummary", words),
           scopes: [READ.glucose, READ.reports],
           icon: Gauge,
           status: "available",
@@ -119,7 +225,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "AGP",
           description: "Your typical day of glucose, with percentile bands and time in range",
           href: "/reports/agp",
-          keywords: ["ambulatory glucose profile", "percentiles", "target range"],
+          keywords: reportKeywords("agp", words),
           scopes: [READ.glucose, READ.reports],
           icon: BarChart3,
           status: "available",
@@ -128,7 +234,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Glucose distribution",
           description: "Time spent in each glucose zone",
           href: "/reports/glucose-distribution",
-          keywords: ["spread"],
+          keywords: reportKeywords("glucoseDistribution", words),
           scopes: [READ.reports],
           icon: PieChart,
           status: "available",
@@ -137,7 +243,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Data quality",
           description: "Compression lows, signal integrity, CGM comparison and rejected uploads",
           href: "/reports/data-quality",
-          keywords: ["compression", "signal", "sensor", "rejected uploads"],
+          keywords: reportKeywords("dataQuality", words),
           scopes: [READ.glucose, READ.reports],
           icon: Layers,
           status: "available",
@@ -147,10 +253,20 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: a1cLabel(true),
           description: `How your ${a1cLabel(true)} has trended over the years`,
           href: "/reports/ehba1c",
-          keywords: ["a1c", "hba1c", "glycated hemoglobin"],
+          keywords: reportKeywords("ehba1c", words),
           scopes: [READ.glucose, READ.reports],
           icon: Activity,
           status: "available",
+        },
+        {
+          title: "Custom reports",
+          description: "Reports that you make from the charts and figures of your data",
+          href: "/reports/custom",
+          keywords: reportKeywords("custom", words),
+          scopes: [READ.reports],
+          icon: LayoutDashboard,
+          status: "available",
+          memberOnly: true,
         },
       ],
     },
@@ -164,7 +280,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Year overview",
           description: "Multi-year heatmap of your diabetes data",
           href: "/reports/year-overview",
-          keywords: ["annual", "yearly", "12 month", "heatmap"],
+          keywords: reportKeywords("yearOverview", words),
           scopes: [READ.glucose],
           icon: CalendarDays,
           status: "available",
@@ -174,7 +290,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "Readings",
           description: "Your glucose readings, one day at a time",
           href: "/reports/readings",
-          keywords: ["glucose readings", "blood sugar", "log", "history"],
+          keywords: reportKeywords("readings", words),
           scopes: [READ.glucose],
           icon: Calendar,
           status: "available",
@@ -183,7 +299,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Day in review",
           description: "Glucose and treatments for one day",
           href: "/reports/day-in-review",
-          keywords: ["daily", "today", "yesterday"],
+          keywords: reportKeywords("dayInReview", words),
           scopes: [READ.glucose, READ.treatments, READ.reports],
           icon: Clock,
           status: "available",
@@ -192,7 +308,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Week to week",
           description: "Compare your glucose patterns from week to week",
           href: "/reports/week-to-week",
-          keywords: ["comparison", "trend", "weekly"],
+          keywords: reportKeywords("weekToWeek", words),
           scopes: [READ.glucose, READ.reports],
           icon: Sunrise,
           status: "available",
@@ -201,7 +317,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Comparison",
           description: "Compare two date ranges side by side",
           href: "/reports/comparison",
-          keywords: ["compare", "date ranges", "diff"],
+          keywords: reportKeywords("comparison", words),
           scopes: [READ.reports],
           icon: ArrowLeftRight,
           status: "available",
@@ -210,7 +326,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Hourly patterns",
           description: "Which hours of the day spend the most and least time in range",
           href: "/reports/hourly-stats",
-          keywords: ["hourly", "time of day", "best hours", "worst hours"],
+          keywords: reportKeywords("hourlyStats", words),
           scopes: [READ.reports],
           icon: SunMoon,
           status: "available",
@@ -228,7 +344,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "Steps",
           description: "Step count patterns with a glucose overlay",
           href: "/reports/steps",
-          keywords: ["activity", "walking", "exercise", "movement"],
+          keywords: reportKeywords("steps", words),
           scopes: [READ.glucose, READ.stepCount],
           icon: Footprints,
           status: "available",
@@ -237,7 +353,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Heart rate",
           description: "Heart rate patterns with a glucose overlay",
           href: "/reports/heart-rate",
-          keywords: ["pulse", "bpm", "cardio"],
+          keywords: reportKeywords("heartRate", words),
           scopes: [READ.glucose, READ.heartRate],
           icon: HeartPulse,
           status: "available",
@@ -247,7 +363,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "Sleep",
           description: "Sleep patterns with a glucose overlay",
           href: "/reports/sleep",
-          keywords: ["overnight", "night time", "sleeping"],
+          keywords: reportKeywords("sleep", words),
           scopes: [READ.glucose, READ.sleep],
           icon: Moon,
           status: "available",
@@ -281,7 +397,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "Treatments",
           description: "View and edit your insulin doses and carb entries",
           href: "/reports/treatments",
-          keywords: ["bolus", "carbs", "corrections", "insulin"],
+          keywords: reportKeywords("treatments", words),
           scopes: [READ.glucose, READ.treatments, READ.devices, READ.reports],
           icon: FileText,
           status: "available",
@@ -291,7 +407,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "Basal analysis",
           description: "Basal insulin delivery by time of day, with percentile bands",
           href: "/reports/basal-analysis",
-          keywords: ["basal rate", "background insulin", "temp basal"],
+          keywords: reportKeywords("basalAnalysis", words),
           scopes: [READ.reports],
           icon: Layers,
           status: "available",
@@ -300,7 +416,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Insulin delivery",
           description: "Basal and bolus split, and total daily dose trends",
           href: "/reports/insulin-delivery",
-          keywords: ["tdd", "total daily dose", "basal bolus ratio"],
+          keywords: reportKeywords("insulinDelivery", words),
           scopes: [READ.reports],
           icon: PieChart,
           status: "available",
@@ -309,7 +425,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Site change impact",
           description: "How pump site changes affect your glucose",
           href: "/reports/site-change-impact",
-          keywords: ["infusion site", "cannula", "rotation", "set change"],
+          keywords: reportKeywords("siteChangeImpact", words),
           scopes: [READ.devices, READ.reports],
           icon: SiteChangeIcon,
           status: "available",
@@ -319,7 +435,7 @@ export function reportCategories(): ReportCategory[] {
           sidebarTitle: "IDP",
           description: "Standardized insulin and glucose summary",
           href: "/reports/idp",
-          keywords: ["insulin dosing profile", "daily insulin", "dose adjustment"],
+          keywords: reportKeywords("idp", words),
           scopes: [READ.treatments, READ.reports],
           icon: Syringe,
           status: "available",
@@ -329,7 +445,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Battery",
           description: "Device battery levels and charge cycles",
           href: "/reports/battery",
-          keywords: ["pump battery", "phone battery", "charge"],
+          keywords: reportKeywords("battery", words),
           scopes: [READ.devices],
           icon: BatteryFull,
           status: "available",
@@ -347,7 +463,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Daily profile",
           description: "Glucose, basal, loop corrections, IOB and COB at each time of day",
           href: "/reports/loop-analysis/daily-profile",
-          keywords: ["loop analysis", "loopalyzer", "closed loop", "aid", "smb", "temp basal", "iob", "cob"],
+          keywords: reportKeywords("loopDailyProfile", words),
           scopes: [READ.glucose, READ.treatments, READ.reports],
           icon: ChartLine,
           status: "available",
@@ -357,7 +473,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Meals and events",
           description: "Glucose and insulin before and after meals, corrections and other events",
           href: "/reports/loop-analysis/meals-and-events",
-          keywords: ["loop analysis", "meal response", "corrections", "unannounced meals"],
+          keywords: reportKeywords("loopMealsAndEvents", words),
           scopes: [READ.glucose, READ.treatments, READ.reports],
           icon: Utensils,
           status: "available",
@@ -367,7 +483,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Prediction accuracy",
           description: "The loop's glucose predictions compared with the readings that followed",
           href: "/reports/loop-analysis/prediction-accuracy",
-          keywords: ["loop analysis", "predictions", "forecast", "uam", "zt"],
+          keywords: reportKeywords("loopPredictionAccuracy", words),
           scopes: [READ.glucose, READ.treatments, READ.devices, READ.reports],
           icon: Target,
           status: "available",
@@ -377,7 +493,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Loop health",
           description: "How long the loop was closed, why it stopped and when it hit its limits",
           href: "/reports/loop-analysis/loop-health",
-          keywords: ["loop analysis", "closed loop", "open loop", "limits", "sensitivity ratio"],
+          keywords: reportKeywords("loopHealth", words),
           scopes: [READ.glucose, READ.treatments, READ.reports],
           icon: Repeat,
           status: "available",
@@ -387,7 +503,7 @@ export function reportCategories(): ReportCategory[] {
           title: "Settings evidence",
           description: "Your profile settings compared with what your data shows",
           href: "/reports/loop-analysis/settings-evidence",
-          keywords: ["loop analysis", "basal", "isf", "carb ratio", "profile settings"],
+          keywords: reportKeywords("loopSettingsEvidence", words),
           scopes: [READ.glucose, READ.treatments, READ.therapy, READ.reports],
           icon: SlidersHorizontal,
           status: "available",
@@ -434,11 +550,26 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
       title: "Sleep night report",
       description: "Sleep stages and overnight glucose for one night",
     },
+    "/reports/custom/new": {
+      title: "New custom report",
+      description: "Make a report from the charts and figures of your data",
+    },
+    "/reports/custom/[id]/edit": {
+      title: "Edit custom report",
+      description: "Change the blocks of a saved custom report",
+    },
+    "/reports/custom/[id]": {
+      title: "Custom report",
+      description: "A saved custom report, run on your current data",
+    },
   };
 }
 
 function subRouteKey(pathname: string): string {
-  return /^\/reports\/sleep\/[^/]+$/.test(pathname) ? "/reports/sleep/[date]" : pathname;
+  if (/^\/reports\/sleep\/[^/]+$/.test(pathname)) return "/reports/sleep/[date]";
+  if (/^\/reports\/custom\/[^/]+\/edit$/.test(pathname)) return "/reports/custom/[id]/edit";
+  if (/^\/reports\/custom\/[^/]+$/.test(pathname) && pathname !== "/reports/custom/new") return "/reports/custom/[id]";
+  return pathname;
 }
 
 /**

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "trend-bucket-matching",
-  "description": "the bucket matches only its exact wire name; a null context bucket is false; another case or an unknown configured bucket cannot be evaluated, so its rule is skipped",
+  "description": "the bucket matches only its exact wire name; a null context bucket is unknown; another case or an unknown configured bucket cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -10,7 +10,6 @@
       "condition_params": {
         "bucket": "falling_fast"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -21,7 +20,6 @@
       "condition_params": {
         "bucket": "FALLING_FAST"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -32,7 +30,6 @@
       "condition_params": {
         "bucket": "plummeting"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

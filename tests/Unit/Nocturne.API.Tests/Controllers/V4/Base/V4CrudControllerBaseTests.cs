@@ -33,7 +33,9 @@ public class TestRecord : IV4Record
 public class TestCreateRequest : IBulkUpsertRequest
 {
     public DateTimeOffset Timestamp { get; set; }
+    public int? UtcOffset { get; set; }
     public string? Device { get; set; }
+    public string? App { get; set; }
     public string? DataSource { get; set; }
     public string? SyncIdentifier { get; set; }
 }
@@ -53,14 +55,9 @@ public class TestCrudController(ITestRecordRepository repository)
 {
     public override string WriteScope => Scope.GlucoseReadWrite;
 
-    protected override V4BulkNaming BulkNaming => new("Test record", "record", "records");
+    protected override V4BulkNaming BulkNaming => new("Test record", "records");
 
-    protected override TestRecord MapCreateToModel(TestCreateRequest request) => new()
-    {
-        Timestamp = request.Timestamp.UtcDateTime,
-        Device = request.Device,
-        DataSource = request.DataSource,
-    };
+    protected override TestRecord MapCreateToModel(TestCreateRequest request) => new TestRecord().WithHeaderFrom(request);
 
     protected override TestRecord MapUpdateToModel(Guid id, TestUpdateRequest request, TestRecord existing) => new()
     {
@@ -142,7 +139,7 @@ public class V4CrudControllerBaseTests
         };
         _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(records);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         var result = await _controller.GetAll(null, null, 100, 0, "timestamp_desc", null, null);
@@ -191,7 +188,7 @@ public class V4CrudControllerBaseTests
     {
         _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
         await _controller.GetAll(null, null, 100, 0, "timestamp_asc", null, null);
@@ -306,7 +303,7 @@ public class V4CrudControllerBaseTests
 
         var result = await controller.Create(new TestCreateRequest { Timestamp = default });
 
-        Detail(result.Result).Should().Be("Timestamp must be set");
+        Detail(result.Result).Should().Be("Timestamp is required");
         controller.BeforeCreateCalls.Should().Be(0);
     }
 
@@ -320,7 +317,7 @@ public class V4CrudControllerBaseTests
 
         var result = await controller.Update(id, new TestUpdateRequest { Timestamp = default });
 
-        Detail(result.Result).Should().Be("Timestamp must be set");
+        Detail(result.Result).Should().Be("Timestamp is required");
         controller.BeforeUpdateCalls.Should().Be(0);
     }
 
@@ -335,7 +332,7 @@ public class V4CrudControllerBaseTests
             new TestCreateRequest { Timestamp = default },
         ]);
 
-        Detail(result.Result).Should().Be("Timestamp must be set on every record");
+        Detail(result.Result).Should().Be("Timestamp is required");
         controller.BeforeCreateCalls.Should().Be(0);
     }
 

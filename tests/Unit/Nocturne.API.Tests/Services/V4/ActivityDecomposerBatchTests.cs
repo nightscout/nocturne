@@ -1,18 +1,27 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.V4;
 
 public class ActivityDecomposerBatchTests : IDisposable
 {
+    private static readonly DateTimeOffset ReceivedAt = new(2026, 10, 29, 3, 4, 5, 678, TimeSpan.Zero);
+
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanRepository> _stateSpanRepoMock;
+    private readonly Mock<ISleepService> _sleepServiceMock;
     private readonly ActivityDecomposer _decomposer;
 
     public ActivityDecomposerBatchTests()
@@ -26,10 +35,19 @@ public class ActivityDecomposerBatchTests : IDisposable
                 It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<StateSpan> spans, CancellationToken _) => spans);
 
+        _sleepServiceMock = new Mock<ISleepService>();
+        _sleepServiceMock
+            .Setup(x => x.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SleepSession session, CancellationToken _) =>
+            {
+                session.Id = Guid.CreateVersion7().ToString();
+                return session;
+            });
+
         _decomposer = new ActivityDecomposer(
-            _context.AsFactory(),
+            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System),
             _stateSpanRepoMock.Object,
-            TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
+            _sleepServiceMock.Object, new FakeTimeProvider(ReceivedAt), NullLogger<ActivityDecomposer>.Instance);
     }
 
     public void Dispose()
@@ -209,6 +227,60 @@ public class ActivityDecomposerBatchTests : IDisposable
         result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
     }
 
+    [Theory]
+    [InlineData("sleep", SleepSessionType.Overnight)]
+    [InlineData("nap", SleepSessionType.Nap)]
+    public async Task DecomposeBatchAsync_RoutesSleepToTheSleepServiceAsASession(string type, SleepSessionType expected)
+    {
+        var activity = CreateRegularActivity("sl1", type);
+        activity.Duration = 420;
+
+        var result = await _decomposer.DecomposeBatchAsync([activity], WriteOrigin.Backfill);
+
+        _sleepServiceMock.Verify(
+            x => x.UpsertSessionAsync(
+                It.Is<SleepSession>(s => s.OriginalId == "sl1" && s.Type == expected
+                    && s.Source == ActivityStateSpanMapper.SleepSessionSource),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _stateSpanRepoMock.Verify(
+            x => x.CreateActivitiesAsStateSpansAsync(
+                It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        var stored = result.CreatedRecords.Should().ContainSingle().Which.Should().BeOfType<Activity>().Subject;
+        stored.Type.Should().Be(type);
+        stored.Mills.Should().Be(activity.Mills);
+        result.Wrote.Should().Equal(true);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_SleepTheUserDeleted_IsSkippedAndTheRestOfTheBatchIsStored()
+    {
+        _sleepServiceMock
+            .Setup(x => x.UpsertSessionAsync(It.Is<SleepSession>(s => s.OriginalId == "deleted"), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException("sleep session", "original id 'deleted'"));
+        var activities = new List<Activity>
+        {
+            CreateHeartRateActivity("hr1", 72),
+            CreateRegularActivity("deleted", "sleep"),
+            CreateRegularActivity("kept", "sleep"),
+            CreateRegularActivity("ex1", "exercise"),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill);
+
+        result.IsDeletedByUser(1).Should().BeTrue();
+        result.IsDeletedByUser(2).Should().BeFalse();
+        result.SkippedDeleted.Should().Be(1);
+        result.Wrote.Should().Equal(true, false, true, false);
+        result.CreatedRecords.OfType<Activity>().Select(a => a.Type).Should().Equal("sleep", "exercise");
+        _context.HeartRates.Should().ContainSingle();
+        _stateSpanRepoMock.Verify(
+            x => x.CreateActivitiesAsStateSpansAsync(
+                It.Is<IEnumerable<StateSpan>>(spans => spans.Count() == 1), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     #region NormalizeMills
 
     /// <summary>
@@ -237,17 +309,40 @@ public class ActivityDecomposerBatchTests : IDisposable
     [InlineData(
         """{"timestamp":-1,"timeStamp":"soon","created_at":"2026-05-28T20:26:44Z"}""",
         1_780_000_004_000, null)]
-    [InlineData(
-        """{"timeStamp":null,"created_at":null}""",
-        0, null)]
     public void NormalizeMills_TakesTheFirstUsableRung(string json, long expectedMills, int? expectedUtcOffset)
     {
         var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(json)!;
 
-        ActivityDecomposer.NormalizeMills(activity);
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
 
         activity.Mills.Should().Be(expectedMills);
         activity.UtcOffset.Should().Be(expectedUtcOffset);
+    }
+
+    [Theory]
+    [InlineData("""{}""")]
+    [InlineData("""{"timeStamp":null,"created_at":null}""")]
+    [InlineData("""{"created_at":"soon"}""")]
+    public void NormalizeMills_NoUsableTime_DatesTheActivityByReceipt(string json)
+    {
+        var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(json)!;
+
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
+
+        activity.Mills.Should().Be(ReceivedAt.ToUnixTimeMilliseconds());
+        activity.UtcOffset.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_HeartRateWithoutAnyTime_IsStoredAtReceipt()
+    {
+        var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(
+            """{"_id":"hr-no-time","type":"hr-bpm","bpm":64}""")!;
+
+        await _decomposer.DecomposeBatchAsync([activity], WriteOrigin.Backfill);
+
+        _context.HeartRates.Should().ContainSingle().Which.Timestamp
+            .Should().Be(ReceivedAt.UtcDateTime);
     }
 
     #endregion
@@ -400,7 +495,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void MapToHeartRate_XDripHeartRateWithoutId_KeysItByTimeAndKeepsItsType()
     {
         var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
-        ActivityDecomposer.NormalizeMills(activity);
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
 
         var heartRate = ActivityDecomposer.MapToHeartRate(activity);
 
@@ -429,7 +524,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     {
         var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
         activity.DataSource = "nightscout-connector";
-        ActivityDecomposer.NormalizeMills(activity);
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
 
         var heartRate = ActivityDecomposer.MapToHeartRate(activity);
 

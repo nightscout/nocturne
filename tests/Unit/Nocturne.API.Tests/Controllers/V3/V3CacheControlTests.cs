@@ -78,6 +78,7 @@ public class V3CacheControlTests
 
         var controller = new FoodController(
             foods.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {
@@ -101,7 +102,6 @@ public class V3CacheControlTests
         var controller = new EntriesController(
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = Context(),

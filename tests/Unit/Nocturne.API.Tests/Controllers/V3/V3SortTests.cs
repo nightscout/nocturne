@@ -47,7 +47,6 @@ public class V3SortTests
         new(
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = Context(queryString),
@@ -75,6 +74,7 @@ public class V3SortTests
     private static FoodController FoodControllerFor(Mock<IFoodRepository> foods, string queryString) =>
         new(
             foods.Object,
+            Mock.Of<IFoodService>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<FoodController>.Instance)
         {

@@ -14,11 +14,13 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for active alert state, history, and acknowledgement.
+/// Active alerts, alert history, and acknowledgement of alerts. Snooze an alert, record delivery
+/// outcomes, and list deliveries waiting to be sent.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -93,6 +95,7 @@ public class AlertsController : ControllerBase
             .AsNoTracking()
             .Include(e => e.AlertRule)
             .Include(e => e.Instances)
+            .OfCondition(includeTest: true)
             .Where(e => e.EndedAt == null)
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(ct);
@@ -106,12 +109,20 @@ public class AlertsController : ControllerBase
                 .ToHashSetAsync(ct)
             : new HashSet<Guid>();
 
+        var ruleIds = excursions.Select(e => e.AlertRuleId).ToList();
+        var holds = await db.AlertTrackerState
+            .AsNoTracking()
+            .Where(s => ruleIds.Contains(s.AlertRuleId) && s.HeldSince != null)
+            .Select(s => new Core.Models.HeldRuleState(s.AlertRuleId, s.HeldSince!.Value, s.UpdatedAt, s.HeldFacts, s.State))
+            .ToDictionaryAsync(s => s.AlertRuleId, AlertHold.Of, ct);
+
         var namesAcknowledger = NamesMembers();
         var receipts = await AlertReceiptService.ReadAsync(
             db, excursions.Select(e => e.Id).ToList(), ReceiptsVisibleOnlyFor(), ct);
         var now = DateTime.UtcNow;
         var result = excursions.Select(e => new ActiveExcursionResponse
         {
+            Hold = holds.GetValueOrDefault(e.AlertRuleId),
             Id = e.Id,
             AlertRuleId = e.AlertRuleId,
             RuleName = e.AlertRule?.Name ?? string.Empty,
@@ -146,7 +157,8 @@ public class AlertsController : ControllerBase
 
     /// <summary>
     /// Get paginated history of resolved excursions. Test fires are excluded
-    /// by default; pass <paramref name="includeTest"/> = true to include them.
+    /// by default; pass <paramref name="includeTest"/> = true to include them. An oversized
+    /// <c>pageSize</c> or <c>page</c> is clamped to the largest allowed value rather than rejected.
     /// </summary>
     /// <remarks>
     /// <paramref name="pageSize"/> is capped at <see cref="V4ReadLimits.MaxOrdinalPageSize"/> and
@@ -177,15 +189,11 @@ public class AlertsController : ControllerBase
         var query = db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
+            .OfCondition(includeTest)
             .Where(e => e.EndedAt != null && e.EndedAt <= now);
 
         if (alertRuleId.HasValue)
             query = query.Where(e => e.AlertRuleId == alertRuleId.Value);
-
-        // A test-fire produces an excursion whose only instance is IsTest=true.
-        // Filter by absence of any non-test instance to drop them.
-        if (!includeTest)
-            query = query.Where(e => e.Instances.Any(i => !i.IsTest));
 
         var ordered = query.OrderByDescending(e => e.EndedAt);
 
@@ -206,6 +214,11 @@ public class AlertsController : ControllerBase
                 e.AcknowledgedAt,
                 e.AcknowledgedBy,
                 IsTest = e.Instances.Any(i => i.IsTest) && !e.Instances.Any(i => !i.IsTest),
+                ResolutionReason = e.Instances
+                    .Where(i => i.ResolutionReason != null)
+                    .OrderBy(i => i.TriggeredAt)
+                    .Select(i => i.ResolutionReason)
+                    .FirstOrDefault(),
             })
             .ToListAsync(ct);
 
@@ -230,6 +243,7 @@ public class AlertsController : ControllerBase
                 AcknowledgedAt = e.AcknowledgedAt,
                 AcknowledgedBy = namesAcknowledger ? e.AcknowledgedBy : null,
                 IsTest = e.IsTest,
+                ResolutionReason = e.ResolutionReason,
                 Receipts = AlertReceiptResponse.From(receipts[e.Id]),
             }).ToList(),
         };
@@ -255,7 +269,9 @@ public class AlertsController : ControllerBase
     /// <summary>
     /// Record that the caller saw an alarm that is firing. It changes nothing about the alert: it
     /// is not an acknowledgement and mutes nothing, for the caller or anyone else, and recording it
-    /// again keeps the first. Members with an account see who recorded one, and when.
+    /// again keeps the first. Members with an account see who recorded one, and when. It is the one
+    /// write a public share link may make, when the link shares alerts; who recorded it comes from
+    /// the credential, not the request.
     /// </summary>
     /// <remarks>
     /// The one write a public share link may make. <see cref="RequireScopeAttribute"/> admits an
@@ -295,6 +311,7 @@ public class AlertsController : ControllerBase
         await using (var db = await _contextFactory.CreateAsync(ct))
         {
             open = await db.AlertExcursions.AsNoTracking()
+                .OfCondition(includeTest: true)
                 .Where(e => e.EndedAt == null)
                 .Select(e => e.Id)
                 .ToListAsync(ct);
@@ -318,7 +335,9 @@ public class AlertsController : ControllerBase
     /// <summary>
     /// Acknowledge a single alert excursion. A caller with <c>alerts.readwrite</c> acknowledges it
     /// for everyone; anyone else mutes it for themselves. The response says which applied.
-    /// Returns 404 when the excursion does not exist for the current tenant.
+    /// Returns 404 when the excursion does not exist for the current tenant. Also accepts
+    /// <c>device.notify</c>, which a registered client device and every member holding a permission
+    /// has, but not a guest link.
     /// </summary>
     /// <remarks>
     /// Accepts <see cref="Scope.DeviceNotify"/> as well as <see cref="Scope.AlertsReadWrite"/>:
@@ -347,6 +366,7 @@ public class AlertsController : ControllerBase
         await using var db = await _contextFactory.CreateAsync(ct);
         var exists = await db.AlertExcursions
             .AsNoTracking()
+            .OfCondition(includeTest: true)
             .AnyAsync(e => e.Id == excursionId, ct);
 
         if (!exists)
@@ -373,7 +393,8 @@ public class AlertsController : ControllerBase
     /// and re-notifies when the snooze lapses if it is still firing. Snoozing again replaces the
     /// window. Returns 409 when the instance is already resolved or has used the rule's
     /// <c>snooze.maxCount</c> (<see cref="Nocturne.API.Services.Alerts.SmartSnoozeConfig"/>), a count
-    /// shared with the sweep's smart-snooze extensions.
+    /// shared with the sweep's smart-snooze extensions. Also accepts <c>alerts.acknowledge</c>, which
+    /// a Nightscout token holding <c>notifications:*:ack</c> carries.
     /// </summary>
     /// <remarks>
     /// Accepts <see cref="Scope.AlertsAcknowledge"/> as well as <see cref="Scope.AlertsReadWrite"/>:
@@ -489,6 +510,12 @@ public class ActiveExcursionResponse
     public DateTime? HysteresisStartedAt { get; set; }
 
     /// <summary>
+    /// Set while the rule waits for missing data, so this alert is held open: since when, and the
+    /// facts it waits for. After 24 hours of it the alert closes (docs/alerts/engine-semantics.md §6.4).
+    /// </summary>
+    public AlertHold? Hold { get; set; }
+
+    /// <summary>
     /// Latest <see cref="ActiveInstanceResponse.SnoozedUntil"/> among the active instances; null
     /// when none is snoozed.
     /// </summary>
@@ -570,6 +597,13 @@ public class HistoryExcursionResponse
 
     /// <summary>True when every instance of this excursion was a test fire.</summary>
     public bool IsTest { get; set; }
+
+    /// <summary>
+    /// Why it closed, as <see cref="ExcursionCloseReasonExtensions.ToWireString"/> writes it:
+    /// <c>hysteresis</c>, <c>auto</c>, <c>manual</c>, <c>rule-disabled</c> or <c>hold-bound</c> (its
+    /// data had been missing for 24 hours); null when none was recorded.
+    /// </summary>
+    public string? ResolutionReason { get; set; }
 
     /// <inheritdoc cref="ActiveExcursionResponse.Receipts"/>
     public List<AlertReceiptResponse> Receipts { get; set; } = [];

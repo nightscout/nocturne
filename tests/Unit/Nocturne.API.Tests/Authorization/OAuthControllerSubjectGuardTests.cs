@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Middleware;
 using Nocturne.API.Models.OAuth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -188,6 +189,32 @@ public class OAuthControllerSubjectGuardTests
 
         RefusalOf(result, "GET /api/oauth/authorize").ErrorDescription
             .Should().Be("Could not determine authenticated user.");
+    }
+
+    [Fact]
+    public async Task An_inactive_caller_cannot_change_a_grant_and_nothing_is_updated()
+    {
+        var subjectId = Guid.CreateVersion7();
+        var tenantId = Guid.CreateVersion7();
+        var controller = CreateController(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
+            SubjectId = subjectId,
+            TenantId = tenantId,
+        });
+        new RequestMembership(subjectId, tenantId, null) { SubjectIsInactive = true }.StoreOn(controller.HttpContext);
+
+        var result = await controller.UpdateGrant(
+            Guid.CreateVersion7(), new UpdateGrantRequest { Scopes = [Scope.GlucoseRead] });
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        _grantService.Verify(
+            s => s.UpdateGrantAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<GrantScopeBounds>(), It.IsAny<string?>(),
+                It.IsAny<IEnumerable<string>?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     private static Task<ActionResult> Authorize(OAuthController controller) => controller.Authorize(

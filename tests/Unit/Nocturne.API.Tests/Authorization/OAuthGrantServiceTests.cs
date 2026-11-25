@@ -2,8 +2,17 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Extensions;
+using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -33,6 +42,9 @@ public class OAuthGrantServiceTests : IDisposable
     private readonly Guid _testTenantId = Guid.CreateVersion7();
     private readonly Guid _testClientEntityId = Guid.CreateVersion7();
     private readonly Guid _ownerSubjectId = Guid.CreateVersion7();
+    private static readonly IReadOnlySet<string> FullAccessCeiling = new HashSet<string> { Scope.FullAccess };
+
+    private static readonly GrantScopeBounds FullAccessBounds = new(FullAccessCeiling, FullAccessCeiling);
 
     public OAuthGrantServiceTests()
     {
@@ -62,13 +74,15 @@ public class OAuthGrantServiceTests : IDisposable
             });
     }
 
-    private OAuthGrantService CreateService(NocturneDbContext dbContext)
+    private OAuthGrantService CreateService(NocturneDbContext dbContext, TimeProvider? time = null)
     {
         return new OAuthGrantService(
             _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
             _mockClientService.Object,
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),
+            new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            time ?? TimeProvider.System,
             _mockLogger.Object);
     }
 
@@ -99,11 +113,14 @@ public class OAuthGrantServiceTests : IDisposable
 
     private async Task SeedSubjectAsync(NocturneDbContext db, Guid id, string name, string? email = null)
     {
-        db.Subjects.Add(new SubjectEntity
+        var subject = new SubjectEntity { Id = id, Name = name };
+        subject.SetEmail(email);
+        db.Subjects.Add(subject);
+        db.TenantMembers.Add(new TenantMemberEntity
         {
-            Id = id,
-            Name = name,
-            Email = email,
+            Id = Guid.CreateVersion7(),
+            TenantId = db.TenantId,
+            SubjectId = id,
         });
         await db.SaveChangesAsync();
     }
@@ -133,6 +150,17 @@ public class OAuthGrantServiceTests : IDisposable
         return id;
     }
 
+    /// <summary>A consent the way a device-code approval stages it, committed on its own unit.</summary>
+    private async Task<OAuthGrantInfo> StageConsentAsync(string[] scopes, bool approvedByDeviceCode)
+    {
+        var contexts = _db.ContextFactory.AsNocturneFactory();
+        await using var unit = await DbUnitOfWork.OpenAsync(contexts);
+        var consent = new GrantConsentService(NullLogger<GrantConsentService>.Instance);
+        var staged = await unit.CommitAsync(token => consent.StageAsync(
+            unit, _testClientEntityId, _ownerSubjectId, scopes, approvedByDeviceCode: approvedByDeviceCode, ct: token));
+        return staged.Grant;
+    }
+
     // ---------------------------------------------------------------
     // ClientIdentity
     // ---------------------------------------------------------------
@@ -150,9 +178,7 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var service = CreateService(db);
 
-        var created = await service.CreateOrUpdateGrantAsync(
-            _testClientEntityId, _ownerSubjectId, [Scope.GlucoseRead],
-            approvedByDeviceCode: approvedByDeviceCode);
+        var created = await StageConsentAsync([Scope.GlucoseRead], approvedByDeviceCode);
         var listed = await service.GetGrantsForSubjectAsync(_ownerSubjectId);
 
         created.ClientIdentity.Should().Be(identity);
@@ -167,8 +193,7 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var service = CreateService(db);
 
-        await service.CreateOrUpdateGrantAsync(
-            _testClientEntityId, _ownerSubjectId, [Scope.GlucoseRead], approvedByDeviceCode: true);
+        await StageConsentAsync([Scope.GlucoseRead], approvedByDeviceCode: true);
         var consented = await service.CreateOrUpdateGrantAsync(
             _testClientEntityId, _ownerSubjectId, [Scope.TreatmentsRead]);
 
@@ -265,10 +290,26 @@ public class OAuthGrantServiceTests : IDisposable
         var grantId = await SeedGrantAsync(db, label: "Old Label");
 
         var service = CreateService(db);
-        var result = await service.UpdateGrantAsync(grantId, _ownerSubjectId, label: "New Label");
+        var result = await service.UpdateGrantAsync(grantId, _ownerSubjectId, FullAccessBounds, label: "New Label");
 
         Assert.NotNull(result);
         Assert.Equal("New Label", result.Label);
+    }
+
+    [Fact]
+    public async Task UpdateLastUsedAsync_RecordsTheInjectedTime()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var service = CreateService(db, time);
+
+        await service.UpdateLastUsedAsync(grantId, ipAddress: null, userAgent: null);
+
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        Assert.Equal(time.GetUtcNow().UtcDateTime, grant.LastUsedAt);
     }
 
     [Fact]
@@ -281,7 +322,7 @@ public class OAuthGrantServiceTests : IDisposable
             scopes: new List<string> { "glucose.read" });
 
         var service = CreateService(db);
-        var result = await service.UpdateGrantAsync(grantId, _ownerSubjectId,
+        var result = await service.UpdateGrantAsync(grantId, _ownerSubjectId, FullAccessBounds,
             scopes: new[] { "glucose.read", "treatments.readwrite" });
 
         Assert.NotNull(result);
@@ -300,7 +341,7 @@ public class OAuthGrantServiceTests : IDisposable
         var service = CreateService(db);
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => service.UpdateGrantAsync(grantId, _ownerSubjectId, scopes: []));
+            () => service.UpdateGrantAsync(grantId, _ownerSubjectId, FullAccessBounds, scopes: []));
 
         var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
         Assert.Equal(["glucose.read"], grant.Scopes);
@@ -333,7 +374,7 @@ public class OAuthGrantServiceTests : IDisposable
 
         var service = CreateService(db);
         var result = await service.UpdateGrantAsync(
-            grantId, _ownerSubjectId, scopes: [Scope.GlucoseRead]);
+            grantId, _ownerSubjectId, FullAccessBounds, scopes: [Scope.GlucoseRead]);
 
         result!.Scopes.Should().Equal([Scope.GlucoseRead]);
         _guestSessionCache.TryGet(_testTenantId, grantId, out _).Should().BeFalse();
@@ -356,7 +397,7 @@ public class OAuthGrantServiceTests : IDisposable
         foreach (var widened in new[] { Scope.FullAccess, Scope.GlucoseReadWrite })
         {
             var attempt = () => service.UpdateGrantAsync(
-                grantId, _ownerSubjectId, scopes: [widened]);
+                grantId, _ownerSubjectId, FullAccessBounds, scopes: [widened]);
 
             await attempt.Should().ThrowAsync<ArgumentException>()
                 .Where(e => e.Message.Contains("not allowed for guest links"));
@@ -379,7 +420,7 @@ public class OAuthGrantServiceTests : IDisposable
         // OAuthController.UpdateGrant catches ArgumentException as invalid_scope; nothing threw it
         // before, so the API advertised validation it did not perform.
         var attempt = () => service.UpdateGrantAsync(
-            grantId, _ownerSubjectId, scopes: ["glucose.everything"]);
+            grantId, _ownerSubjectId, FullAccessBounds, scopes: ["glucose.everything"]);
 
         await attempt.Should().ThrowAsync<ArgumentException>()
             .Where(e => e.Message.Contains("not a recognised scope"));
@@ -400,11 +441,137 @@ public class OAuthGrantServiceTests : IDisposable
 
         var service = CreateService(db);
         var result = await service.UpdateGrantAsync(
-            grantId, _ownerSubjectId, scopes: [Scope.FullAccess]);
+            grantId, _ownerSubjectId, FullAccessBounds, scopes: [Scope.FullAccess]);
 
         // The guest cap is scoped to guest grants: an app grant is still whatever the user consented
         // to, including full access.
         result!.Scopes.Should().Equal([Scope.FullAccess]);
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_BoundsAGuestGrantsScopesByWhatTheCallerMayGive()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, grantType: OAuthGrantTypes.Guest, scopes: [Scope.GlucoseRead]);
+        var service = CreateService(db);
+        var ceiling = new HashSet<string> { Scope.GlucoseRead };
+
+        var widened = () => service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, ceiling), scopes: [Scope.TreatmentsRead]);
+        (await widened.Should().ThrowAsync<GrantCeilingViolationException>())
+            .Which.Violation.Code.Should().Be(GrantCeilingViolation.ExceedsGranter);
+        (await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId)).Scopes.Should().Equal([Scope.GlucoseRead]);
+
+        var held = await service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, ceiling), scopes: [Scope.GlucoseRead]);
+        held!.Scopes.Should().Equal([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_RefusesNewScopesOnAGuestGrantFromACallerWhoMayGiveNothing()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, grantType: OAuthGrantTypes.Guest, scopes: [Scope.GlucoseRead]);
+        var service = CreateService(db);
+
+        var attempt = () => service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), scopes: [Scope.GlucoseRead]);
+        (await attempt.Should().ThrowAsync<GrantCeilingViolationException>())
+            .Which.Violation.Code.Should().Be(CallerAccessFromTeam.Code);
+
+        var relabelled = await service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), label: "Renamed");
+        relabelled!.Label.Should().Be("Renamed");
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_DoesNotBoundAnAppGrantByWhatTheCallerMayGive()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, grantType: OAuthGrantTypes.App, scopes: [Scope.GlucoseRead]);
+        var service = CreateService(db);
+
+        var result = await service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), scopes: [Scope.TreatmentsRead]);
+
+        result!.Scopes.Should().Equal([Scope.TreatmentsRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrant_ByAMixedMember_RefusesAGuestLinkScopeOnlyTheTeamGives()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, grantType: OAuthGrantTypes.Guest, scopes: [Scope.GlucoseRead]);
+        var controller = CreateController(
+            db, [Scope.GlucoseRead, Scope.TreatmentsRead], new GrantCeiling(new HashSet<string> { Scope.GlucoseRead }, null, false));
+
+        var result = await controller.UpdateGrant(grantId, new UpdateGrantRequest { Scopes = [Scope.TreatmentsRead] });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<OAuthError>().Which.Error.Should().Be("invalid_scope");
+        (await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId)).Scopes.Should().Equal([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrant_ByATeamOnlyMember_RefusesNewGuestLinkScopes()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, grantType: OAuthGrantTypes.Guest, scopes: [Scope.GlucoseRead]);
+        var controller = CreateController(db, [Scope.GlucoseRead], ceiling: null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(
+            await controller.UpdateGrant(grantId, new UpdateGrantRequest { Scopes = [Scope.GlucoseRead] }));
+        (await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId)).Scopes.Should().Equal([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrant_BoundsAnAppGrantByEverythingTheCallerHolds()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, grantType: OAuthGrantTypes.App, scopes: [Scope.GlucoseRead]);
+        var controller = CreateController(
+            db, [Scope.GlucoseRead, Scope.TreatmentsRead], new GrantCeiling(new HashSet<string> { Scope.GlucoseRead }, null, false));
+
+        var wider = await controller.UpdateGrant(grantId, new UpdateGrantRequest { Scopes = [Scope.DevicesRead] });
+        wider.Result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<OAuthError>().Which.Error.Should().Be("invalid_scope");
+
+        var held = await controller.UpdateGrant(grantId, new UpdateGrantRequest { Scopes = [Scope.TreatmentsRead] });
+        held.Result.Should().BeOfType<OkObjectResult>();
+        (await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId)).Scopes.Should().Equal([Scope.TreatmentsRead]);
+    }
+
+    private OAuthController CreateController(NocturneDbContext db, IReadOnlyList<string> heldScopes, GrantCeiling? ceiling)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
+            SubjectId = _ownerSubjectId,
+        };
+        httpContext.SetGrantedScopes((IReadOnlySet<string>)heldScopes.ToHashSet());
+        httpContext.SetGrantCeiling(ceiling);
+
+        return new OAuthController(
+            Mock.Of<IOAuthClientService>(),
+            CreateService(db),
+            Mock.Of<IOAuthTokenService>(),
+            Mock.Of<IOAuthDeviceCodeService>(),
+            Mock.Of<ISubjectService>(),
+            Mock.Of<IJwtService>(),
+            Mock.Of<IOAuthTokenRevocationCache>(),
+            NullLogger<OAuthController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
     }
 
     [Fact]
@@ -417,7 +584,7 @@ public class OAuthGrantServiceTests : IDisposable
 
         var service = CreateService(db);
         var wrongOwnerId = Guid.CreateVersion7();
-        var result = await service.UpdateGrantAsync(grantId, wrongOwnerId, label: "Hacked");
+        var result = await service.UpdateGrantAsync(grantId, wrongOwnerId, FullAccessBounds, label: "Hacked");
 
         Assert.Null(result);
     }

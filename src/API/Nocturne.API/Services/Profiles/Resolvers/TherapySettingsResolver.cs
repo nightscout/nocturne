@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
@@ -23,7 +24,6 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
     private bool? _hasData;
 
-    private const double DefaultDia = 3.0;
     private const double DefaultCarbsHr = 20.0;
 
     public TherapySettingsResolver(
@@ -69,7 +69,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+        var timestamp = timeMills.ToUtcDateTime();
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
 
         // An AID that manages the profile owns the DIA, so it outranks a recorded insulin.
@@ -83,7 +83,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         return settings is { Dia: > 0 }
             ? (InsulinActionTimeSource.Profile, settings.Dia, primaryBolus)
-            : (InsulinActionTimeSource.Default, DefaultDia, primaryBolus);
+            : (InsulinActionTimeSource.Default, TherapySnapshot.DefaultDia, primaryBolus);
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+        var timestamp = timeMills.ToUtcDateTime();
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
 
         return settings?.CarbsHr > 0 ? settings.CarbsHr : DefaultCarbsHr;
@@ -122,7 +122,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         var snapshot = specProfile is null ? await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) : null;
         var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
         var settings = await GetCachedSettingsAsync(
-            profileName, DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime, ct);
+            profileName, timeMills.ToUtcDateTime(), ct);
         return ScheduleTimeHelper.TimezoneOf(null, snapshot?.Timezone, settings?.Timezone);
     }
 
@@ -137,7 +137,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     public async Task<bool> HasDataAsync(CancellationToken ct = default)
     {
         // Scoped resolver: the memo lives for one request and never crosses tenants.
-        return _hasData ??= await _repo.CountAsync(null, null, ct) > 0;
+        return _hasData ??= await _repo.CountAsync(null, null, null, null, ct) > 0;
     }
 
     private Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(

@@ -110,7 +110,7 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
         var rows = await _cache.GetOrSetAsync(
             $"{TenantCacheFamily.ProfileActivations}:{readFrom}:{readTo}",
             async () => (await _activations.GetOverlappingAsync(
-                ToUtc(readFrom), ToUtc(readTo), MaxActivationsPerRead, ct)).ToArray(),
+                readFrom.ToUtcDateTime(), readTo.ToUtcDateTime(), MaxActivationsPerRead, ct)).ToArray(),
             Ttl, ct);
         var effectiveSources = await _cache.GetOrSetAsync(
             $"{TenantCacheFamily.ProfileActivations}:effective-sources",
@@ -152,6 +152,4 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
 
     private static long MinuteOf(long mills) =>
         Math.DivRem(mills, MillisPerMinute, out var rem) * MillisPerMinute - (rem < 0 ? MillisPerMinute : 0);
-
-    private static DateTime ToUtc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
 }

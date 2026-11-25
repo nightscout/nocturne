@@ -124,8 +124,12 @@ public class PublishSkippedDeletedTests : IDisposable
         _tally.SkippedDeleted.Should().Be(1);
     }
 
-    private TreatmentPublisher TreatmentPublisherOver(Mock<ITreatmentService> service) =>
-        new(
+    private TreatmentPublisher TreatmentPublisherOver(Mock<ITreatmentService> service)
+    {
+        service
+            .Setup(s => s.ResolveStoredIdentitiesAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Treatment>());
+        return new(
             service.Object,
             Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(),
             Mock.Of<IBolusCalculationRepository>(), Mock.Of<ITempBasalRepository>(),
@@ -133,6 +137,7 @@ public class PublishSkippedDeletedTests : IDisposable
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
             Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _tally,
             Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance);
+    }
 
     [Fact]
     public async Task Device_statuses_the_user_deleted_are_counted_through_the_device_status_service()
@@ -161,7 +166,7 @@ public class PublishSkippedDeletedTests : IDisposable
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var sensorGlucose = new SensorGlucoseRepository(
-            ctxFactory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance);
+            ctxFactory, Mock.Of<IDuplicateLinker>(), audit, NullLogger<SensorGlucoseRepository>.Instance);
         var meterGlucose = new MeterGlucoseRepository(ctxFactory, audit, NullLogger<MeterGlucoseRepository>.Instance);
         var calibration = new CalibrationRepository(ctxFactory, audit, NullLogger<CalibrationRepository>.Instance);
 
@@ -169,6 +174,6 @@ public class PublishSkippedDeletedTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<ICanonicalAlertEvaluator>(), audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
+            audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
     }
 }

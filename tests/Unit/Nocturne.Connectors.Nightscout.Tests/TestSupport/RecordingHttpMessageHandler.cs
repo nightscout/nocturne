@@ -16,6 +16,9 @@ internal sealed class RecordingHttpMessageHandler(HttpStatusCode statusCode = Ht
 
     public List<string> ApiSecretHeaders { get; } = [];
 
+    /// <summary>Whether each request carried an <c>api-secret</c> header at all, empty or not.</summary>
+    public List<bool> CarriedApiSecret { get; } = [];
+
     public List<string> Bodies { get; } = [];
 
     public int RequestCount => Uris.Count;
@@ -33,6 +36,12 @@ internal sealed class RecordingHttpMessageHandler(HttpStatusCode statusCode = Ht
     /// </summary>
     public Func<Uri, HttpResponseMessage>? Respond { get; set; }
 
+    /// <summary>
+    /// Builds the reply from the request's method and body, ahead of <see cref="Respond"/>; a null
+    /// reply falls through to it.
+    /// </summary>
+    public Func<HttpMethod, string, HttpResponseMessage?>? RespondTo { get; set; }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
@@ -42,10 +51,9 @@ internal sealed class RecordingHttpMessageHandler(HttpStatusCode statusCode = Ht
 
         Methods.Add(request.Method);
         Uris.Add(request.RequestUri!);
-        ApiSecretHeaders.Add(
-            request.Headers.TryGetValues("api-secret", out var values)
-                ? string.Join(",", values)
-                : string.Empty);
+        var carried = request.Headers.TryGetValues("api-secret", out var values);
+        CarriedApiSecret.Add(carried);
+        ApiSecretHeaders.Add(carried ? string.Join(",", values!) : string.Empty);
         Bodies.Add(
             request.Content is null
                 ? string.Empty
@@ -55,6 +63,8 @@ internal sealed class RecordingHttpMessageHandler(HttpStatusCode statusCode = Ht
         if (toThrow is not null)
             throw toThrow;
 
-        return Respond?.Invoke(request.RequestUri!) ?? new HttpResponseMessage(statusCode);
+        return RespondTo?.Invoke(request.Method, Bodies[^1])
+            ?? Respond?.Invoke(request.RequestUri!)
+            ?? new HttpResponseMessage(statusCode);
     }
 }

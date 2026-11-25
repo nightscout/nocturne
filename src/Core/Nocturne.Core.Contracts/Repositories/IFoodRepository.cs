@@ -17,6 +17,12 @@ public interface IFoodRepository
     /// <returns>The food entry if found, null otherwise</returns>
     Task<Food?> GetFoodByIdAsync(string id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The foods with these UUIDs, in one query, keyed by UUID (a migrated food's <see cref="Food.Id"/>
+    /// is its legacy id, not the UUID); an id no food has is left out.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, Food>> GetFoodsByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
+
     /// <param name="type">The food type to filter by</param>
     /// <returns>Collection of food entries of the specified type</returns>
     Task<IEnumerable<Food>> GetFoodByTypeAsync(
@@ -99,7 +105,7 @@ public interface IFoodRepository
     );
 
     /// <summary>
-    /// Foods whose name, category or subcategory contains <paramref name="text"/>, ordered by name.
+    /// Foods whose name, category or subcategory contains <paramref name="text"/>, ignoring case, ordered by name.
     /// This is the V4 free-text search, distinct from the legacy <c>find</c> syntax.
     /// </summary>
     /// <param name="text">The text to look for; null or empty matches every food.</param>
@@ -107,6 +113,27 @@ public interface IFoodRepository
         string? text,
         int count = 10,
         int skip = 0,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// The key of the live food <paramref name="id"/> names, in any form <see cref="GetFoodByIdAsync"/>
+    /// accepts. Null when no live food has it.
+    /// </summary>
+    Task<Guid?> ResolveFoodKeyAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The live catalog food <paramref name="reference"/> names: its UUID when it parses as one, otherwise
+    /// its legacy ObjectId. Unlike <see cref="GetFoodByIdAsync"/> it does not match coerced v3 ids.
+    /// </summary>
+    Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        string reference,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>The live catalog food keyed by <paramref name="id"/>.</summary>
+    Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        Guid id,
         CancellationToken cancellationToken = default
     );
 }

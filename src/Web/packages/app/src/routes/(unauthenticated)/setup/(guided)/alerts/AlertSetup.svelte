@@ -72,6 +72,7 @@
       kind: r.kind!,
       isEnabled: r.isEnabled ?? true,
       threshold: r.threshold ?? undefined,
+      setInRuleEditor: r.setInRuleEditor ?? false,
     }));
   }
 
@@ -114,7 +115,7 @@
 
   async function save() {
     status = await saveAlertSetup({
-      rules: rules.map((r) => ({ ...r, threshold: r.threshold ?? undefined })),
+      rules: rules.map((r) => ({ kind: r.kind, isEnabled: r.isEnabled, threshold: r.threshold ?? undefined })),
       channels: elsewhere ? channels.map(toChannelRequest) : undefined,
     });
     rules = copyRules(status);
@@ -206,7 +207,11 @@
           <li class="flex flex-wrap items-center gap-3 px-4 py-3" data-testid="starter-rule-{rule.kind}">
             <Switch id="rule-{rule.kind}" bind:checked={rule.isEnabled} aria-label={label(rule.kind)} />
             <Label for="rule-{rule.kind}" class="min-w-32 flex-1">{label(rule.kind)}</Label>
-            {#if dir}
+            {#if dir && rule.setInRuleEditor}
+              <span class="text-sm text-muted-foreground" data-testid="starter-rule-{rule.kind}-from-editor">
+                Set in the rule editor
+              </span>
+            {:else if dir}
               <span class="flex items-center gap-2 text-sm text-muted-foreground">
                 {dir}
                 <Input

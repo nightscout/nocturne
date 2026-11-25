@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -17,6 +18,9 @@ namespace Nocturne.API.Tests.Services.Platform;
 [Trait("Category", "Unit")]
 public class DemoUISettingsProxyTests
 {
+    // A read inside the failure TTL must answer at once; this is how long it has, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustAnswerWithin = TimeSpan.FromSeconds(1);
+
     private const string DeviceId = "from-demo-service";
 
     private readonly FakeTimeProvider _time = new();
@@ -45,7 +49,7 @@ public class DemoUISettingsProxyTests
 
         var settings = await _proxy.GetAsync(CancellationToken.None);
 
-        settings!.Devices.ConnectedDevices.Should().ContainSingle().Which.Id.Should().Be(DeviceId);
+        settings!.Devices!.ConnectedDevices.Should().ContainSingle().Which.Id.Should().Be(DeviceId);
         _service.Calls.Should().Be(1);
     }
 
@@ -53,11 +57,11 @@ public class DemoUISettingsProxyTests
     public async Task HandsEachCallerItsOwnCopy()
     {
         var first = await _proxy.GetAsync(CancellationToken.None);
-        first!.Devices.ConnectedDevices.Clear();
+        first!.Devices!.ConnectedDevices.Clear();
 
         var second = await _proxy.GetAsync(CancellationToken.None);
 
-        second!.Devices.ConnectedDevices.Should().ContainSingle();
+        second!.Devices!.ConnectedDevices.Should().ContainSingle();
     }
 
     [Fact]
@@ -104,11 +108,11 @@ public class DemoUISettingsProxyTests
     {
         _service.Hangs = true;
         var waiting = Task.WhenAll(_proxy.GetAsync(CancellationToken.None), _proxy.GetAsync(CancellationToken.None));
-        await _service.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await _service.Started.Task.WaitAsync(Eventually.DefaultPatience);
         _time.Advance(DemoUISettingsProxy.ProxyTimeout);
 
-        var answers = await waiting.WaitAsync(TimeSpan.FromSeconds(10));
-        var later = await _proxy.GetAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(1));
+        var answers = await waiting.WaitAsync(Eventually.DefaultPatience);
+        var later = await _proxy.GetAsync(CancellationToken.None).WaitAsync(MustAnswerWithin);
 
         answers.Should().AllSatisfy(a => a.Should().BeNull());
         later.Should().BeNull();

@@ -9,8 +9,8 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests;
 
@@ -48,6 +48,23 @@ public class MyFitnessPalConnectorServiceTests
         (session == null).Should().Be(expectTokenDropped);
     }
 
+    /// <summary>
+    /// A scheduled run with food switched off has nothing to fetch, so it succeeds and makes no call,
+    /// not even a sign-in.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_FoodOff_SucceedsWithoutAVendorCall()
+    {
+        var handler = new MfpStubHandler(DateOnly.FromDateTime(DateTime.UtcNow), HttpStatusCode.OK);
+        var fixture = new ServiceFixture(handler);
+        fixture.Config.SyncFood = false;
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        handler.Requests.Should().Be(0);
+    }
+
     private sealed class ServiceFixture
     {
         internal MyFitnessPalConnectorService Service { get; }
@@ -61,9 +78,7 @@ public class MyFitnessPalConnectorServiceTests
 
         internal ServiceFixture(MfpStubHandler handler)
         {
-            var tenantAccessor = new Mock<ITenantAccessor>();
-            tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-            tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var tenantAccessor = ResolvedTenant.Accessor();
 
             var configService = new Mock<IConnectorConfigurationService>();
             configService
@@ -77,7 +92,7 @@ public class MyFitnessPalConnectorServiceTests
                 http,
                 new ConnectorTokenCache(),
                 resolver,
-                tenantAccessor.Object,
+                tenantAccessor,
                 NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>());
 
@@ -98,11 +113,14 @@ public class MyFitnessPalConnectorServiceTests
     /// </summary>
     private sealed class MfpStubHandler(DateOnly entryDate, HttpStatusCode diaryStatus) : HttpMessageHandler
     {
+        internal int Requests { get; private set; }
+
         internal int DiaryRequests { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            Requests++;
             var url = request.RequestUri!.ToString();
 
             if (url.Contains(MyFitnessPalConstants.Endpoints.Token, StringComparison.Ordinal))

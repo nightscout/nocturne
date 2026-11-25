@@ -9,6 +9,7 @@
     reason = "tests call the C ABI"
 )]
 
+use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char};
 use std::fs;
 use std::path::PathBuf;
@@ -65,7 +66,7 @@ fn version_returns_crate_version() {
 }
 
 #[test]
-fn include_leaves_false_omits_only_the_leaf_log() {
+fn the_leaf_log_is_produced_only_when_asked_for() {
     let mut request = json!({
         "schema_version": 1,
         "rule": {
@@ -80,6 +81,8 @@ fn include_leaves_false_omits_only_the_leaf_log() {
         "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z", "iob_units": 0 },
         "now": "2026-01-05T12:00:00Z",
     });
+    let by_default = evaluate(&request);
+    request["include_leaves"] = json!(true);
     let mut with_leaves = evaluate(&request);
     assert_eq!(
         with_leaves["result"]["leaves"].as_array().map(Vec::len),
@@ -92,6 +95,130 @@ fn include_leaves_false_omits_only_the_leaf_log() {
         .unwrap()
         .remove("leaves");
     assert_eq!(without, with_leaves);
+    assert_eq!(by_default, without, "the leaf log is off unless asked for");
+}
+
+#[test]
+fn signal_loss_with_no_reading_ever_measures_from_the_rule_enablement() {
+    let request = |enabled_at: Option<&str>, now: &str| {
+        json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": "signal_loss",
+                "condition_params": { "timeout_minutes": 20 },
+                "enabled_at": enabled_at
+            },
+            "context": {},
+            "now": now
+        })
+    };
+
+    let waiting = evaluate(&request(
+        Some("2026-01-05T12:00:00Z"),
+        "2026-01-05T12:05:00Z",
+    ));
+    assert_eq!(waiting["ok"], json!(true), "{waiting}");
+    assert_eq!(waiting["result"]["root"], json!(false));
+    assert!(waiting["result"].get("unknown").is_none());
+    assert_eq!(
+        waiting["result"]["next_change_at"],
+        json!("2026-01-05T12:20:00Z")
+    );
+
+    let lost = evaluate(&request(
+        Some("2026-01-05T12:00:00Z"),
+        "2026-01-05T12:20:00Z",
+    ));
+    assert_eq!(lost["result"]["root"], json!(true), "{lost}");
+    assert_eq!(lost["result"]["transition"], json!("opened"));
+
+    let unrecorded = evaluate(&request(None, "2026-01-05T12:20:00Z"));
+    assert_eq!(unrecorded["result"]["unknown"], json!(true), "{unrecorded}");
+    assert_eq!(
+        unrecorded["result"]["next_change_at"],
+        json!("2026-01-06T12:20:00Z"),
+        "only the hold's bound"
+    );
+
+    assert_error(
+        &evaluate(&request(Some("12:00"), "2026-01-05T12:20:00Z")),
+        "invalid request envelope",
+    );
+}
+
+/// A stored hold that an engine which does not record holds wrote over (an
+/// active alert updated after `held_since`) restarts at the held evaluation
+/// instead of reaching its stale bound (engine-semantics.md §6.4).
+#[test]
+fn evaluate_restarts_a_stored_hold_an_older_engine_wrote_over() {
+    let response = evaluate(&json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 },
+            "hysteresis_minutes": 15
+        },
+        "context": {},
+        "now": "2026-01-08T12:00:00Z",
+        "tracker": {
+            "state": "active",
+            "active_excursion_ordinal": 1,
+            "updated_at": "2026-01-07T12:00:00Z",
+            "held_since": "2026-01-05T12:00:00Z"
+        }
+    }));
+    assert_eq!(response["ok"], json!(true), "{response}");
+    assert_eq!(response["result"]["transition"], json!("none"));
+    assert!(response["result"].get("held_too_long").is_none());
+    assert_eq!(
+        response["tracker"]["held_since"],
+        json!("2026-01-08T12:00:00Z")
+    );
+    assert_eq!(response["tracker"]["state"], json!("active"));
+}
+
+#[test]
+fn evaluate_reports_the_next_change_and_omits_none() {
+    let request = |condition_type: &str, params: Value| {
+        json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": condition_type,
+                "condition_params": params
+            },
+            "context": {
+                "latest_value": 120,
+                "latest_timestamp": "2026-01-05T11:55:00Z",
+                "last_reading_at": "2026-01-05T11:55:00Z",
+                "iob_units": 1
+            },
+            "now": "2026-01-05T12:00:00Z"
+        })
+    };
+
+    let wall_clock = evaluate(&request("signal_loss", json!({ "timeout_minutes": 15 })));
+    assert_eq!(wall_clock["ok"], json!(true), "{wall_clock}");
+    assert_eq!(
+        wall_clock["result"]["next_change_at"],
+        json!("2026-01-05T12:10:00Z")
+    );
+
+    let reading_driven = evaluate(&request(
+        "threshold",
+        json!({ "direction": "below", "value": 70 }),
+    ));
+    assert_eq!(reading_driven["ok"], json!(true), "{reading_driven}");
+    assert_eq!(
+        reading_driven["result"]["next_change_at"],
+        json!("2026-01-05T12:06:00Z")
+    );
+
+    let constant = evaluate(&request("iob", json!({ "operator": ">", "value": 2 })));
+    assert_eq!(constant["ok"], json!(true), "{constant}");
+    assert!(constant["result"].get("next_change_at").is_none());
 }
 
 #[test]
@@ -170,12 +297,12 @@ pub(crate) const UNEVALUABLE_RULE: &str = "malformed condition_params for ";
 
 /// Drives one scenario through an evaluate-envelope function (C ABI or
 /// UniFFI), threading the timers/tracker state envelopes between ticks exactly
-/// as a host would, and returns the assembled expected-file Value.
+/// as a host would, and returns the assembled expected-file Value with the
+/// corpus's excursion numbering ([`number_as_corpus`]).
 fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> Value {
-    // Per-rule persisted state, plus the shared next-excursion ordinal.
     let mut timers: Map<String, Value> = Map::new(); // rule id -> timers object
+    let mut not_true: Map<String, Value> = Map::new(); // rule id -> not_true object
     let mut trackers: Map<String, Value> = Map::new(); // rule id -> tracker object
-    let mut next_ordinal: u64 = 1;
 
     let ticks: Vec<Value> = scenario
         .ticks
@@ -186,11 +313,7 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                 .iter()
                 .map(|rule| {
                     let rule_id = rule["id"].as_str().expect("rule id").to_string();
-                    let mut tracker = trackers
-                        .get(&rule_id)
-                        .and_then(|t| t.as_object().cloned())
-                        .unwrap_or_default();
-                    tracker.insert("next_excursion_ordinal".into(), json!(next_ordinal));
+                    let tracker = trackers.get(&rule_id).cloned().unwrap_or_else(|| json!({}));
 
                     let request = json!({
                         "schema_version": 1,
@@ -198,7 +321,9 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                         "context": tick.context,
                         "now": tick.at,
                         "timers": timers.get(&rule_id).cloned().unwrap_or_else(|| json!({})),
+                        "not_true": not_true.get(&rule_id).cloned().unwrap_or_else(|| json!({})),
                         "tracker": tracker,
+                        "include_leaves": true,
                     });
 
                     let response = evaluate(&request);
@@ -221,10 +346,8 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                     );
 
                     timers.insert(rule_id.clone(), response["timers"].clone());
+                    not_true.insert(rule_id.clone(), response["not_true"].clone());
                     trackers.insert(rule_id.clone(), response["tracker"].clone());
-                    next_ordinal = response["tracker"]["next_excursion_ordinal"]
-                        .as_u64()
-                        .expect("next_excursion_ordinal present");
 
                     response["result"].clone()
                 })
@@ -233,11 +356,63 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
         })
         .collect();
 
-    json!({
+    let mut actual = json!({
         "schema_version": 1,
         "scenario": scenario.name,
         "ticks": ticks,
-    })
+    });
+    number_as_corpus(&mut actual);
+    actual
+}
+
+/// Renumbers each `tracker.excursion` as the corpus numbers excursions: 1, 2,
+/// ... in the order they open across every rule of the scenario. The envelope
+/// numbers each rule's own, so the corpus number is the rule and its ordinal
+/// looked up in opening order.
+pub(crate) fn number_as_corpus(actual: &mut Value) {
+    let mut opened: HashMap<String, u64> = HashMap::new();
+    let mut corpus: HashMap<(String, u64), u64> = HashMap::new();
+    for tick in actual["ticks"].as_array_mut().expect("ticks") {
+        for result in tick["rules"].as_array_mut().expect("rules") {
+            let rule = result["rule_id"].as_str().expect("rule id").to_owned();
+            if result["transition"] == "opened" {
+                let ordinal = opened.entry(rule.clone()).or_default();
+                *ordinal = ordinal.saturating_add(1);
+                let next = u64::try_from(corpus.len())
+                    .expect("a count")
+                    .saturating_add(1);
+                corpus.insert((rule.clone(), *ordinal), next);
+            }
+            if let Some(excursion) = result.pointer_mut("/tracker/excursion") {
+                let ordinal = excursion.as_u64().expect("an ordinal");
+                *excursion = json!(corpus[&(rule, ordinal)]);
+            }
+        }
+    }
+}
+
+/// `actual` without the `next_change_at` of each result whose snapshot does
+/// not carry one: a snapshot pins it by carrying it, and the corpus is frozen.
+pub(crate) fn as_pinned(mut actual: Value, expected: &Value) -> Value {
+    let expected_ticks = expected["ticks"].as_array().cloned().unwrap_or_default();
+    if let Some(ticks) = actual["ticks"].as_array_mut() {
+        for (tick, expected_tick) in ticks.iter_mut().zip(&expected_ticks) {
+            let expected_rules = expected_tick["rules"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if let Some(rules) = tick["rules"].as_array_mut() {
+                for (rule, expected_rule) in rules.iter_mut().zip(&expected_rules) {
+                    if expected_rule.get("next_change_at").is_none()
+                        && let Some(result) = rule.as_object_mut()
+                    {
+                        result.remove("next_change_at");
+                    }
+                }
+            }
+        }
+    }
+    actual
 }
 
 /// Runs the full corpus through an evaluate-envelope function and pins every
@@ -253,7 +428,7 @@ fn assert_corpus_round_trips(evaluate: impl Fn(&Value) -> Value) {
     let mut failed: Vec<String> = Vec::new();
     for path in &scenario_paths {
         let (scenario, expected) = load_scenario(path);
-        let actual = run_scenario(&scenario, &evaluate);
+        let actual = as_pinned(run_scenario(&scenario, &evaluate), &expected);
         if actual != expected {
             failed.push(format!(
                 "scenario {}: FFI output differs from expected snapshot",
@@ -299,7 +474,7 @@ fn state_threading_survives_serialisation() {
     assert_eq!(first["result"]["root"], Value::Bool(false));
     assert_eq!(first["timers"]["sustained"], json!("2026-01-05T12:00:00Z"));
     assert_eq!(first["tracker"]["state"], json!("idle"));
-    assert_eq!(first["tracker"]["next_excursion_ordinal"], json!(1));
+    assert!(first["tracker"].get("last_excursion_ordinal").is_none());
 
     let second = evaluate(&json!({
         "schema_version": 1,
@@ -315,7 +490,7 @@ fn state_threading_survives_serialisation() {
     assert_eq!(second["result"]["tracker"]["excursion"], json!(1));
     assert_eq!(second["tracker"]["state"], json!("active"));
     assert_eq!(second["tracker"]["active_excursion_ordinal"], json!(1));
-    assert_eq!(second["tracker"]["next_excursion_ordinal"], json!(2));
+    assert_eq!(second["tracker"]["last_excursion_ordinal"], json!(1));
     assert_eq!(
         second["tracker"]["updated_at"],
         json!("2026-01-05T12:10:00Z")
@@ -343,10 +518,9 @@ fn hysteresis_start_round_trips_and_anchors_expiry() {
         "2026-01-05T12:05:00Z",
         json!({
             "state": "active",
-            "confirmation_count": 0,
             "active_excursion_ordinal": 1,
             "updated_at": "2026-01-05T12:00:00Z",
-            "next_excursion_ordinal": 2,
+            "last_excursion_ordinal": 1,
         }),
     ));
     assert_eq!(entered["result"]["transition"], json!("hysteresis_started"));
@@ -383,10 +557,9 @@ fn hysteresis_state_without_a_start_adopts_updated_at() {
         "2026-01-05T12:30:00Z",
         json!({
             "state": "hysteresis",
-            "confirmation_count": 0,
             "active_excursion_ordinal": 1,
             "updated_at": "2026-01-05T12:10:00Z",
-            "next_excursion_ordinal": 2,
+            "last_excursion_ordinal": 1,
         }),
     ));
     assert_eq!(response["ok"], Value::Bool(true));
@@ -429,6 +602,66 @@ fn evaluate_node_evaluates_a_tree_with_a_root_override() {
     assert_eq!(response["value"], Value::Bool(true));
     assert_eq!(response["timers"], json!({}));
     assert_eq!(response["timer_ops"], json!([]));
+}
+
+#[test]
+fn evaluate_node_reports_a_reading_dated_beyond_the_clock_tolerance() {
+    let request = |reading: &str| {
+        json!({
+            "schema_version": 1,
+            "rule_id": "00000000-0000-0000-0000-000000000001",
+            "node": { "type": "signal_loss", "signal_loss": { "timeout_minutes": 20 } },
+            "context": { "last_reading_at": reading },
+            "now": "2026-01-05T12:00:00Z",
+        })
+    };
+    let ahead = evaluate_node(&request("2026-01-05T13:00:00Z"));
+    assert_eq!(ahead["value"], json!(false));
+    assert_eq!(ahead["unknown"], json!(true));
+    assert_eq!(
+        ahead["clock_anomaly"],
+        json!([{ "fact": "last_reading_at", "ahead_ms": 3_600_000 }])
+    );
+
+    let within = evaluate_node(&request("2026-01-05T12:05:00Z"));
+    assert_eq!(within["value"], json!(false));
+    assert!(within.get("unknown").is_none());
+    assert!(within.get("clock_anomaly").is_none());
+}
+
+#[test]
+fn evaluate_reports_a_reading_dated_ahead_and_holds_the_open_excursion() {
+    let rule = json!({
+        "id": "00000000-0000-0000-0000-000000000001",
+        "condition_type": "signal_loss",
+        "condition_params": { "timeout_minutes": 20 },
+    });
+    let response = call_json(
+        nocturne_alerts_evaluate,
+        &json!({
+            "schema_version": 1,
+            "rule": rule,
+            "context": { "last_reading_at": "2026-01-05T13:00:00Z" },
+            "now": "2026-01-05T12:00:00Z",
+            "tracker": {
+                "state": "active",
+                "active_excursion_ordinal": 1,
+                "updated_at": "2026-01-05T11:00:00Z",
+                "last_excursion_ordinal": 1
+            },
+        })
+        .to_string(),
+    );
+    assert_eq!(response["ok"], json!(true));
+    let result = &response["result"];
+    assert_eq!(result["unknown"], json!(true));
+    assert_eq!(result["transition"], json!("none"));
+    assert_eq!(response["tracker"]["state"], json!("active"));
+    assert_eq!(
+        result["clock_anomaly"],
+        json!([{ "fact": "last_reading_at", "ahead_ms": 3_600_000 }])
+    );
+    assert_eq!(result["next_change_at"], json!("2026-01-05T12:55:00Z"));
 }
 
 #[test]
@@ -609,6 +842,104 @@ fn evaluate_rejects_wrong_schema_version() {
 }
 
 #[test]
+fn evaluate_reads_a_rules_glucose_freshness_bound() {
+    let request = |minutes: Value| {
+        json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": "threshold",
+                "condition_params": { "direction": "above", "value": 180 },
+                "glucose_freshness_minutes": minutes,
+            },
+            "context": {
+                "latest_value": 200,
+                "latest_timestamp": "2026-01-05T11:40:00Z",
+                "last_reading_at": "2026-01-05T11:40:00Z"
+            },
+            "now": "2026-01-05T12:00:00Z",
+        })
+    };
+    let default = evaluate(&request(Value::Null));
+    assert_eq!(default["result"]["unknown"], json!(true), "{default}");
+    let thirty = evaluate(&request(json!(30)));
+    assert_eq!(thirty["result"]["root"], json!(true), "{thirty}");
+    assert!(thirty["result"].get("unknown").is_none());
+    for bad in [json!(0), json!(-1), json!(1441)] {
+        assert_error(
+            &evaluate(&request(bad)),
+            "glucose_freshness_minutes must be a whole number of minutes from 1 to 1440",
+        );
+    }
+}
+
+#[test]
+fn evaluate_rejects_an_on_unknown_word_naming_no_choice() {
+    for word in ["Hold", "ignore", ""] {
+        let request = json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": "threshold",
+                "condition_params": { "direction": "above", "value": 180 },
+                "on_unknown": word,
+            },
+            "context": {},
+            "now": "2026-01-05T12:00:00Z",
+        });
+        assert_error(&evaluate(&request), &format!("unknown on_unknown '{word}'"));
+    }
+}
+
+#[test]
+fn evaluate_flags_an_unknown_root_and_leaf_beside_their_false_values() {
+    let request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "not",
+            "condition_params": {
+                "child": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
+            },
+        },
+        "context": {},
+        "now": "2026-01-05T12:00:00Z",
+        "include_leaves": true,
+    });
+    let result = &evaluate(&request)["result"];
+    assert_eq!(result["root"], json!(false));
+    assert_eq!(result["unknown"], json!(true));
+    assert_eq!(
+        result["leaves"],
+        json!([{ "leaf_id": 0, "value": false, "unknown": true }])
+    );
+    assert_eq!(result["transition"], json!("none"));
+}
+
+#[test]
+fn evaluate_node_flags_an_unknown_value() {
+    let request = |context: Value| {
+        call_json(
+            crate::nocturne_alerts_evaluate_node,
+            &json!({
+                "schema_version": 1,
+                "rule_id": "00000000-0000-0000-0000-000000000001",
+                "node": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } },
+                "context": context,
+                "now": "2026-01-05T12:00:00Z",
+            })
+            .to_string(),
+        )
+    };
+    let unknown = request(json!({}));
+    assert_eq!(unknown["value"], json!(false));
+    assert_eq!(unknown["unknown"], json!(true));
+    let known = request(json!({ "latest_value": 100 }));
+    assert_eq!(known["value"], json!(false));
+    assert_eq!(known.get("unknown"), None);
+}
+
+#[test]
 fn evaluate_rejects_unknown_condition_type() {
     let request = json!({
         "schema_version": 1,
@@ -651,7 +982,7 @@ fn evaluate_rejects_tracker_state_without_updated_at() {
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
-        "tracker": { "state": "active", "confirmation_count": 0, "next_excursion_ordinal": 2 },
+        "tracker": { "state": "active", "last_excursion_ordinal": 1 },
     });
     assert_error(&evaluate(&request), "tracker.updated_at is required");
 }
@@ -686,7 +1017,7 @@ fn evaluate_rejects_timers_and_tracker_outside_the_dotnet_range() {
     request["tracker"] = json!({
         "state": "active",
         "updated_at": "0000-06-01T00:00:00Z",
-        "next_excursion_ordinal": 2,
+        "last_excursion_ordinal": 1,
     });
     assert_error(&evaluate(&request), "tracker.updated_at is outside");
 }
@@ -946,6 +1277,29 @@ fn references_wall_clock_rejects_a_bad_envelope() {
 }
 
 #[test]
+fn references_wall_clock_reads_on_unknown_for_a_freshness_leaf() {
+    let request = |on_unknown: Option<&str>| {
+        let mut request = json!({
+            "schema_version": 1,
+            "condition_type": "threshold",
+            "condition_params": { "direction": "above", "value": 180 },
+        });
+        if let Some(word) = on_unknown {
+            request["on_unknown"] = word.into();
+        }
+        call_json(nocturne_alerts_references_wall_clock, &request.to_string())
+    };
+    assert_eq!(request(None)["references_wall_clock"], json!(false));
+    assert_eq!(request(Some("hold"))["references_wall_clock"], json!(false));
+    assert_eq!(request(Some("met"))["references_wall_clock"], json!(true));
+    assert_eq!(
+        request(Some("not_met"))["references_wall_clock"],
+        json!(true)
+    );
+    assert_error(&request(Some("Hold")), "unknown on_unknown 'Hold'");
+}
+
+#[test]
 fn references_wall_clock_walks_an_enabled_auto_resolve_tree() {
     let request = |enabled: bool| {
         json!({
@@ -980,7 +1334,10 @@ fn rule_reads_names_facts_by_wire_name() {
         &high_rule_resolving_on_cob().to_string(),
     );
     assert_eq!(response["ok"], json!(true));
-    assert_eq!(response["reads"], json!(["glucose", "carbs"]));
+    assert_eq!(
+        response["reads"],
+        json!(["glucose", "carbs", "sensor_state"])
+    );
     let unknown = call_json(
         nocturne_alerts_rule_reads,
         &json!({ "schema_version": 1, "condition_type": "no_such_kind" }).to_string(),
@@ -1200,6 +1557,7 @@ fn describe_leaf_ids_align_with_evaluate_force_eval_log() {
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
+        "include_leaves": true,
     }));
     assert_eq!(
         evaluated["ok"],
@@ -1394,6 +1752,7 @@ fn describe_nested_composite_preorder_ids_align_with_evaluate() {
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
+        "include_leaves": true,
     }));
     let ids: Vec<i64> = evaluated["result"]["leaves"]
         .as_array()
@@ -1489,7 +1848,7 @@ fn describe_alert_state_carries_uuid_and_null_for_minutes() {
 
 #[cfg(feature = "uniffi")]
 mod uniffi_surface {
-    use super::{assert_error, load_scenario, run_scenario, scenario_paths};
+    use super::{as_pinned, assert_error, load_scenario, run_scenario, scenario_paths};
     use crate::uniffi_api;
     use serde_json::{Value, json};
 
@@ -1553,7 +1912,7 @@ mod uniffi_surface {
         // ABI in this build; both paths share one envelope implementation.)
         let paths = scenario_paths();
         let (scenario, expected) = load_scenario(paths.first().expect("corpus is non-empty"));
-        let actual = run_scenario(&scenario, evaluate);
+        let actual = as_pinned(run_scenario(&scenario, evaluate), &expected);
         assert_eq!(
             actual, expected,
             "scenario {}: uniffi output differs from expected snapshot",
@@ -1629,4 +1988,95 @@ mod uniffi_surface {
         }));
         assert_error(&bad_schema, "unsupported schema_version 2");
     }
+}
+
+/// A sustained{30} over an override that began at 11:00, evaluated at 12:00
+/// from `state`, the request fields a host persisted.
+fn override_held_since_eleven(state: Value) -> Value {
+    let mut request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-00000000abcd",
+            "condition_type": "sustained",
+            "condition_params": {
+                "minutes": 30,
+                "child": { "type": "override_active", "override_active": { "is_active": true } }
+            },
+            "enabled_at": "2026-01-05T09:00:00Z",
+        },
+        "context": { "active_override": { "started_at": "2026-01-05T11:00:00Z" } },
+        "now": "2026-01-05T12:00:00Z",
+    });
+    request
+        .as_object_mut()
+        .unwrap()
+        .extend(state.as_object().unwrap().clone());
+    evaluate(&request)
+}
+
+#[test]
+fn not_true_round_trips_and_bounds_a_start() {
+    let first = evaluate(&json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-00000000abcd",
+            "condition_type": "sustained",
+            "condition_params": {
+                "minutes": 30,
+                "child": { "type": "override_active", "override_active": { "is_active": true } }
+            },
+        },
+        "context": {},
+        "now": "2026-01-05T11:45:00Z",
+    }));
+    assert_eq!(first["timers"], json!({}));
+    assert_eq!(
+        first["not_true"],
+        json!({ "sustained": "2026-01-05T11:45:00Z" })
+    );
+    assert_eq!(
+        first["result"]["timer_ops"],
+        json!([{ "op": "clear", "path": "sustained", "at": "2026-01-05T11:45:00Z" }])
+    );
+
+    let second = override_held_since_eleven(json!({
+        "timers": first["timers"],
+        "not_true": first["not_true"],
+        "tracker": first["tracker"],
+    }));
+    // The 11:45 record's lease ends at 11:50, where the run starts.
+    assert_eq!(second["result"]["root"], json!(false));
+    assert_eq!(
+        second["timers"],
+        json!({ "sustained": "2026-01-05T11:50:00Z" })
+    );
+    assert_eq!(second["not_true"], json!({}));
+}
+
+#[test]
+fn a_rule_with_state_from_before_not_true_starts_its_run_at_now() {
+    let tracker = json!({ "state": "idle", "updated_at": "2026-01-05T11:55:00Z" });
+    let stored = override_held_since_eleven(json!({ "timers": {}, "tracker": tracker }));
+    assert_eq!(stored["result"]["root"], json!(false));
+    assert_eq!(
+        stored["timers"],
+        json!({ "sustained": "2026-01-05T12:00:00Z" })
+    );
+
+    // With no state at all it is the rule's first evaluation, bounded by its
+    // enabled_at: the override has held 60 minutes since it began.
+    let fresh = override_held_since_eleven(json!({}));
+    assert_eq!(fresh["result"]["root"], json!(true));
+    assert_eq!(
+        fresh["timers"],
+        json!({ "sustained": "2026-01-05T11:00:00Z" })
+    );
+}
+
+#[test]
+fn evaluate_rejects_not_true_outside_the_dotnet_range() {
+    let response = override_held_since_eleven(json!({
+        "not_true": { "sustained": "0000-06-01T00:00:00Z" },
+    }));
+    assert_error(&response, "not_true is outside");
 }

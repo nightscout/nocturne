@@ -4,17 +4,16 @@ namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
 /// Populates the optional fields of a <see cref="SensorContext"/> (IOB, COB, predictions,
-/// reservoir, site/sensor age, trend bucket, and active-alert snapshots) before evaluation.
+/// reservoir, site/sensor age, and active-alert snapshots) before evaluation.
 /// </summary>
 /// <remarks>
-/// The orchestrator hands the enricher the base context (latest reading, trend rate, last
-/// reading time) along with the rules being evaluated this pass. The enricher walks the
+/// The orchestrator hands the enricher the base context (latest reading, trend rate and
+/// bucket, last reading time) along with the rules being evaluated this pass. The enricher walks the
 /// rules' condition trees, decides which optional fields any rule actually needs, and then
 /// fetches only those — IOB/COB/predictions/reservoir/site-age/sensor-age/active-alerts plus
 /// the looping facts (APS cycle/enaction timestamps, pump/uploader status, active temp basal,
 /// active override, sensitivity ratio) — from their respective sources. A rule set that only
-/// consults BG and trend triggers no downstream fetches; the trend bucket is derived from the
-/// existing <see cref="SensorContext.TrendRate"/>.
+/// consults BG and trend triggers no downstream fetches.
 ///
 /// Two entry points: <see cref="EnrichAsync"/> populates state as-of "now" (live alert
 /// engine path); <see cref="EnrichAsOfAsync"/> pins every fetch to a historical timestamp,

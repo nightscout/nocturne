@@ -27,6 +27,20 @@ describe('ticksFor', () => {
 		expect(ticks[4].context.last_reading_at).toBe('1970-01-01T00:10:00Z');
 	});
 
+	it('ticks at the start and each reading, and samples a gap every 5 minutes', () => {
+		const ticks = ticksFor(scenario([[2, 100], [4, 95], [17, 90]]));
+		expect(ticks.map((t) => [Date.parse(t.at) / MINUTE, t.reading])).toEqual([
+			[0, true],
+			[2, true],
+			[4, true],
+			[9, false],
+			[14, false],
+			[17, true],
+			[22, false],
+			[27, false],
+		]);
+	});
+
 	it('reads a tick before the first reading as fresh, not as no reading ever', () => {
 		const [first] = ticksFor(scenario([[5, 100]]));
 		expect(first.context.last_reading_at).toBe(first.at);
@@ -92,13 +106,14 @@ describe('replay in the shape the app reads', () => {
 		expect(high).toMatchObject({ autoResolveEnabled: true });
 	});
 
-	it('names and colours each event by its rule, and leaves out cleared', () => {
+	it('names and colours each event by its rule, and leaves out the hysteresis transitions', () => {
 		const trace = SCENARIOS['overnight-low'];
 		const result = replayResult(trace, rules, [], {
 			order: [],
 			events: [
 				{ at: '2026-01-06T01:00:00Z', rule_id: rules[0].id, kind: 'fired' },
-				{ at: '2026-01-06T01:30:00Z', rule_id: rules[0].id, kind: 'cleared' },
+				{ at: '2026-01-06T01:30:00Z', rule_id: rules[0].id, kind: 'hysteresis_started' },
+				{ at: '2026-01-06T01:30:00.0000001Z', rule_id: rules[0].id, kind: 'closed' },
 			],
 			leaf_transitions: [{ rule_id: rules[0].id, leaves: [{ leaf_id: 0, points: [{ at_ms: 1, value: true }] }] }],
 			ticks: [],

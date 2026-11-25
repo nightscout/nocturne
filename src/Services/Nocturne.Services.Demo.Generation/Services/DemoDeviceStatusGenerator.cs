@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
@@ -81,7 +82,7 @@ public static class DemoDeviceStatusGenerator
         var utc = clock.ToUtc(time);
         var localTime = clock.ToLocal(utc);
         var mills = utc.ToMills();
-        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         var rng = DayScenarios.RngFor(localTime.Date, $"devicestatus:{localTime.Hour}:{localTime.Minute}");
 
         var eventualBg = EstimateEventualBg(glucose, iob, cob, effectiveIsf, effectiveCarbRatio, targetGlucose);
@@ -91,10 +92,10 @@ public static class DemoDeviceStatusGenerator
         // Basal IOB is the temp-basal component; the demo's simulator tracks a
         // single pool, so split it with a plausible ratio rather than pretending
         // to more precision than the simulation has.
-        var bolusIob = Math.Round(iob * 0.85, 3);
-        var basalIob = Math.Round(iob - bolusIob, 3);
+        var bolusIob = ScaledRounding.Round(iob * 0.85, 3);
+        var basalIob = ScaledRounding.Round(iob - bolusIob, 3);
 
-        var insulinReq = Math.Round((glucose - targetGlucose) / effectiveIsf - iob * 0.5, 2);
+        var insulinReq = ScaledRounding.Round((glucose - targetGlucose) / effectiveIsf - iob * 0.5, 2);
         var reason = BuildReason(glucose, eventualBg, iob, cob, effectiveIsf, targetGlucose,
             sensitivityRatio, tempBasalRate, tempBasalDuration, insulinReq, requestedBasalRate, maxSafeBasalRate);
 
@@ -102,11 +103,11 @@ public static class DemoDeviceStatusGenerator
         {
             Timestamp = isoTime,
             DeliverAt = isoTime,
-            Bg = Math.Round(glucose, 0),
-            EventualBG = Math.Round(eventualBg, 0),
+            Bg = ScaledRounding.Round(glucose, 0),
+            EventualBG = ScaledRounding.Round(eventualBg, 0),
             TargetBG = targetGlucose,
-            IOB = Math.Round(iob, 3),
-            COB = Math.Round(cob, 1),
+            IOB = ScaledRounding.Round(iob, 3),
+            COB = ScaledRounding.Round(cob, 1),
             InsulinReq = insulinReq,
             SensitivityRatio = sensitivityRatio,
             Rate = tempBasalRate,
@@ -149,12 +150,12 @@ public static class DemoDeviceStatusGenerator
                 Version = AidVersion,
                 Iob = new OpenApsIobData
                 {
-                    Iob = Math.Round(iob, 3),
+                    Iob = ScaledRounding.Round(iob, 3),
                     BolusIob = bolusIob,
                     BasalIob = basalIob,
                     Timestamp = isoTime,
                 },
-                Cob = Math.Round(cob, 1),
+                Cob = ScaledRounding.Round(cob, 1),
             },
             Pump = new PumpStatus
             {
@@ -184,15 +185,15 @@ public static class DemoDeviceStatusGenerator
     /// </summary>
     public static double ReservoirAt(DateTime localTime)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, "Insulin Change");
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.InsulinChange);
         var used = AssumedDailyInsulinUnits * sinceChange.TotalDays;
-        return Math.Round(Math.Max(8, ReservoirCapacityUnits - used), 1);
+        return ScaledRounding.Round(Math.Max(8, ReservoirCapacityUnits - used), 1);
     }
 
     /// <summary>Pump battery percent, resetting on Pump Battery Change days.</summary>
     public static int PumpBatteryAt(DateTime localTime)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, "Pump Battery Change");
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.PumpBatteryChange);
         var drained = PumpBatteryDrainPerDayPercent * sinceChange.TotalDays;
         return (int)Math.Clamp(100 - drained, 4, 100);
     }
@@ -279,7 +280,7 @@ public static class DemoDeviceStatusGenerator
             // 1 - e^-kt approach with ~85% completion at the end of the curve.
             var progress = 1 - Math.Exp(-2.0 * i / points);
             var value = from + (to - from) * progress + (rng.NextDouble() - 0.5) * 2;
-            curve.Add(Math.Round(Math.Clamp(value, 39, 400), 0));
+            curve.Add(ScaledRounding.Round(Math.Clamp(value, 39, 400), 0));
         }
 
         return curve;

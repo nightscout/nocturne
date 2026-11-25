@@ -38,9 +38,9 @@ public class ConnectorPollingRegistrationTests
     /// <summary>
     /// Connectors that never poll: they receive or emit data by another route, so having no
     /// scheduled job is the design, not a gap. HomeAssistant is an outbound notify target the alert
-    /// delivery pipeline pushes to.
+    /// delivery pipeline pushes to. Oura's data arrives as an export archive the user uploads.
     /// </summary>
-    private static readonly string[] NonPollingByDesign = ["HomeAssistant"];
+    private static readonly string[] NonPollingByDesign = ["HomeAssistant", "Oura"];
 
     public static TheoryData<string> PollingConnectors() => [.. Polling];
 
@@ -313,8 +313,6 @@ public class ConnectorPollingRegistrationTests
         public string ServiceName => nameof(RecordingConnectorService);
 
         public List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
-
-        public Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
         public Task<SyncResult> SyncDataAsync(
             SyncRequest request,

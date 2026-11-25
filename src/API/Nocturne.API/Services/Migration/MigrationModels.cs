@@ -32,8 +32,22 @@ public enum MigrationJobState
     Failed = 4,
     /// <summary>Migration was explicitly stopped by the user before completion.</summary>
     Cancelled = 5,
-    /// <summary>The API restarted while the migration was running; the work did not complete and must be re-run.</summary>
+    /// <summary>
+    /// The API restarted while the migration was running, under a version that could not resume it;
+    /// the work did not complete and must be re-run.
+    /// </summary>
     Interrupted = 6
+}
+
+/// <summary>What a live migration job is doing.</summary>
+public enum MigrationPhase
+{
+    /// <summary>Reaching the source.</summary>
+    Connecting = 0,
+    /// <summary>Asking the source how many documents each collection holds.</summary>
+    Counting = 1,
+    /// <summary>Pulling <see cref="MigrationJobStatus.CurrentCollection"/>.</summary>
+    Importing = 2,
 }
 
 /// <summary>
@@ -45,7 +59,7 @@ public static class MigrationJobStates
     public static IReadOnlyList<string> LiveNames { get; } =
         Enum.GetValues<MigrationJobState>().Where(IsLive).Select(s => s.ToString()).ToArray();
 
-    /// <summary>Whether a job in this state is pending or running, so can still be cancelled or interrupted.</summary>
+    /// <summary>Whether a job in this state is pending or running, so has more to do and can still be cancelled.</summary>
     public static bool IsLive(this MigrationJobState state) =>
         state is MigrationJobState.Pending or MigrationJobState.Running;
 }
@@ -142,10 +156,32 @@ public record MigrationJobStatus
     public required MigrationJobState State { get; init; }
     public required double ProgressPercentage { get; init; }
     public string? CurrentOperation { get; init; }
+
+    /// <summary>What the job is doing, or <see langword="null"/> once it has ended.</summary>
+    public MigrationPhase? Phase { get; init; }
+
+    /// <summary>
+    /// The key in <see cref="CollectionProgress"/> of the collection being pulled, or
+    /// <see langword="null"/> when none is.
+    /// </summary>
+    public string? CurrentCollection { get; init; }
+
     public string? ErrorMessage { get; init; }
     public DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
     public TimeSpan? EstimatedTimeRemaining { get; init; }
+
+    /// <inheritdoc cref="MigrationJobInfo.HasFailures"/>
+    public bool HasFailures { get; init; }
+
+    /// <summary>
+    /// Whether the newest part of the range has been read from every collection, so the app has
+    /// current data to show while a live run reads the older history. A Nightscout API run reads
+    /// that part first; a MongoDB run reads each collection whole, so it says this only once it
+    /// has completed.
+    /// </summary>
+    public bool RecentDataReady { get; init; }
+
     public Dictionary<string, CollectionProgress> CollectionProgress { get; init; } = [];
 }
 
@@ -155,6 +191,11 @@ public record MigrationJobStatus
 public record CollectionProgress
 {
     public required string CollectionName { get; init; }
+
+    /// <summary>
+    /// Documents the collection is expected to hold: the source's count while it is in flight, 0
+    /// while the source has given none, and what the source served once it is complete.
+    /// </summary>
     public long TotalDocuments { get; init; }
 
     /// <summary>
@@ -304,7 +345,9 @@ public record PendingMigrationConfig
     public MigrationMode? Mode { get; init; }
 
     /// <summary>
-    /// Nightscout URL from MIGRATION_NS_URL env var
+    /// <c>MIGRATION_NS_URL</c> in its <c>NightscoutAddress.Masked</c> form, never the URL itself: its
+    /// path or query can be the credential. An API-mode request that sends no URL reads the
+    /// configured one (<see cref="IMigrationJobService.ResolveNightscoutUrl"/>).
     /// </summary>
     public string? NightscoutUrl { get; init; }
 
@@ -340,7 +383,7 @@ public record MigrationSourceDto
     public required MigrationMode Mode { get; init; }
 
     /// <summary>
-    /// Nightscout URL (for API mode)
+    /// The Nightscout URL masked, with no scheme and each long path segment cut (for API mode)
     /// </summary>
     public string? NightscoutUrl { get; init; }
 

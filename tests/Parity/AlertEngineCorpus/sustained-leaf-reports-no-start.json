@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "name": "sustained-leaf-reports-no-start",
+  "description": "IOB knows no instant it has held since: the run starts on the first evaluation that finds it true, as before",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 15,
+        "child": {
+          "type": "iob",
+          "iob": {
+            "operator": ">",
+            "value": 2
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "context": {
+        "iob_units": 1
+      }
+    },
+    {
+      "at": "2026-11-02T12:05:00Z",
+      "context": {
+        "iob_units": 3
+      }
+    },
+    {
+      "at": "2026-11-02T12:15:00Z",
+      "context": {
+        "iob_units": 3
+      }
+    },
+    {
+      "at": "2026-11-02T12:20:00Z",
+      "context": {
+        "iob_units": 3
+      }
+    }
+  ]
+}

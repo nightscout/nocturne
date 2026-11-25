@@ -80,6 +80,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
             .UseSqlite(_db.Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
@@ -140,6 +141,27 @@ public class PlatformAccessCookieHandlerTests : IDisposable
         // Grant is otherwise valid (marker + matching tenant) but the subject's platform-admin
         // flag has since been revoked — the live re-check must reject it.
         var token = MintGrant(_revokedSubjectId, tenantId: _tenantId, platformAccess: true);
+        var context = BuildContext(_tenantId, cookieValue: token);
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.ShouldSkip.Should().BeTrue();
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeactivatedPlatformAdmin_SkipsAsOneWhoIsNoLongerAnAdmin()
+    {
+        var deactivatedId = Guid.CreateVersion7();
+        using (var ctx = _db.CreateContext())
+        {
+            ctx.Subjects.Add(new SubjectEntity
+            {
+                Id = deactivatedId, Name = "Deactivated Operator", IsActive = false, IsPlatformAdmin = true,
+            });
+            ctx.SaveChanges();
+        }
+        var token = MintGrant(deactivatedId, tenantId: _tenantId, platformAccess: true);
         var context = BuildContext(_tenantId, cookieValue: token);
 
         var result = await _handler.AuthenticateAsync(context);

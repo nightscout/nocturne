@@ -19,6 +19,7 @@ internal interface ITreatmentStore
     /// projecting V4 records into the legacy Treatment shape.
     /// </summary>
     /// <param name="query">The <see cref="TreatmentQuery"/> filter and pagination parameters.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>A read-only list of <see cref="Treatment"/> records matching the query.</returns>
     Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default);
 
@@ -30,9 +31,11 @@ internal interface ITreatmentStore
     /// <see cref="GetByIdAsync"/> resolves.
     /// </summary>
     /// <param name="id">The identifier as received from the client.</param>
+    /// <param name="ct">The cancellation token.</param>
     Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default);
 
     /// <param name="id">The treatment identifier (GUID or legacy MongoDB ObjectId).</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>The <see cref="Treatment"/> if found, or <c>null</c>.</returns>
     Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default);
 
@@ -43,6 +46,7 @@ internal interface ITreatmentStore
     /// decomposed from a treatment is keyed to the treatment id it was written under.
     /// </summary>
     /// <param name="id">The identifier as received from the client.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>The re-keyed <see cref="Treatment"/>, or <c>null</c> when nothing is stored under the id.</returns>
     Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default);
 
@@ -53,6 +57,7 @@ internal interface ITreatmentStore
     /// </summary>
     /// <param name="fromMills">Inclusive lower bound of the time window (Unix ms).</param>
     /// <param name="toMills">Inclusive upper bound of the time window (Unix ms).</param>
+    /// <param name="ct">The cancellation token.</param>
     Task<IReadOnlyList<Treatment>> GetByRangeAsync(long fromMills, long toMills, CancellationToken ct = default);
 
     /// <summary>
@@ -60,6 +65,7 @@ internal interface ITreatmentStore
     /// </summary>
     /// <param name="lastModifiedMills">The Unix-millisecond cutoff; only treatments modified after this are returned.</param>
     /// <param name="limit">Maximum number of records to return.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>A read-only list of recently modified <see cref="Treatment"/> records.</returns>
     Task<IReadOnlyList<Treatment>> GetModifiedSinceAsync(long lastModifiedMills, int limit, CancellationToken ct = default);
 
@@ -101,7 +107,9 @@ internal interface ITreatmentStore
     /// <summary>
     /// Updates an existing treatment by ID, propagating changes to V4 tables.
     /// </summary>
+    /// <param name="id">The identifier as received from the client.</param>
     /// <param name="treatment">The updated <see cref="Treatment"/> data.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated <see cref="Treatment"/>, or <c>null</c> if not found.</returns>
     Task<Treatment?> UpdateAsync(string id, Treatment treatment, CancellationToken ct = default);
 
@@ -115,6 +123,7 @@ internal interface ITreatmentStore
     /// Counts treatments matching the optional find filter, summing across all V4 treatment repositories.
     /// </summary>
     /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>
+    /// <param name="ct">The cancellation token.</param>
     Task<long> CountAsync(string? find = null, CancellationToken ct = default);
 }
 
@@ -125,6 +134,18 @@ internal interface ITreatmentStore
 /// <param name="Created">The treatment as the create returned it.</param>
 internal abstract record StoredTreatment(Treatment Created)
 {
+    /// <summary>
+    /// Whether the create updated a record already stored for the treatment rather than inserting
+    /// one: a client's resend, a connector republish, a span sent again.
+    /// </summary>
+    public bool Updated { get; init; }
+
+    /// <summary>
+    /// Whether the create applied a pulled treatment as an upstream edit of a record write-back sent,
+    /// which keeps the record's data source.
+    /// </summary>
+    public bool UpstreamEdit { get; init; }
+
     /// <summary>
     /// A temp basal, mapped from the record <paramref name="RecordId"/> as written. A later write of
     /// the batch can change that record: a re-send of it, or a Profile Switch that re-resolves its
@@ -140,6 +161,12 @@ internal abstract record StoredTreatment(Treatment Created)
 
     /// <summary><paramref name="Created"/> keeps the id it was sent with, which a read resolves.</summary>
     internal sealed record Unnamed(Treatment Created) : StoredTreatment(Created);
+
+    /// <summary>
+    /// A live treatment the create deleted, being sent under its id with <c>isValid: false</c>;
+    /// <paramref name="Created"/> is it as reads served it before.
+    /// </summary>
+    internal sealed record Deleted(Treatment Created) : StoredTreatment(Created);
 }
 
 /// <param name="Served">

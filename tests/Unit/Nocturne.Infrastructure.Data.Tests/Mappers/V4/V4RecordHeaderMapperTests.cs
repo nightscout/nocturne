@@ -120,6 +120,25 @@ public class V4RecordHeaderMapperTests
 
     [Theory]
     [MemberData(nameof(V4EntityTypeNames))]
+    public void UpdateEntity_IgnoresTheModelsCreatedAtAndModifiedAt(string entityTypeName)
+    {
+        var entityType = EntityType(entityTypeName);
+        var stamped = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entity = NewEntity(entityType);
+        entity.SysCreatedAt = stamped;
+        entity.SysUpdatedAt = stamped;
+        var model = NewModel(entityType);
+        model.CreatedAt = stamped.AddDays(30);
+        model.ModifiedAt = stamped.AddDays(30);
+
+        UpdateEntity(entityType, entity, model);
+
+        entity.SysCreatedAt.Should().Be(stamped, "a later publish stamp alone must not rewrite a stored row");
+        entity.SysUpdatedAt.Should().Be(stamped);
+    }
+
+    [Theory]
+    [MemberData(nameof(V4EntityTypeNames))]
     public void UpdateEntity_CopiesTheHeaderFromTheModel(string entityTypeName)
     {
         var entityType = EntityType(entityTypeName);

@@ -33,7 +33,7 @@ public class TenantControllerAttachOidcTests
     {
         _subjectService
             .Setup(s => s.AttachOidcIdentityAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()))
             .ReturnsAsync((OidcLinkOutcome.AlreadyLinkedToOther, (Guid?)null));
 
         var result = await _controller.AttachOidcIdentity(

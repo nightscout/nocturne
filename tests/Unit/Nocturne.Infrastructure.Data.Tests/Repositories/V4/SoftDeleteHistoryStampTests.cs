@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -236,7 +237,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
             Link(first, ledByA.B.Id, isPrimary: false, "source-b", RecordType.SensorGlucose),
             Link(second, ledByB.A.Id, isPrimary: false, "source-a", RecordType.SensorGlucose),
             Link(second, ledByB.B.Id, isPrimary: true, "source-b", RecordType.SensorGlucose));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.SensorGlucose, ledByA.B.Id, ledByB.A.Id);
         foreach (var row in new[] { ledByA.A, ledByA.B, ledByB.A, ledByB.B })
             row.SysUpdatedAt = Written;
         await _context.SaveChangesAsync();
@@ -244,7 +245,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
 
         await using var context = _db.CreateContext();
         var deleted = await context.AuditedSoftDeleteAsync(
-            context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            context.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(2);
         await using var verify = _db.CreateContext();
@@ -266,7 +267,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.LinkedRecords.AddRange(
             Link(canonical, primary.Id, isPrimary: true, "source-a", RecordType.SensorGlucose),
             Link(canonical, copy.Id, isPrimary: false, "source-b", RecordType.SensorGlucose));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.SensorGlucose, copy.Id);
         _context.ChangeTracker.Clear();
         await _context.SensorGlucose.Where(g => g.Id == primary.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(g => g.DeletedAt, Written));
@@ -274,12 +275,18 @@ public class SoftDeleteHistoryStampTests : IDisposable
         var pending = Glucose("source-c", 150);
         _context.SensorGlucose.Add(pending);
 
-        await DuplicateGroupPrimaries.RepointAwayFromAsync(
-            _context, RecordType.SensorGlucose, [primary.Id], Written, CancellationToken.None);
+        await using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            await DuplicateGroupPrimaries.RepointAwayFromAsync(
+                _context, RecordType.SensorGlucose, [primary.Id], Written, CancellationToken.None);
+            await transaction.CommitAsync();
+        }
 
         _context.Entry(pending).State.Should().Be(EntityState.Added);
         await using var verify = _db.CreateContext();
         (await verify.LinkedRecords.SingleAsync(l => l.IsPrimary)).RecordId.Should().Be(copy.Id);
+        (await verify.SensorGlucose.IgnoreQueryFilters().Where(g => g.IsDuplicate).Select(g => g.Id).ToListAsync())
+            .Should().Equal(primary.Id);
     }
 
     [Fact]
@@ -291,7 +298,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         await using var context = _db.CreateContext();
         _statements.Clear();
         var deleted = await context.AuditedSoftDeleteAsync(
-            context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            context.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(count);
         _statements.Count("SELECT", s => s.Contains("FROM \"linked_records\"", StringComparison.Ordinal)).Should().Be(1 + 3, "one lookup of the groups, then one read per chunk");
@@ -308,7 +315,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         var (primaries, copies) = await SeedGroupsAsync(1);
 
         await using var context = _db.CreateContext();
-        var rows = context.SensorGlucose.FromSource("source-a");
+        var rows = context.SensorGlucose.Selected(RecordSelector.ForSource("source-a"));
         _statements.FailOn(s => s.StartsWith("UPDATE \"linked_records\"", StringComparison.Ordinal), ordinal: 2);
         Func<Task> act = withEntities
             ? () => context.AuditedSoftDeleteWithEntitiesAsync(rows, new UserAuditContext(), "data_source=source-a")
@@ -360,11 +367,11 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.LinkedRecords.AddRange(
             Link(canonical, primary.Id, isPrimary: true, "source-a", RecordType.StateSpan),
             Link(canonical, copy.Id, isPrimary: false, "source-b", RecordType.StateSpan));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.StateSpan, copy.Id);
         _context.ChangeTracker.Clear();
 
         var repository = new StateSpanRepository(
-            _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
+            _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
             new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
 
         var deleted = activity
@@ -396,8 +403,16 @@ public class SoftDeleteHistoryStampTests : IDisposable
     }
 
     private NoteRepository NotesAs(IAuditContext audit) => new(
-        new AuditedFactory(_db, audit), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
+        new SuppliedContextFactory(() => AuditedContext(audit)), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
         audit, NullLogger<NoteRepository>.Instance);
+
+    /// <summary>A fresh context carrying a user's audit context, as a request's factory hands out.</summary>
+    private NocturneDbContext AuditedContext(IAuditContext audit)
+    {
+        var ctx = _db.CreateContext();
+        ctx.AttributedTo(audit);
+        return ctx;
+    }
 
     /// <summary>One group per row: source A's reading leads, source B's is its duplicate.</summary>
     private async Task<(List<Guid> Primaries, List<Guid> Copies)> SeedGroupsAsync(int count)
@@ -417,7 +432,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
             primaries.Add(primary.Id);
             copies.Add(copy.Id);
         }
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.SensorGlucose, [.. copies]);
         await _context.SensorGlucose.ExecuteUpdateAsync(s => s.SetProperty(g => g.SysUpdatedAt, Written));
         _context.ChangeTracker.Clear();
         return (primaries, copies);
@@ -432,21 +447,10 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.LinkedRecords.AddRange(
             Link(canonical, primary.Id, isPrimary: true, "source-a"),
             Link(canonical, copy.Id, isPrimary: false, "source-b"));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.FlagAsync(_context, RecordType.Note, copy.Id);
         await _context.Notes.ExecuteUpdateAsync(s => s.SetProperty(n => n.SysUpdatedAt, Written));
         _context.ChangeTracker.Clear();
         return (primary.Id, copy.Id);
-    }
-
-    /// <summary>Hands out fresh contexts carrying a user's audit context, as a request's factory does.</summary>
-    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
-        {
-            var ctx = db.CreateContext();
-            ctx.AttributedTo(audit);
-            return ValueTask.FromResult(ctx);
-        }
     }
 
     private sealed class UserAuditContext : IAuditContext

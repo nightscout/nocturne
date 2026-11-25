@@ -26,7 +26,9 @@ import Import from "@lucide/svelte/icons/import";
 import Inbox from "@lucide/svelte/icons/inbox";
 import TestTube from "@lucide/svelte/icons/test-tube";
 import Timer from "@lucide/svelte/icons/timer";
-import Layers from "@lucide/svelte/icons/layers";
+import ChartGantt from "@lucide/svelte/icons/chart-gantt";
+import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+import Syringe from "@lucide/svelte/icons/syringe";
 import Wrench from "@lucide/svelte/icons/wrench";
 import Users from "@lucide/svelte/icons/users";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
@@ -46,7 +48,7 @@ export type NavItemId =
   | "time-spans"
   | "reports"
   | "clock"
-  | "tenants"
+  | "people"
   | "food"
   | "meals"
   | "tools"
@@ -102,6 +104,8 @@ export interface NavViewer {
   isGuestSession: boolean;
   /** Whether the viewer administers the platform. */
   isPlatformAdmin: boolean;
+  /** Whether the API refuses the viewer as the demo subject. */
+  refusedAsDemoSubject?: boolean;
   /** The viewer's granted scopes, as `page.data.effectivePermissions` carries them. */
   grantedScopes: readonly string[];
   /** How many tenants the viewer can switch between. */
@@ -143,6 +147,33 @@ export function readOnlyNav(items: NavItem[], viewer: NavViewer): NavItem[] | nu
   );
 }
 
+/** The settings pages the Therapy group carries, which the Site settings group then leaves out. */
+const THERAPY_SETTINGS_HREFS: readonly string[] = ["/settings/profile", "/settings/patient"];
+
+/**
+ * The therapy timeline, grouped with the profile and patient record pages for a member who may
+ * read therapy settings. Anyone else gets the timeline alone, as a plain entry.
+ */
+function therapyNav(viewer: NavViewer): NavItem {
+  const timeline = { href: "/time-spans", icon: ChartGantt };
+  const settings =
+    viewer.user && !viewer.isGuestSession && satisfiesScope(viewer.grantedScopes, "therapy.read");
+  if (!settings) {
+    return { id: "time-spans", title: "Therapy timeline", ...timeline };
+  }
+
+  return {
+    id: "time-spans",
+    title: "Therapy",
+    icon: Syringe,
+    children: [
+      { title: "Timeline", ...timeline },
+      { title: "Profiles", href: "/settings/profile", icon: Syringe },
+      { title: "Patient record", href: "/settings/patient", icon: HeartPulse },
+    ],
+  };
+}
+
 export function buildAppNavigation(viewer: NavViewer): NavItem[] {
   const items: NavItem[] = [
     {
@@ -158,12 +189,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       href: "/calendar",
       icon: Calendar,
     },
-    {
-      id: "time-spans",
-      title: "Time spans",
-      href: "/time-spans",
-      icon: Layers,
-    },
+    therapyNav(viewer),
     {
       id: "reports",
       title: "Reports",
@@ -190,9 +216,9 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
 
   if (viewer.tenantCount > 1) {
     items.push({
-      id: "tenants",
-      title: "Tenants",
-      href: "/tenants",
+      id: "people",
+      title: "People",
+      href: "/people",
       icon: Users,
     });
   }
@@ -271,12 +297,14 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
         id: SETTINGS_NAV_IDS[group.id],
         title: group.title,
         icon: SETTINGS_NAV_ICONS[group.id],
-        children: group.links.map(({ title, href, icon, strict }) => ({ title, href, icon, strict })),
+        children: group.links
+          .filter((link) => !THERAPY_SETTINGS_HREFS.includes(link.href))
+          .map(({ title, href, icon, strict }) => ({ title, href, icon, strict })),
       })
     )
   );
 
-  const visible = withinScope(items, viewer);
+  const visible = withinScope(items, viewer).filter((item) => !item.children || item.children.length > 0);
 
   // See tenantless-navigation for why the tenant-scoped pages come out.
   if (viewer.tenantless) {

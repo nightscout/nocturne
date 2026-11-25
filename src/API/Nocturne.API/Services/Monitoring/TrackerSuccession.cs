@@ -1,7 +1,6 @@
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -32,25 +31,30 @@ public static class TrackerSuccession
     /// <see cref="TrackerRealtimeAction.Complete"/>, then the new run as
     /// <see cref="TrackerRealtimeAction.Create"/>; with no <paramref name="broadcast"/> nothing is,
     /// for a caller inside a transaction it has yet to commit, which broadcasts after.
+    /// <paramref name="afterCommit"/> runs with the started run once the repository's work returns and
+    /// before any broadcast, for a caller that owns no outer transaction, as the broadcasts are (see
+    /// <see cref="TrackerDeviceEventWriter"/>).
     /// </summary>
     public static async Task<TrackerSuccessionResult> StartAsync(
         ITrackerRepository repository,
         ISignalRBroadcastService? broadcast,
+        TimeProvider time,
         ILogger logger,
-        TrackerDefinitionEntity definition,
+        TrackerDefinition definition,
         DateTime startedAt,
         string? completionNotes,
         string? completeTreatmentId,
-        Func<ITrackerRepository, CancellationToken, Task<TrackerInstanceEntity>> start,
+        Func<ITrackerRepository, CancellationToken, Task<TrackerInstance>> start,
         CancellationToken ct,
-        Func<IReadOnlyList<TrackerInstanceEntity>, bool>? alreadyStarted = null,
-        bool replay = false)
+        Func<IReadOnlyList<TrackerInstance>, bool>? alreadyStarted = null,
+        bool replay = false,
+        Func<TrackerInstance, Task>? afterCommit = null)
     {
         var result = await repository.ExecuteUnderDefinitionLockAsync(
             definition.Id,
             async (tx, token) =>
             {
-                List<TrackerInstanceEntity> completed = [];
+                List<TrackerInstance> completed = [];
                 if (definition.Mode == TrackerMode.Duration)
                 {
                     var running = await tx.GetActiveInstancesForDefinitionAsync(definition.Id, token);
@@ -86,6 +90,9 @@ public static class TrackerSuccession
             ct
         );
 
+        if (afterCommit is not null && result.Started is { } committed)
+            await afterCommit(committed);
+
         foreach (var instance in result.Completed)
         {
             logger.LogInformation(
@@ -97,14 +104,14 @@ public static class TrackerSuccession
             if (broadcast is not null)
                 await broadcast.BroadcastTrackerUpdateAsync(
                     TrackerRealtimeAction.Complete,
-                    TrackerInstanceDto.FromEntity(instance)
+                    TrackerInstanceDto.From(instance, time.GetUtcNow().UtcDateTime)
                 );
         }
 
         if (broadcast is not null && result.Started is { } started)
             await broadcast.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Create,
-                TrackerInstanceDto.FromEntity(started)
+                TrackerInstanceDto.From(started, time.GetUtcNow().UtcDateTime)
             );
 
         return result;
@@ -126,5 +133,5 @@ public enum TrackerSuccessionOutcome
 /// <param name="Completed">The runs this call completed, which a CompletedElsewhere call keeps.</param>
 public sealed record TrackerSuccessionResult(
     TrackerSuccessionOutcome Outcome,
-    TrackerInstanceEntity? Started,
-    IReadOnlyList<TrackerInstanceEntity> Completed);
+    TrackerInstance? Started,
+    IReadOnlyList<TrackerInstance> Completed);

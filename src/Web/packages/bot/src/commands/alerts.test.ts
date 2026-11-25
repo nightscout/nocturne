@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import type { ActiveExcursionResponse } from "@nocturne/api-client";
 import type { ActionEvent, Chat, SlashCommandEvent } from "chat";
 import { registerAlertCommands } from "./alerts.js";
 import { runWithContext, type BotRequestContext } from "../lib/request-context.js";
 import type {
-  ActiveExcursion,
   BotApiClient,
   DirectoryCandidate,
 } from "../types.js";
@@ -64,7 +64,7 @@ interface ScopedAlerts {
 
 function createContext(
   candidates: DirectoryCandidate[] | null,
-  activeAlerts: ActiveExcursion[] | null = [],
+  activeAlerts: ActiveExcursionResponse[] | null = [],
 ) {
   const resolve = vi.fn().mockResolvedValue(candidates);
   const ambientAcknowledge = vi.fn().mockResolvedValue(undefined);
@@ -157,7 +157,7 @@ const postedText = (post: Mock, call = 0) =>
 const asLinkedMember = (excursionId: string | null) => ({
   platform: "discord",
   platformUserId: "discord-user-1",
-  excursionId,
+  excursionId: excursionId ?? undefined,
   acknowledgedBy: "Sam Tester",
 });
 
@@ -479,7 +479,7 @@ describe("/alerts command", () => {
     handler = registerHandlers().commands.get("/alerts")!;
   });
 
-  const excursion = (id: string, ruleName: string): ActiveExcursion => ({
+  const excursion = (id: string, ruleName: string): ActiveExcursionResponse => ({
     id,
     ruleName,
     startedAt: new Date(Date.now() - 3 * 60_000).toISOString(),

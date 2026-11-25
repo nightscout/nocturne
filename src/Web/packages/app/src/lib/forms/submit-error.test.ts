@@ -1,20 +1,25 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
-import { parseErrorBody } from "#lib/api/error-body.js";
+import { parseCode, parseErrorBody } from "#lib/api/error-body.js";
 import {
   describeRemoteError,
   describeSubmitError,
   errorIssues,
   errorMessage,
+  isSignInRequired,
   PERMISSION_GATED_MUTATION,
+  permissionGatedMutationError,
 } from "./submit-error";
 import {
   genericSubmitError,
   missingItemError,
+  missingScopeError,
   rateLimitedError,
+  signInRequiredError,
 } from "./submit-messages.svelte";
+import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
 /**
@@ -28,7 +33,8 @@ import { remoteErrorMessage } from "#lib/api/remote-error.js";
 type ForbidArm = (
   err: unknown,
   error: typeof import("@sveltejs/kit").error,
-  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody
+  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody,
+  parseCode: typeof import("#lib/api/error-body.js").parseCode
 ) => never;
 
 function compileArm(source: string): ForbidArm {
@@ -37,7 +43,7 @@ function compileArm(source: string): ForbidArm {
 
 async function crossThe403Arm(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, error, parseErrorBody) => { ${config.errorHandling.on403}; }`,
+    `(err, error, parseErrorBody, parseCode) => { ${config.errorHandling.on403}; }`,
     "on403.ts",
     { loader: "ts" }
   );
@@ -45,7 +51,7 @@ async function crossThe403Arm(thrown: unknown): Promise<unknown> {
   const forbid = compileArm(compiled.code.trim().replace(/;$/, ""));
 
   try {
-    forbid(thrown, error, parseErrorBody);
+    forbid(thrown, error, parseErrorBody, parseCode);
   } catch (crossed) {
     return crossed;
   }
@@ -239,6 +245,125 @@ describe("describeSubmitError", () => {
   });
 });
 
+describe("a sign_in_required refusal", () => {
+  const handedOffRefusal = {
+    ...problemDetails(403, "Sign in to do this. This session was opened from a sign-in link."),
+    code: "sign_in_required",
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("asks a writer to sign in, ahead of its fallback and of a sentence it has for the code", async () => {
+    const crossed = await crossThe403Arm(handedOffRefusal);
+
+    expect(
+      describeSubmitError(crossed, "Could not create the token.", { sign_in_required: "Other." })
+    ).toBe(signInRequiredError());
+  });
+
+  it("tells a reader to sign in", async () => {
+    const crossed = await crossThe403Arm(handedOffRefusal);
+
+    expect(remoteErrorMessage(crossed, "Could not load your connections.")).toBe(
+      signInRequiredError()
+    );
+  });
+
+  // Callers format inside `$derived` (the error page, the join page), where a state write throws,
+  // so describing the refusal opens nothing; the refused write opens the prompt itself.
+  it("opens nothing while it is described, for a writer or a reader", async () => {
+    const prompt = vi.spyOn(confirmIdentity, "request").mockResolvedValue(false);
+    const crossed = await crossThe403Arm(handedOffRefusal);
+
+    describeSubmitError(crossed, "Could not create the token.");
+    remoteErrorMessage(crossed, "Could not load your connections.");
+
+    expect(prompt).not.toHaveBeenCalled();
+    expect(confirmIdentity.open).toBe(false);
+  });
+
+  it("is recognised as this refusal, and no other 403 is", async () => {
+    expect(isSignInRequired(await crossThe403Arm(handedOffRefusal))).toBe(true);
+    expect(
+      isSignInRequired(
+        await crossThe403Arm({ ...problemDetails(403, "No."), code: "missing_scope" })
+      )
+    ).toBe(false);
+    expect(isSignInRequired({ status: 401, body: { code: "sign_in_required" } })).toBe(false);
+  });
+});
+
+describe("a missing_scope refusal", () => {
+  const scopeRefusal = {
+    ...problemDetails(403, "This operation requires the 'tenant.settings' scope."),
+    code: "missing_scope",
+    scopes: ["tenant.settings"],
+  };
+
+  it("answers an ordinary caller with the permission sentence, which names no scope, ahead of its fallback", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+    const shown = describeSubmitError(crossed, "Could not save the profile.");
+
+    expect(shown).toBe(missingScopeError());
+    expect(shown).not.toContain("tenant.settings");
+  });
+
+  it("reads the same when the refusal reached NSwag unparsed", async () => {
+    const crossed = await crossThe403Arm(
+      nswagApiException(403, UNDECLARED_STATUS_MESSAGE, JSON.stringify(scopeRefusal))
+    );
+
+    expect(describeSubmitError(crossed, "Could not save the profile.")).toBe(
+      missingScopeError()
+    );
+  });
+
+  it("leaves a permission-gated caller its own refusal sentence", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+
+    expect(
+      permissionGatedMutationError(
+        crossed,
+        "Changing alerts requires the alerts.readwrite permission."
+      )
+    ).toBe("Changing alerts requires the alerts.readwrite permission.");
+  });
+
+  it("leaves a 403 with another code to the server's sentence", async () => {
+    const crossed = await crossThe403Arm({
+      ...problemDetails(403, "Demo accounts cannot do this."),
+      code: "demo_subject",
+    });
+
+    expect(describeSubmitError(crossed, "You can't change this setting.")).toBe(
+      "Demo accounts cannot do this."
+    );
+  });
+
+  it("lets a call site's own sentence for the code win", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+
+    expect(
+      describeSubmitError(crossed, "Fallback.", { missing_scope: "Ask an owner." })
+    ).toBe("Ask an owner.");
+  });
+
+  it("lets a call site's own sentence for the code win over a permission-gated caller's sentence", async () => {
+    const crossed = await crossThe403Arm(scopeRefusal);
+
+    expect(
+      describeRemoteError(
+        crossed,
+        "Changing alerts requires the alerts.readwrite permission.",
+        PERMISSION_GATED_MUTATION,
+        { missing_scope: "Ask an owner." }
+      )
+    ).toBe("Ask an owner.");
+  });
+});
+
 describe("the 403 arm", () => {
   it("forwards the reason when an invalidated query's refresh is what was refused", async () => {
     const crossed = await crossThe403Arm(
@@ -411,5 +536,58 @@ describe("a mutation whose fallback names the permission its page is gated on", 
     expect(describe_({ status: 403, body: { message: NEEDS_SCOPE } })).toBe(
       NEEDS_SCOPE
     );
+  });
+});
+
+describe("a problem code the caller has a sentence for", () => {
+  const KNOWN = { role_name_taken: "A role with this name already exists." };
+  const FALLBACK = "Failed to create role.";
+
+  it.each([400, 404, 409])("answers a %i with the sentence for its code", (status) => {
+    const err = { status, body: { message: "Server text", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(KNOWN.role_name_taken);
+  });
+
+  it("answers a query's own error the same way", () => {
+    const err = { status: 409, message: "Server text", code: "role_name_taken" };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(KNOWN.role_name_taken);
+  });
+
+  it("leaves the server's text for a code the caller does not know", () => {
+    const err = { status: 409, body: { message: "Server text", code: "other_code" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("leaves the server's text when the rejection has no code", () => {
+    const err = { status: 409, body: { message: "Server text" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("ignores a code when the caller passes no map", () => {
+    const err = { status: 409, body: { message: "Server text", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK)).toBe("Server text");
+  });
+
+  it("ignores a malformed code", () => {
+    const err = { status: 409, body: { message: "Server text", code: "Role Name Taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, { "Role Name Taken": "No." })).toBe("Server text");
+  });
+
+  it("does not mistake an inherited property for a known code", () => {
+    const err = { status: 409, body: { message: "Server text", code: "constructor" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe("Server text");
+  });
+
+  it("still answers a 429 as throttled", () => {
+    const err = { status: 429, body: { message: "Too many requests", code: "role_name_taken" } };
+
+    expect(describeSubmitError(err, FALLBACK, KNOWN)).toBe(rateLimitedError());
   });
 });

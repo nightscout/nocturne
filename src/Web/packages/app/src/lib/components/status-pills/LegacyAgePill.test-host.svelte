@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { LegacyFallbackDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { LegacyFallbackDto } from "@nocturne/api-client";
   import { hiddenLegacyFallbacks } from "#lib/stores/appearance-store.svelte.js";
   import LegacyAgePill from "./LegacyAgePill.svelte";
   import { visibleLegacyFallbacks } from "./tracker-pill-visibility";

@@ -22,21 +22,25 @@ public class ShareDataCategoriesGuardTests
     {
         // Configuration that applies to all of history rather than to rows of it: therapy and
         // profile schedules, alert and tracker setup, devices and connector settings.
-        "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_tracker_state",
+        "alert_condition_not_true", "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_tracker_state",
         "basal_schedules", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
-        "connector_configurations", "data_source_metadata", "devices", "dnd_windows", "patient_devices",
+        "connector_configurations", "data_source_metadata", "devices", "patient_devices",
         "patient_insulins", "patient_records", "sensitivity_schedules", "settings", "target_range_schedules",
         "tenant_alert_settings", "tenant_data_retention_config", "therapy_settings", "timezone_timeline",
         "tracker_definitions", "tracker_notification_thresholds", "tracker_presets", "translation_drafts",
         "user_food_favorites",
+
+        // Saved custom report specs: a definition that names datasets and ranges, no readings.
+        "report_specs",
 
         // Access control and audit, read under their own permissions.
         "alert_invites", "login_codes", "member_invites", "membership_requests", "mutation_audit_log",
         "oauth_authorization_codes", "oauth_clients", "oauth_device_codes", "oauth_grants", "oauth_refresh_tokens",
         "read_access_log",
 
-        // Internal bookkeeping.
-        "dedup_reconcile_state",
+        // Internal bookkeeping. The evaluated reading's key is the newest reading's, which the
+        // evaluation that wrote it read in full, so it is not history.
+        "alert_evaluated_readings", "dedup_reconcile_state", "google_health_work",
 
         // The owner's onboarding state.
         "setup_hub_additions", "setup_hub_items",

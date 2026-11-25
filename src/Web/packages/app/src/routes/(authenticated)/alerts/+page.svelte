@@ -19,7 +19,7 @@
   import type {
     AlertRuleResponse,
     TenantAlertSettingsResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -40,6 +40,8 @@
   import { resolve } from "$app/paths";
 
   import AlertRuleRow from "#lib/components/alerts/AlertRuleRow.svelte";
+  import ChannelsNotSent from "#lib/components/alerts/ChannelsNotSent.svelte";
+  import { channelNotSentMessage } from "#lib/components/alerts/channelState.svelte.js";
   import DndNoticeStrip from "#lib/components/alerts/DndNoticeStrip.svelte";
   import { isDndInEffect, isDndManualActive } from "#lib/components/alerts/dnd.js";
   import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
@@ -64,7 +66,9 @@
   // ---- Mutation state ----
   let togglingRuleId = $state<string | null>(null);
   let deletingRuleId = $state<string | null>(null);
-  let testingRuleId = $state<string | null>(null);
+  let testingRuleIds = $state<string[]>([]);
+  let testNotSent = $state<{ ruleId: string; ruleName: string; messages: string[] } | null>(null);
+  let latestTestFire = 0;
   let acknowledging = $state(false);
   let disablingDnd = $state(false);
 
@@ -82,6 +86,7 @@
 
   async function handleDeleteRule(ruleId: string): Promise<void> {
     deletingRuleId = ruleId;
+    if (testNotSent?.ruleId === ruleId) testNotSent = null;
     try {
       await deleteRule(ruleId);
     } catch (err) {
@@ -91,14 +96,22 @@
     }
   }
 
-  async function handleTestFire(ruleId: string): Promise<void> {
-    testingRuleId = ruleId;
+  async function handleTestFire(rule: AlertRuleResponse): Promise<void> {
+    const ruleId = rule.id ?? "";
+    const fire = ++latestTestFire;
+    testingRuleIds = [...testingRuleIds, ruleId];
+    testNotSent = null;
     try {
-      await testFire(ruleId);
+      const answer = await testFire(ruleId);
+      if (fire === latestTestFire) {
+        const channels = rule.channels ?? [];
+        const messages = (answer.notSent ?? []).map((entry) => channelNotSentMessage(entry, channels));
+        testNotSent = messages.length > 0 ? { ruleId, ruleName: rule.name ?? "", messages } : null;
+      }
     } catch (err) {
       toast.error(mutationError(err));
     } finally {
-      testingRuleId = null;
+      testingRuleIds = testingRuleIds.filter((id) => id !== ruleId);
     }
   }
 
@@ -171,7 +184,7 @@
     {#if canManageAlerts}
       <div class="flex items-center gap-2">
         <Button onclick={newRule}>
-          <Plus class="h-4 w-4 mr-2" /> New rule
+          <Plus class="h-4 w-4 mr-2" /> New alert
         </Button>
       </div>
     {/if}
@@ -229,6 +242,23 @@
             : `${needsReview} alert rules need review.`}
           Some rules were created in an older format. An update changed or turned off some of them. For others, the conditions possibly do not alert as set. Each one is marked below.
         </p>
+      </div>
+    {/if}
+
+    {#if rules.length > 0 && !rules.some((r) => r.coversLow)}
+      <div
+        role="status"
+        class="flex items-center gap-3 rounded-lg border px-4 py-3 {severity('warning', 'strip')}"
+      >
+        <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <p class="flex-1 text-sm font-medium">
+          No alert is on for low glucose. Nocturne will not tell you when glucose is low.
+        </p>
+        {#if canManageAlerts}
+          <Button type="button" variant="outline" size="sm" onclick={newRule}>
+            <Plus class="h-4 w-4 mr-2" /> Add a low alert
+          </Button>
+        {/if}
       </div>
     {/if}
 
@@ -334,18 +364,24 @@
       <CardHeader>
         <CardTitle>Alert rules</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent class="space-y-3">
+        {#if testNotSent}
+          <ChannelsNotSent
+            heading={`The test alert for ${testNotSent.ruleName} did not go to every channel.`}
+            messages={testNotSent.messages}
+          />
+        {/if}
         {#if rules.length === 0}
           <EmptyState
             art="alarm-bell"
             variant="outline"
-            title="No alert rules yet"
-            body="Add a rule so Nocturne can notify you when glucose goes out of range."
+            title="No alerts yet"
+            body="Add an alert so Nocturne can notify you when glucose goes out of range."
             action={canManageAlerts ? newRuleAction : undefined}
           />
           {#snippet newRuleAction()}
             <Button size="sm" onclick={newRule}>
-              <Plus class="h-4 w-4 mr-2" /> New rule
+              <Plus class="h-4 w-4 mr-2" /> New alert
             </Button>
           {/snippet}
         {:else}
@@ -356,11 +392,11 @@
                 canManage={canManageAlerts}
                 isToggling={togglingRuleId === rule.id}
                 isDeleting={deletingRuleId === rule.id}
-                isTesting={testingRuleId === rule.id}
+                isTesting={testingRuleIds.includes(rule.id ?? "")}
                 onToggleEnabled={() => handleToggleRule(rule.id ?? "")}
                 onEdit={() => editRule(rule)}
                 onDelete={() => handleDeleteRule(rule.id ?? "")}
-                onTestFire={() => handleTestFire(rule.id ?? "")}
+                onTestFire={() => handleTestFire(rule)}
                 resolveAlertName={(id) => ruleNamesById.get(id)}
               />
             {/each}

@@ -37,7 +37,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
     private readonly ISecretEncryptionService _oldKey = Encryption("the-old-instance-key");
     private readonly ISecretEncryptionService _newKey = Encryption("the-new-instance-key");
-    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
+    private readonly ScanClock _clock = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
     private readonly SqliteTestDatabase _database = TestDbContextFactory.CreateSqlite();
     private readonly List<Sent> _sent = [];
     private readonly List<InAppNotificationEntity> _active = [];
@@ -72,6 +72,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new RecordingNotifications(sp.GetRequiredService<ITenantAccessor>(), this));
         services.AddTransient(_ => _key);
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddTransient<UndecryptableSecretScanner>();
         _provider = services.BuildServiceProvider();
@@ -143,7 +144,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var affected = _database.ContextFactory.AsNocturneFactory(Affected);
         var found = await new UndecryptableSecretScanner(
-            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected), _newKey).ScanTenantAsync(CancellationToken.None);
+            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected, TimeProvider.System), _newKey).ScanTenantAsync(CancellationToken.None);
 
         found.AlertChannels.Select(c => (c.RuleName, c.Destination)).Should().Equal(
             ("Bare", ""), ("Mixed", "a.example.com"));
@@ -207,15 +208,14 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         var admin = await SeedPlatformAdminAsync(Affected);
 
         var service = CreateService();
-        await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _sent.Count == OwnersOf(Affected).Length + 1);
+        await StartAndAwaitPassAsync(service);
         var generation = (await CheckAsync())!.Generation.ToString();
 
         await StoreConnectorAsync(Affected, "dexcom", _newKey);
         await using (var db = _database.CreateContext(Affected))
             await db.AlertRuleChannels.ExecuteDeleteAsync();
         await StorePlatformSettingAsync("discord", enabled: true, _newKey);
-        await AdvanceUntilAsync(() => service.ExecuteTask!.IsCompleted);
+        await Eventually.UntilAsync("the service to finish", () => service.ExecuteTask!.IsCompleted, eachStep: AdvanceRescan);
         await service.ExecuteTask!;
 
         _archived.Should().BeEquivalentTo(
@@ -253,19 +253,17 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await StoreConnectorAsync(Unaffected, "dexcom", _oldKey);
 
         var first = CreateService();
-        await first.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _sent.Count == 4);
+        await StartAndAwaitPassAsync(first);
         var firstChange = (await CheckAsync())!.Generation.ToString();
         await StoreConnectorAsync(Affected, "dexcom", _newKey);
-        await AdvanceUntilAsync(() => _archived.Count == 2);
+        await Eventually.UntilAsync("the second check to be archived", () => _archived.Count == 2, eachStep: AdvanceRescan);
         await first.StopAsync(CancellationToken.None);
         _sent.Clear();
         _archived.Clear();
 
         _key = third;
         var second = CreateService();
-        await second.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _sent.Count == 4);
+        await StartAndAwaitPassAsync(second);
         await second.StopAsync(CancellationToken.None);
 
         var secondChange = (await CheckAsync())!.Generation.ToString();
@@ -289,10 +287,11 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var service = CreateService(snapshotContexts: flaky.AsNocturneFactory());
         await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => flaky.Failed);
+        await Eventually.UntilAsync("the snapshot read to fail", () => flaky.Failed);
         service.ExecuteTask!.IsCompleted.Should().BeFalse();
 
-        await AdvanceUntilAsync(() => _sent.Count == OwnersOf(Affected).Length);
+        await Eventually.UntilAsync(
+            "a notice to reach every affected owner", () => _sent.Count == OwnersOf(Affected).Length, eachStep: AdvanceRescan);
         await service.StopAsync(CancellationToken.None);
 
         _log.Entries.Should().Contain(e => e.Level == LogLevel.Error);
@@ -372,7 +371,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new InstanceKeyCheck(root, _key),
             new OwnerNoticeLedger(root),
             new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            new TenantMembershipRepository(root),
+            new TenantMembershipRepository(root, AccountLinkRoutes.Off),
             _clock,
             _log);
     }
@@ -380,27 +379,23 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     private static async Task RunAsync(InstanceKeyChangeService service)
     {
         await service.StartAsync(CancellationToken.None);
-        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.ExecuteTask!.WaitAsync(Eventually.DefaultPatience);
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
+    /// <summary>
+    /// Returns once the service has finished a pass and is waiting for the next scan, so the test
+    /// thread opens no context while the pass has one on the shared connection.
+    /// </summary>
+    private async Task StartAndAwaitPassAsync(InstanceKeyChangeService service)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition())
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline);
-            await Task.Delay(10);
-        }
+        var scans = _clock.Scans;
+        await service.StartAsync(CancellationToken.None);
+        await Eventually.UntilAsync(
+            "the service to finish a pass", () => _clock.Scans > scans || service.ExecuteTask!.IsCompleted);
     }
 
     /// <summary>Moves the clock a scan at a time, since a scan may not yet be waiting when it moves.</summary>
-    private Task AdvanceUntilAsync(Func<bool> condition) => WaitUntilAsync(() =>
-    {
-        if (condition())
-            return true;
-        _clock.Advance(InstanceKeyChangeService.RescanInterval);
-        return false;
-    });
+    private void AdvanceRescan() => _clock.Advance(InstanceKeyChangeService.RescanInterval);
 
     private async Task WriteCheckAsync(ISecretEncryptionService key) =>
         (await new InstanceKeyCheck(_database.ContextFactory.AsNocturneFactory(), key)
@@ -510,6 +505,22 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         _database.Dispose();
     }
 
+    /// <summary>Counts the scan waits the service starts, one for each pass that ends without clearing the change.</summary>
+    private sealed class ScanClock(DateTimeOffset start) : FakeTimeProvider(start)
+    {
+        private int _scans;
+
+        public int Scans => Volatile.Read(ref _scans);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
+            if (dueTime == InstanceKeyChangeService.RescanInterval)
+                Interlocked.Increment(ref _scans);
+            return timer;
+        }
+    }
+
     private sealed record Sent(
         Guid TenantId, string UserId, string Type, string SourceId, NotificationUrgency? Urgency,
         List<NotificationActionDto> Actions, Dictionary<string, object> Metadata);
@@ -555,13 +566,24 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<bool> ReplaceMetadataBySourceAsync(
+            string userId, string type, string sourceId, Dictionary<string, object> metadata,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> CreateNotificationUnlessActiveAsync(
+            string userId, string type, string title, string sourceId, NotificationCategory? category = null,
+            string? source = null, string? subtitle = null, Dictionary<string, object>? metadata = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<List<InAppNotificationDto>> GetActiveNotificationsAsync(string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<string?> GetNotificationTypeAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<bool> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
+        public Task<NotificationActionResult> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<bool> MarkAsReadAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>

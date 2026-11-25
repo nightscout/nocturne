@@ -19,12 +19,12 @@
     {
       "at": "2026-01-05T12:30:00Z",
       "rule_id": "00000000-0000-0000-0000-000000000001",
-      "kind": "cleared"
+      "kind": "hysteresis_started"
     },
     {
       "at": "2026-01-05T12:30:00Z",
       "rule_id": "00000000-0000-0000-0000-000000000002",
-      "kind": "cleared"
+      "kind": "hysteresis_started"
     }
   ],
   "leaf_transitions": [
@@ -170,12 +170,12 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "met": false,
-          "firing": false
+          "firing": true
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "met": false,
-          "firing": false
+          "firing": true
         }
       ]
     }

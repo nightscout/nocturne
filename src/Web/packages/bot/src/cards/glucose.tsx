@@ -1,9 +1,9 @@
 import { Card, Fields, Field } from "chat";
-import type { SensorGlucoseReading } from "../types.js";
+import type { SensorGlucose } from "@nocturne/api-client";
 import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 
 export function GlucoseCard(props: {
-  reading: SensorGlucoseReading;
+  reading: SensorGlucose;
   unit?: "mg/dL" | "mmol/L";
 }) {
   const { reading, unit = "mg/dL" } = props;

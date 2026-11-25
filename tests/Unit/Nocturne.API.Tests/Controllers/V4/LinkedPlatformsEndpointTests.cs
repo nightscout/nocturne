@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -38,6 +39,13 @@ public class LinkedPlatformsEndpointTests : IDisposable
 
     private NocturneDbContext CreateDbContext() => new(_dbOptions);
 
+    private static Guid SeedSubject(NocturneDbContext db)
+    {
+        var id = Guid.NewGuid();
+        db.Subjects.Add(new SubjectEntity { Id = id, Name = "Member" });
+        return id;
+    }
+
     private LinkedPlatformsController CreateController(
         ChatIdentityDirectoryService directory)
     {
@@ -55,7 +63,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => CreateDbContext());
-        return new ChatIdentityDirectoryService(factoryMock.Object.AsNocturneFactory(), TimeProvider.System, _loggerMock.Object);
+        return new ChatIdentityDirectoryService(factoryMock.Object.AsNocturneFactory(), new TenantMembershipRepository(factoryMock.Object.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, _loggerMock.Object);
     }
 
     [Fact]
@@ -71,7 +79,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
                     Platform = "discord",
                     PlatformUserId = "user1",
                     TenantId = _tenantId,
-                    NocturneUserId = Guid.NewGuid(),
+                    NocturneUserId = SeedSubject(db),
                     Label = "main",
                     DisplayName = "Main",
                     IsDefault = true,
@@ -83,7 +91,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
                     Platform = "discord",
                     PlatformUserId = "user2",
                     TenantId = _tenantId,
-                    NocturneUserId = Guid.NewGuid(),
+                    NocturneUserId = SeedSubject(db),
                     Label = "alt",
                     DisplayName = "Alt",
                     IsDefault = false,
@@ -95,7 +103,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
                     Platform = "telegram",
                     PlatformUserId = "user3",
                     TenantId = _tenantId,
-                    NocturneUserId = Guid.NewGuid(),
+                    NocturneUserId = SeedSubject(db),
                     Label = "tg",
                     DisplayName = "Telegram",
                     IsDefault = true,

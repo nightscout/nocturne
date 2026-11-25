@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -25,7 +27,6 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 public sealed class MemberInviteControllerStepDownTests : IDisposable
 {
     private readonly NocturneDbContext _db;
-    private readonly Mock<IAuthAuditService> _audit = new();
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _helperSubjectId = Guid.CreateVersion7();
     private readonly Guid _recipientSubjectId = Guid.CreateVersion7();
@@ -59,6 +60,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         });
         _db.SaveChanges();
         _db.ChangeTracker.Clear();
+        _db.ActingAs(new TestAuditActor { SubjectId = _helperSubjectId });
     }
 
     public void Dispose() => _db.Dispose();
@@ -73,6 +75,10 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
     {
         var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _recipientSubjectId };
         _db.TenantMembers.Add(member);
+        _db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = _recipientSubjectId, CredentialId = _recipientSubjectId.ToByteArray(), PublicKey = [1],
+        });
         _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
         {
             Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = _owner.Id,
@@ -95,18 +101,17 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
-            Mock.Of<ITenantService>(),
-            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory()), TimeProvider.System),
+            TestTenantService.Over(_db),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_db.AsFactory()), _db.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            new TenantMembershipRepository(_db.AsFactory()),
-            _audit.Object)
+            new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
-    private async Task<List<string?>> HelperRoleSlugsAsync() =>
+    private async Task<List<string>> HelperRoleSlugsAsync() =>
         await _db.TenantMemberRoles.AsNoTracking()
             .Where(mr => mr.TenantMemberId == _helperMemberId)
             .Select(mr => mr.TenantRole!.Slug)
@@ -127,6 +132,51 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
             .Should().Equal(_recipientSubjectId);
     }
 
+    /// <summary>
+    /// A mixed member: the sum is an owner's, while the direct reason gives only
+    /// <paramref name="directScopes"/>, ends in a week and reads the last 24 hours.
+    /// </summary>
+    private MemberInviteController MixedController(IEnumerable<string> directScopes)
+    {
+        var controller = Controller(Scope.FullAccess);
+        controller.HttpContext.SetGrantCeiling(
+            new GrantCeiling(directScopes.ToHashSet(), DateTime.UtcNow.AddDays(7), true));
+        return controller;
+    }
+
+    [Fact]
+    public async Task RefusesAMixedMemberWhoseDirectReasonCouldNotGiveCaretaker()
+    {
+        AddRecipientAsOwner();
+
+        var result = await MixedController([Scope.GlucoseRead, Scope.MembersManage]).StepDown(CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Owner);
+    }
+
+    [Fact]
+    public async Task StepsDownAMixedMemberWhoseDirectReasonCouldGiveCaretaker()
+    {
+        AddRecipientAsOwner();
+
+        var result = await MixedController(RoleSeeds.Permissions[RoleSeeds.Caretaker]).StepDown(CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Caretaker);
+    }
+
+    [Fact]
+    public async Task RefusesATeamOnlyMember()
+    {
+        AddRecipientAsOwner();
+        var controller = Controller(Scope.FullAccess);
+        controller.HttpContext.SetGrantCeiling(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.StepDown(CancellationToken.None));
+        (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Owner);
+    }
+
     [Fact]
     public async Task AuditsTheOwnerRoleRemovedAndCaretakerAssigned_AgainstTheCaller()
     {
@@ -134,13 +184,11 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         await Controller(Scope.FullAccess).StepDown(CancellationToken.None);
 
-        _audit.Verify(a => a.LogAsync(
-            AuthAuditEventType.RoleRemoved, _helperSubjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            null, """{"role":"owner","kind":"tenant"}""", null, null, null), Times.Once);
-        _audit.Verify(a => a.LogAsync(
-            AuthAuditEventType.RoleAssigned, _helperSubjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            null, """{"role":"caretaker","kind":"tenant"}""", null, null, null), Times.Once);
-        _audit.VerifyNoOtherCalls();
+        var rows = await _db.AuthAuditLog.AsNoTracking().ToListAsync();
+        rows.Should().HaveCount(2);
+        var logged = rows.Select(a => (a.EventType, a.TargetSubjectId, a.ActorSubjectId, a.TenantId, a.DetailsJson)).ToList();
+        logged.Should().Contain((AuthAuditEventType.RoleRemoved, (Guid?)_helperSubjectId, (Guid?)_helperSubjectId, (Guid?)_tenantId, (string?)"""{"role":"owner","kind":"tenant"}"""));
+        logged.Should().Contain((AuthAuditEventType.RoleAssigned, (Guid?)_helperSubjectId, (Guid?)_helperSubjectId, (Guid?)_tenantId, (string?)"""{"role":"caretaker","kind":"tenant"}"""));
     }
 
     [Fact]
@@ -158,7 +206,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         result.Should().BeOfType<NoContentResult>();
         (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Caretaker);
-        _audit.VerifyNoOtherCalls();
+        (await _db.AuthAuditLog.AsNoTracking().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -170,7 +218,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(TenantOwnerFilter.LastOwnerRefusal);
         (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Owner);
-        _audit.VerifyNoOtherCalls();
+        (await _db.AuthAuditLog.AsNoTracking().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -189,6 +237,6 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Viewer);
-        _audit.VerifyNoOtherCalls();
+        (await _db.AuthAuditLog.AsNoTracking().CountAsync()).Should().Be(0);
     }
 }

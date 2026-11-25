@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
@@ -15,7 +15,8 @@
   import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
   import { Progress } from "#lib/components/ui/progress/index.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
-  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
+  import CollectionLanes from "#lib/components/migration/CollectionLanes.svelte";
+  import TimeRemaining from "#lib/components/migration/TimeRemaining.svelte";
   import Import from "@lucide/svelte/icons/import";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -32,6 +33,7 @@
   import ArrowRightLeft from "@lucide/svelte/icons/arrow-right-left";
   import { EmptyState } from "#lib/components/shared/index.js";
   import { databaseArtwork } from "#lib/watercolour-icons.js";
+  import { watchImport } from "#lib/migration/background-import.svelte.js";
   import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -45,6 +47,7 @@
     type MigrationSourceDto,
     MigrationJobState,
     MigrationMode,
+    MigrationPhase,
   } from "#lib/api/index.js";
   import { fresh } from "#lib/api/fresh-query.js";
 
@@ -68,6 +71,7 @@
   // Form state
   let mode = $state<MigrationMode>(MigrationMode.Api);
   let nightscoutUrl = $state("");
+  let changingUrl = $state(false);
   let nightscoutApiSecret = $state("");
   let mongoConnectionString = $state("");
   let mongoDatabaseName = $state("");
@@ -82,9 +86,25 @@
   let connectionTestResult = $state<{
     success: boolean;
     message: string;
-    entryCount?: number;
-    treatmentCount?: number;
+    /** The source the test reached; a result for other details says nothing about these. */
+    source: string;
   } | null>(null);
+
+  /**
+   * The server's address, masked. The form sends no URL until the viewer presses "Change address",
+   * and the API then reads the server's own.
+   */
+  const configuredUrl = $derived(pendingConfig?.nightscoutUrl ?? "");
+  const usesConfiguredUrl = $derived(configuredUrl !== "" && !changingUrl);
+
+  const sourceKey = $derived(
+    mode === MigrationMode.Api
+      ? `api\n${usesConfiguredUrl}\n${nightscoutUrl}\n${nightscoutApiSecret}`
+      : `mongo\n${mongoConnectionString}\n${mongoDatabaseName}`
+  );
+  const shownTestResult = $derived(
+    connectionTestResult?.source === sourceKey ? connectionTestResult : null
+  );
 
   // Migration state
   let cancellingMigration = $state(false);
@@ -110,9 +130,6 @@
         if (configResult.mode !== undefined && configResult.mode !== null) {
           mode = configResult.mode;
         }
-        if (configResult.nightscoutUrl) {
-          nightscoutUrl = configResult.nightscoutUrl;
-        }
         if (configResult.mongoDatabaseName) {
           mongoDatabaseName = configResult.mongoDatabaseName;
         }
@@ -135,6 +152,21 @@
     }
   }
 
+  // Reloads what a finished run changes. The page stays up, and the form keeps what was typed.
+  async function refreshLists() {
+    try {
+      const [sourcesResult, historyResult] = await Promise.all([
+        fresh(migrationRemote.getSources()),
+        fresh(migrationRemote.getHistory()),
+      ]);
+      if (destroyed) return;
+      sources = sourcesResult || [];
+      history = historyResult || [];
+    } catch (err) {
+      error = remoteErrorMessage(err, "Failed to load migration data");
+    }
+  }
+
   // Initial load. Deferred so this effect does not track what the load reads.
   $effect(() => {
     queueMicrotask(loadData);
@@ -150,45 +182,59 @@
     const poll = { jobId };
     activePoll = poll;
     completedJobId = null;
-    try {
-      while (activePoll === poll) {
+    // The run continues on the server whatever a status read does, so one failed read is
+    // retried and only a run of them is reported.
+    const MAX_CONSECUTIVE_FAILURES = 5;
+    let consecutiveFailures = 0;
+    while (activePoll === poll) {
+      try {
         const status = await fresh(migrationRemote.getStatus(jobId));
         if (activePoll !== poll) return;
+        consecutiveFailures = 0;
         activeMigration = status;
 
-        // Check if completed
-        if (
-          status.state === MigrationJobState.Completed ||
-          status.state === MigrationJobState.Failed ||
-          status.state === MigrationJobState.Cancelled ||
-          status.state === MigrationJobState.Interrupted
-        ) {
+        if (!isLive(status)) {
           activePoll = null;
-          await loadData(); // Refresh history
+          await refreshLists();
           if (completedCleanly(history.find((j) => j.id === jobId))) completedJobId = jobId;
           return;
         }
+      } catch (err) {
+        if (activePoll !== poll) return;
+        if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.error("Failed to poll migration status:", err);
+          activePoll = null;
+          activeMigration = null;
+          error = remoteErrorMessage(err, "Failed to read migration status");
+          return;
+        }
+      }
 
-        // Wait before next poll
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-    } catch (err) {
-      console.error("Failed to poll migration status:", err);
-      if (activePoll === poll) {
-        activePoll = null;
-        error = remoteErrorMessage(err, "Failed to read migration status");
-      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
+  }
+
+  function isLive(status: MigrationJobStatus | null): boolean {
+    return (
+      status?.state === MigrationJobState.Pending ||
+      status?.state === MigrationJobState.Running
+    );
   }
 
   // Cancel migration
   async function handleCancelMigration() {
     if (!activeMigration?.jobId) return;
+    const jobId = activeMigration.jobId;
     cancellingMigration = true;
     try {
-      await migrationRemote.cancelMigration(activeMigration.jobId);
+      await migrationRemote.cancelMigration(jobId);
       activePoll = null;
-      await loadData();
+      // The cancel is done whether or not its status can be read back.
+      activeMigration = await fresh(migrationRemote.getStatus(jobId)).catch(() => ({
+        ...activeMigration,
+        state: MigrationJobState.Cancelled,
+      }));
+      await refreshLists();
     } catch (err) {
       error = describeSubmitError(err, "Failed to cancel migration");
     } finally {
@@ -219,17 +265,19 @@
   }
 
   // Derived: has active migration
-  const hasActiveMigration = $derived(
-    activeMigration &&
-      (activeMigration.state === MigrationJobState.Pending ||
-        activeMigration.state === MigrationJobState.Running)
-  );
+  const hasActiveMigration = $derived(isLive(activeMigration));
 
-  // Derived: form valid
+  // A date input gives a calendar day. The range runs from the start of the first day to the
+  // end of the last, in the browser's time zone.
+  const rangeStart = $derived(dateRangeStart ? new Date(`${dateRangeStart}T00:00:00`) : null);
+  const rangeEnd = $derived(dateRangeEnd ? new Date(`${dateRangeEnd}T23:59:59.999`) : null);
+  const isRangeValid = $derived(!rangeStart || !rangeEnd || rangeStart <= rangeEnd);
+
+  // Nightscout can be readable without an API secret, so the secret is optional.
   const isFormValid = $derived(
-    mode === MigrationMode.Api
-      ? nightscoutUrl.trim() !== "" && nightscoutApiSecret.trim() !== ""
-      : mongoConnectionString.trim() !== "" && mongoDatabaseName.trim() !== ""
+    (mode === MigrationMode.Api
+      ? usesConfiguredUrl || nightscoutUrl.trim() !== ""
+      : mongoConnectionString.trim() !== "" && mongoDatabaseName.trim() !== "") && isRangeValid
   );
 </script>
 
@@ -268,9 +316,9 @@
     {#if pendingConfig?.hasPendingConfig}
       <Alert.Root class="mb-6">
         <Info class="h-4 w-4" />
-        <Alert.Title>Migration configuration detected</Alert.Title>
+        <Alert.Title>Migration settings found</Alert.Title>
         <Alert.Description>
-          Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready.
+          The server settings give a migration source, and the form shows them. Check them, then start the migration.
         </Alert.Description>
       </Alert.Root>
     {/if}
@@ -313,8 +361,8 @@
           <CardHeader>
             <CardTitle>Start new migration</CardTitle>
             <CardDescription>
-              Import entries and treatments from an existing Nightscout
-              instance.
+              Import the history of a Nightscout site: entries, treatments,
+              device statuses, profiles, foods, and activities.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-6">
@@ -324,7 +372,7 @@
               <RadioGroup.Root
                 value={String(mode)}
                 onValueChange={(value) => (mode = Number(value))}
-                class="flex gap-4"
+                class="flex flex-wrap gap-4"
               >
                 <div class="flex items-center space-x-2">
                   <RadioGroup.Item value={String(MigrationMode.Api)} id="mode-api" />
@@ -347,19 +395,48 @@
             {#if mode === MigrationMode.Api}
               <div class="grid gap-4 @lg:grid-cols-2">
                 <div class="space-y-2">
-                  <Label for="nightscout-url">Nightscout URL</Label>
-                  <Input
-                    id="nightscout-url"
-                    placeholder="https://your-nightscout.herokuapp.com"
-                    bind:value={nightscoutUrl}
-                  />
+                  <Label for={usesConfiguredUrl ? undefined : "nightscout-url"}>Nightscout URL</Label>
+                  {#if usesConfiguredUrl}
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="min-w-0 break-all text-sm" data-testid="configured-nightscout-url">
+                        {configuredUrl}
+                      </span>
+                      <Button variant="outline" size="sm" onclick={() => (changingUrl = true)}>
+                        Change address
+                      </Button>
+                    </div>
+                  {:else}
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Input
+                        id="nightscout-url"
+                        placeholder="https://your-nightscout.herokuapp.com"
+                        class="min-w-0 flex-1"
+                        bind:value={nightscoutUrl}
+                      />
+                      {#if configuredUrl}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onclick={() => {
+                            changingUrl = false;
+                            nightscoutUrl = "";
+                          }}
+                        >
+                          Keep current address
+                        </Button>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
                 <div class="space-y-2">
-                  <Label for="api-secret">API secret</Label>
+                  <Label for="api-secret">
+                    API secret
+                    <span class="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
                   <Input
                     id="api-secret"
                     type="password"
-                    placeholder="Your API secret"
+                    placeholder="Leave blank if the site needs none"
                     bind:value={nightscoutApiSecret}
                   />
                 </div>
@@ -393,8 +470,7 @@
             <div class="space-y-3">
               <Label>Date range (optional)</Label>
               <p class="text-sm text-muted-foreground">
-                Leave empty to import all data, or specify a range to import
-                partial data.
+                Leave the dates empty to import all data.
               </p>
               <div class="grid gap-4 @lg:grid-cols-2">
                 <div class="space-y-2">
@@ -410,35 +486,39 @@
                   <Input id="date-end" type="date" bind:value={dateRangeEnd} />
                 </div>
               </div>
+              {#if !isRangeValid}
+                <p class="text-sm text-destructive">
+                  The end date is before the start date.
+                </p>
+              {/if}
             </div>
 
             <!-- Connection Test Result -->
-            {#if connectionTestResult}
+            {#if shownTestResult}
               <Alert.Root
-                variant={connectionTestResult.success
-                  ? "default"
-                  : "destructive"}
+                variant={shownTestResult.success ? "default" : "destructive"}
               >
-                {#if connectionTestResult.success}
+                {#if shownTestResult.success}
                   <CheckCircle2 class="h-4 w-4" />
                 {:else}
                   <XCircle class="h-4 w-4" />
                 {/if}
                 <Alert.Title>
-                  {connectionTestResult.success
+                  {shownTestResult.success
                     ? "Connection successful"
                     : "Connection failed"}
                 </Alert.Title>
                 <Alert.Description>
-                  {connectionTestResult.message}
+                  {shownTestResult.message}
                 </Alert.Description>
               </Alert.Root>
             {/if}
 
             <!-- Actions -->
-            <div class="flex gap-3">
+            <div class="flex flex-col gap-3">
               <form
                 {...testConnectionForm.enhance(async ({ submit }) => {
+                  const source = sourceKey;
                   connectionTestResult = null;
                   try {
                     await submit();
@@ -446,30 +526,30 @@
                     connectionTestResult = {
                       success: false,
                       message: describeSubmitError(err, "Connection test failed"),
+                      source,
                     };
                     return;
                   }
                   const result = testConnectionForm.result;
-                  if (result) {
-                    connectionTestResult = {
-                      success: result.isSuccess || false,
-                      message: result.isSuccess
-                        ? `Connected. Found ${result.entryCount ?? 0} entries and ${result.treatmentCount ?? 0} treatments.`
-                        : result.errorMessage || "Connection failed",
-                      entryCount: result.entryCount ?? undefined,
-                      treatmentCount: result.treatmentCount ?? undefined,
-                    };
-                  } else {
-                    connectionTestResult = {
-                      success: false,
-                      message: "Connection test failed",
-                    };
-                  }
+                  // Only a MongoDB test counts documents.
+                  const counted =
+                    result?.entryCount != null && result.treatmentCount != null
+                      ? `Connected. Found ${formatNumber(result.entryCount)} entries and ${formatNumber(result.treatmentCount)} treatments.`
+                      : "Connected.";
+                  connectionTestResult = {
+                    success: result?.isSuccess || false,
+                    message: result?.isSuccess
+                      ? counted
+                      : result?.errorMessage || "Connection test failed",
+                    source,
+                  };
                 })}
               >
                 <input {...testConnectionForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {#if !usesConfiguredUrl}
+                    <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {/if}
                   <input {...testConnectionForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
                   <input {...testConnectionForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
@@ -502,6 +582,8 @@
                   const jobInfo = startMigrationForm.result;
                   if (jobInfo?.id) {
                     activeTab = "progress";
+                    // This page shows the run, so the app keeps only its banner for it.
+                    watchImport(jobInfo.id, { acknowledged: true });
                     void pollMigrationStatus(jobInfo.id);
                   } else {
                     error = "Failed to start migration";
@@ -510,31 +592,33 @@
               >
                 <input {...startMigrationForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {#if !usesConfiguredUrl}
+                    <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {/if}
                   <input {...startMigrationForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
                   <input {...startMigrationForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
                   <input {...startMigrationForm.fields.mongoDatabaseName.as("hidden", mongoDatabaseName)} />
                 {/if}
-                {#if dateRangeStart}
-                  <input {...startMigrationForm.fields.startDate.as("hidden", new Date(dateRangeStart).toISOString())} />
+                {#if rangeStart}
+                  <input {...startMigrationForm.fields.startDate.as("hidden", rangeStart.toISOString())} />
                 {/if}
-                {#if dateRangeEnd}
-                  <input {...startMigrationForm.fields.endDate.as("hidden", new Date(dateRangeEnd).toISOString())} />
+                {#if rangeEnd}
+                  <input {...startMigrationForm.fields.endDate.as("hidden", rangeEnd.toISOString())} />
                 {/if}
-                <input {...startMigrationForm.fields.collections[0].as("hidden", "entries")} />
-                <input {...startMigrationForm.fields.collections[1].as("hidden", "treatments")} />
                 <Button
                   type="submit"
+                  size="xl"
+                  class="w-full"
                   disabled={!isFormValid ||
-                    !connectionTestResult?.success ||
+                    !shownTestResult?.success ||
                     !!startMigrationForm.pending ||
                     !!hasActiveMigration}
                 >
                   {#if startMigrationForm.pending}
-                    <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 class="animate-spin" />
                   {:else}
-                    <Play class="h-4 w-4 mr-2" />
+                    <Play />
                   {/if}
                   Start migration
                 </Button>
@@ -554,9 +638,6 @@
                 <Badge variant="default" live>Running</Badge>
               {/if}
             </CardTitle>
-            <CardDescription>
-              Monitor the progress of your current migration.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {#if activeMigration && hasActiveMigration}
@@ -564,50 +645,27 @@
                 <!-- Progress Bar -->
                 <div class="space-y-2">
                   <div class="flex justify-between text-sm">
-                    <span class="text-muted-foreground">Progress</span>
+                    <span class="text-muted-foreground">
+                      {#if activeMigration.phase === MigrationPhase.Counting}
+                        Counting the records in the source
+                      {:else if activeMigration.phase === MigrationPhase.Importing}
+                        <TimeRemaining remaining={activeMigration.estimatedTimeRemaining} />
+                      {:else}
+                        Connecting to the source
+                      {/if}
+                    </span>
                     <span class="font-medium">
-                      {activeMigration.progressPercentage ?? 0}%
+                      {Math.round(activeMigration.progressPercentage ?? 0)}%
                     </span>
                   </div>
                   <Progress value={activeMigration.progressPercentage ?? 0} />
                 </div>
 
-                <!-- Current Operation -->
-                {#if activeMigration.currentOperation}
-                  <div class="p-4 bg-muted rounded-lg">
-                    <p class="text-sm text-muted-foreground mb-1">
-                      Current operation
-                    </p>
-                    <p class="font-medium">
-                      {activeMigration.currentOperation}
-                    </p>
-                  </div>
-                {/if}
-
-                <!-- Collection Progress -->
                 {#if activeMigration.collectionProgress && Object.keys(activeMigration.collectionProgress).length > 0}
-                  <div class="space-y-3">
-                    <Label>Collection progress</Label>
-                    {#each Object.entries(activeMigration.collectionProgress) as [name, collection] (name)}
-                      <div
-                        class="flex justify-between items-center p-3 border rounded-lg"
-                      >
-                        <span class="font-medium capitalize">
-                          {name}
-                        </span>
-                        <div class="text-right">
-                          <span class="text-sm text-muted-foreground">
-                            {collection.documentsMigrated} / {collection.totalDocuments}
-                          </span>
-                          <SkippedRecordsNote
-                            deleted={collection.recordsSkippedDeleted}
-                            unsupported={collection.documentsSkippedUnsupported}
-                            class="text-xs text-muted-foreground"
-                          />
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
+                  <CollectionLanes
+                    collections={activeMigration.collectionProgress}
+                    currentCollection={activeMigration.currentCollection}
+                  />
                 {/if}
 
                 <!-- Cancel Button -->
@@ -623,6 +681,27 @@
                   {/if}
                   Cancel migration
                 </Button>
+              </div>
+            {:else if activeMigration}
+              {@const badge = getStateBadge(activeMigration.state)}
+              <!-- The run this page watched, after it ended -->
+              <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium">Last migration</span>
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                </div>
+                {#if activeMigration.errorMessage}
+                  <p
+                    class="text-sm {activeMigration.hasFailures
+                      ? 'text-destructive'
+                      : 'text-muted-foreground'}"
+                  >
+                    {activeMigration.errorMessage}
+                  </p>
+                {/if}
+                {#if activeMigration.collectionProgress && Object.keys(activeMigration.collectionProgress).length > 0}
+                  <CollectionLanes collections={activeMigration.collectionProgress} />
+                {/if}
               </div>
             {:else}
               <EmptyState
@@ -640,9 +719,6 @@
         <Card>
           <CardHeader>
             <CardTitle>Migration history</CardTitle>
-            <CardDescription>
-              View past migrations and their results.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {#if history.length === 0}
@@ -652,51 +728,52 @@
                 body="Completed migrations will appear here"
               />
             {:else}
-              <div class="space-y-3">
+              <ul class="-my-3 divide-y">
                 {#each history as job (job.id)}
                   {@const badge = getStateBadge(job.state)}
-                  <div
-                    class="flex items-center justify-between p-4 rounded-lg border"
-                  >
-                    <div class="flex items-center gap-3">
-                      <div class="p-2 rounded-lg bg-muted">
-                        {#if job.mode === MigrationMode.MongoDb}
-                          <Database class="h-5 w-5" />
-                        {:else}
-                          <Globe class="h-5 w-5" />
-                        {/if}
-                      </div>
-                      <div>
-                        <div class="font-medium flex items-center gap-2">
+                  <li class="flex items-start gap-3 py-3">
+                    {#if job.mode === MigrationMode.MongoDb}
+                      <Database class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {:else}
+                      <Globe class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {/if}
+                    <div class="min-w-0 flex-1 space-y-1">
+                      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span class="min-w-0 font-medium break-all">
                           {job.sourceDescription || "Unknown source"}
-                          <Badge variant={badge.variant}>
-                            {badge.label}
-                          </Badge>
-                        </div>
-                        <div class="text-sm text-muted-foreground">
-                          Started: {formatMediumDateTime(job.startedAt)}
-                        </div>
-                        {#if job.errorMessage}
-                          <div
-                            class="text-sm mt-1 {job.hasFailures ||
-                            job.state === MigrationJobState.Failed ||
-                            job.state === MigrationJobState.Cancelled
-                              ? 'text-destructive'
-                              : 'text-muted-foreground'}"
-                          >
-                            {job.errorMessage}
-                          </div>
-                        {/if}
+                        </span>
+                        <Badge variant={badge.variant}>
+                          {badge.label}
+                        </Badge>
                       </div>
-                    </div>
-                    <div class="text-right text-sm text-muted-foreground">
+                      <p class="text-sm text-muted-foreground">
+                        Started: {formatMediumDateTime(job.startedAt)}
+                      </p>
                       {#if job.completedAt}
-                        <div>Completed: {formatMediumDateTime(job.completedAt)}</div>
+                        <p class="text-sm text-muted-foreground">
+                          {#if job.state === MigrationJobState.Completed}
+                            Completed: {formatMediumDateTime(job.completedAt)}
+                          {:else}
+                            Ended: {formatMediumDateTime(job.completedAt)}
+                          {/if}
+                        </p>
+                      {/if}
+                      {#if job.errorMessage}
+                        <p
+                          class="text-sm {job.hasFailures ||
+                          job.state === MigrationJobState.Failed ||
+                          job.state === MigrationJobState.Interrupted ||
+                          job.state === MigrationJobState.Cancelled
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'}"
+                        >
+                          {job.errorMessage}
+                        </p>
                       {/if}
                     </div>
-                  </div>
+                  </li>
                 {/each}
-              </div>
+              </ul>
             {/if}
           </CardContent>
         </Card>
@@ -706,39 +783,27 @@
           <Card class="mt-6">
             <CardHeader>
               <CardTitle>Known sources</CardTitle>
-              <CardDescription>
-                Previously used migration sources with their last sync
-                timestamps.
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div class="space-y-3">
+              <ul class="-my-3 divide-y">
                 {#each sources as source (source.id)}
-                  <div
-                    class="flex items-center justify-between p-4 rounded-lg border"
-                  >
-                    <div class="flex items-center gap-3">
-                      <div class="p-2 rounded-lg bg-muted">
-                        {#if source.mode === MigrationMode.MongoDb}
-                          <Database class="h-5 w-5" />
-                        {:else}
-                          <Globe class="h-5 w-5" />
-                        {/if}
-                      </div>
-                      <div>
-                        <div class="font-medium">
-                          {source.nightscoutUrl ||
-                            source.mongoDatabaseName ||
-                            "Unknown"}
-                        </div>
-                        <div class="text-sm text-muted-foreground">
-                          Last migration: {formatMediumDateTime(source.lastMigrationAt)}
-                        </div>
-                      </div>
+                  <li class="flex items-start gap-3 py-3">
+                    {#if source.mode === MigrationMode.MongoDb}
+                      <Database class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {:else}
+                      <Globe class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {/if}
+                    <div class="min-w-0 flex-1 space-y-1">
+                      <p class="font-medium break-all">
+                        {source.nightscoutUrl || source.mongoDatabaseName || "Unknown"}
+                      </p>
+                      <p class="text-sm text-muted-foreground">
+                        Last migration: {formatMediumDateTime(source.lastMigrationAt)}
+                      </p>
                     </div>
-                  </div>
+                  </li>
                 {/each}
-              </div>
+              </ul>
             </CardContent>
           </Card>
         {/if}

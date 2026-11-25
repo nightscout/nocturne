@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Core.Models;
 
@@ -15,6 +17,8 @@ namespace Nocturne.Connectors.Tandem.Mappers;
 /// </summary>
 public sealed class TandemUserModeMapper(ILogger logger, TandemTimeResolver time)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TandemConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
@@ -66,9 +70,8 @@ public sealed class TandemUserModeMapper(ILogger logger, TandemTimeResolver time
             State = state,
             StartTimestamp = _time.ToUtc(start.RawTimestampSeconds),
             EndTimestamp = stop != null ? _time.ToUtc(stop.RawTimestampSeconds) : null,
-            Source = TandemMapHelpers.Source,
             OriginalId = stop != null
-                ? $"tandem_usermode_{start.SeqNum}_{stop.SeqNum}"
-                : $"tandem_usermode_{start.SeqNum}",
+                ? LegacyIds.Of("usermode", start.SeqNum, stop.SeqNum)
+                : LegacyIds.Of("usermode", start.SeqNum),
         };
 }

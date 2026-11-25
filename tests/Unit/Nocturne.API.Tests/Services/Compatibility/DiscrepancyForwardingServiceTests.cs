@@ -183,17 +183,18 @@ public class DiscrepancyForwardingServiceTests
         );
     }
 
-    [Fact]
-    public async Task ForwardDiscrepancyAsync_WhenClientError_DoesNotRetry()
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task ForwardDiscrepancyAsync_WhenTheEndpointRefuses_SendsOnceAndReportsFailure(
+        HttpStatusCode status)
     {
-        // Arrange
         var settings = new DiscrepancyForwardingSettings
         {
             Enabled = true,
             EndpointUrl = "https://test.example.com",
             MinimumSeverity = DiscrepancySeverityLevel.Minor,
-            TimeoutSeconds = 10,
-            RetryAttempts = 3
+            TimeoutSeconds = 10
         };
         var service = CreateService(settings);
         var analysis = CreateTestAnalysis();
@@ -205,19 +206,50 @@ public class DiscrepancyForwardingServiceTests
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>()
             )
-            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            .ReturnsAsync(new HttpResponseMessage(status)
             {
-                Content = new StringContent("{\"status\":400}")
+                Content = new StringContent("{}")
             });
 
-        // Act
         var result = await service.ForwardDiscrepancyAsync(analysis, "GET", "/api/v1/entries");
 
-        // Assert
         Assert.False(result);
         _httpMessageHandlerMock.Protected().Verify(
             "SendAsync",
-            Times.Once(), // Only one attempt - no retries on 4xx
+            Times.Once(),
+            ItExpr.IsAny<HttpRequestMessage>(),
+            ItExpr.IsAny<CancellationToken>()
+        );
+    }
+
+    [Fact]
+    public async Task ForwardDiscrepancyAsync_WhenTheEndpointCannotBeReached_SendsOnceAndReportsFailure()
+    {
+        var settings = new DiscrepancyForwardingSettings
+        {
+            Enabled = true,
+            EndpointUrl = "https://test.example.com",
+            MinimumSeverity = DiscrepancySeverityLevel.Minor,
+            TimeoutSeconds = 10
+        };
+        var service = CreateService(settings);
+        var analysis = CreateTestAnalysis();
+
+        _httpMessageHandlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>()
+            )
+            .ThrowsAsync(new HttpRequestException("connection refused"));
+
+        var result = await service.ForwardDiscrepancyAsync(analysis, "GET", "/api/v1/entries");
+
+        Assert.False(result);
+        _httpMessageHandlerMock.Protected().Verify(
+            "SendAsync",
+            Times.Once(),
             ItExpr.IsAny<HttpRequestMessage>(),
             ItExpr.IsAny<CancellationToken>()
         );

@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Core.Models.V4;
 
@@ -12,6 +14,8 @@ namespace Nocturne.Connectors.Tandem.Mappers;
 /// </summary>
 public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TandemConnectorConfiguration>();
+
     // Sentinels for out-of-range readings, mirroring the Tandem Source frontend's
     // CgmBuilder.determineGlucoseValue (via tconnectsync's determine_glucose_value).
     private const double GlucoseLimitLow = 40;
@@ -22,7 +26,7 @@ public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public List<SensorGlucose> Map(IEnumerable<TandemPumpEvent> events, DateTime now)
+    public List<SensorGlucose> Map(IEnumerable<TandemPumpEvent> events)
     {
         var records = new List<SensorGlucose>();
 
@@ -37,17 +41,13 @@ public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
 
             records.Add(new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                UtcOffset = _time.OffsetMinutes,
+                UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
-                DataSource = TandemMapHelpers.Source,
-                SyncIdentifier = $"tandem_cgm_{ev.SeqNum}",
-                LegacyId = $"tandem_cgm_{ev.SeqNum}",
+                SyncIdentifier = LegacyIds.Of("cgm", ev.SeqNum),
+                LegacyId = LegacyIds.Of("cgm", ev.SeqNum),
                 Mgdl = mgdl.Value,
                 TrendRate = ev.Num("Rate"),
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 

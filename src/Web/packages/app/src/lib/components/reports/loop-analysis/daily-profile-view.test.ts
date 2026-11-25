@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DailyProfileRange, DailyProfileSlot } from "#lib/api/index.js";
-import { aggregateRuns, clockTime, contributingDays, covers, signedTwoPlaces } from "./daily-profile-view";
+import { aggregateRuns } from "@nocturne/charts/core";
+import { clockTime, contributingDays, covers, signedTwoPlaces } from "./daily-profile-view";
 import { bitmapOf } from "./daily-profile.test-fixtures";
 
 describe("coverage bitmaps", () => {

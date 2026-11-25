@@ -6,7 +6,10 @@
 
   import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
   import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
+  import { exceedsDaySpan, outsideDaySpan } from "#lib/utils/date-range.js";
+  import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
@@ -47,6 +50,9 @@
       defaultValue: undefined,
     },
   });
+
+  const limits = getV4ApiLimits();
+  const maxDays = $derived(limits.current?.maxDateSpanDays);
 
   let value = $state<DateRange | undefined>();
   let open = $state(false);
@@ -142,8 +148,12 @@
     });
   }
 
+  const pendingStart = $derived(value?.start && !value.end ? value.start : undefined);
+  const isDateDisabled = $derived(outsideDaySpan(pendingStart, maxDays));
+
   function handleCalendarChange(newValue: DateRange | undefined) {
     if (newValue?.start && newValue?.end) {
+      if (exceedsDaySpan(newValue.start.toString(), newValue.end.toString(), maxDays)) return;
       // Clear days parameter when manually selecting dates
       params.days = undefined;
       params.from = newValue.start.toString();
@@ -185,23 +195,29 @@
         captionLayout="dropdown"
         locale={formatLocale()}
         onValueChange={handleCalendarChange}
+        {isDateDisabled}
+        {maxDays}
       />
     </Popover.Content>
   </Popover.Root>
 
   {#if showDaysPresets}
-    <!-- Quick Day Selection (right) -->
-    <div class="flex flex-wrap gap-2">
+    <ToggleGroup.Root
+      type="single"
+      variant="segmented"
+      size="sm"
+      aria-label="Range"
+      bind:value={
+        () => selectedDays?.toString() ?? "",
+        // A second click on the selected segment clears it; keep it and start the range again from today.
+        (days: string) => setDayRange(days ? Number(days) : (selectedDays ?? defaultDays))
+      }
+    >
       {#each [1, 3, 7, 14, 30, 90] as daysOption (daysOption)}
-        <Button
-          variant={selectedDays === daysOption ? "default" : "outline"}
-          size="sm"
-          onclick={() => setDayRange(daysOption)}
-          class="text-xs"
-        >
-          {daysOption === 1 ? "Today" : `${daysOption} days`}
-        </Button>
+        <ToggleGroup.Item value={daysOption.toString()}>
+          {daysOption}d<span class="sr-only">, {daysOption === 1 ? "today" : `last ${daysOption} days`}</span>
+        </ToggleGroup.Item>
       {/each}
-    </div>
+    </ToggleGroup.Root>
   {/if}
 </div>

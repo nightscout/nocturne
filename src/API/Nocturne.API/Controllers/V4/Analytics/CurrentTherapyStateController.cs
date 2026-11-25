@@ -14,13 +14,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Returns small "right now" therapy values for the dashboard: the active pump
-/// operational mode, the current insulin sensitivity expressed as a percentage
-/// of the profile baseline, the pump's latest reservoir and battery reading, and the
-/// glucose thresholds in force now.
+/// The current therapy values for the dashboard: the active pump operational mode, the insulin
+/// sensitivity as a percentage of the profile baseline, the latest pump reservoir and battery reading,
+/// and the glucose thresholds in force now.
 /// </summary>
 [ApiController]
-[Tags("Current Therapy State")]
+[Tags("Analytics")]
 [Route("api/v4/current-therapy-state")]
 [Authorize]
 public class CurrentTherapyStateController : ControllerBase
@@ -72,10 +71,21 @@ public class CurrentTherapyStateController : ControllerBase
                 Reservoir = latestPump?.Reservoir,
                 PumpBatteryPercent = latestPump?.BatteryPercent,
                 PumpBatteryVoltage = latestPump?.BatteryVoltage,
+                LinkBatteryVoltage = LinkBatteryVoltage(latestPump),
                 Thresholds = thresholds,
             },
             HttpContext.GetGrantedScopes()));
     }
+
+    /// <summary>
+    /// The key AndroidAPS's Medtronic driver puts an OrangeLink's battery voltage under, in the
+    /// pump status's <c>extended</c> block, which a pump snapshot keeps among its additional
+    /// properties.
+    /// </summary>
+    internal const string LinkBatteryVoltageKey = "RileyLinkBatteryVoltage";
+
+    private static double? LinkBatteryVoltage(Nocturne.Core.Models.V4.PumpSnapshot? snapshot) =>
+        KeptField.Double(snapshot?.AdditionalProperties, LinkBatteryVoltageKey);
 }
 
 /// <summary>
@@ -115,6 +125,13 @@ public class CurrentTherapyStateResponse
     /// pump reports no battery voltage.
     /// </summary>
     public double? PumpBatteryVoltage { get; set; }
+
+    /// <summary>
+    /// Battery voltage of the radio link between the uploader and the pump, from the most recent
+    /// pump snapshot: an OrangeLink's, as AndroidAPS's Medtronic driver reports it. Null when none
+    /// is reported.
+    /// </summary>
+    public double? LinkBatteryVoltage { get; set; }
 
     /// <summary>
     /// The glucose colouring band and the personal target in force now, as the chart data

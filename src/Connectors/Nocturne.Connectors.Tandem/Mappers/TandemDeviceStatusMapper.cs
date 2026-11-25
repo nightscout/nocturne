@@ -34,7 +34,7 @@ public sealed class TandemDeviceStatusMapper(ILogger logger, TandemTimeResolver 
             Device = TandemMapHelpers.Source,
             Mills = utc.ToMills(),
             CreatedAt = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
-            UtcOffset = _time.OffsetMinutes,
+            UtcOffset = _time.OffsetMinutesAt(utc),
             Pump = new PumpStatus
             {
                 Manufacturer = "Tandem",

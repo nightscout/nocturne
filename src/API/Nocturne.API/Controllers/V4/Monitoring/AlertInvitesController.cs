@@ -15,7 +15,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Controller for managing alert invite links (create, validate, redeem, revoke).
+/// Invite links for alerts. Create, validate, redeem and revoke invites. An invite lasts 7 days and
+/// can be redeemed once. Redeeming an invite records who used it.
 /// </summary>
 /// <remarks>
 /// An invite attaches a follower to an alert rule channel, so creating, redeeming and revoking one
@@ -62,6 +63,9 @@ public class AlertInvitesController : ControllerBase
     public async Task<ActionResult<AlertInviteResponse>> CreateInvite(
         [FromBody] CreateAlertInviteRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         if (!await _alertRules.ChannelExistsAsync(request.AlertRuleChannelId, ct))
             return Problem(detail: "Channel not found", statusCode: 400, title: "Bad Request");
 

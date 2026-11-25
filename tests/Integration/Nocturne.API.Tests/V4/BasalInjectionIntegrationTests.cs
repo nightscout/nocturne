@@ -242,8 +242,7 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
 
         await SetTenantContextAsync(conn, tenantId);
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             INSERT INTO patient_insulins (
                 id, tenant_id, insulin_category, name, start_date, end_date,
                 is_current, dia, peak, curve, concentration, role, is_primary,
@@ -253,13 +252,10 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
                 true, 24.0, 600, 'long-acting', 100, 'Basal', true,
                 now(), now()
             );
-            """;
-        cmd.Parameters.AddWithValue("id", insulinId);
-        cmd.Parameters.AddWithValue("tenantId", tenantId);
-        // Active window safely spans "now": started a year ago, no end date.
-        cmd.Parameters.AddWithValue("start", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1)));
-        cmd.Parameters.AddWithValue("end", DBNull.Value);
-        await cmd.ExecuteNonQueryAsync();
+            """,
+            ("id", insulinId), ("tenantId", tenantId),
+            // Active window safely spans "now": started a year ago, no end date.
+            ("start", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1))), ("end", DBNull.Value));
 
         return insulinId;
     }
@@ -310,13 +306,11 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
         await SetTenantContextAsync(conn, tenantId);
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = includeDeleted
-            ? "SELECT COUNT(*) FROM basal_injections WHERE id = @id;"
-            : "SELECT COUNT(*) FROM basal_injections WHERE id = @id AND deleted_at IS NULL;";
-        cmd.Parameters.AddWithValue("id", id);
-        var result = await cmd.ExecuteScalarAsync();
-        return Convert.ToInt32(result);
+        return (int)await conn.ScalarAsync<long>(
+            includeDeleted
+                ? "SELECT COUNT(*) FROM basal_injections WHERE id = @id;"
+                : "SELECT COUNT(*) FROM basal_injections WHERE id = @id AND deleted_at IS NULL;",
+            ("id", id));
     }
 
     private async Task<int> CountBySyncIdentifierAsync(
@@ -326,14 +320,11 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
         await SetTenantContextAsync(conn, tenantId);
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = includeDeleted
-            ? "SELECT COUNT(*) FROM basal_injections WHERE data_source = @ds AND sync_identifier = @sid;"
-            : "SELECT COUNT(*) FROM basal_injections WHERE data_source = @ds AND sync_identifier = @sid AND deleted_at IS NULL;";
-        cmd.Parameters.AddWithValue("ds", dataSource);
-        cmd.Parameters.AddWithValue("sid", syncIdentifier);
-        var result = await cmd.ExecuteScalarAsync();
-        return Convert.ToInt32(result);
+        return (int)await conn.ScalarAsync<long>(
+            includeDeleted
+                ? "SELECT COUNT(*) FROM basal_injections WHERE data_source = @ds AND sync_identifier = @sid;"
+                : "SELECT COUNT(*) FROM basal_injections WHERE data_source = @ds AND sync_identifier = @sid AND deleted_at IS NULL;",
+            ("ds", dataSource), ("sid", syncIdentifier));
     }
 
     private async Task<List<AuditRow>> GetAuditEntriesAsync(Guid tenantId, Guid entityId)
@@ -342,36 +333,24 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
         await SetTenantContextAsync(conn, tenantId);
 
-        var rows = new List<AuditRow>();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        return await conn.QueryAsync("""
             SELECT id, entity_type, entity_id, action, actor_subject_id
             FROM mutation_audit_log
             WHERE entity_type = @entityType AND entity_id = @entityId
             ORDER BY created_at;
-            """;
-        cmd.Parameters.AddWithValue("entityType", EntityType);
-        cmd.Parameters.AddWithValue("entityId", entityId);
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            rows.Add(new AuditRow(
+            """,
+            reader => new AuditRow(
                 Id: reader.GetGuid(0),
                 EntityType: reader.GetString(1),
                 EntityId: reader.GetGuid(2),
                 Action: reader.GetString(3),
-                ActorSubjectId: reader.IsDBNull(4) ? null : reader.GetGuid(4)));
-        }
-        return rows;
+                ActorSubjectId: reader.IsDBNull(4) ? null : reader.GetGuid(4)),
+            ("entityType", EntityType), ("entityId", entityId));
     }
 
     private static async Task SetTenantContextAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-        cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenantId, false);", ("tenantId", tenantId.ToString()));
     }
 
     private record AuditRow(Guid Id, string EntityType, Guid EntityId, string Action, Guid? ActorSubjectId);

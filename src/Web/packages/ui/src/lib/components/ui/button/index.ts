@@ -23,6 +23,9 @@ export const buttonVariants = tv({
       link: "text-primary underline-offset-4 hover:underline",
       // A link that must read as one at rest, where an action sits among form controls.
       "link-underlined": "text-primary underline underline-offset-4",
+      // A part of a sentence that is also a control, e.g. a chart caption whose parts go to their settings: set as the text around it until hovered or focused.
+      prose:
+        "inline whitespace-normal text-left text-current text-[1em] font-normal leading-[inherit] decoration-dotted underline-offset-4 hover:underline focus-visible:underline rounded-sm",
       // A quiet secondary action.
       "ghost-muted":
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
@@ -63,6 +66,9 @@ export const buttonVariants = tv({
       touch: "h-11 px-4 py-2 has-[>svg]:px-3 @md:h-9",
       "touch-sm": "h-11 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5 @md:h-8",
       "icon-touch": "size-11 @md:size-9",
+      // A page's primary action floating over a phone's scrolling content. The page-coloured ring
+      // cuts it out of whatever passes beneath, in place of a lifting shadow.
+      fab: "size-14 rounded-full ring-4 ring-background [&_svg:not([class*='size-'])]:size-6",
       icon: "size-9",
       "icon-xs": "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3",
       "icon-sm": "size-8",

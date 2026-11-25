@@ -4,7 +4,7 @@
 //! converts it with the .NET `(decimal)double` conversion. Both are reproduced
 //! exactly, including the conversion's double rounding.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::TimeDelta;
 use rust_decimal::Decimal;
 
 /// The unit an elapsed time is measured in.
@@ -32,13 +32,13 @@ fn ticks(d: TimeDelta) -> Option<i64> {
         .checked_add(i64::from(d.subsec_nanos()) / 100)
 }
 
-/// `now - since` in `unit`, as a double; `None` past the tick range.
+/// `d` in `unit`, as a double; `None` past the tick range.
 #[expect(
     clippy::as_conversions,
     reason = "ticks convert to double as .NET's (double)ticks does, rounding past 2^53"
 )]
-pub(crate) fn elapsed(now: DateTime<Utc>, since: DateTime<Utc>, unit: Unit) -> Option<f64> {
-    ticks(now.signed_duration_since(since)).map(|t| t as f64 * unit.per_tick())
+pub(crate) fn in_unit(d: TimeDelta, unit: Unit) -> Option<f64> {
+    ticks(d).map(|t| t as f64 * unit.per_tick())
 }
 
 /// Exact `f64` powers of ten `1e0..=1e28`, the scale factors the conversion
@@ -167,9 +167,8 @@ mod tests {
 
     #[test]
     fn whole_minutes_cast_exactly() {
-        let now = DateTime::UNIX_EPOCH + TimeDelta::minutes(15);
-        let cast = decimal_from_f64_cs(elapsed(now, DateTime::UNIX_EPOCH, Unit::Minutes).unwrap())
-            .unwrap();
+        let cast =
+            decimal_from_f64_cs(in_unit(TimeDelta::minutes(15), Unit::Minutes).unwrap()).unwrap();
         assert_eq!(cast, Decimal::from(15));
     }
 

@@ -35,7 +35,8 @@ public sealed record TenantRecord(
     DateTime? ShareLastAccessedAt,
     DateTime SysCreatedAt,
     DateTime SysUpdatedAt,
-    DemoTenantConfig? DemoConfig);
+    DemoTenantConfig? DemoConfig,
+    DateTime? SlugChangedAt = null);
 
 /// <summary>The demo tenant's operational state, which survives its resets.</summary>
 public sealed record DemoTenantConfig(
@@ -67,6 +68,8 @@ public sealed record NewTenant(
 /// <summary>Changes to a tenant's columns; a null member leaves its column as it is.</summary>
 public sealed record TenantEdit(
     string? DisplayName = null,
+    string? Slug = null,
+    DateTime? SlugChangedAt = null,
     bool? IsActive = null,
     bool? IsDemo = null,
     bool? AllowAccessRequests = null,

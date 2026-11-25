@@ -26,12 +26,12 @@ public class SupportedDataTypesFromRegistrationTests
     public class DerivedFromRegisteredConfig : RegisteredConfig;
 
     private class Service<TConfig>(ConnectorServerResolver<TConfig> resolver)
-        : BaseConnectorService<TConfig>(new HttpClient(), resolver, NullLogger.Instance)
+        : BaseConnectorService<TConfig>(
+            new HttpClient(), resolver, NullLogger.Instance, new RecordingRetryDelayStrategy())
         where TConfig : BaseConnectorConfiguration
     {
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
-        public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
         // These tests only read SupportedDataTypes, never run a sync.
         protected override Task<SyncResult> PerformSyncInternalAsync(

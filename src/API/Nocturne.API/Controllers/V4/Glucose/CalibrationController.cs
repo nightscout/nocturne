@@ -9,12 +9,12 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Glucose;
 
 /// <summary>
-/// Controller for managing CGM calibration records — the slope, intercept, and scale values
-/// that a sensor transmitter applies to raw signal to produce glucose readings.
-/// Provides CRUD operations backed by <see cref="ICalibrationRepository"/>.
+/// Continuous glucose monitor (CGM) calibrations: the slope, intercept, and scale values that a
+/// sensor transmitter applies to the raw signal. List, read, create (one or in bulk), update and
+/// delete calibrations. List deleted calibrations and restore them.
 /// </summary>
 /// <remarks>
-/// Inherits standard list, get-by-ID, create, update, and delete operations from
+/// Backed by <see cref="ICalibrationRepository"/>. Inherits standard list, get-by-ID, create, update, and delete operations from
 /// <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// </remarks>
 /// <seealso cref="ICalibrationRepository"/>
@@ -22,6 +22,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="UpsertCalibrationRequest"/>
 /// <seealso cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Calibrations")]
 [Tags("Glucose")]
 [Route("api/v4/glucose/calibrations")]
 [RequireScope(Scope.GlucoseRead)]
@@ -34,7 +35,7 @@ public class CalibrationController(ICalibrationRepository repo)
     public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Calibration", "calibration", "calibrations");
+    protected override V4BulkNaming BulkNaming => new("Calibration", "calibrations");
 
     /// <inheritdoc/>
     /// <remarks>
@@ -56,17 +57,12 @@ public class CalibrationController(ICalibrationRepository repo)
     /// </summary>
     /// <param name="request">The create request containing slope, intercept, scale, and device metadata.</param>
     /// <returns>A new <see cref="Calibration"/> instance ready for persistence.</returns>
-    protected override Calibration MapCreateToModel(UpsertCalibrationRequest request) => new()
+    protected override Calibration MapCreateToModel(UpsertCalibrationRequest request) => new Calibration
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Slope = request.Slope,
         Intercept = request.Intercept,
         Scale = request.Scale,
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>
     /// Maps a <see cref="UpsertCalibrationRequest"/> to an updated <see cref="Calibration"/>, preserving
@@ -77,14 +73,9 @@ public class CalibrationController(ICalibrationRepository repo)
     /// <param name="request">The update request.</param>
     /// <param name="existing">The existing record whose immutable fields are carried forward.</param>
     /// <returns>A <see cref="Calibration"/> instance with updated mutable fields and preserved immutable fields.</returns>
-    protected override Calibration MapUpdateToModel(Guid id, UpsertCalibrationRequest request, Calibration existing) => new()
+    protected override Calibration MapUpdateToModel(Guid id, UpsertCalibrationRequest request, Calibration existing) => new Calibration
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Slope = request.Slope,
         Intercept = request.Intercept,
         Scale = request.Scale,
@@ -92,5 +83,5 @@ public class CalibrationController(ICalibrationRepository repo)
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

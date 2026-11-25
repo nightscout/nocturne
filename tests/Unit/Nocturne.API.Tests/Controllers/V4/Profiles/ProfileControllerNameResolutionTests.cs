@@ -36,7 +36,8 @@ public class ProfileControllerNameResolutionTests
             Mock.Of<IProfileProjectionService>(),
             _deletionService.Object,
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<ILoopClosedLoopStamper>());
+            Mock.Of<ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>());
     }
 
     private void Stored(params TherapySettings[] settings) =>

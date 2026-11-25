@@ -11,7 +11,7 @@
   import { cn } from "#lib/utils/index.js";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";
-  import { toured, whileShown } from "#lib/coach-marks/attach.js";
+  import { whileShown } from "#lib/coach-marks/attach.js";
   import {
     trackerDefinition,
     visibleTrackerInstances,
@@ -79,14 +79,12 @@
       {#if index === 0}
         <div
           class="flex"
-          {@attach toured()
-            ? whileShown(
-                coachmark([
-                  { ...coachFor("tracker-intro.pill") },
-                  { ...coachFor("tracker-intro.complete") },
-                ])
-              )
-            : undefined}
+          {@attach whileShown(
+            coachmark([
+              { ...coachFor("tracker-intro.pill") },
+              { ...coachFor("tracker-intro.complete") },
+            ])
+          )}
         >
           {@render pill(instance)}
         </div>

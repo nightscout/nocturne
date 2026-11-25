@@ -11,7 +11,7 @@ import type { AlarmVisualSettings } from "#lib/types/alarm-profile.js";
 import { bg as formatBg, bgDelta as formatBgDelta } from "#lib/utils/formatting.js";
 import { directionGlyph, type GlucoseTileVariant } from "@nocturne/ui/glucose";
 import { renderGlucoseIcon } from "@nocturne/ui/glucose-icon";
-import type { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import type { GlucoseStatus } from "@nocturne/api-client";
 import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
 import { getEngineHost } from "water-ui";
 

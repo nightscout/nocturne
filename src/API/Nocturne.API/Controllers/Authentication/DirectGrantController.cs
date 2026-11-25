@@ -1,4 +1,5 @@
 using Nocturne.API.Authorization;
+using Nocturne.API.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
@@ -10,10 +11,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for managing direct grant tokens (programmatic API tokens without an OAuth client).
-/// These tokens use the <c>noc_</c> prefix and are validated by <see cref="DirectGrantTokenHandler"/>.
+/// Programmatic API tokens for scripts and automation, issued without an OAuth client. A caller can create,
+/// list and delete direct grant tokens. Tokens use the <c>noc_</c> prefix.
 /// </summary>
 /// <remarks>
+/// Tokens are validated by <see cref="DirectGrantTokenHandler"/>.
+///
 /// Direct grants are bearer tokens tied to a specific user but issued outside the standard
 /// OAuth 2.0 consent flow. They are intended for scripts, automation, and server-to-server
 /// integrations where launching an authorization-code flow is impractical.
@@ -33,6 +36,7 @@ namespace Nocturne.API.Controllers.Authentication;
 [ApiController]
 [Route("api/auth/direct-grants")]
 [RequireInteractiveSession]
+[System.ComponentModel.DisplayName("API Tokens")]
 [Tags("Authentication")]
 public class DirectGrantController : ControllerBase
 {
@@ -42,6 +46,7 @@ public class DirectGrantController : ControllerBase
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectGrantController"/> class.
     /// </summary>
+    /// <param name="subjects">The repository that finds the tenant's device subject, the holder of its site tokens.</param>
     /// <param name="directGrantService">The service that creates, lists, and revokes direct grants.</param>
     public DirectGrantController(
         ISubjectRepository subjects,
@@ -57,7 +62,7 @@ public class DirectGrantController : ControllerBase
     /// <param name="request">The create request containing the human-readable label, desired scopes, and optional expiry.</param>
     /// <returns>A <see cref="CreateDirectGrantResponse"/> containing the grant ID and the single-use plaintext token.</returns>
     [HttpPost]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
     [ProducesResponseType(typeof(CreateDirectGrantResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -70,18 +75,24 @@ public class DirectGrantController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
         if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
         {
             return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
         }
 
-        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+        var limitTo24Hours = HttpContext.InheritOwnCredentialHistoryClamp(request.LimitTo24Hours);
 
         var result = await _directGrantService.CreateAsync(
             pinnedTenantId: null, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
             limitTo24Hours,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
+            createdBySubjectId: null,
             ct: HttpContext.RequestAborted);
 
         if (result.Error != null)
@@ -100,6 +111,7 @@ public class DirectGrantController : ControllerBase
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DirectGrantDto>), StatusCodes.Status200OK)]
+    [ScopeDecidedBy(typeof(DirectGrantController), nameof(SiteTokenHolderAsync))]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<DirectGrantDto>>> List()
     {
@@ -134,7 +146,8 @@ public class DirectGrantController : ControllerBase
     /// <param name="id">The GUID of the grant to revoke.</param>
     /// <returns><c>204 No Content</c> on success (including when already revoked); <c>404 Not Found</c> if the grant does not belong to the current user.</returns>
     [HttpDelete("{id:guid}")]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
+    [ScopeDecidedBy(typeof(DirectGrantController), nameof(SiteTokenHolderAsync))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -148,7 +161,7 @@ public class DirectGrantController : ControllerBase
 
         var found = await _directGrantService.RevokeAsync(
             pinnedTenantId: null, id, auth.SubjectId.Value,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
 
@@ -161,7 +174,7 @@ public class DirectGrantController : ControllerBase
 
             found = await _directGrantService.RevokeAsync(
                 pinnedTenantId: null, id, holderId,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                HttpContext.GetClientAddress(),
                 Request.Headers.UserAgent.ToString(),
                 ct: HttpContext.RequestAborted);
         }
@@ -172,6 +185,48 @@ public class DirectGrantController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Remove the expiry of a device credential that a member set up, so it does not stop when that
+    /// member's access ends.
+    /// </summary>
+    /// <remarks>
+    /// Keeping a credential gives the site's uploader access with no end, so it takes a caller who
+    /// manages the members and whose own access does not end
+    /// (<see cref="HttpContextExtensions.MayKeepDeviceCredentials"/>).
+    /// </remarks>
+    /// <param name="id">The device credential, as the connections list shows it.</param>
+    /// <returns><c>204 No Content</c> on success; <c>404 Not Found</c> when it is not a device credential.</returns>
+    [HttpPost("{id:guid}/keep")]
+    [RequireScope(Scope.MembersManage)]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Keep(Guid id)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+        {
+            return this.CallerAccessFromTeamProblem();
+        }
+
+        if (!HttpContext.MayKeepDeviceCredentials())
+        {
+            return ceiling.AccessEndsAt is null
+                ? Forbid()
+                : Problem(detail: HttpContextExtensions.KeepDeviceCredentialEndDateDetail, statusCode: 403, title: "Forbidden");
+        }
+
+        return await _directGrantService.KeepDeviceCredentialAsync(id, HttpContext.RequestAborted)
+            ? NoContent()
+            : Problem(detail: "No device credential has this id.", statusCode: 404, title: "Not Found");
     }
 
     /// <summary>

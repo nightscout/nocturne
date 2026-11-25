@@ -1,7 +1,6 @@
 using System.Runtime.ExceptionServices;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Jobs;
-using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -30,16 +29,8 @@ internal sealed class TrackerAlertRuleBackfillJob(ILogger<TrackerAlertRuleBackfi
     {
         var tenantId = run.Tenant!.TenantId;
 
-        List<Guid> definitionIds;
-        await using (var db = await run.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct))
-        {
-            definitionIds = await db.TrackerNotificationThresholds
-                .AsNoTracking()
-                .Where(t => t.AlertRuleId == null)
-                .Select(t => t.TrackerDefinitionId)
-                .Distinct()
-                .ToListAsync(ct);
-        }
+        var definitionIds = await run.Services.GetRequiredService<ITrackerRepository>()
+            .GetDefinitionsWithUnlinkedThresholdsAsync(ct);
 
         var sync = run.Services.GetRequiredService<ITrackerAlertRuleSyncService>();
         var failures = new List<Exception>();

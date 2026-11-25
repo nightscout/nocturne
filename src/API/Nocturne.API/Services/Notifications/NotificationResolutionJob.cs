@@ -62,15 +62,8 @@ internal sealed class NotificationResolutionJob(ILogger<NotificationResolutionJo
                 if (archived is null)
                     continue;
 
-                try
-                {
-                    await broadcastService.BroadcastNotificationArchivedAsync(
-                        archived.UserId, InAppNotificationRepository.ToDto(archived), NotificationArchiveReason.Expired);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to broadcast notification archived event for {NotificationId}", notification.Id);
-                }
+                await broadcastService.BroadcastNotificationArchivedAsync(
+                    archived.UserId, InAppNotificationRepository.ToDto(archived), NotificationArchiveReason.Expired);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

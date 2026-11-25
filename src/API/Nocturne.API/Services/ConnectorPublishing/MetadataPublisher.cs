@@ -15,6 +15,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -37,7 +38,6 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly IHeartRateService _heartRateService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly IActivityDedupRepository _activityDedup;
-    private readonly IConnectorConfigurationRepository _configurations;
     private readonly IProfileActivationRepository _profileActivations;
     private readonly ProfileActivationWriter _profileActivationWriter;
 
@@ -55,7 +55,6 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
         IActivityDedupRepository activityDedup,
-        IConnectorConfigurationRepository configurations,
         IProfileActivationRepository profileActivations,
         ProfileActivationWriter profileActivationWriter,
         IAuditContext auditContext,
@@ -77,7 +76,6 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         _heartRateService = heartRateService ?? throw new ArgumentNullException(nameof(heartRateService));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
         _activityDedup = activityDedup ?? throw new ArgumentNullException(nameof(activityDedup));
-        _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
     }
 
     /// <summary>
@@ -137,7 +135,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         var foodList = foods.ToList();
         try
         {
-            await _foodService.CreateFoodAsync(foodList, cancellationToken);
+            await _foodService.CreateFoodAsync(foodList, FoodWriteMode.Native, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -232,7 +230,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
         => PublishUnheldAsync(
-            activities, a => a.Id,
+            activities,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
             ids => _activityDedup.GetHeldIdsAsync(ids, cancellationToken));
@@ -315,7 +313,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             }
             return true;
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, activationList, source);
             return false;
@@ -427,32 +425,4 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string source,
         CancellationToken cancellationToken = default)
         => _stateSpanService.GetLatestNonActivityTimestampAsync(source, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<DateTime?> GetBackfillLowWaterMarkAsync(
-        string source,
-        string collection,
-        CancellationToken cancellationToken = default)
-        => _configurations.GetBackfillLowWaterMarkAsync(source, collection, cancellationToken);
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Same-key races (a manual sync or cursor-reset job racing the background sync) stay
-    /// last-writer-wins: any surviving mark is a valid resume point because the resume crawl is
-    /// unbounded below it. Different keys on the same row keep each other; see
-    /// <see cref="Infrastructure.Data.Repositories.ConnectorConfigurationRepository"/>.
-    /// </remarks>
-    public async Task SetBackfillLowWaterMarkAsync(
-        string source,
-        string collection,
-        DateTime? lowWaterMark,
-        CancellationToken cancellationToken = default)
-    {
-        if (!await _configurations.SetBackfillLowWaterMarkAsync(source, collection, lowWaterMark, cancellationToken))
-        {
-            Logger.LogWarning(
-                "No connector configuration found for {Source}; cannot persist backfill low-water mark",
-                source);
-        }
-    }
 }

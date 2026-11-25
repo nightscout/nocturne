@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -53,16 +52,9 @@ public class DeviceStatusDecomposerPumpSuspensionTests
             .Setup(r => r.GetTimelineAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [.. _stored]);
 
-        _decomposer = new DeviceStatusDecomposer(
-            Mock.Of<IApsSnapshotRepository>(),
-            _pumpRepoMock.Object,
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            _stateSpanServiceMock.Object,
-            new UnresolvedDevices(),
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
+            pump: _pumpRepoMock.Object,
+            stateSpans: _stateSpanServiceMock.Object);
     }
 
     private static DeviceStatus MakeDeviceStatus(string id, DateTime at, bool suspended, string? clockIso = null) => new()

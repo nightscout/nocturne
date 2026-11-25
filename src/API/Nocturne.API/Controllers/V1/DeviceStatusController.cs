@@ -15,14 +15,17 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Device Status controller that provides 1:1 compatibility with Nightscout device status endpoints.
-/// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
+/// Nightscout device status documents. A client can list, create and delete them.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/devicestatus/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class DeviceStatusController : ControllerBase
 {
     private readonly IDeviceStatusService _deviceStatuses;
@@ -58,7 +61,7 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatus(
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         [FromQuery] string format = "json",
         CancellationToken cancellationToken = default
@@ -68,66 +71,57 @@ public class DeviceStatusController : ControllerBase
             "Device status endpoint requested with count: {Count}, skip: {Skip} from {RemoteIpAddress}",
             count,
             skip,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
+
+        var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+        if (pageSize < 0)
+        {
+            _logger.LogDebug("Returning empty array for count={Count}", count);
+            return Ok(Array.Empty<DeviceStatus>());
+        }
+
+        // Normalize skip parameter (negative is not valid)
+        if (skip < 0)
+        {
+            skip = 0; // Normalize to 0 for Nightscout compatibility
+        }
+
+        var find = FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(
+            LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null),
+            _timeProvider.GetUtcNow()
+        ));
+        var deviceStatusEntries = await _deviceStatuses.GetDeviceStatusesAsync(
+            find, LegacyReadLimits.ClampMergedCount(pageSize), skip, cancellationToken
+        );
+        var deviceStatusArray = deviceStatusEntries.ToArray();
+
+        _logger.LogDebug(
+            "Successfully returned {Count} device status entries",
+            deviceStatusArray.Length
+        );
+
+        // Handle different output formats
+        if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
+        {
+            return Ok(deviceStatusArray);
+        }
 
         try
         {
-            // Handle count parameter for Nightscout compatibility:
-            // - 0 or negative: return empty array (Nightscout behavior)
-            if (count <= 0)
-            {
-                _logger.LogDebug("Returning empty array for count={Count}", count);
-                return Ok(Array.Empty<DeviceStatus>());
-            }
-
-            // Normalize skip parameter (negative is not valid)
-            if (skip < 0)
-            {
-                skip = 0; // Normalize to 0 for Nightscout compatibility
-            }
-
-            var find = FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(
-                LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null),
-                _timeProvider.GetUtcNow()
-            ));
-            var deviceStatusEntries = await _deviceStatuses.GetDeviceStatusesAsync(
-                find, LegacyReadLimits.ClampMergedCount(count), skip, cancellationToken
+            var formattedData = DataFormatService.FormatDeviceStatus(
+                deviceStatusArray,
+                format
             );
-            var deviceStatusArray = deviceStatusEntries.ToArray();
-
-            _logger.LogDebug(
-                "Successfully returned {Count} device status entries",
-                deviceStatusArray.Length
-            );
-
-            // Handle different output formats
-            if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                return Ok(deviceStatusArray);
-            }
-
-            try
-            {
-                var formattedData = DataFormatService.FormatDeviceStatus(
-                    deviceStatusArray,
-                    format
-                );
-                var contentType = DataFormatService.GetContentType(format);
-                return Content(formattedData, contentType);
-            }
-            catch (ArgumentException)
-            {
-                _logger.LogWarning("Invalid format requested: {Format}", format);
-                return BadRequest(
-                    $"Unsupported format: {format}. Supported formats are: json, csv, tsv, txt"
-                );
-            }
+            var contentType = DataFormatService.GetContentType(format);
+            return Content(formattedData, contentType);
         }
-        catch (Exception ex)
+        catch (ArgumentException)
         {
-            _logger.LogError(ex, "Error occurred while fetching device status entries");
-            return StatusCode(500, Array.Empty<DeviceStatus>());
+            _logger.LogWarning("Invalid format requested: {Format}", format);
+            return BadRequest(
+                $"Unsupported format: {format}. Supported formats are: json, csv, tsv, txt"
+            );
         }
     }
 
@@ -149,11 +143,6 @@ public class DeviceStatusController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Device status creation endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var deviceStatusEntries = NightscoutJsonBody.ReadObjects<DeviceStatus>(body);
@@ -199,11 +188,6 @@ public class DeviceStatusController : ControllerBase
             _logger.LogWarning(ex, "Invalid JSON in create device status request");
             return BadRequest("Invalid JSON format");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while creating device status entries");
-            return StatusCode(500, Array.Empty<DeviceStatus>());
-        }
     }
 
     /// <summary>
@@ -216,6 +200,7 @@ public class DeviceStatusController : ControllerBase
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus/:id")]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(403)]
@@ -228,38 +213,30 @@ public class DeviceStatusController : ControllerBase
         _logger.LogDebug(
             "Device status deletion endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Device status deletion requested with empty ID");
-                return BadRequest("Device status ID is required");
-            }
-
-            if (id == LegacyDeleteStatus.AnyId)
-            {
-                return HttpContext?.HasScope(Scope.FullAccess) == true
-                    ? await BulkDeleteDeviceStatus(cancellationToken)
-                    : Forbid();
-            }
-
-            if (await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
-            {
-                _logger.LogDebug("Successfully deleted device status with ID: {Id}", id);
-                return Ok(LegacyDeleteStatus.For(1));
-            }
-
-            _logger.LogDebug("Device status not found for deletion with ID: {Id}", id);
-            return Ok(LegacyDeleteStatus.For(0));
+            _logger.LogWarning("Device status deletion requested with empty ID");
+            return BadRequest("Device status ID is required");
         }
-        catch (Exception ex)
+
+        if (id == LegacyDeleteStatus.AnyId)
         {
-            _logger.LogError(ex, "Error occurred while deleting device status with ID: {Id}", id);
-            return StatusCode(500);
+            return HttpContext?.HasScope(Scope.FullAccess) == true
+                ? await BulkDeleteDeviceStatus(cancellationToken)
+                : Forbid();
         }
+
+        if (await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
+        {
+            _logger.LogDebug("Successfully deleted device status with ID: {Id}", id);
+            return Ok(LegacyDeleteStatus.For(1));
+        }
+
+        _logger.LogDebug("Device status not found for deletion with ID: {Id}", id);
+        return Ok(LegacyDeleteStatus.For(0));
     }
 
     /// <summary>
@@ -278,42 +255,29 @@ public class DeviceStatusController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Device status bulk deletion endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+        var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+        var find = FindQuery.ParseDeviceStatus(findQuery);
+
+        if (find.IsEmpty || find.HasInexactCondition)
+        {
+            _logger.LogWarning("Bulk delete device status refused: the query names no find it can apply");
+            return BadRequest(
+                "A find is required for bulk delete, and every condition in it must be one it can evaluate"
+            );
+        }
+
+        // Nightscout windows every delete naming no created_at or _id, a time-only one included.
+        var deletedCount = await _deviceStatuses.DeleteDeviceStatusesAsync(
+            FindQuery.ParseDeviceStatus(
+                LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow(), windowUnfiltered: true)),
+            cancellationToken
         );
 
-        try
-        {
-            var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
-            var find = FindQuery.ParseDeviceStatus(findQuery);
+        _logger.LogDebug(
+            "Successfully bulk deleted {Count} device status entries",
+            deletedCount
+        );
 
-            if (find.IsEmpty || find.HasInexactCondition)
-            {
-                _logger.LogWarning("Bulk delete device status refused: the query names no find it can apply");
-                return BadRequest(
-                    "A find is required for bulk delete, and every condition in it must be one it can evaluate"
-                );
-            }
-
-            // Nightscout windows every delete naming no created_at or _id, a time-only one included.
-            var deletedCount = await _deviceStatuses.DeleteDeviceStatusesAsync(
-                FindQuery.ParseDeviceStatus(
-                    LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow(), windowUnfiltered: true)),
-                cancellationToken
-            );
-
-            _logger.LogDebug(
-                "Successfully bulk deleted {Count} device status entries",
-                deletedCount
-            );
-
-            return Ok(LegacyDeleteStatus.For(deletedCount));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred during bulk delete of device status entries");
-            return StatusCode(500);
-        }
+        return Ok(LegacyDeleteStatus.For(deletedCount));
     }
 }

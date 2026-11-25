@@ -200,6 +200,18 @@ public class BodyWeightMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void UpdateEntity_NoCreatedAt_KeepsTheStoredOne()
+    {
+        var entity = new BodyWeightEntity { CreatedAt = "2024-01-01T08:00:00.000Z", WeightKg = 70m };
+
+        BodyWeightMapper.UpdateEntity(entity, new BodyWeight { Mills = 1700000000000, WeightKg = 71m });
+
+        entity.CreatedAt.Should().Be("2024-01-01T08:00:00.000Z");
+        entity.WeightKg.Should().Be(71m);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void UpdateEntity_DoesNotTouchSysUpdatedAt()
     {
         var stale = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);

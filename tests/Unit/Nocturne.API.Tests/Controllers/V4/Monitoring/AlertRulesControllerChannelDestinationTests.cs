@@ -5,7 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Models.Responses;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
@@ -23,9 +26,10 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Covers destination validation on <see cref="AlertRulesController"/>. Nothing downstream
-/// inspects a channel destination — the bot service hands it straight to the platform adapter —
-/// so a destination in the wrong shape saves cleanly and then never delivers.
+/// Covers destination validation on <see cref="AlertRulesController"/>, and who a channel is
+/// stamped with and whether it delivers. Delivery never checks a destination's shape, since the
+/// bot service hands it straight to the platform adapter, so a destination in the wrong shape
+/// saves cleanly and then never delivers.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertRulesControllerChannelDestinationTests
@@ -47,18 +51,19 @@ public class AlertRulesControllerChannelDestinationTests
 
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(ctx),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(ctx)),
-            new AlertRuleRepository(new TestNocturneDbContextFactory(ctx)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(ctx), TimeProvider.System),
             MockTenantAccessor.Create(ctx.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             deliveryService ?? Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Rearms.Unannounced(),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
+            Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
 
         var http = new DefaultHttpContext();
         http.Items["AuthContext"] = new AuthContext
@@ -151,6 +156,9 @@ public class AlertRulesControllerChannelDestinationTests
     private static async Task LinkIdentityAsync(
         NocturneDbContext db, string platform, string platformUserId)
     {
+        if (!await db.Subjects.AnyAsync(s => s.Id == Subject))
+            db.Subjects.Add(new SubjectEntity { Id = Subject, Name = "Subject" });
+
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = Guid.CreateVersion7(),
@@ -492,7 +500,7 @@ public class AlertRulesControllerChannelDestinationTests
                 It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<AlertRuleChannelSnapshot>, AlertPayload, CancellationToken>(
                 (channels, _, _) => fired = channels)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync([]);
         var (controller, db) = CreateController(delivery.Object);
         await AddMemberAsync(db, Subject);
 
@@ -631,7 +639,7 @@ public class AlertRulesControllerChannelDestinationTests
                 It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<AlertRuleChannelSnapshot>, AlertPayload, CancellationToken>(
                 (channels, _, _) => fired = channels)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync([]);
         var (controller, db) = CreateController(delivery.Object);
         await AddMemberAsync(db, Subject);
         var departed = Guid.CreateVersion7();
@@ -755,5 +763,341 @@ public class AlertRulesControllerChannelDestinationTests
         }, CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    private const string SlackChannelId = "C00FAKECHAN1";
+
+    /// <summary>Makes <paramref name="subjectId"/> the caller, whose access ends at <paramref name="accessEndsAt"/>.</summary>
+    private static void ActAs(AlertRulesController controller, Guid? subjectId, DateTime? accessEndsAt = null)
+    {
+        var http = controller.ControllerContext.HttpContext;
+        http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId, TenantId = Tenant };
+        if (subjectId is { } subject)
+            new Nocturne.API.Middleware.RequestMembership(
+                    subject, Tenant,
+                    new Nocturne.API.Middleware.MembershipFacts(
+                        Guid.CreateVersion7(),
+                        new Nocturne.Core.Contracts.Multitenancy.TenantMemberAccess(new HashSet<string> { "*" }, false, accessEndsAt),
+                        new Nocturne.Core.Contracts.Multitenancy.TenantMemberAccess(new HashSet<string> { "*" }, false, accessEndsAt),
+                        null))
+                .StoreOn(http);
+    }
+
+    private static async Task<List<AlertRuleChannelEntity>> StoredChannelsAsync(NocturneDbContext db) =>
+        await db.AlertRuleChannels.AsNoTracking().OrderBy(c => c.SortOrder).ToListAsync();
+
+    private static CreateAlertRuleChannelRequest Typed(ChannelType type, string destination) =>
+        new() { ChannelType = type, Destination = destination };
+
+    [Fact]
+    public async Task A_typed_in_channel_is_stamped_with_the_member_who_saves_it_and_stops_when_their_access_ends()
+    {
+        var (controller, db) = CreateController();
+        var ends = DateTime.UtcNow.AddDays(3);
+        ActAs(controller, Subject, ends);
+
+        await controller.CreateRule(RuleWith(ChannelType.DiscordChannel, ChannelSnowflake), CancellationToken.None);
+
+        (await StoredChannelsAsync(db)).Should().ContainSingle().Which.Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == Subject && c.StopsAt == ends);
+    }
+
+    [Fact]
+    public async Task A_typed_in_channel_saved_by_no_member_is_not_stamped()
+    {
+        var (controller, db) = CreateController();
+        ActAs(controller, subjectId: null);
+
+        await controller.CreateRule(RuleWith(ChannelType.DiscordChannel, ChannelSnowflake), CancellationToken.None);
+
+        (await StoredChannelsAsync(db)).Should().ContainSingle().Which.Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == null && c.StopsAt == null);
+    }
+
+    [Fact]
+    public async Task An_unchanged_channel_keeps_its_stamps_when_another_member_saves_the_rule_and_a_changed_one_is_stamped_again()
+    {
+        var (controller, db) = CreateController();
+        var sitterEnds = DateTime.UtcNow.AddDays(3);
+        var other = Guid.CreateVersion7();
+        ActAs(controller, Subject, sitterEnds);
+        var created = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [Typed(ChannelType.DiscordChannel, ChannelSnowflake), Typed(ChannelType.SlackChannel, SlackChannelId)],
+        }, CancellationToken.None);
+        var ruleId = ((AlertRuleResponse)((CreatedAtActionResult)created.Result!).Value!).Id;
+
+        ActAs(controller, other);
+        await controller.UpdateRule(ruleId, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [Typed(ChannelType.DiscordChannel, ChannelSnowflake), Typed(ChannelType.SlackChannel, "C00FAKECHAN2")],
+        }, CancellationToken.None);
+
+        var stored = await StoredChannelsAsync(db);
+        stored.Should().HaveCount(2);
+        stored[0].Should().Match<AlertRuleChannelEntity>(c => c.AddedBySubjectId == Subject && c.StopsAt == sitterEnds,
+            "the channel came back as it was stored");
+        stored[1].Should().Match<AlertRuleChannelEntity>(c => c.AddedBySubjectId == other && c.StopsAt == null,
+            "its destination changed, so the member who saved it added it");
+    }
+
+    /// <summary>A rule with a Discord channel added by <paramref name="adder"/> that stopped yesterday, and an in-app channel.</summary>
+    private static async Task<AlertRuleEntity> SeedStoppedRuleAsync(NocturneDbContext db, Guid adder)
+    {
+        var rule = new AlertRuleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = Tenant,
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+        };
+        rule.Channels.Add(new AlertRuleChannelEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = Tenant,
+            AlertRuleId = rule.Id,
+            ChannelType = ChannelType.DiscordChannel,
+            Destination = ChannelSnowflake,
+            AddedBySubjectId = adder,
+            StopsAt = DateTime.UtcNow.AddDays(-1),
+        });
+        rule.Channels.Add(new AlertRuleChannelEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = Tenant,
+            AlertRuleId = rule.Id,
+            ChannelType = ChannelType.InApp,
+            Destination = Subject.ToString(),
+            SortOrder = 1,
+        });
+        db.AlertRules.Add(rule);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        return rule;
+    }
+
+    private static AlertRuleResponse OkRule(ActionResult<AlertRuleResponse> result) =>
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<AlertRuleResponse>().Subject;
+
+    [Fact]
+    public async Task Keeping_a_stopped_channel_as_a_member_with_no_end_date_makes_it_last()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var channel = rule.Channels.Single(c => c.ChannelType == ChannelType.DiscordChannel);
+        ActAs(controller, Subject);
+
+        var kept = OkRule(await controller.KeepChannel(rule.Id, channel.Id, CancellationToken.None));
+
+        (await StoredChannelsAsync(db))[0].Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == Subject && c.StopsAt == null);
+        kept.Channels.Single(c => c.Id == channel.Id).State.Should().Be(AlertChannelState.Active);
+    }
+
+    [Fact]
+    public async Task Keeping_a_stopped_channel_as_a_member_whose_access_ends_keeps_it_only_until_then()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var channel = rule.Channels.Single(c => c.ChannelType == ChannelType.DiscordChannel);
+        var ends = DateTime.UtcNow.AddDays(2);
+        ActAs(controller, Subject, ends);
+
+        await controller.KeepChannel(rule.Id, channel.Id, CancellationToken.None);
+
+        (await StoredChannelsAsync(db))[0].Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == Subject && c.StopsAt == ends);
+    }
+
+    [Fact]
+    public async Task A_channel_to_a_member_cannot_be_kept()
+    {
+        var (controller, db) = CreateController();
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var inApp = rule.Channels.Single(c => c.ChannelType == ChannelType.InApp);
+
+        var result = await controller.KeepChannel(rule.Id, inApp.Id, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        (await StoredChannelsAsync(db))[1].AddedBySubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_caller_who_may_edit_sees_each_channels_state_and_the_members_it_names()
+    {
+        var (controller, db) = CreateController();
+        var sitter = Guid.CreateVersion7();
+        var departed = Guid.CreateVersion7();
+        db.Subjects.Add(new SubjectEntity { Id = sitter, Name = "Sitter" });
+        db.Subjects.Add(new SubjectEntity { Id = departed, Name = "Departed" });
+        await db.SaveChangesAsync();
+        var rule = await SeedStoppedRuleAsync(db, sitter);
+        db.AlertRuleChannels.Add(new AlertRuleChannelEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = Tenant,
+            AlertRuleId = rule.Id,
+            ChannelType = ChannelType.DiscordDm,
+            Destination = DiscordUserSnowflake,
+            RecipientSubjectId = departed,
+            SortOrder = 2,
+        });
+        await db.SaveChangesAsync();
+
+        var channels = OkRule(await controller.GetRule(rule.Id, CancellationToken.None)).Channels;
+
+        var stopped = channels.Single(c => c.ChannelType == ChannelType.DiscordChannel);
+        stopped.State.Should().Be(AlertChannelState.Stopped);
+        stopped.AddedByName.Should().Be("Sitter");
+        stopped.StopsAt.Should().NotBeNull().And.BeBefore(DateTime.UtcNow);
+        var dm = channels.Single(c => c.ChannelType == ChannelType.DiscordDm);
+        dm.State.Should().Be(AlertChannelState.NoRecipient);
+        dm.MemberName.Should().Be("Departed", "the link is gone, and the channel stored who it belonged to");
+        channels.Single(c => c.ChannelType == ChannelType.InApp).State.Should().Be(AlertChannelState.NoRecipient,
+            "the in-app channel names a subject who is not a member");
+    }
+
+    [Fact]
+    public async Task A_read_only_caller_sees_no_channel_state()
+    {
+        var (controller, db) = CreateController(grantedScope: Scope.AlertsRead);
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+
+        OkRule(await controller.GetRule(rule.Id, CancellationToken.None)).Channels.Should().AllSatisfy(c =>
+        {
+            c.State.Should().BeNull();
+            c.MemberName.Should().BeNull();
+            c.AddedByName.Should().BeNull();
+            c.StopsAt.Should().BeNull();
+        });
+    }
+
+    private async Task<Guid> CreateWithAsync(AlertRulesController controller, params CreateAlertRuleChannelRequest[] channels)
+    {
+        var created = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [.. channels],
+        }, CancellationToken.None);
+        return ((AlertRuleResponse)((CreatedAtActionResult)created.Result!).Value!).Id;
+    }
+
+    private static Task UpdateWithAsync(AlertRulesController controller, Guid ruleId, params CreateAlertRuleChannelRequest[] channels) =>
+        controller.UpdateRule(ruleId, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [.. channels],
+        }, CancellationToken.None);
+
+    [Fact]
+    public async Task A_channel_added_again_beside_its_copy_takes_the_stamps_of_the_member_who_saves_it()
+    {
+        var (controller, db) = CreateController();
+        var sitterEnds = DateTime.UtcNow.AddDays(3);
+        var lasting = Guid.CreateVersion7();
+        ActAs(controller, Subject, sitterEnds);
+        var ruleId = await CreateWithAsync(controller, Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        ActAs(controller, lasting);
+        await UpdateWithAsync(controller, ruleId,
+            Typed(ChannelType.DiscordChannel, ChannelSnowflake), Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        (await StoredChannelsAsync(db)).Should().HaveCount(2).And.AllSatisfy(c =>
+            c.Should().Match<AlertRuleChannelEntity>(r => r.AddedBySubjectId == lasting && r.StopsAt == null,
+                "with two copies the key cannot tell which is which, so each is stamped by its writer"));
+    }
+
+    [Fact]
+    public async Task Copies_stored_with_different_stamps_are_each_stamped_by_the_member_who_saves_them_back()
+    {
+        var (controller, db) = CreateController();
+        var sitterEnds = DateTime.UtcNow.AddDays(3);
+        var lasting = Guid.CreateVersion7();
+        ActAs(controller, Subject, sitterEnds);
+        var ruleId = await CreateWithAsync(controller,
+            Typed(ChannelType.DiscordChannel, ChannelSnowflake), Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+        var lastingCopy = await db.AlertRuleChannels.OrderBy(c => c.SortOrder).LastAsync();
+        lastingCopy.AddedBySubjectId = lasting;
+        lastingCopy.StopsAt = null;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var editor = Guid.CreateVersion7();
+        var editorEnds = DateTime.UtcNow.AddDays(5);
+        ActAs(controller, editor, editorEnds);
+        await UpdateWithAsync(controller, ruleId,
+            Typed(ChannelType.DiscordChannel, ChannelSnowflake), Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        (await StoredChannelsAsync(db)).Should().HaveCount(2).And.AllSatisfy(c =>
+            c.Should().Match<AlertRuleChannelEntity>(r => r.AddedBySubjectId == editor && r.StopsAt == editorEnds,
+                "neither copy takes the other's stop"));
+    }
+
+    [Fact]
+    public async Task A_dry_run_answers_with_the_channels_it_did_not_send()
+    {
+        var notSent = new AlertChannelNotSent(0, ChannelType.DiscordDm, AlertChannelState.NoRecipient);
+        var delivery = new Mock<IAlertDeliveryService>();
+        delivery.Setup(d => d.TestFireDryRunAsync(
+                It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(), It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([notSent]);
+        var (controller, _) = CreateController(delivery.Object);
+
+        var result = await controller.TestFireDryRun(
+            new TestFireDryRunRequest("Low", AlertRuleSeverity.Warning,
+                [new CreateAlertRuleChannelRequest { ChannelType = ChannelType.DiscordDm, Destination = DiscordUserSnowflake }]),
+            CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>()
+            .Which.Value.Should().BeOfType<TestFireResponse>()
+            .Which.NotSent.Should().Equal(notSent);
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_answers_with_the_channels_it_did_not_send()
+    {
+        var notSent = new AlertChannelNotSent(1, ChannelType.DiscordChannel, AlertChannelState.Stopped);
+        var delivery = new Mock<IAlertDeliveryService>();
+        IReadOnlyList<AlertRuleChannelSnapshot>? fired = null;
+        delivery.Setup(d => d.TestFireAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(), It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid _, IReadOnlyList<AlertRuleChannelSnapshot> channels, AlertPayload _, CancellationToken _) => fired = channels)
+            .ReturnsAsync(new AlertTestFire(Guid.NewGuid(), [notSent]));
+        var (controller, _) = CreateController(delivery.Object);
+        var ruleId = await CreateWithAsync(controller,
+            Typed(ChannelType.Webhook, "https://example.test/hook"), Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        var result = await controller.TestFire(ruleId, CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>()
+            .Which.Value.Should().BeOfType<TestFireResponse>()
+            .Which.NotSent.Should().Equal(notSent);
+        fired!.Select(c => c.ChannelType).Should().Equal(
+            [ChannelType.Webhook, ChannelType.DiscordChannel], "the index counts the channels in the order the editor shows");
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_that_reached_every_channel_answers_with_an_empty_list()
+    {
+        var delivery = new Mock<IAlertDeliveryService>();
+        delivery.Setup(d => d.TestFireAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(), It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertTestFire(Guid.NewGuid(), []));
+        var (controller, _) = CreateController(delivery.Object);
+        var ruleId = await CreateWithAsync(controller, Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        var result = await controller.TestFire(ruleId, CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>()
+            .Which.Value.Should().BeOfType<TestFireResponse>()
+            .Which.NotSent.Should().BeEmpty();
     }
 }

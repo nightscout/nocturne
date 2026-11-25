@@ -1,4 +1,3 @@
-using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -27,7 +26,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 public sealed class MemberInviteControllerAuditTests : IDisposable
 {
     private readonly NocturneDbContext _db;
-    private readonly Mock<IAuthAuditService> _audit = new();
+    private int _expectedRows;
     private readonly PublicAccessCacheService _publicAccessCache = TestPublicAccessCache.Create();
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _callerSubjectId = Guid.CreateVersion7();
@@ -68,6 +67,10 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         });
         _db.SaveChanges();
         _db.ChangeTracker.Clear();
+        _db.ActingAs(new TestAuditActor
+        {
+            SubjectId = _callerSubjectId, IpAddress = "203.0.113.7", UserAgent = "Browser/1.0", TraceId = "trace-1",
+        });
     }
 
     public void Dispose() => _db.Dispose();
@@ -78,10 +81,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         Permissions = [.. RoleSeeds.Permissions[slug]], IsSystem = true,
     };
 
-    private MemberInviteController Controller(params string[] grantedScopes) =>
-        Controller(new TenantMembershipRepository(_db.AsFactory()), grantedScopes);
-
-    private MemberInviteController Controller(ITenantMembershipRepository members, params string[] grantedScopes)
+    private MemberInviteController Controller(params string[] grantedScopes)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
@@ -95,12 +95,11 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
 
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
-            Mock.Of<ITenantService>(),
-            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory()), TimeProvider.System),
+            TestTenantService.Over(_db),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_db.AsFactory()), _db.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
-            members,
-            _audit.Object)
+            new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
@@ -115,10 +114,24 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
             _targetMemberId, new SetMemberPermissionsRequest(permissions?.ToList()), _publicAccessCache,
             CancellationToken.None);
 
-    private void VerifyLogged(string eventType, string detailsJson) =>
-        _audit.Verify(a => a.LogAsync(
-            eventType, _targetSubjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
-            null, detailsJson, null, null, null), Times.Once);
+    private void VerifyLogged(string eventType, string detailsJson)
+    {
+        var rows = _db.AuthAuditLog.AsNoTracking()
+            .Where(a => a.EventType == eventType && a.DetailsJson == detailsJson).ToList();
+        rows.Should().ContainSingle();
+        var row = rows.Single();
+        row.TargetSubjectId.Should().Be(_targetSubjectId);
+        row.ActorSubjectId.Should().Be(_callerSubjectId);
+        row.ActorCredential.Should().BeNull();
+        row.TenantId.Should().Be(_tenantId);
+        row.IpAddress.Should().Be("203.0.113.7");
+        row.UserAgent.Should().Be("Browser/1.0");
+        row.TraceId.Should().Be("trace-1");
+        row.Success.Should().BeTrue();
+        _expectedRows++;
+    }
+
+    private void VerifyNoOtherRows() => _db.AuthAuditLog.AsNoTracking().Count().Should().Be(_expectedRows);
 
     [Fact]
     public async Task SetMemberRoles_AuditsEachRoleRemovedAndEachRoleAdded()
@@ -129,7 +142,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         VerifyLogged(AuthAuditEventType.RoleRemoved, """{"role":"viewer","kind":"tenant"}""");
         VerifyLogged(AuthAuditEventType.RoleAssigned, """{"role":"owner","kind":"tenant"}""");
         VerifyLogged(AuthAuditEventType.RoleAssigned, """{"role":"caretaker","kind":"tenant"}""");
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -138,7 +151,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         await SetRoles(Controller(Scope.FullAccess), _viewer.Id, _caretaker.Id);
 
         VerifyLogged(AuthAuditEventType.RoleAssigned, """{"role":"caretaker","kind":"tenant"}""");
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -147,46 +160,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         var result = await SetRoles(Controller(Scope.FullAccess), _viewer.Id);
 
         result.Should().BeOfType<NoContentResult>();
-        _audit.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task SetMemberRoles_AuditsOnlyAfterTheChangeIsStored()
-    {
-        var rolesWhenAudited = new List<string?>();
-        _audit.Setup(a => a.LogAsync(
-                It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(),
-                It.IsAny<Guid?>()))
-            .Callback(() => rolesWhenAudited = _db.TenantMemberRoles.AsNoTracking()
-                .Where(mr => mr.TenantMemberId == _targetMemberId)
-                .Select(mr => mr.TenantRole!.Slug)
-                .ToList())
-            .Returns(Task.CompletedTask);
-
-        await SetRoles(Controller(Scope.FullAccess), _caretaker.Id);
-
-        rolesWhenAudited.Should().Equal(RoleSeeds.Caretaker);
-    }
-
-    [Fact]
-    public async Task SetMemberRoles_ReadsNothingFromTheRepositoryOnceTheChangeIsStored()
-    {
-        var repository = RecordingRepository.Wrap(new TenantMembershipRepository(_db.AsFactory()));
-        var callsAfterSave = new List<string>();
-        _audit.Setup(a => a.LogAsync(
-                It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(),
-                It.IsAny<Guid?>()))
-            .Callback(() => callsAfterSave.AddRange(((RecordingRepository)repository).CallsAfterTheRoleChange))
-            .Returns(Task.CompletedTask);
-
-        await SetRoles(Controller(repository, Scope.FullAccess), _owner.Id, _caretaker.Id);
-
-        callsAfterSave.Should().BeEmpty();
-        VerifyLogged(AuthAuditEventType.RoleRemoved, """{"role":"viewer","kind":"tenant"}""");
-        VerifyLogged(AuthAuditEventType.RoleAssigned, """{"role":"owner","kind":"tenant"}""");
-        VerifyLogged(AuthAuditEventType.RoleAssigned, """{"role":"caretaker","kind":"tenant"}""");
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -202,7 +176,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         var result = await SetRoles(Controller(Scope.FullAccess), _viewer.Id);
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -211,7 +185,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         var result = await SetRoles(Controller(Scope.MembersManage), _viewer.Id, _owner.Id);
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -222,7 +196,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         result.Should().BeOfType<NoContentResult>();
         VerifyLogged(AuthAuditEventType.RoleRemoved, """{"permission":"glucose.read","kind":"tenant"}""");
         VerifyLogged(AuthAuditEventType.RoleAssigned, """{"permission":"devices.read","kind":"tenant"}""");
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -232,7 +206,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
 
         VerifyLogged(AuthAuditEventType.RoleRemoved, """{"permission":"glucose.read","kind":"tenant"}""");
         VerifyLogged(AuthAuditEventType.RoleRemoved, """{"permission":"treatments.read","kind":"tenant"}""");
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -241,24 +215,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         var result = await SetPermissions(Controller(Scope.FullAccess), Scope.TreatmentsRead, Scope.GlucoseRead);
 
         result.Should().BeOfType<NoContentResult>();
-        _audit.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task SetMemberPermissions_AuditsOnlyAfterTheChangeIsStored()
-    {
-        IReadOnlyList<string>? permissionsWhenAudited = null;
-        _audit.Setup(a => a.LogAsync(
-                It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(),
-                It.IsAny<Guid?>()))
-            .Callback(() => permissionsWhenAudited = _db.TenantMembers.AsNoTracking()
-                .Single(m => m.Id == _targetMemberId).DirectPermissions)
-            .Returns(Task.CompletedTask);
-
-        await SetPermissions(Controller(Scope.FullAccess), Scope.DevicesRead);
-
-        permissionsWhenAudited.Should().Equal(Scope.DevicesRead);
+        VerifyNoOtherRows();
     }
 
     [Fact]
@@ -267,37 +224,43 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         var result = await SetPermissions(Controller(Scope.MembersManage), Scope.DevicesRead);
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
-        _audit.VerifyNoOtherCalls();
+        VerifyNoOtherRows();
     }
 
-    /// <summary>Forwards to a real repository and records each call made after <c>ReplaceRolesUnlessLastOwnerAsync</c>.</summary>
-    public class RecordingRepository : DispatchProxy
+    private Task<IActionResult> SetClamp(MemberInviteController controller, bool limit) =>
+        controller.SetMemberLimitTo24Hours(
+            _targetMemberId, new SetMemberLimitTo24HoursRequest(limit), _publicAccessCache, CancellationToken.None);
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_AuditsTheClampBeingSet()
     {
-        private ITenantMembershipRepository _inner = null!;
-        private bool _saved;
+        var result = await SetClamp(Controller(Scope.FullAccess), true);
 
-        public List<string> CallsAfterTheRoleChange { get; } = [];
+        result.Should().BeOfType<NoContentResult>();
+        VerifyLogged(AuthAuditEventType.HistoryLimitChanged, """{"history_limit":"24_hours","kind":"tenant"}""");
+        VerifyNoOtherRows();
+    }
 
-        public static ITenantMembershipRepository Wrap(ITenantMembershipRepository inner)
-        {
-            var proxy = Create<ITenantMembershipRepository, RecordingRepository>();
-            ((RecordingRepository)proxy)._inner = inner;
-            return proxy;
-        }
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_AuditsTheClampBeingLifted()
+    {
+        (await _db.TenantMembers.SingleAsync(m => m.Id == _targetMemberId)).LimitTo24Hours = true;
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
 
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-        {
-            if (_saved)
-                CallsAfterTheRoleChange.Add(targetMethod!.Name);
-            _saved |= targetMethod!.Name == nameof(ITenantMembershipRepository.ReplaceRolesUnlessLastOwnerAsync);
-            try
-            {
-                return targetMethod.Invoke(_inner, args);
-            }
-            catch (TargetInvocationException e) when (e.InnerException is not null)
-            {
-                throw e.InnerException;
-            }
-        }
+        var result = await SetClamp(Controller(Scope.FullAccess), false);
+
+        result.Should().BeOfType<NoContentResult>();
+        VerifyLogged(AuthAuditEventType.HistoryLimitChanged, """{"history_limit":"full","kind":"tenant"}""");
+        VerifyNoOtherRows();
+    }
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_AuditsNothingWhenTheClampIsUnchanged()
+    {
+        var result = await SetClamp(Controller(Scope.FullAccess), false);
+
+        result.Should().BeOfType<NoContentResult>();
+        VerifyNoOtherRows();
     }
 }

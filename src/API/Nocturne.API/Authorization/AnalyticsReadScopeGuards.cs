@@ -94,8 +94,12 @@ internal static class ChartDataReadScopeGuard
             || !AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead))
             data.LastPumpSyncMills = null;
 
+        // The target lines are the active profile's target, therapy data like the profile spans.
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
+        {
             data.ProfileSpans = [];
+            data.Thresholds = data.Thresholds with { TargetLow = null, TargetHigh = null };
+        }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.HeartRateRead))
             data.HeartRateSeries = [];
@@ -264,7 +268,10 @@ internal static class WidgetSummaryReadScopeGuard
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
             data.Iob = 0;
+            data.IobKnown = false;
             data.Cob = 0;
+            data.CobKnown = false;
+            data.BasalInjection = null;
         }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.AlertsRead))
@@ -301,6 +308,7 @@ internal static class CurrentTherapyStateReadScopeGuard
             data.Reservoir = null;
             data.PumpBatteryPercent = null;
             data.PumpBatteryVoltage = null;
+            data.LinkBatteryVoltage = null;
         }
 
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))

@@ -1,6 +1,6 @@
 # Nocturne
 
-A modern, high-performance diabetes management platform built with .NET 10. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
+A modern, high-performance diabetes management platform built with .NET 11. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="src/Web/packages/screenshots/images/dashboard-overview.dark.webp">
@@ -31,7 +31,6 @@ Nocturne/
 │   ├── Infrastructure/             # EF Core data access, caching, security
 │   ├── Portal/                     # Marketing website
 │   ├── Services/                   # Background services
-│   ├── Tools/                      # CLI tools and MCP server
 │   ├── Web/                        # pnpm monorepo (SvelteKit frontend, bot, bridge)
 │   └── Widgets/                    # Embeddable widgets
 └── tests/                          # Comprehensive test suite
@@ -52,7 +51,7 @@ Nocturne/
 
 ### Prerequisites
 
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
+- [.NET 11.0 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) or later
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [Node.js 24+](https://nodejs.org/)
 - [pnpm 9+](https://pnpm.io/)
@@ -136,11 +135,22 @@ dotnet user-secrets set "LocalDev:Domain" "nocturne.test"
 
 This requires mkcert and one hosts-file line per tenant slug (`127.0.0.1 dev.nocturne.test` — hosts files don't support wildcards). The app is then at `https://nocturne.test` with no port.
 
-## Production Deployment (Docker Compose)
+## Production Deployment
 
-The easiest way to deploy Nocturne is with the production Docker Compose bundle. Each [GitHub Release](https://github.com/nightscout/nocturne/releases) includes ready-to-use artifacts, or you can generate them locally.
+The easiest way to deploy Nocturne is the install script. On a Linux server with systemd, as root:
 
-### Using a release
+```bash
+curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/install.sh -o install.sh
+sudo BASE_DOMAIN=nocturne.example.com bash install.sh
+```
+
+It installs Docker when it is absent, downloads the production Docker Compose bundle to `/opt/nocturne`, generates the keys and passwords, sets the DNS record for a DuckDNS name (or prints the two records to create), and starts the stack. Re-running it repairs a failed install. See the [install script guide](https://getnocturne.dev/docs/installation/install-script). The Oracle Cloud installer (`oracle-cloud-install.sh`) provisions a free server and runs this same script on it.
+
+Both scripts are generated: edit their sources in `src/Aspire/Nocturne.Aspire.Host/install/` and regenerate with `dotnet run scripts/publish-release.cs`.
+
+### Using the Docker Compose bundle by hand
+
+Each [GitHub Release](https://github.com/nightscout/nocturne/releases) includes the bundle the script uses, or you can generate it locally.
 
 Download `docker-compose.yaml` and `.env.example` from the [latest release](https://github.com/nightscout/nocturne/releases).
 
@@ -216,7 +226,7 @@ Send the member `https://<tenant-host>/auth/recovery?code=<code>`. The code work
 
 ### Generating locally
 
-If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:
+If you have the .NET 11 SDK and Aspire CLI installed, you can generate the production bundle from source:
 
 ```bash
 dotnet run scripts/publish-release.cs              # regenerates deploy/ and docs/diagrams/; CI fails a PR whose bundle drifts
@@ -304,4 +314,4 @@ Nocturne is a labor of love built by volunteers. If you find it useful, please c
 ### Acknowledgments
 
 - Built on the shoulders of the [Nightscout Project](https://github.com/nightscout/cgm-remote-monitor)
-- Powered by [.NET 10](https://dotnet.microsoft.com/) and [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
+- Powered by [.NET 11](https://dotnet.microsoft.com/) and [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)

@@ -217,10 +217,13 @@ public class PropertiesService : IPropertiesService
             // Build properties that would be set by plugins
 
             // BGNow properties (most recent glucose entry)
-            SetBgNowPropertiesAsync(properties, ddata);
+            var buckets = DirectionService.BuildBuckets(ddata.Sgvs ?? []);
+            SetBgNowPropertiesAsync(properties, ddata, buckets);
+
+            SetBucketsProperties(properties, buckets);
 
             // Delta properties (change in glucose)
-            SetDeltaProperties(properties, ddata);
+            SetDeltaProperties(properties, ddata, buckets);
 
             // Direction properties
             SetDirectionProperties(properties, ddata);
@@ -291,14 +294,18 @@ public class PropertiesService : IPropertiesService
     /// <see cref="DirectionService.BuildBuckets"/>). A bucket holding only error codes has no
     /// <c>mean</c>, <c>last</c> or <c>mills</c>, and so no delta or forecast follows it.
     /// </summary>
-    private void SetBgNowPropertiesAsync(Dictionary<string, object> properties, DData ddata)
+    private void SetBgNowPropertiesAsync(
+        Dictionary<string, object> properties, DData ddata, IReadOnlyList<BgNowBucket> buckets)
     {
         var currentSgv = ddata.Sgvs?.OrderByDescending(s => s.Mills).FirstOrDefault();
         if (currentSgv == null)
+        {
+            properties["bgnow"] = new Dictionary<string, object>();
             return;
+        }
 
         var mgdlValue = currentSgv.GlucoseMgdl();
-        var bgnow = BucketProperties(DirectionService.BuildBuckets(ddata.Sgvs!)[0]);
+        var bgnow = BucketProperties(buckets[0]);
         bgnow["mgdl"] = mgdlValue;
         bgnow["scaled"] = currentSgv.Scaled ?? mgdlValue;
         bgnow["displayLine"] = $"BG Now: {currentSgv.Scaled ?? mgdlValue} mg/dl";
@@ -306,8 +313,39 @@ public class PropertiesService : IPropertiesService
         properties["bgnow"] = bgnow;
     }
 
+    /// <summary>
+    /// Sets <c>buckets</c>, the 5 minute windows <c>bgnow</c> and <c>delta</c> read, each with its
+    /// place and window as <c>bgnow.js</c> keeps them.
+    /// </summary>
+    private static void SetBucketsProperties(
+        Dictionary<string, object> properties, IReadOnlyList<BgNowBucket> buckets)
+    {
+        properties["buckets"] = buckets
+            .Select((bucket, index) =>
+            {
+                var result = new Dictionary<string, object?>(BucketProperties(bucket))
+                {
+                    ["index"] = index,
+                    ["fromMills"] = bucket.FromMills,
+                    ["toMills"] = bucket.ToMills,
+                };
+                if (bucket.Entries.Count == 0)
+                    result["isEmpty"] = true;
+                return result;
+            })
+            .ToList();
+    }
+
+    /// <remarks>
+    /// NIGHTSCOUT-COMPAT: <c>scaled</c> on a reading is always mg/dl, where Nightscout gives it in the
+    /// display units; so are the <c>scaled</c> of <c>bgnow</c> and of each AR2 point
+    /// (<see cref="SetAr2PropertiesAsync"/>).
+    /// </remarks>
     private static Dictionary<string, object> BucketProperties(BgNowBucket bucket)
     {
+        foreach (var entry in bucket.Entries)
+            entry.Scaled ??= entry.GlucoseMgdl();
+
         var result = new Dictionary<string, object> { ["sgvs"] = bucket.Entries };
 
         if (bucket.Last != null)
@@ -326,13 +364,14 @@ public class PropertiesService : IPropertiesService
     /// <summary>
     /// Set delta properties showing glucose change between the two most recent 5 minute buckets
     /// </summary>
-    private void SetDeltaProperties(Dictionary<string, object> properties, DData ddata)
+    private void SetDeltaProperties(
+        Dictionary<string, object> properties, DData ddata, IReadOnlyList<BgNowBucket> buckets)
     {
         if (ddata.Sgvs == null)
             return;
 
         var bucketDelta = DirectionService.CalculateBucketDelta(
-            DirectionService.BuildBuckets(ddata.Sgvs),
+            buckets,
             "mg/dl"
         );
         if (bucketDelta == null)
@@ -365,8 +404,9 @@ public class PropertiesService : IPropertiesService
         // Use the DirectionService for exact legacy direction calculation
         var directionInfo = DirectionService.GetDirectionInfo(currentEntry);
 
-        properties["direction"] = new Dictionary<string, object>
+        properties["direction"] = new Dictionary<string, object?>
         {
+            ["display"] = null,
             ["value"] = currentEntry.Direction ?? "NONE",
             ["label"] = directionInfo.Label,
             ["entity"] = directionInfo.Entity,
@@ -547,7 +587,7 @@ public class PropertiesService : IPropertiesService
         try
         {
             var offline = _openAps.FindOfflineMarker(
-                ddata.Treatments ?? [], DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime) is not null;
+                ddata.Treatments ?? [], now.ToUtcDateTime()) is not null;
             var built = DeviceStatusProperties.Build(ddata.DeviceStatus ?? [], now, new PumpPreferences(), offline);
             var byName = new Dictionary<string, object>
             {
@@ -571,18 +611,8 @@ public class PropertiesService : IPropertiesService
     {
         try
         {
-            // Get BGNow and Delta properties that AR2 depends on
-            if (
-                !properties.TryGetValue("bgnow", out var bgNowObj)
-                || bgNowObj is not Dictionary<string, object> bgNowProperties
-            )
-                return;
-
-            if (
-                !properties.TryGetValue("delta", out var deltaObj)
-                || deltaObj is not Dictionary<string, object> deltaProperties
-            )
-                return;
+            var bgNowProperties = properties.GetValueOrDefault("bgnow") as Dictionary<string, object> ?? [];
+            var deltaProperties = properties.GetValueOrDefault("delta") as Dictionary<string, object> ?? [];
 
             // Get settings for thresholds (use defaults if not available)
             var settings = new Dictionary<string, object>
@@ -614,6 +644,7 @@ public class PropertiesService : IPropertiesService
                             mills = p.Mills,
                             mgdl = p.Mgdl,
                             color = p.Color,
+                            scaled = p.Mgdl,
                         })
                         .ToArray(),
                     ["avgLoss"] = ar2Properties.Forecast.AvgLoss,
@@ -674,7 +705,14 @@ public class PropertiesService : IPropertiesService
             batteryReports.Select(ToBatteryReading),
             now);
         if (weakest == null)
+        {
+            properties["upbat"] = new Dictionary<string, object>
+            {
+                ["display"] = "?%",
+                ["devices"] = new Dictionary<string, object>(),
+            };
             return;
+        }
 
         // The most recent report from each uploader, weakest battery first. Legacy
         // clients read this list to show more than one phone.
@@ -757,8 +795,8 @@ public class PropertiesService : IPropertiesService
                 await _deviceAgeService.GetCannulaAgeAsync(prefs, ct: cancellationToken));
             properties["sage"] = new Dictionary<string, object?>
             {
-                ["Sensor Start"] = ToSensorDictionary(sensor.SensorStart, sensor.Min == "Sensor Start"),
-                ["Sensor Change"] = ToSensorDictionary(sensor.SensorChange, sensor.Min == "Sensor Change"),
+                [TreatmentTypes.SensorStart] = ToSensorDictionary(sensor.SensorStart, sensor.Min == TreatmentTypes.SensorStart),
+                [TreatmentTypes.SensorChange] = ToSensorDictionary(sensor.SensorChange, sensor.Min == TreatmentTypes.SensorChange),
                 ["min"] = sensor.Min,
             };
             properties["iage"] = ToAgeDictionary(
@@ -1024,10 +1062,7 @@ public class PropertiesService : IPropertiesService
         var tempBasalTreatment = treatments
             .Where(t =>
                 !string.IsNullOrEmpty(t.EventType)
-                && (
-                    t.EventType.Equals("Temp Basal", StringComparison.OrdinalIgnoreCase)
-                    || t.EventType.Equals("temp basal", StringComparison.OrdinalIgnoreCase)
-                )
+                && t.EventType.Equals(TreatmentTypes.TempBasal, StringComparison.OrdinalIgnoreCase)
                 && t.Mills <= time
                 && t.Mills + (t.Duration ?? 0) * 60000 > time
             ) // Duration in minutes, convert to ms
@@ -1050,10 +1085,7 @@ public class PropertiesService : IPropertiesService
         var comboBolusTreatment = treatments
             .Where(t =>
                 !string.IsNullOrEmpty(t.EventType)
-                && (
-                    t.EventType.Equals("Combo Bolus", StringComparison.OrdinalIgnoreCase)
-                    || t.EventType.Equals("combo bolus", StringComparison.OrdinalIgnoreCase)
-                )
+                && t.EventType.Equals(TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase)
                 && t.Mills <= time
                 && t.Mills + (t.Duration ?? 0) * 60000 > time
             ) // Duration in minutes, convert to ms
@@ -1096,16 +1128,28 @@ public class PropertiesService : IPropertiesService
         var totalSize = dbStats.DataSize + dbStats.IndexSize;
         var percentage = totalSize > 0 ? (int)(totalSize * 100.0 / _dbSize.MaxBytes) : 0;
 
+        const double bytesPerMiB = 1024.0 * 1024.0;
+        var totalMiB = totalSize / bytesPerMiB;
+        var maxMiB = (double)Math.Max(_dbSize.MaxMiB, 1);
+        var (status, level) =
+            totalMiB >= Math.Floor(0.75 * maxMiB) ? ("urgent", DeviceAgeLevel.Urgent)
+            : totalMiB >= Math.Floor(0.60 * maxMiB) ? ("warn", DeviceAgeLevel.Warn)
+            : ("current", DeviceAgeLevel.Info);
+
         properties["dbsize"] = new Dictionary<string, object>
         {
             ["size"] = totalSize,
             ["percentage"] = percentage,
             ["display"] = $"{percentage}%",
-            // NIGHTSCOUT-COMPAT: Nightscout's dbsize plugin warns from 60% and is urgent from 75% of the floored percentage.
-            ["status"] =
-                percentage >= 75 ? "urgent"
-                : percentage >= 60 ? "warn"
-                : "ok",
+            ["status"] = status,
+            ["dataPercentage"] = percentage,
+            ["totalDataSize"] = totalMiB,
+            ["notificationLevel"] = level,
+            ["details"] = new Dictionary<string, object>
+            {
+                ["dataSize"] = ScaledRounding.Round(totalMiB, 2, MidpointRounding.AwayFromZero),
+                ["maxSize"] = maxMiB,
+            },
         };
     }
 
@@ -1114,6 +1158,6 @@ public class PropertiesService : IPropertiesService
     /// </summary>
     private void SetRuntimeStateProperties(Dictionary<string, object> properties)
     {
-        properties["runtimestate"] = new Dictionary<string, object> { ["state"] = "ok" };
+        properties["runtimestate"] = new Dictionary<string, object> { ["state"] = "loaded" };
     }
 }

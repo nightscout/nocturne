@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -69,12 +70,9 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
 
     private static readonly TimeSpan NudgeDebounceWindow = TimeSpan.FromSeconds(10);
 
-    /// <summary>
-    /// Maximum wall-clock time a single tenant's sync may run before it is cancelled. Bounds how long
-    /// one stuck or failing tenant — e.g. a hung network call or an auth-retry storm against bad
-    /// credentials — can hold a scheduler slot and a budget slot. Overridable for tests.
-    /// </summary>
-    protected virtual TimeSpan PerTenantSyncTimeout => TimeSpan.FromMinutes(3);
+    /// <inheritdoc cref="ConnectorRunLimits.PerTenantSyncTimeout"/>
+    /// <remarks>Overridable for tests.</remarks>
+    protected virtual TimeSpan PerTenantSyncTimeout => ConnectorRunLimits.PerTenantSyncTimeout;
 
     private readonly ConnectorSyncBudget _budget;
     private readonly IJobLedger _ledger;
@@ -88,6 +86,9 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
     private readonly TenantRunGuard? _runGuard;
 
     private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
+
+    /// <summary>The clock the schedule and every deadline of this service run on.</summary>
+    protected TimeProvider Clock => _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
@@ -395,9 +396,11 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
             Logger.LogWarning(
                 "{ConnectorName} sync for tenant {TenantSlug} exceeded {Timeout} and was cancelled",
                 ConnectorName, tenant.Slug, PerTenantSyncTimeout);
-            throw new TimeoutException($"The {ConnectorName} sync exceeded {PerTenantSyncTimeout}.");
+            throw new TimeoutException(TimeoutMessage);
         }
     }
+
+    private string TimeoutMessage => $"The {ConnectorName} sync exceeded {PerTenantSyncTimeout}.";
 
     /// <summary>
     /// How long a tenant may queue for a budget slot before the wait is reported. A saturated budget
@@ -467,19 +470,28 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
         {
             result = await PerformSyncAsync(run.Services, config, stoppingToken, progressReporter);
         }
-        catch (OperationCanceledException)
+        catch (Exception ex)
         {
+            var shuttingDown = shutdownToken.IsCancellationRequested;
+            var timedOut = ex is OperationCanceledException && !shuttingDown && stoppingToken.IsCancellationRequested;
+
             _metrics?.RecordSyncDuration(
                 ConnectorName,
-                shutdownToken.IsCancellationRequested ? "cancelled"
-                    : stoppingToken.IsCancellationRequested ? "timeout"
+                ex is OperationCanceledException && shuttingDown ? "cancelled"
+                    : timedOut ? "timeout"
                     : "failure",
                 Stopwatch.GetElapsedTime(started));
-            throw;
-        }
-        catch (Exception)
-        {
-            _metrics?.RecordSyncDuration(ConnectorName, "failure", Stopwatch.GetElapsedTime(started));
+
+            if (!shuttingDown)
+            {
+                await UpdateHealthStateAsync(
+                    run.Services,
+                    isHealthy: false,
+                    lastErrorMessage: timedOut ? TimeoutMessage : $"{ex.GetType().Name}: {ex.Message}",
+                    lastErrorAt: UtcNow,
+                    cancellationToken: shutdownToken);
+            }
+
             throw;
         }
 
@@ -612,7 +624,11 @@ public class ConnectorBackgroundService<TService, TConfig>(
         IServiceProvider scopeProvider,
         TConfig config,
         CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null) =>
-        scopeProvider.GetRequiredService<TService>()
-            .SyncDataAsync(config, cancellationToken, since: null, progressReporter);
+        ISyncProgressReporter? progressReporter = null)
+    {
+        var service = scopeProvider.GetRequiredService<TService>();
+        if (service is IBackfillBudgeted budgeted)
+            budgeted.BackfillBudget = ConnectorRunLimits.BackfillBudgetFor(PerTenantSyncTimeout);
+        return service.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
+    }
 }

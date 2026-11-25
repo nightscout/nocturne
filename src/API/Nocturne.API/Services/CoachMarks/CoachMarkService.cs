@@ -23,6 +23,7 @@ public class CoachMarkService : ICoachMarkService
     /// <summary>
     /// Initializes a new instance of <see cref="CoachMarkService"/>.
     /// </summary>
+    /// <param name="contexts">Opens the context each call reads and writes coach mark states through.</param>
     /// <param name="httpContextAccessor">Accessor for the current HTTP context and authenticated subject.</param>
     /// <param name="timeProvider">Clock that stamps seen and completed times.</param>
     /// <param name="logger">The logger instance.</param>
@@ -131,8 +132,9 @@ public class CoachMarkService : ICoachMarkService
                 entity.SeenAt = _time.GetUtcNow().UtcDateTime;
             }
 
-            // Set CompletedAt on first transition to "completed" or "dismissed"
-            if (entity.CompletedAt is null && status is "completed" or "dismissed")
+            // A dismissal restamps CompletedAt so a prompt that returns after a while can be
+            // dismissed again; a completion keeps its first time.
+            if (status is "dismissed" || (entity.CompletedAt is null && status is "completed"))
             {
                 entity.CompletedAt = _time.GetUtcNow().UtcDateTime;
             }

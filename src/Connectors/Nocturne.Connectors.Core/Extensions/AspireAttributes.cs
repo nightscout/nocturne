@@ -5,8 +5,7 @@ using Nocturne.Core.Contracts.Connectors;
 namespace Nocturne.Connectors.Core.Extensions;
 
 /// <summary>
-///     Marks a property as an Aspire parameter to be automatically registered in the Aspire Dashboard.
-///     Used by source generators to generate connector extension methods.
+///     Marks a property as an Aspire parameter, binding it from configuration.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
 public abstract class AspireParameterAttribute(
@@ -44,9 +43,8 @@ public abstract class AspireParameterAttribute(
 }
 
 /// <summary>
-///     Marks a connector configuration class for automatic Aspire extension method generation.
-///     Used by source generators to create AddXxxConnector methods.
-///     Also provides display metadata for the connector in the UI.
+///     A connector's identity and display metadata, declared on its configuration class. Its
+///     service, installer and token provider read their names and data source from here.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]
 public class ConnectorRegistrationAttribute(
@@ -95,6 +93,19 @@ public class ConnectorRegistrationAttribute(
     public string DataSourceId { get; } = dataSourceId;
 
     /// <summary>
+    ///     What every key <see cref="Utilities.ConnectorLegacyIds"/> builds for this connector starts
+    ///     with. <see cref="DataSourceId"/> unless declared: a connector whose stored keys predate the
+    ///     rule declares the prefix they carry; see <see cref="Utilities.ConnectorLegacyIds"/> for why a key must not change.
+    /// </summary>
+    public string LegacyIdPrefix
+    {
+        get => _legacyIdPrefix ?? DataSourceId;
+        set => _legacyIdPrefix = value;
+    }
+
+    private string? _legacyIdPrefix;
+
+    /// <summary>
     ///     Icon identifier for the connector in the UI (e.g., "libre", "dexcom", "glooko")
     /// </summary>
     public string Icon { get; } = icon;
@@ -131,6 +142,17 @@ public class ConnectorRegistrationAttribute(
     public bool SupportsManualSync { get; set; } = true;
 
     /// <summary>
+    ///     The connector has no sync: its data arrives as a file the user imports.
+    /// </summary>
+    public bool IsImport { get; set; }
+
+    /// <summary>
+    ///     What a purge of this connector's data that keeps it from being imported again clears of
+    ///     the connector's state. A purge that allows re-import clears both slots of every connector.
+    /// </summary>
+    public ConnectorStateSlots KeptOutPurgeClears { get; set; } = ConnectorStateSlots.Resume;
+
+    /// <summary>
     ///     Supported data types for this connector.
     /// </summary>
     public SyncDataType[] SupportedDataTypes { get; set; } = [SyncDataType.Glucose];
@@ -154,6 +176,11 @@ public class ConnectorRegistrationAttribute(
     ///     <see cref="DataSourceId"/>, which it must therefore declare too.
     /// </summary>
     public int SensorReadingIntervalSeconds { get; set; }
+
+    /// <summary>
+    ///     The connector's setup guide in the Nocturne docs, or <c>null</c> when it has none.
+    /// </summary>
+    public string? DocumentationUrl { get; set; }
 
     /// <summary>
     ///     The name <paramref name="configType"/> answers to in messages, falling back to its type

@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// (<see cref="Nocturne.Core.Contracts.Auth.ISubjectRepository.DeleteAsync"/>).
 /// </summary>
 [Table("read_access_log")]
-public class ReadAccessLogEntity : ITenantScoped
+public class ReadAccessLogEntity : ITenantScoped, IAuditLogRow
 {
     /// <summary>Primary key (UUID v7).</summary>
     [Key]

@@ -25,6 +25,19 @@ public interface ISourceOwnedDataReader
     Task<IReadOnlyList<SourceBucket>> BucketsAsync(
         DateTime windowStart, DateTime last24Hours, CancellationToken ct);
 
+    /// <summary>
+    /// The rows of every table a connection is listed by, from <paramref name="windowStart"/> on,
+    /// one bucket per table, writer and pair of origin handles.
+    /// </summary>
+    Task<IReadOnlyList<WriterBucket>> WriterBucketsAsync(
+        DateTime windowStart, DateTime last24Hours, CancellationToken ct);
+
+    /// <summary>
+    /// Whether any table holds a row whose <c>DataSource</c> is <paramref name="dataSource"/> exactly.
+    /// Unlike the source filters it does not match <c>Device</c>, so an index serves it.
+    /// </summary>
+    Task<bool> HoldsRowsByDataSourceAsync(string dataSource, CancellationToken ct);
+
     /// <summary>Every row <paramref name="source"/> owns, counted by data type, non-zero only.</summary>
     Task<IReadOnlyDictionary<string, long>> CountsBySourceAsync(string source, CancellationToken ct);
 
@@ -34,6 +47,12 @@ public interface ISourceOwnedDataReader
     /// </summary>
     Task<IReadOnlyList<SourceTypeStats>> StatsBySourceAsync(
         string source, DateTime last24Hours, CancellationToken ct);
+
+    /// <summary>
+    /// The <see cref="SourceDataTypes"/> names of the treatment types, whose rows a source's treatment
+    /// totals and its first and last treatment times span.
+    /// </summary>
+    IReadOnlyList<string> TreatmentDataTypes { get; }
 
     /// <summary>The latest time among the source's treatment rows, or null when it has none.</summary>
     Task<DateTime?> LatestTreatmentTimestampAsync(string source, CancellationToken ct);

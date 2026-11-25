@@ -16,6 +16,12 @@ public sealed class AddJobLedgerMigrationFixture : IAsyncLifetime
 {
     internal const string PriorMigration = "20261030103950_AddTenantHandedOverAt";
 
+    /// <summary>
+    /// Up stops here: a later migration (<c>AddSecondaryStreamFlagToSensorGlucose</c>) adds ledger rows
+    /// of its own for every tenant.
+    /// </summary>
+    internal const string Migration = "20261031124030_AddJobLedger";
+
     internal static readonly Guid Completed = Guid.Parse("a1111111-1111-7111-8111-111111113155");
     internal static readonly Guid Pending = Guid.Parse("b2222222-2222-7222-8222-222222223155");
     internal static readonly DateTime CompletedAt = new(2026, 10, 28, 1, 2, 3, DateTimeKind.Utc);
@@ -43,7 +49,7 @@ public sealed class AddJobLedgerMigrationFixture : IAsyncLifetime
               VALUES ('{Pending}', 'profile-versions-moved', '{RequestedAt:O}');
             """, _ => 0);
 
-        await MigrateToAsync(null);
+        await MigrateToAsync(Migration);
         LedgerAfterUp = await QueryAsync(
             "SELECT job, tenant_id, last_completed_at, next_due_at, attempts, id FROM job_ledger ORDER BY job",
             r => (r.GetString(0), r.GetGuid(1),
@@ -62,7 +68,7 @@ public sealed class AddJobLedgerMigrationFixture : IAsyncLifetime
             "SELECT tenant_id, job, requested_at FROM pending_tenant_jobs",
             r => (r.GetGuid(0), r.GetString(1), r.GetDateTime(2)));
 
-        await MigrateToAsync(null);
+        await MigrateToAsync(Migration);
         LedgerRowsAfterSecondUp = (await QueryAsync("SELECT count(*) FROM job_ledger", r => r.GetInt64(0))).Single();
     }
 

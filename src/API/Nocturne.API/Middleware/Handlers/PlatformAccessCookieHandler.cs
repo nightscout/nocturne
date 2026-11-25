@@ -85,15 +85,16 @@ public class PlatformAccessCookieHandler : IAuthHandler
         if (!claims.PlatformAccess || claims.TenantId != tenant.TenantId)
             return AuthResult.Skip();
 
-        // Confirm the subject is STILL a platform admin on every request, so clearing the flag
-        // ends access on the next request instead of lingering until the grant expires.
-        var stillPlatformAdmin = await scope.ServiceProvider.GetRequiredService<ISubjectRepository>()
-            .IsPlatformAdminAsync(claims.SubjectId, context.RequestAborted);
+        // Confirm the subject is STILL an active platform admin on every request, so clearing the
+        // flag or deactivating the subject ends access on the next request instead of lingering
+        // until the grant expires.
+        var state = await scope.ServiceProvider.GetRequiredService<ISubjectRepository>()
+            .GetSignInStateAsync(claims.SubjectId, context.RequestAborted);
 
-        if (!stillPlatformAdmin)
+        if (state is not { IsActivePlatformAdmin: true })
         {
             _logger.LogWarning(
-                "Platform-access grant rejected: subject {SubjectId} is no longer a platform admin",
+                "Platform-access grant rejected: subject {SubjectId} is no longer an active platform admin",
                 claims.SubjectId);
             return AuthResult.Skip();
         }

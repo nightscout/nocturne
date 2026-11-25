@@ -14,7 +14,7 @@ namespace Nocturne.Core.Clinical.Statistics;
 /// <see cref="GlucoseCadence.ReadingMinutes"/> credits it.
 /// </param>
 /// <param name="Extreme">The lowest reading of a low episode, or the highest of a high one.</param>
-internal sealed record GlucoseEpisode(
+public sealed record GlucoseEpisode(
     bool BelowRange,
     bool Severe,
     DateTime StartAt,
@@ -26,6 +26,18 @@ internal sealed record GlucoseEpisode(
     /// readings cover all of them.
     /// </summary>
     public double DurationMinutes => (EndAt - StartAt).TotalMinutes;
+}
+
+/// <summary>The episodes <see cref="GlucoseEpisodeDetector"/> finds in readings as they come.</summary>
+public static class GlucoseEpisodes
+{
+    /// <summary>
+    /// The episodes in <paramref name="readings"/>, in the order they began. Implausible readings are left out and the
+    /// rest put in time order, as the statistics take them.
+    /// </summary>
+    public static IReadOnlyList<GlucoseEpisode> Find(IEnumerable<SensorGlucose> readings, GlycemicThresholds thresholds) =>
+        GlucoseEpisodeDetector.Detect(
+            readings.Where(r => GlucoseStatistics.IsPlausibleReading(r.Mgdl)).OrderBy(r => r.Timestamp).ToList(), thresholds);
 }
 
 /// <summary>

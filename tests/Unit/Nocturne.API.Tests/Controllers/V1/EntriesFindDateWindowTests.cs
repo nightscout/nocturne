@@ -166,7 +166,6 @@ public class EntriesFindDateWindowTests
         var controller = new EntriesController(
             service.Object,
             Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             new FakeTimeProvider(Now),
             NullLogger<EntriesController>.Instance)
         {

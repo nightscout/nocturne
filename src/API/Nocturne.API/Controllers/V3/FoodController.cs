@@ -1,22 +1,29 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
 
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Food controller that provides full V3 API compatibility with Nightscout food endpoints.
-/// Implements the /api/v3/food endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout food: food records, with paging, field selection, sorting and filtering. A client can list, read,
+/// create, update and delete food records, and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout food endpoints, at /api/v3/food.
+/// </remarks>
 /// <seealso cref="IFoodRepository"/>
+/// <seealso cref="IFoodService"/>
 /// <seealso cref="Food"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -26,15 +33,18 @@ namespace Nocturne.API.Controllers.V3;
 public class FoodController : BaseV3Controller<Food>
 {
     private readonly IFoodRepository _foods;
+    private readonly IFoodService _foodService;
 
     public FoodController(
         IFoodRepository foods,
+        IFoodService foodService,
         IDocumentProcessingService documentProcessingService,
         ILogger<FoodController> logger
     )
         : base(documentProcessingService, logger)
     {
         _foods = foods;
+        _foodService = foodService;
     }
 
     /// <summary>
@@ -51,11 +61,6 @@ public class FoodController : BaseV3Controller<Food>
     [ErrorEnvelope]
     public async Task<ActionResult> GetFood(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 food endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -113,6 +118,7 @@ public class FoodController : BaseV3Controller<Food>
 
     /// <summary>
     /// Get food records modified since a given timestamp (for AAPS incremental sync).
+    /// When no newer records exist, the response still carries a cursor <c>ETag</c> equal to the requested timestamp.
     /// </summary>
     /// <param name="lastModified">Unix timestamp in milliseconds. Only foods modified after this time are returned.</param>
     /// <param name="limit">Maximum number of foods to return (1-1000, default 1000).</param>
@@ -131,26 +137,20 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(500)]
     [RequireScope(Scope.FoodRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetFoodHistory(
+    public Task<ActionResult> GetFoodHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 food history requested since {LastModified} with limit {Limit}",
+        =>
+        CreateV3HistoryResponseAsync(
+            "food",
             lastModified,
-            limit
+            limit,
+            (since, take) => _foods.GetFoodModifiedSinceAsync(since, take, cancellationToken),
+            records => records.Select(f => ToV3Document(f, f.Id)).ToList(),
+            echoRequestCursorWhenEmpty: true
         );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var page = await _foods.GetFoodModifiedSinceAsync(lastModified, limit, cancellationToken);
-
-        SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
-
-        return CreateV3SuccessResponse(page.Records.Select(f => ToV3Document(f, f.Id)).ToList());
-    }
 
     /// <summary>
     /// Apply V3 filter criteria to a list of food records
@@ -324,7 +324,7 @@ public class FoodController : BaseV3Controller<Food>
         _logger.LogDebug(
             "V3 food by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var food = await _foods.GetFoodByIdAsync(id, cancellationToken);
@@ -348,7 +348,7 @@ public class FoodController : BaseV3Controller<Food>
     }
 
     /// <summary>
-    /// Create new food records with V3 format and deduplication support
+    /// Create new food records with V3 format
     /// Nightscout V3 API requires date field validation before processing
     /// </summary>
     /// <param name="foodData">Food data to create (single object or array)</param>
@@ -367,10 +367,6 @@ public class FoodController : BaseV3Controller<Food>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 food create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             // Check for empty request body first (Nightscout returns "Bad or missing request body")
@@ -418,9 +414,9 @@ public class FoodController : BaseV3Controller<Food>
                 ProcessFoodForCreation(food);
             }
 
-            // Create food records with deduplication support
-            var createdRecords = await _foods.CreateFoodAsync(
+            var createdRecords = await _foodService.CreateFoodAsync(
                 foodRecords,
+                FoodWriteMode.Legacy,
                 cancellationToken
             );
 
@@ -472,7 +468,7 @@ public class FoodController : BaseV3Controller<Food>
         _logger.LogDebug(
             "V3 food update endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -498,7 +494,7 @@ public class FoodController : BaseV3Controller<Food>
 
             ProcessFoodForCreation(food);
 
-            var updatedFood = await _foods.UpdateFoodAsync(id, food, cancellationToken);
+            var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
 
             if (updatedFood == null)
             {
@@ -576,10 +572,10 @@ public class FoodController : BaseV3Controller<Food>
         _logger.LogDebug(
             "V3 food delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        var deleted = await _foods.DeleteFoodAsync(id, cancellationToken);
+        var deleted = await _foodService.DeleteFoodAsync(id, cancellationToken);
 
         if (!deleted)
         {
@@ -639,7 +635,7 @@ public class FoodController : BaseV3Controller<Food>
         }
 
         // Add timestamp for uniqueness
-        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture));
 
         // If we have identifying parts, create a hash-based identifier
         if (identifierParts.Any())

@@ -4,7 +4,7 @@
   as textures. It is not interactive, so it prints as it looks.
 -->
 <script lang="ts" module>
-  import type { TextureKey } from "./chart-print-patterns";
+  import type { TextureKey } from "@nocturne/charts/core";
 
   export interface ChartKeyItem {
     texture: TextureKey;
@@ -16,7 +16,7 @@
 
 <script lang="ts">
   import { cn } from "#lib/utils/index.js";
-  import TextureSwatch from "./TextureSwatch.svelte";
+  import { TextureSwatch } from "@nocturne/charts/print";
 
   interface Props {
     items: ChartKeyItem[];

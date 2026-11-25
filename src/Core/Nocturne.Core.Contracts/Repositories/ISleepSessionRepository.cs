@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Repositories;
@@ -49,6 +50,27 @@ public interface ISleepSessionRepository
         SleepSource? source = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Whether any session overlaps <c>[from, to)</c>: starts before <paramref name="to"/> and ends at or after
+    /// <paramref name="from"/>. Reads one row at most.
+    /// </summary>
+    Task<bool> AnySessionOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether any stage of a session overlaps <c>[from, to)</c>, as <see cref="AnySessionOverlappingAsync"/> reads
+    /// sessions. Reads one row at most.
+    /// </summary>
+    Task<bool> AnyStageOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether any biometric sample was taken in <c>[from, to)</c>. Reads one row at most.</summary>
+    Task<bool> AnyBiometricSampleInAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The first <paramref name="limit"/> biometric samples taken in <c>[from, to)</c>, of every session, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<SleepBiometricSample>> GetBiometricSamplesAsync(
+        DateTime from, DateTime to, int limit, CancellationToken cancellationToken = default);
+
     /// <returns>The <see cref="SleepSession"/> if found, or <c>null</c>.</returns>
     Task<SleepSession?> GetSessionByIdAsync(
         Guid id,
@@ -91,4 +113,64 @@ public interface ISleepSessionRepository
     Task<bool> DeleteSessionAsync(
         Guid id,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Hard-deletes every session <paramref name="sourceApp"/> recorded through
+    /// <paramref name="source"/>, user tombstones included, with their stages and samples. Returns the
+    /// number deleted.
+    /// </summary>
+    Task<int> PurgeSourceAppAsync(
+        SleepSource source, string sourceApp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The live sessions <paramref name="sourceApp"/> recorded through <paramref name="source"/> that
+    /// carry an original id and ended in <c>[from, to)</c>, at most <paramref name="limit"/> of them, in
+    /// no order. The key is the original id.
+    /// </summary>
+    Task<IReadOnlyList<SourceRecordKey>> GetSourceAppKeysAsync(
+        SleepSource source, string sourceApp, DateTime from, DateTime to, int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Soft-deletes the live sessions of <paramref name="ids"/> that <paramref name="sourceApp"/>
+    /// recorded through <paramref name="source"/>, as a system delete that a later sync may re-create.
+    /// Returns the number deleted.
+    /// </summary>
+    Task<int> RetireAsync(
+        SleepSource source, string sourceApp, IReadOnlyCollection<Guid> ids, DateTime deletedAt,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts the sessions <paramref name="sourceApp"/> recorded through <paramref name="source"/>
+    /// starting from <paramref name="since"/> on, or all of them when it is null. Returns null when
+    /// there are none.
+    /// </summary>
+    Task<SleepSessionStats?> DescribeSourceAppAsync(
+        SleepSource source, string sourceApp, DateTime? since, DateTime last24Hours,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Soft-deletes the live sessions <paramref name="sourceApp"/> recorded through
+    /// <paramref name="source"/> for <paramref name="auditContext"/>, recording one summary row for
+    /// <paramref name="scope"/>. Returns the number deleted.
+    /// </summary>
+    Task<int> DeleteSourceAppAsync(
+        SleepSource source, string sourceApp, IAuditContext auditContext, string scope,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Releases the user deletions among the sessions <paramref name="sourceApp"/> recorded through
+    /// <paramref name="source"/>, so that a sync can import them again, recording one summary row for
+    /// <paramref name="scope"/>. The sessions stay deleted. Returns the number released.
+    /// </summary>
+    Task<int> AllowSourceAppReimportAsync(
+        SleepSource source, string sourceApp, IAuditContext auditContext, string scope,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>How many sessions a source recorded, and over what span.</summary>
+/// <param name="Count">The sessions counted.</param>
+/// <param name="CountLast24Hours">Those that started in the last 24 hours.</param>
+/// <param name="Latest">The latest start.</param>
+/// <param name="Oldest">The oldest start.</param>
+public sealed record SleepSessionStats(long Count, int CountLast24Hours, DateTime Latest, DateTime Oldest);

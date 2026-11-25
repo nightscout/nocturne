@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import type { CoachMarkContext } from "@nocturne/coach";
+import { afterScroll } from "#lib/test-stubs/after-scroll.js";
 import Harness from "./TourScrollHarness.test.svelte";
 
 type Layout = "tour" | "far-only" | "two-tours" | "parts";
@@ -35,23 +36,26 @@ describe("coach mark scrolling", () => {
     await open("tour");
     await readNear();
 
-    await page.getByRole("button", { name: "Done", exact: true }).click();
+    expect(onScreen("Far target")).toBe(false);
+    await afterScroll(() => page.getByRole("button", { name: "Done", exact: true }).click());
 
     await expect.element(page.getByRole("dialog", { name: "Far" })).toBeVisible();
-    await vi.waitFor(() => expect(onScreen("Far target")).toBe(true));
+    expect(onScreen("Far target")).toBe(true);
   });
 
   it("brings a later part of a mark on screen when the reader presses Next, and the first part on Back", async () => {
     await open("parts");
     await readNear();
 
-    await page.getByRole("button", { name: "Next" }).click();
+    expect(onScreen("Far target")).toBe(false);
+    await afterScroll(() => page.getByRole("button", { name: "Next" }).click());
     await expect.element(page.getByRole("dialog", { name: "Near, part two" })).toBeVisible();
-    await vi.waitFor(() => expect(onScreen("Far target")).toBe(true));
+    expect(onScreen("Far target")).toBe(true);
 
-    await page.getByRole("button", { name: "Back" }).click();
+    expect(onScreen("Near target")).toBe(false);
+    await afterScroll(() => page.getByRole("button", { name: "Back" }).click());
     await expect.element(page.getByRole("dialog", { name: "Near" })).toBeVisible();
-    await vi.waitFor(() => expect(onScreen("Near target")).toBe(true));
+    expect(onScreen("Near target")).toBe(true);
   });
 
   it("leaves the page where it is for a tip raised on its own", async () => {

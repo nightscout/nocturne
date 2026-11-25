@@ -5,7 +5,7 @@
  * the loaders live in widget-registry.ts and are typed against these ids.
  */
 
-import { WidgetId } from "../../api/generated/nocturne-api-client";
+import { WidgetId } from "@nocturne/api-client";
 
 export const TOP_WIDGET_IDS = [
   WidgetId.BgDelta,

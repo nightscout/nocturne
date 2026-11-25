@@ -1,9 +1,9 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+import { WidgetId } from "@nocturne/api-client";
 import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 
@@ -19,6 +19,7 @@ const { now, store, settings } = vi.hoisted(() => {
       now,
       isConnected: true,
       entries: [{ mills: now, sgv: 123 }],
+      currentReadingLoaded: true,
       direction: "Flat",
       demoMode: false,
       pillsData: { cob: null, basal: null, iob: null, loop: null },
@@ -67,6 +68,8 @@ describe("CurrentBGDisplay", () => {
   afterEach(() => {
     store.trackerInstances = [];
     store.trackerDefinitions = [];
+    store.currentBG = 123;
+    store.currentEntry = { mills: now, sgv: 123 };
     settings.features.trackerPills.enabled = false;
     summary.current = undefined;
     resetWatercolour();
@@ -92,6 +95,17 @@ describe("CurrentBGDisplay", () => {
     render(CurrentBGDisplay, { showPills: false });
 
     await expect.element(page.getByText("123", { exact: true })).toBeInTheDocument();
+  });
+
+  it("shows no reading, not 0, when the newest reading has no value", async () => {
+    dashboardTopWidgets.hydrate([WidgetId.TirChart, WidgetId.Tdd]);
+    store.currentBG = 0;
+    store.currentEntry = { mills: now, sgv: 0 };
+    render(CurrentBGDisplay, { showPills: false });
+
+    await expect.element(page.getByText("No glucose reading")).toBeInTheDocument();
+    await expect.element(page.getByText("—", { exact: true })).toBeInTheDocument();
+    expect(page.getByText("0", { exact: true }).elements()).toHaveLength(0);
   });
 
   it("hands the reading to the Current glucose widget when the grid shows it", async () => {

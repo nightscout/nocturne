@@ -10,6 +10,8 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
@@ -99,7 +101,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Lookups.Should().Equal($"find[id]={TrioKept}");
+        harness.Lookups.Should().Equal($"find[id]={TrioKept}", $"find[identifier][$in]={TrioKept},{MongoObjectId.Coerce(TrioKept)}");
         harness.Deleted.Should().BeEmpty();
     }
 
@@ -121,6 +123,68 @@ public class NightscoutTreatmentReconcileTests
 
         harness.Deleted.Should().BeEmpty();
         harness.Lookups.Skip(firstLookups).Should().NotContain($"find[id]={TrioGone}");
+    }
+
+    [Fact]
+    public async Task Another_source_with_a_later_clock_does_not_forget_this_sources_lookups()
+    {
+        var memory = new NightscoutLookups();
+        var harness = new Harness
+        {
+            LookupMemory = memory,
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+            AlsoUpstream = [TrioGone],
+        };
+        var later = Now.AddDays(7);
+        var elsewhere = new Harness
+        {
+            LookupMemory = memory,
+            At = later,
+            LatestStored = later.AddMinutes(-10),
+            Upstream = [Trio(MongoIdB, TrioKept, later.AddMinutes(-30))],
+            Stored = [TrioKept, LoopGone],
+            AlsoUpstream = [LoopGone],
+        };
+
+        await harness.SyncAsync();
+        var firstLookups = harness.Lookups.Count;
+        await elsewhere.SyncAsync();
+        await harness.SyncAsync();
+
+        elsewhere.Lookups.Should().Contain(l => l.EndsWith(LoopGone), "the later source looked its own treatment up");
+        harness.Lookups.Skip(firstLookups).Should().NotContain($"find[id]={TrioGone}");
+    }
+
+    [Fact]
+    public async Task Another_tenants_lookup_on_the_same_site_does_not_stand_for_this_tenants()
+    {
+        var memory = new NightscoutLookups();
+        const string site = "https://shared.ns.example";
+        var first = new Harness
+        {
+            LookupMemory = memory,
+            Url = site,
+            Tenant = Guid.NewGuid(),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+            AlsoUpstream = [TrioGone],
+        };
+        var second = new Harness
+        {
+            LookupMemory = memory,
+            Url = site,
+            Tenant = Guid.NewGuid(),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+        };
+
+        await first.SyncAsync();
+        await second.SyncAsync();
+
+        first.Deleted.Should().BeEmpty();
+        second.Lookups.Should().Contain($"find[id]={TrioGone}", "the first tenant's lookup was of its own copy");
+        second.Deleted.Should().ContainSingle().Which.Should().BeEquivalentTo([TrioGone]);
     }
 
     [Fact]
@@ -174,8 +238,8 @@ public class NightscoutTreatmentReconcileTests
         var result = await harness.SyncAsync();
 
         result.Success.Should().BeTrue();
-        harness.Crawled.Select(t => t.Id).Should().Equal(LoopKept);
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, LoopGone]);
+        harness.CrawledIds.Should().Equal(LoopKept);
+        harness.RepublishedIds.Should().BeEquivalentTo([MongoIdA, LoopGone]);
         harness.Republished.Should().OnlyContain(t => t.DataSource == Source);
     }
 
@@ -190,7 +254,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, MongoIdB]);
+        harness.RepublishedIds.Should().BeEquivalentTo([MongoIdA, MongoIdB]);
         harness.Republished.Should().OnlyContain(t => TreatmentClientId.Of(t) == TrioKept);
         harness.Lookups.Should().BeEmpty("a row stored under the id the read carries is not missing");
         harness.Deleted.Should().BeEmpty();
@@ -211,6 +275,53 @@ public class NightscoutTreatmentReconcileTests
         harness.FullReconcileRecorded.Should().Equal(Now.UtcDateTime);
     }
 
+    private static readonly List<SyncDataType> EveryTreatmentType =
+    [
+        SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.ManualBG,
+        SyncDataType.BolusCalculations, SyncDataType.Notes, SyncDataType.DeviceEvents,
+    ];
+
+    /// <summary>
+    /// A reset of every treatment type forgets the last full reconcile, so the catch-up after it
+    /// reconciles in full however recent the last one was. The reset run itself is bounded and
+    /// reconciles nothing.
+    /// </summary>
+    [Fact]
+    public async Task The_catch_up_after_a_reset_reconciles_in_full_whenever_the_last_reconcile_was()
+    {
+        var harness = new Harness
+        {
+            LastFullReconcile = Now.UtcDateTime.AddMinutes(-20),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+        };
+
+        await harness.SyncAsync(SyncRequest.Reset(Now.UtcDateTime.AddMinutes(-5), Now.UtcDateTime, EveryTreatmentType));
+        harness.FullReconcileRecorded.Should().Equal([(DateTime?)null], "the reset removed the stamp");
+        await harness.SyncAsync();
+
+        harness.FullReconcileRecorded.Should().Equal(null, Now.UtcDateTime);
+    }
+
+    /// <summary>
+    /// The reconcile stamp schedules every treatment type, so a reset of only some of them keeps it
+    /// and the catch-up after it reconciles as it would have.
+    /// </summary>
+    [Fact]
+    public async Task A_reset_of_one_treatment_type_keeps_the_last_full_reconcile()
+    {
+        var harness = new Harness
+        {
+            LastFullReconcile = Now.UtcDateTime.AddMinutes(-20),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+        };
+
+        await harness.SyncAsync(SyncRequest.Reset(Now.UtcDateTime.AddMinutes(-5), Now.UtcDateTime, [SyncDataType.CarbIntake]));
+        await harness.SyncAsync();
+
+        harness.FullReconcileRecorded.Should().BeEmpty("the reset kept the stamp and the catch-up ran no full reconcile");
+        harness.CrawlLowerBound.Should().Be(Now.UtcDateTime.AddMinutes(-5), "a full reconcile reads back 25 hours");
+    }
+
     [Fact]
     public async Task Between_full_reconciles_the_window_comes_from_the_crawls_own_download()
     {
@@ -227,7 +338,7 @@ public class NightscoutTreatmentReconcileTests
 
         harness.TreatmentReads.Should().Be(1);
         harness.CrawlLowerBound.Should().Be(Now.UtcDateTime.AddMinutes(-15));
-        harness.Republished.Select(t => t.Id).Should().Equal(MongoIdA);
+        harness.RepublishedIds.Should().Equal(MongoIdA);
         harness.FullReconcileRecorded.Should().BeEmpty();
     }
 
@@ -311,6 +422,65 @@ public class NightscoutTreatmentReconcileTests
         harness.Lookups.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Nocturne stores a treatment it wrote back under its own key, and Nightscout 15.0.7+ returns
+    /// the copy under a <c>_id</c> it minted, with that key as <c>identifier</c>. The read therefore
+    /// counts the identifier, and the lookup falls back to it, or the treatment would be deleted as
+    /// gone from the source.
+    /// </summary>
+    [Fact]
+    public async Task A_treatment_nocturne_wrote_back_is_recognised_by_its_identifier()
+    {
+        const string ownKey = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        const string missingKey = "0198c2a4-1f3b-7c2d-9e55-000000000000";
+        var harness = new Harness
+        {
+            Upstream =
+            [
+                Trio(MongoIdB, TrioKept, Now.AddMinutes(-20)),
+                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
+            ],
+            Stored = [ownKey, TrioKept, missingKey],
+            AlsoUpstreamByIdentifier = [missingKey],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Deleted.Should().BeEmpty();
+        harness.Lookups.Should().ContainInOrder(
+            $"find[id]={missingKey}", $"find[identifier][$in]={missingKey},{MongoObjectId.Coerce(missingKey)}");
+        harness.Lookups.Should().NotContain(l => l.Contains(ownKey), "the read served it as an identifier, so it is neither missing nor the canary");
+    }
+
+    /// <summary>
+    /// A row written before write-back coerced its key is relabelled to the connector under that
+    /// key, while its copy upstream sits under the key's coerced form as <c>identifier</c>, the uuid
+    /// prefix or the hash. Missing from the read, it is looked up under both forms at once, and kept.
+    /// </summary>
+    [Theory]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-0000000000aa")]
+    [InlineData("pump-history-42")]
+    public async Task A_relabelled_row_whose_copy_sits_under_its_coerced_key_is_kept(string storedKey)
+    {
+        var coerced = MongoObjectId.Coerce(storedKey)!;
+        var harness = new Harness
+        {
+            Upstream = [Trio(MongoIdB, TrioKept, Now.AddMinutes(-20))],
+            Stored = [TrioKept, storedKey],
+            AlsoUpstreamByIdentifier = [coerced],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Deleted.Should().BeEmpty();
+        harness.Lookups.Should().Contain($"find[identifier][$in]={storedKey},{coerced}");
+        harness.Lookups.Count(l => l.StartsWith("find[identifier]", StringComparison.Ordinal)).Should().Be(1,
+            "the canary was found by id, and the stored key's forms share one query");
+    }
+
+    private static string WrittenBack(string mongoId, string identifier, DateTimeOffset at) =>
+        $$"""{"_id":"{{mongoId}}","identifier":"{{identifier}}","enteredBy":"nocturne","eventType":"Carb Correction","carbs":20,"created_at":"{{at.UtcDateTime:o}}"}""";
+
     private static string Trio(string mongoId, string trioId, DateTimeOffset at) =>
         $$"""{"_id":"{{mongoId}}","id":"{{trioId}}","enteredBy":"Trio","eventType":"Carb Correction","carbs":20,"created_at":"{{at.UtcDateTime:o}}"}""";
 
@@ -328,27 +498,61 @@ public class NightscoutTreatmentReconcileTests
 
     private sealed class Harness : HttpMessageHandler
     {
+        /// <summary>What the connector remembers of its lookups; give two harnesses one to share it.</summary>
+        public NightscoutLookups LookupMemory { get; init; } = new();
+
+        public Guid Tenant { get; init; } = MockTenantAccessor.DefaultTenantId;
+
         public string Url { get; init; } = $"https://{Guid.NewGuid():N}.ns.example";
 
         public DateTimeOffset At { get; init; } = Now;
         public DateTimeOffset LatestStored { get; init; } = Now.AddMinutes(-10);
         public List<string> Upstream { get; init; } = [];
         public HashSet<string> AlsoUpstream { get; init; } = [];
+        public HashSet<string> AlsoUpstreamByIdentifier { get; init; } = [];
         public HashSet<string> Stored { get; init; } = [];
         public bool ReadFails { get; init; }
         public bool LookupFails { get; init; }
         public bool LookupFindsNothing { get; init; }
+        private const string FullReconcileKey = "TreatmentsFullReconcile";
+
         public DateTime? LastFullReconcile { get; init; }
         public int? Written { get; init; }
 
-        public List<Treatment> Crawled { get; } = [];
         public List<Treatment> Republished { get; } = [];
+
+        /// <summary>The ids the crawl offered the store, as the source served them.</summary>
+        public List<string?> CrawledIds { get; } = [];
+
+        /// <summary>The ids the reconcile offered the store, as the source served them.</summary>
+        public List<string?> RepublishedIds { get; } = [];
         public List<IReadOnlySet<string>> Deleted { get; } = [];
         public List<string> DeletedFrom { get; } = [];
         public List<string> StoredAskedOf { get; } = [];
         public List<string> Lookups { get; } = [];
         public List<string> LookupUrls { get; } = [];
         public List<DateTime?> FullReconcileRecorded { get; } = [];
+
+        /// <summary>The connector's state, kept across this harness's runs; seeded on first use.</summary>
+        private InMemoryConnectorStateStore State => _state ??= NewState();
+
+        private InMemoryConnectorStateStore? _state;
+
+        private InMemoryConnectorStateStore NewState()
+        {
+            InMemoryConnectorStateStore state = null!;
+            state = new InMemoryConnectorStateStore
+            {
+                OnWrite = key =>
+                {
+                    if (key == FullReconcileKey)
+                        FullReconcileRecorded.Add(state.Resume.TryGetValue(key, out var at) ? at : null);
+                },
+            };
+            if (LastFullReconcile is { } last)
+                state.Resume[FullReconcileKey] = last;
+            return state;
+        }
         public int TreatmentReads { get; private set; }
         public DateTime? CrawlLowerBound { get; private set; }
 
@@ -369,16 +573,20 @@ public class NightscoutTreatmentReconcileTests
                 return Task.FromResult(Json([]));
 
             var lookup = System.Text.RegularExpressions.Regex.Match(url, @"find\[(_id|id)\]=(.+)$");
-            if (lookup.Success)
+            var byIdentifier = System.Text.RegularExpressions.Regex.Matches(url, @"&find\[identifier\]\[\$in\]\[\d+\]=([^&]+)");
+            if (lookup.Success || byIdentifier.Count > 0)
             {
-                var (field, id) = (lookup.Groups[1].Value, lookup.Groups[2].Value);
-                Lookups.Add($"find[{field}]={id}");
+                var (field, ids) = lookup.Success
+                    ? (lookup.Groups[1].Value, new[] { lookup.Groups[2].Value })
+                    : ("identifier", byIdentifier.Select(m => m.Groups[1].Value).ToArray());
+                Lookups.Add(lookup.Success ? $"find[{field}]={ids[0]}" : $"find[identifier][$in]={string.Join(',', ids)}");
                 LookupUrls.Add(url);
                 if (LookupFails)
                     return Task.FromResult(Failure());
 
-                var found = !LookupFindsNothing && (AlsoUpstream.Contains(id) || Upstream.Any(doc =>
-                    doc.Contains(field == "_id" ? $"\"_id\":\"{id}\"" : $"\"id\":\"{id}\"", StringComparison.Ordinal)));
+                var found = !LookupFindsNothing && ids.Any(id =>
+                    (field == "identifier" ? AlsoUpstreamByIdentifier : AlsoUpstream).Contains(id)
+                    || Upstream.Any(doc => doc.Contains($"\"{field}\":\"{id}\"", StringComparison.Ordinal)));
                 return Task.FromResult(Json(found ? [Upstream.FirstOrDefault() ?? "{}"] : []));
             }
 
@@ -391,6 +599,13 @@ public class NightscoutTreatmentReconcileTests
             return Task.FromResult(ReadFails ? Failure() : Json(Upstream));
         }
 
+        /// <summary>The store names each treatment it keeps by an id of its own, which the source does not know.</summary>
+        private static void RenameAsStored(IEnumerable<Treatment> published)
+        {
+            foreach (var treatment in published)
+                treatment.Id = Guid.CreateVersion7().ToString();
+        }
+
         private NightscoutConnectorService NewService()
         {
             var treatments = new Mock<ITreatmentPublisher>();
@@ -400,12 +615,23 @@ public class NightscoutTreatmentReconcileTests
             treatments
                 .Setup(p => p.PublishTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => Crawled.AddRange(batch))
+                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    var list = batch.ToList();
+                    CrawledIds.AddRange(list.Select(t => t.Id));
+                    RenameAsStored(list);
+                })
                 .ReturnsAsync(true);
             treatments
                 .Setup(p => p.PublishRecentTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => Republished.AddRange(batch))
+                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    var list = batch.ToList();
+                    Republished.AddRange(list);
+                    RepublishedIds.AddRange(list.Select(t => t.Id));
+                    RenameAsStored(list);
+                })
                 .ReturnsAsync((IEnumerable<Treatment> batch, string _, WriteOrigin _, CancellationToken _) =>
                     Written ?? batch.Count());
             treatments
@@ -413,6 +639,10 @@ public class NightscoutTreatmentReconcileTests
                     It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .Callback<string, DateTime, DateTime, CancellationToken>((source, _, _, _) => StoredAskedOf.Add(source))
                 .ReturnsAsync(() => Stored.ToDictionary(id => id, _ => StoredAt));
+            treatments
+                .Setup(p => p.GetOpenSpanTreatmentsAsync(
+                    It.IsAny<string>(), It.IsAny<StoredTreatmentKey?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
             treatments
                 .Setup(p => p.DeleteTreatmentsAsync(
                     It.IsAny<string>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
@@ -428,16 +658,8 @@ public class NightscoutTreatmentReconcileTests
             publisher.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
             publisher.Setup(p => p.Treatments).Returns(treatments.Object);
             publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
-            var metadata = new Mock<IMetadataPublisher>();
-            metadata
-                .Setup(m => m.GetBackfillLowWaterMarkAsync(Source, "TreatmentsFullReconcile", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(LastFullReconcile);
-            metadata
-                .Setup(m => m.SetBackfillLowWaterMarkAsync(
-                    Source, "TreatmentsFullReconcile", It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-                .Callback<string, string, DateTime?, CancellationToken>((_, _, at, _) => FullReconcileRecorded.Add(at))
-                .Returns(Task.CompletedTask);
-            publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+            publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+            publisher.Setup(p => p.State).Returns(State);
 
             var registration = new Mock<IConnectorRegistration<NightscoutConnectorConfiguration>>();
             registration.Setup(r => r.Defaults).Returns(new NightscoutConnectorConfiguration());
@@ -447,8 +669,9 @@ public class NightscoutTreatmentReconcileTests
                 Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 registration.Object,
+                LookupMemory,
+                MockTenantAccessor.Create(Tenant).Object,
                 publisher.Object,
                 new FakeTimeProvider(At));
         }

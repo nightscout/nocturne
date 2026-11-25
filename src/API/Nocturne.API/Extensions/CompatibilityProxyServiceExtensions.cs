@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Configurations;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.API.Configuration;
-using Nocturne.API.Helpers;
 using Nocturne.API.Services.Compatibility;
 
 namespace Nocturne.API.Extensions;
@@ -14,6 +15,12 @@ namespace Nocturne.API.Extensions;
 /// </summary>
 public static class CompatibilityProxyServiceExtensions
 {
+    /// <summary>
+    /// The client the manual test reads Nightscout through. It has no resilience handler: a retry
+    /// would write a manual POST twice and distort the status and time the test measures.
+    /// </summary>
+    public const string ManualTestHttpClientName = "CompatibilityManualTest";
+
     /// <summary>
     /// Add compatibility proxy services to the service collection
     /// </summary>
@@ -37,7 +44,6 @@ public static class CompatibilityProxyServiceExtensions
         services.AddScoped<ICorrelationService, CorrelationService>();
         services.AddScoped<IResponseComparisonService, ResponseComparisonService>();
 
-        services.AddScoped<IDiscrepancyAnalysisRepository, DiscrepancyAnalysisRepository>();
         services.AddScoped<IDiscrepancyForwardingService, DiscrepancyForwardingService>();
         services.AddScoped<IDiscrepancyPersistenceService, DiscrepancyPersistenceService>();
 
@@ -62,20 +68,31 @@ public static class CompatibilityProxyServiceExtensions
                 .GetSection(CompatibilityProxyConfiguration.ConfigurationSection)
                 .Get<CompatibilityProxyConfiguration>() ?? new CompatibilityProxyConfiguration();
 
-        // Requests carry absolute URIs built by NightscoutBaseUri from the connector URL.
+        // Requests carry absolute URIs built by NightscoutAddress from the connector URL.
+        var nightscout = services.AddHttpClient(
+            "NightscoutClient",
+            client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds);
+                client.DefaultRequestHeaders.Add(
+                    "User-Agent",
+                    "Nocturne-CompatibilityProxy/1.0"
+                );
+            }
+        );
+        nightscout.AddForwardingResilience(TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds));
+        nightscout.KeepNightscoutPathOutOfTelemetry();
+
         services
             .AddHttpClient(
-                "NightscoutClient",
+                ManualTestHttpClientName,
                 client =>
                 {
-                    client.Timeout = TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds);
-                    client.DefaultRequestHeaders.Add(
-                        "User-Agent",
-                        "Nocturne-CompatibilityProxy/1.0"
-                    );
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                    client.DefaultRequestHeaders.Add("User-Agent", "Nocturne-CompatibilityProxy/1.0");
                 }
             )
-            .AddStandardResilienceHandler();
+            .KeepNightscoutPathOutOfTelemetry();
 
         // Discrepancy Forwarding HTTP client
         var forwardingConfig = proxyConfig.DiscrepancyForwarding;
@@ -95,10 +112,27 @@ public static class CompatibilityProxyServiceExtensions
                     );
                 }
             )
-            .AddStandardResilienceHandler();
+            .AddForwardingResilience(TimeSpan.FromSeconds(forwardingConfig.TimeoutSeconds));
 
         return services;
     }
+
+    /// <summary>
+    /// The standard resilience handler with an attempt timeout of <paramref name="timeout"/>, the
+    /// same bound <c>HttpClient.Timeout</c> puts on the whole call, and a retry only for a
+    /// <see cref="RepeatableRequest"/>: a forwarded write is never marked, so it goes out once.
+    /// </summary>
+    private static IHttpStandardResiliencePipelineBuilder AddForwardingResilience(
+        this IHttpClientBuilder builder,
+        TimeSpan timeout
+    ) =>
+        builder.AddStandardResilienceHandler(options =>
+        {
+            options.Retry.ShouldHandle = RepeatableRequest.ShouldRetry;
+            options.AttemptTimeout.Timeout = timeout;
+            options.TotalRequestTimeout.Timeout = timeout;
+            options.CircuitBreaker.SamplingDuration = timeout * 2;
+        });
 }
 
 /// <summary>
@@ -184,11 +218,17 @@ public class CompatibilityProxyHealthCheck : IHealthCheck
     {
         try
         {
+            if (!NightscoutAddress.TryResolve(targetUrl, out var address) || !address.TryFor("", out var probe))
+            {
+                _logger.LogDebug("Target {ClientName} has no usable address", clientName);
+                return false;
+            }
+
             using var client = _httpClientFactory.CreateClient(clientName);
             client.Timeout = TimeSpan.FromSeconds(5); // Short timeout for health checks
 
             using var response = await client.SendAsync(
-                new HttpRequestMessage(HttpMethod.Head, NightscoutBaseUri.For(targetUrl)),
+                new HttpRequestMessage(HttpMethod.Head, probe),
                 cancellationToken
             );
 

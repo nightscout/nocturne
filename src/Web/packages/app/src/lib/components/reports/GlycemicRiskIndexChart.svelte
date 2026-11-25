@@ -5,10 +5,10 @@
     GRIZone,
     type GlycemicRiskIndex,
     type GriTimelinePeriod,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { formatGlucoseValue, formatMonthYear, getUnitLabel } from "#lib/utils/formatting.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass, type TextureKey } from "@nocturne/charts/core";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
 
   interface Props {

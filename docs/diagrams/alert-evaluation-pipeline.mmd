@@ -8,7 +8,7 @@ flowchart TD
         Enricher["<b>ISensorContextEnricher</b><br/>Lazy: reads rule leaves from the engine (describe), fetches only<br/>IOB/COB/predictions/active-alerts/<br/>looping (loop staleness, pump/uploader/<br/>temp-basal/override/sensitivity) actually<br/>consulted this pass.<br/>HasEver* flags suppress cold-start firing.<br/>Pump-suspension projection nulled when<br/>latest pump snapshot is itself stale.<br/>EnrichAsOfAsync threads asOf for replay."]
         Loop["For each surviving rule"]
         Eval["<b>IAlertEvaluationEngine</b><br/>EvaluateRuleAsync(rule, context)<br/>Rust engine over FFI (nocturne_alerts):<br/>root, leaves, sustained timers, tracker decision"]
-        Tracker["<b>IExcursionTracker</b><br/>ProcessEvaluationAsync(ruleId, met)<br/>State machine: idle → confirming →<br/>active → hysteresis → idle"]
+        Tracker["<b>IExcursionTracker</b><br/>ProcessEvaluationAsync(ruleId, met)<br/>State machine: idle → active →<br/>hysteresis → idle"]
         Branch{"Transition?"}
 
         Orchestrator --> Filter --> Enricher --> Loop --> Eval --> Tracker --> Branch

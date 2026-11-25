@@ -10,7 +10,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for step count data from diabetes apps and wearables.
+/// Step count readings from diabetes apps and wearables, stored as a time series. Callers can list,
+/// read, add, update and delete readings.
 /// </summary>
 /// <remarks>
 /// Step count readings are stored as time-series observations. All operations delegate to
@@ -59,7 +60,8 @@ public class StepCountController(IStepCountService stepCountService)
     };
 
     /// <summary>
-    /// Get step count records with optional pagination and date filtering
+    /// Get step count records with optional pagination and date filtering.
+    /// A date range without <c>count</c> returns at most the maximum page size of records; page through the rest with <c>skip</c>.
     /// </summary>
     /// <param name="count">Maximum number of records to return (default: 10, or up to the ceiling when from/to are specified)</param>
     /// <param name="skip">Number of records to skip for pagination (default: 0)</param>

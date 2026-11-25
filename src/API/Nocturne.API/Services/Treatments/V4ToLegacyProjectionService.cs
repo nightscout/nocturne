@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Nocturne.API.Services.Entries;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -69,32 +70,21 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Converts nullable unix milliseconds to nullable DateTime.
-    /// </summary>
-    private static DateTime? MillsToDateTime(long? mills) =>
-        mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime : null;
-
     /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        bool descending = true,
+        LegacyTreatmentRange range,
         CancellationToken ct = default
     )
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var range = new LegacyTreatmentRange(
-            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, descending);
 
         var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
         var treatments = await AssembleAsync(db, rows, ct);
 
-        return (descending
+        return (range.Descending
                 ? treatments.OrderByDescending(t => t.Mills)
                 : treatments.OrderBy(t => t.Mills))
-            .Take(limit);
+            .Take(range.Limit);
     }
 
     /// <summary>The records of one table <see cref="GetProjectedTreatmentsAtAsync"/> reads at each instant.</summary>
@@ -106,7 +96,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         CancellationToken ct = default
     )
     {
-        var at = instants.Distinct().Select(mills => MillsToDateTime(mills)!.Value).ToList();
+        var at = instants.Distinct().Select(mills => mills.ToUtcDateTime()).ToList();
         if (at.Count == 0)
             return [];
 
@@ -128,7 +118,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     {
         await using var db = await _contexts.CreateAsync(ct);
         var rows = await LegacyTreatmentTables.LatestOfTypeAsync(
-            _repositories, db, eventType, MillsToDateTime(fromMills)!.Value, MillsToDateTime(toMills)!.Value, ct);
+            _repositories, db, eventType, fromMills.ToUtcDateTime(), toMills.ToUtcDateTime(), ct);
 
         return (await AssembleAsync(db, rows, ct)).FirstOrDefault();
     }
@@ -263,26 +253,50 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     public async Task<string?> GetStateSpanTreatmentIdAsync(string id, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+        return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).LegacyId : null;
     }
 
-    /// <summary>Span ids <see cref="GetStateSpanTreatmentIdsAsync"/> reads in one statement.</summary>
+    /// <summary>
+    /// Span ids <see cref="GetStateSpanTreatmentIdsAsync"/> and <see cref="GetProjectedStateSpanTreatmentsAsync"/>
+    /// read in one statement.
+    /// </summary>
     internal const int SpanIdsPerStatement = 50;
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, string>> GetStateSpanTreatmentIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return new Dictionary<string, string>();
+
+        await using var db = await _contexts.CreateAsync(ct);
+        var found = await FindStateSpansAsync(db, ids, ct);
+        return found.ToDictionary(f => f.Key, f => ((StateSpanEntity)f.Value.Record).LegacyId!, StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, Treatment>> GetProjectedStateSpanTreatmentsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return new Dictionary<string, Treatment>();
+
+        await using var db = await _contexts.CreateAsync(ct);
+        var found = await FindStateSpansAsync(db, ids, ct);
+        var projected = (await AssembleAsync(db, [.. found.Values.DistinctBy(RecordId)], ct))
+            .ToDictionary(t => t.Id!, StringComparer.Ordinal);
+        return found.ToDictionary(f => f.Key, f => projected[RecordId(f.Value).ToString()], StringComparer.Ordinal);
+    }
+
     /// <remarks>
     /// Every statement matches exactly <see cref="SpanIdsPerStatement"/> ids, the last repeated to fill
     /// it, through <see cref="SpanIdBounds"/>, so every read has one shape whatever ids it is asked for.
     /// </remarks>
-    public async Task<IReadOnlyDictionary<string, string>> GetStateSpanTreatmentIdsAsync(
-        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    private static async Task<Dictionary<string, FetchedRecord>> FindStateSpansAsync(
+        NocturneDbContext db, IReadOnlyCollection<string> ids, CancellationToken ct)
     {
-        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        var found = new Dictionary<string, FetchedRecord>(StringComparer.Ordinal);
         var unresolved = ids.Distinct(StringComparer.Ordinal).ToList();
-        if (unresolved.Count == 0)
-            return keys;
-
-        await using var db = await _contexts.CreateAsync(ct);
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
             if (unresolved.Count == 0)
@@ -300,18 +314,18 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             {
                 var bounds = SpanIdBounds.Of(id);
                 var span = spans.Where(bounds.Matches)
-                    .OrderBy(s => s.OriginalId == id ? 0 : 1)
+                    .OrderBy(s => s.LegacyId == id ? 0 : 1)
                     .ThenBy(s => s.Id.ToString("N"), StringComparer.Ordinal)
                     .FirstOrDefault();
-                if (span?.OriginalId is { } key)
+                if (span is not null)
                 {
-                    keys[id] = key;
+                    found[id] = table.Fetched(span);
                     unresolved.Remove(id);
                 }
             }
         }
 
-        return keys;
+        return found;
     }
 
     /// <summary>
@@ -339,10 +353,10 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         {
             static bool Between(string? value, string from, string to) =>
                 value is not null && string.CompareOrdinal(value, from) >= 0 && string.CompareOrdinal(value, to) <= 0;
-            return span.OriginalId == Id
+            return span.LegacyId == Id
                 || Between(span.Id.ToString(), Low.ToString(), High.ToString())
-                || Between(span.OriginalId, From, To)
-                || Between(span.OriginalId, UpperFrom, UpperTo);
+                || Between(span.LegacyId, From, To)
+                || Between(span.LegacyId, UpperFrom, UpperTo);
         }
 
         public static Expression<Func<StateSpanEntity, bool>> MatchingAny(IEnumerable<SpanIdBounds> bounds)
@@ -352,10 +366,10 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             Expression? matches = null;
             foreach (var (id, low, high, from, to, upperFrom, upperTo) in bounds)
             {
-                Expression<Func<StateSpanEntity, bool>> term = s => s.OriginalId == id
+                Expression<Func<StateSpanEntity, bool>> term = s => s.LegacyId == id
                     || (s.Id >= low && s.Id <= high)
-                    || (string.Compare(s.OriginalId, from) >= 0 && string.Compare(s.OriginalId, to) <= 0)
-                    || (string.Compare(s.OriginalId, upperFrom) >= 0 && string.Compare(s.OriginalId, upperTo) <= 0);
+                    || (string.Compare(s.LegacyId, from) >= 0 && string.Compare(s.LegacyId, to) <= 0)
+                    || (string.Compare(s.LegacyId, upperFrom) >= 0 && string.Compare(s.LegacyId, upperTo) <= 0);
                 var body = ReplacingExpressionVisitor.Replace(term.Parameters[0], row, term.Body);
                 matches = matches is null ? body : Expression.OrElse(matches, body);
             }
@@ -369,7 +383,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
             var span = await MatchingId(table.Rows(db), id)
-                .OrderBy(s => s.OriginalId == id ? 0 : 1)
+                .OrderBy(s => s.LegacyId == id ? 0 : 1)
                 .ThenBy(s => s.Id)
                 .FirstOrDefaultAsync(ct);
 
@@ -399,7 +413,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? fromMills, long? toMills, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var (from, to) = (MillsToDateTime(fromMills), MillsToDateTime(toMills));
+        var (from, to) = (fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime());
         long count = 0;
         foreach (var table in LegacyTreatmentTables.All)
             count += await table.CountAsync(_repositories, db, from, to, _logger, ct);
@@ -412,20 +426,20 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         if (Guid.TryParse(id, out var guid))
         {
             string[] forms = [id, guid.ToString(), guid.ToString().ToUpperInvariant()];
-            return rows.Where(s => s.Id == guid || forms.Contains(s.OriginalId!));
+            return rows.Where(s => s.Id == guid || forms.Contains(s.LegacyId!));
         }
 
         if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
         {
             var (lowerFrom, lowerTo) = (low.ToString(), high.ToString());
             var (upperFrom, upperTo) = (lowerFrom.ToUpperInvariant(), lowerTo.ToUpperInvariant());
-            return rows.Where(s => s.OriginalId == id
+            return rows.Where(s => s.LegacyId == id
                 || (s.Id >= low && s.Id <= high)
-                || (string.Compare(s.OriginalId, lowerFrom) >= 0 && string.Compare(s.OriginalId, lowerTo) <= 0)
-                || (string.Compare(s.OriginalId, upperFrom) >= 0 && string.Compare(s.OriginalId, upperTo) <= 0));
+                || (string.Compare(s.LegacyId, lowerFrom) >= 0 && string.Compare(s.LegacyId, lowerTo) <= 0)
+                || (string.Compare(s.LegacyId, upperFrom) >= 0 && string.Compare(s.LegacyId, upperTo) <= 0));
         }
 
-        return rows.Where(s => s.OriginalId == id);
+        return rows.Where(s => s.LegacyId == id);
     }
 
     /// <summary>
@@ -450,6 +464,12 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// (<see cref="LegacyTreatmentTables.NotesServedWithAnotherRecord"/>), stamped no older than the
     /// Note's row, deleted or not, so a conditional read sees an edit of the notes alone.
     /// </summary>
+    /// <param name="db">
+    /// The read's context, on which the records holding the page's Notes and the Notes those records
+    /// wrote are read.
+    /// </param>
+    /// <param name="rows">The fetched rows of the page, deleted ones included.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <param name="historyCursor">
     /// The newest row stamp of a history page, or null for any other read. A history page also serves:
     /// the records holding a Note on it that the page does not, since editing only the notes moves the
@@ -531,6 +551,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             .Distinct()
             .ToList();
         Dictionary<string, string>? notes = null;
+        Dictionary<string, string>? deletedNotes = null;
         Dictionary<string, DateTime> noteStamps = [];
         if (keys.Count > 0)
         {
@@ -543,6 +564,11 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 .Where(n => n.Live)
                 .GroupBy(n => n.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
+            if (historyCursor is null)
+                deletedNotes = written
+                    .Where(n => !n.Live)
+                    .GroupBy(n => n.Key, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
             noteStamps = written
                 .GroupBy(n => n.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.Max(n => n.SysUpdatedAt), StringComparer.Ordinal);
@@ -563,8 +589,8 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var foods = await LoadCarbFoodsAsync(rows, ct);
         var treatments = pairedWithin is null
-            ? LegacyTreatmentTables.Assemble(rows, foods, notes)
-            : [.. rows.GroupBy(pairedWithin).SelectMany(group => LegacyTreatmentTables.Assemble([.. group], foods, notes))];
+            ? LegacyTreatmentTables.Assemble(rows, foods, notes, deletedNotes)
+            : [.. rows.GroupBy(pairedWithin).SelectMany(group => LegacyTreatmentTables.Assemble([.. group], foods, notes, deletedNotes))];
         return foldedNotes.Count == 0
             ? treatments
             : treatments.Select(t => t.Id is { } id && foldedNotes.Contains(id) ? FoldedNoteTombstone(t) : t).ToList();
@@ -578,7 +604,7 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     private static Treatment FoldedNoteTombstone(Treatment note) => new()
     {
         Id = note.Id,
-        EventType = "Note",
+        EventType = TreatmentTypes.Note,
         Mills = note.Mills,
         SrvCreated = note.SrvCreated,
         SrvModified = note.SrvModified,

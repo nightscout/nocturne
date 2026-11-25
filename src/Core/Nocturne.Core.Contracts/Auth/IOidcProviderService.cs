@@ -24,9 +24,6 @@ public interface IOidcProviderService
     /// <returns>Provider if found, null otherwise</returns>
     Task<OidcProvider?> GetProviderByIdAsync(Guid providerId);
 
-    /// <returns>Provider if found, null otherwise</returns>
-    Task<OidcProvider?> GetProviderByIssuerAsync(string issuerUrl);
-
     /// <param name="provider">Provider configuration</param>
     Task<OidcProvider> CreateProviderAsync(OidcProvider provider);
 

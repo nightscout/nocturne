@@ -3,10 +3,10 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Mappers;
 using Nocturne.Connectors.Tidepool.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Tidepool.Services;
@@ -15,12 +15,10 @@ namespace Nocturne.Connectors.Tidepool.Services;
 ///     Connector service for Tidepool data source.
 ///     Fetches glucose readings and bolus/food entries, writing V4 models directly.
 /// </summary>
-public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorConfiguration>
+public class TidepoolConnectorService
+    : TokenConnectorService<TidepoolConnectorConfiguration, TidepoolAuthTokenProvider>
 {
-    private readonly IRateLimitingStrategy _rateLimitingStrategy;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TidepoolSensorGlucoseMapper _sensorGlucoseMapper;
-    private readonly TidepoolAuthTokenProvider _tokenProvider;
     private readonly TidepoolV4TreatmentMapper _v4TreatmentMapper;
 
     public TidepoolConnectorService(
@@ -28,49 +26,38 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         IConnectorServerResolver<TidepoolConnectorConfiguration> serverResolver,
         ILogger<TidepoolConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
-        IRateLimitingStrategy rateLimitingStrategy,
         TidepoolAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
-        : base(httpClient, serverResolver, logger, publisher, timeProvider)
+        : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _retryDelayStrategy =
-            retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-        _rateLimitingStrategy =
-            rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
-        _tokenProvider =
-            tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _sensorGlucoseMapper = new TidepoolSensorGlucoseMapper(logger, ConnectorSource);
         _v4TreatmentMapper = new TidepoolV4TreatmentMapper(logger, ConnectorSource);
     }
 
-    protected override string ConnectorSource => DataSources.TidepoolConnector;
     public override string ServiceName => "Tidepool";
 
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override bool NeedsSignIn(SyncRequest request, TidepoolConnectorConfiguration config) =>
+        ResolveActiveTypes(request, config).Count > 0;
+
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TidepoolConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         TidepoolConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
+        if (activeTypes.Count == 0)
+            return result;
 
-        // Authenticate up front. The data fetches below treat a missing token as "no data" and
-        // return null without raising an error, so without this gate an auth failure (e.g. bad
-        // credentials returning 401) would be recorded as a successful, healthy sync — masking a
-        // broken connector so it never surfaces as unhealthy. Fail the sync explicitly instead.
-        // The token is cached, so the fetches below reuse it rather than re-authenticating.
-        if (activeTypes.Count > 0)
-        {
-            var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
-            if (string.IsNullOrEmpty(token))
-            {
-                _logger.LogWarning("[{ConnectorSource}] Sync failed: authentication unsuccessful", ConnectorSource);
-                return AuthenticationFailedResult();
-            }
-        }
+        // Every type is read in one window, which starts where glucose resumes.
+        var from = WindowStart(request, ResumeFamily.Glucose);
 
         // CBG and SMBG both map to SensorGlucose.
         if (activeTypes.Contains(SyncDataType.Glucose))
@@ -78,9 +65,9 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             try
             {
                 var bgValues = await FetchDataAsync<TidepoolBgValue[]>(
-                    config,
+                    config, session,
                     $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}",
-                    request.From, request.To);
+                    from, request.To, cancellationToken);
 
                 if (bgValues is null)
                 {
@@ -88,12 +75,11 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 }
                 else
                 {
-                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                        _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), PublishSensorGlucoseDataAsync,
-                        config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), config, cancellationToken);
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Glucose", ex);
             }
@@ -104,14 +90,14 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         {
             try
             {
-                var bolusTask = FetchDataAsync<TidepoolBolus[]>(config, TidepoolConstants.DataTypes.Bolus, request.From, request.To);
-                var foodTask = FetchDataAsync<TidepoolFood[]>(config, TidepoolConstants.DataTypes.Food, request.From, request.To);
+                var bolusTask = FetchDataAsync<TidepoolBolus[]>(config, session, TidepoolConstants.DataTypes.Bolus, from, request.To, cancellationToken);
+                var foodTask = FetchDataAsync<TidepoolFood[]>(config, session, TidepoolConstants.DataTypes.Food, from, request.To, cancellationToken);
                 await Task.WhenAll(bolusTask, foodTask);
 
                 var boluses = await bolusTask;
                 var foods = await foodTask;
 
-                var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods, Clock.GetUtcNow().UtcDateTime);
+                var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
                 // Both fetches are issued whenever either type is active, because the correlation
                 // that pairs a carb intake with a bolus needs the boluses even when boluses
@@ -124,14 +110,14 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 // Boluses come from the bolus fetch and carb intakes from the food fetch, so each
                 // type is reported only when its own fetch came back.
                 if (boluses is not null)
-                    await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                        mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        mappedBoluses, config, cancellationToken);
 
                 if (foods is not null)
-                    await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                        mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
+                    await PublishRecordTypeAsync(result, activeTypes,
+                        mappedCarbs, config, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 RecordTypeSyncError(result, "Treatments", ex);
             }
@@ -144,50 +130,44 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     ///     Fetches typed data from the Tidepool API data endpoint.
     /// </summary>
     /// <returns>
-    ///     The deserialized collection, or <c>null</c> when the fetch failed — no token, an error
+    ///     The deserialized collection, or <c>null</c> when the fetch failed: no user id, an error
     ///     response, or exhausted retries. A caller must not read that as an empty window: a type
     ///     the sync could not check has to go unreported, because the count the tenant's sync card
     ///     renders as "checked, found nothing" is a claim the source was reached.
     /// </returns>
     private async Task<T?> FetchDataAsync<T>(
-        TidepoolConnectorConfiguration config,
-        string dataType, DateTime? startDate = null, DateTime? endDate = null) where T : class
+        TidepoolConnectorConfiguration config, TokenSession session,
+        string dataType, DateTime? startDate, DateTime? endDate, CancellationToken cancellationToken) where T : class
     {
-        var token = await _tokenProvider.GetValidTokenAsync(config);
-        var cached = await _tokenProvider.GetCachedSessionAsync();
+        var cached = await TokenProvider.GetCachedSessionAsync();
         var userId = cached?.Metadata?.GetValueOrDefault("UserId");
-        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(userId))
         {
             _logger.LogWarning(
-                "[{ConnectorSource}] Cannot fetch data: missing token or user ID",
+                "[{ConnectorSource}] Cannot fetch data: missing user ID",
                 ConnectorSource);
             return null;
         }
 
-        await _rateLimitingStrategy.ApplyDelayAsync(0);
-
         return await ExecuteWithRetryAsync(
-            async () => await FetchDataCoreAsync<T>(config, token, userId, dataType, startDate, endDate),
-            _retryDelayStrategy,
+            async () => await FetchDataCoreAsync<T>(config, session.Token, userId, dataType, startDate, endDate, cancellationToken),
             async () =>
             {
-                _tokenProvider.InvalidateToken();
-                var newToken = await _tokenProvider.GetValidTokenAsync(config);
-                if (string.IsNullOrEmpty(newToken)) return false;
-                token = newToken;
-                // Re-read userId from refreshed cache
-                var refreshedSession = await _tokenProvider.GetCachedSessionAsync();
+                if (!await session.ReauthenticateAsync()) return false;
+                var refreshedSession = await TokenProvider.GetCachedSessionAsync();
                 userId = refreshedSession?.Metadata?.GetValueOrDefault("UserId");
                 return !string.IsNullOrEmpty(userId);
             },
             maxRetries: config.MaxRetryAttempts,
-            operationName: $"FetchTidepoolData({dataType})"
+            operationName: $"FetchTidepoolData({dataType})",
+            cancellationToken: cancellationToken
         );
     }
 
     private async Task<T?> FetchDataCoreAsync<T>(
         TidepoolConnectorConfiguration config,
-        string token, string userId, string dataType, DateTime? startDate, DateTime? endDate) where T : class
+        string token, string userId, string dataType, DateTime? startDate, DateTime? endDate,
+        CancellationToken cancellationToken) where T : class
     {
         var url = $"/data/{userId}?type={dataType}";
 
@@ -203,10 +183,10 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             [TidepoolConstants.Headers.SessionToken] = token
         };
 
-        var response = await GetWithHeadersAsync(url, headers);
+        var response = await GetWithHeadersAsync(url, headers, cancellationToken);
 
-        await response.EnsureSuccessWithBodyAsync();
+        await response.EnsureSuccessWithBodyAsync(cancellationToken);
 
-        return await DeserializeResponseAsync<T>(response);
+        return await DeserializeResponseAsync<T>(response, cancellationToken);
     }
 }

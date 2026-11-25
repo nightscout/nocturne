@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import { LegacyConsumableKind, RailItemId } from "#lib/api/generated/nocturne-api-client.js";
+import { LegacyConsumableKind, RailItemId } from "@nocturne/api-client";
 
 const { now, store, settings } = vi.hoisted(() => {
   const now = Date.UTC(2026, 5, 14, 9, 30, 0);
@@ -21,6 +21,7 @@ const { now, store, settings } = vi.hoisted(() => {
       demoMode: false,
       pillsData: { cob: null, basal: null, iob: null, loop: null },
       currentReservoir: 120 as number | null,
+      currentLinkBatteryVoltage: null as number | null,
       trackerInstances: [] as unknown[],
       trackerDefinitions: [] as unknown[],
       legacyFallbacks: [] as unknown[],
@@ -73,7 +74,7 @@ const MOBILE = "status-pills-mobile";
 const RAIL_STORAGE_KEY = "nocturne-dashboard-rail";
 const HIDDEN_STORAGE_KEY = "nocturne-hidden-legacy-fallbacks";
 
-const { Cob, Basal, Iob, Loop, Reservoir, Trackers } = RailItemId;
+const { Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers } = RailItemId;
 
 /** The rail items a rail renders, in the order it renders them. */
 function railItems(testId: string): string[] {
@@ -89,6 +90,7 @@ describe("StatusRail", () => {
     dashboardRail.presentFrom({});
     settings.features.trackerPills.enabled = true;
     store.currentReservoir = 120;
+    store.currentLinkBatteryVoltage = null;
     store.trackerDefinitions = [SENSOR_DEFINITION];
     store.trackerInstances = [SENSOR_INSTANCE];
     store.legacyFallbacks = [];
@@ -123,6 +125,7 @@ describe("StatusRail", () => {
     expect(trackerPills(DESKTOP)).toEqual(["tracker-pill", "legacy-age-pill"]);
 
     await page.viewport(400, 900);
+    await page.getByTestId(MOBILE).getByRole("button", { name: "Show all" }).click();
     await expect
       .element(page.getByTestId(MOBILE).getByRole("button", { name: /Infusion site/ }))
       .toBeVisible();
@@ -194,6 +197,14 @@ describe("StatusRail", () => {
     expect(railItems(DESKTOP)).not.toContain(Reservoir);
   });
 
+  it("shows the link battery after the reservoir once a voltage is reported", async () => {
+    store.currentLinkBatteryVoltage = 2.93;
+    render(CurrentBGDisplay);
+
+    await expect.element(page.getByTestId(DESKTOP).getByText("2.93 V")).toBeVisible();
+    expect(railItems(DESKTOP)).toEqual([Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers]);
+  });
+
   it("shows the same rail, trackers included, in the mobile layout", async () => {
     await page.viewport(400, 900);
     dashboardRail.hydrate({ order: [Trackers, Loop, Cob], hidden: [Basal, Iob, Reservoir] });
@@ -214,6 +225,53 @@ describe("StatusRail", () => {
 
     await expect.element(page.getByTestId(DESKTOP)).toBeInTheDocument();
     expect(page.getByTestId(MOBILE).elements()).toHaveLength(0);
+  });
+
+  it("shows the first four items on a phone and the rest after Show all", async () => {
+    await page.viewport(400, 900);
+    render(CurrentBGDisplay);
+
+    const mobile = page.getByTestId(MOBILE);
+    const toggle = mobile.getByRole("button", { name: "Show all" });
+    await expect.element(mobile.getByText("COB")).toBeVisible();
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect.element(mobile.getByText("Reservoir level")).not.toBeVisible();
+    expect(mobile.getByRole("button", { name: /Sensor/ }).elements()).toHaveLength(0);
+
+    await toggle.click();
+
+    await expect.element(mobile.getByText("Reservoir level")).toBeVisible();
+    await expect.element(mobile.getByRole("button", { name: /Sensor/ })).toBeVisible();
+    await expect
+      .element(mobile.getByRole("button", { name: "Show fewer" }))
+      .toHaveAttribute("aria-expanded", "true");
+    expect(railItems(MOBILE)).toEqual([Cob, Basal, Iob, Loop, Reservoir, Trackers]);
+  });
+
+  it("shows trackers in front on a phone while one gives a warning", async () => {
+    await page.viewport(400, 900);
+    store.trackerInstances = [
+      {
+        ...SENSOR_INSTANCE,
+        schedule: [
+          { urgency: "Warn", firesAt: new Date(now - 3600_000).toISOString() },
+        ],
+      },
+    ];
+    render(CurrentBGDisplay);
+
+    const mobile = page.getByTestId(MOBILE);
+    await expect.element(mobile.getByRole("button", { name: /Sensor/ })).toBeVisible();
+    await expect.element(mobile.getByText("Reservoir level")).not.toBeVisible();
+  });
+
+  it("shows every desktop item without a Show all button", async () => {
+    render(CurrentBGDisplay);
+
+    await expect.element(page.getByTestId(DESKTOP).getByText("Reservoir level")).toBeVisible();
+    expect(
+      page.getByTestId(DESKTOP).getByRole("button", { name: "Show all" }).elements()
+    ).toHaveLength(0);
   });
 
   it("hides the mobile layout at desktop width", async () => {

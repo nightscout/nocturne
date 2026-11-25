@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using CredentialMaker = Nocturne.Core.Models.Authorization.CredentialMaker;
 
 namespace Nocturne.Core.Contracts.Identity;
 
@@ -38,7 +39,11 @@ public interface IAuthorizationService
     /// <returns>Subject or null if not found</returns>
     Task<Subject?> GetSubjectByIdAsync(string id);
 
-    Task<Subject> CreateSubjectAsync(Subject subject);
+    /// <summary>
+    /// Mints a Nightscout API token as a device credential. It expires when
+    /// <paramref name="maker"/>'s access ends, and never when that does not end or there is no maker.
+    /// </summary>
+    Task<Subject> CreateSubjectAsync(Subject subject, CredentialMaker? maker);
 
     /// <returns>Updated subject or null if not found</returns>
     Task<Subject?> UpdateSubjectAsync(Subject subject);

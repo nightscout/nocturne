@@ -35,7 +35,7 @@ public class BaseConnectorServiceTests
     }
 
     [Fact]
-    public async Task PublishGlucoseDataAsync_WithValidData_SubmitsToAPI()
+    public async Task PublishByRouteAsync_WithValidEntries_SubmitsToAPI()
     {
         // Arrange
         var publisherMock = new Mock<IConnectorPublisher>();
@@ -71,7 +71,7 @@ public class BaseConnectorServiceTests
             .ReturnsAsync(true);
 
         // Act
-        var result = await testService.PublishGlucoseDataAsyncPublic(entries, config);
+        var result = await testService.PublishEntriesByRoutePublic(entries, config);
 
         // Assert
         Assert.True(result);
@@ -105,12 +105,10 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
     )
         : base(new HttpClient(),
             new Nocturne.Connectors.Core.Services.ConnectorServerResolver<TestConnectorConfiguration>(null, null, null),
-            logger, publisher) { }
+            logger, Mock.Of<IRetryDelayStrategy>(), publisher) { }
 
     protected override string ConnectorSource => "test-connector";
     public override string ServiceName => "Test Connector";
-
-    public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
     // This double only exercises the publish path, never a sync run.
     protected override Task<SyncResult> PerformSyncInternalAsync(
@@ -120,11 +118,11 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
         => throw new NotSupportedException();
 
     // Public wrapper for testing protected method
-    public Task<bool> PublishGlucoseDataAsyncPublic(
+    public Task<bool> PublishEntriesByRoutePublic(
         IEnumerable<Entry> entries,
         TestConnectorConfiguration config
     )
     {
-        return PublishGlucoseDataAsync(entries, config);
+        return PublishByRouteAsync(entries, config, CancellationToken.None);
     }
 }

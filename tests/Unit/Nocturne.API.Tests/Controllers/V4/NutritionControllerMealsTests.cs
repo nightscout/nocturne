@@ -2,14 +2,18 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
@@ -39,7 +43,6 @@ public class NutritionControllerMealsTests : IDisposable
     private readonly BolusRepository _bolusRepo;
     private readonly CarbIntakeRepository _carbIntakeRepo;
     private readonly Mock<ITreatmentFoodService> _foodServiceMock = new();
-    private readonly Mock<IDemoModeService> _demoModeMock = new();
     private readonly RecordingV4RecordBroadcaster<Bolus> _bolusBroadcaster = new();
     private readonly RecordingV4RecordBroadcaster<CarbIntake> _carbBroadcaster = new();
 
@@ -51,7 +54,7 @@ public class NutritionControllerMealsTests : IDisposable
         _dbContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
         _dbContext.SaveChanges();
 
-        var dedupMock = new Mock<IDeduplicationService>();
+        var dedupMock = new Mock<IDuplicateLinker>();
         var auditMock = new Mock<IAuditContext>().Object;
         var ctxFactory = new TestNocturneDbContextFactory(_dbContext);
         _bolusRepo = new BolusRepository(
@@ -81,8 +84,8 @@ public class NutritionControllerMealsTests : IDisposable
             carbIntakeRepo ?? _carbIntakeRepo,
             bolusRepo ?? _bolusRepo,
             _foodServiceMock.Object,
-            _demoModeMock.Object,
-            _dbContext.AsFactory());
+            Mock.Of<IFoodRepository>(),
+            Mock.Of<IMealReadService>());
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()
@@ -143,6 +146,34 @@ public class NutritionControllerMealsTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateMeal_TakesTheRequestsHeaderOntoTheBolusAndTheCarbIntake()
+    {
+        var controller = CreateController();
+        var sent = new DateTimeOffset(2026, 7, 1, 12, 30, 0, TimeSpan.FromHours(10));
+        var request = new CreateMealRequest
+        {
+            Timestamp = sent,
+            UtcOffset = 600,
+            Device = "device-sent",
+            App = "app-sent",
+            DataSource = "source-sent",
+            Insulin = 5.0,
+            Carbs = 30.0,
+        };
+
+        var body = ExtractBody(await controller.CreateMeal(request, default));
+
+        foreach (var record in new IV4Record[] { body.Bolus, body.CarbIntake })
+        {
+            record.Timestamp.Should().Be(sent.UtcDateTime);
+            record.UtcOffset.Should().Be(600);
+            record.Device.Should().Be("device-sent");
+            record.App.Should().Be("app-sent");
+            record.DataSource.Should().Be("source-sent");
+        }
+    }
+
+    [Fact]
     public async Task CreateMeal_WithSuppliedCorrelationId_Propagates()
     {
         var controller = CreateController();
@@ -161,6 +192,43 @@ public class NutritionControllerMealsTests : IDisposable
         body.CorrelationId.Should().Be(cid);
         body.Bolus.CorrelationId.Should().Be(cid);
         body.CarbIntake.CorrelationId.Should().Be(cid);
+    }
+
+    [Fact]
+    public async Task CreateMeal_WhenTheFoodTypesFailOnAnExistingMeal_AnswersWithTheStoredMealAndLogsTheFailure()
+    {
+        var logger = new ListLogger<object>();
+        var loggerFactory = new Mock<ILoggerFactory>();
+        loggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>())).Returns(logger);
+        var controller = CreateController();
+        controller.ControllerContext.HttpContext.RequestServices =
+            new ServiceCollection().AddSingleton(loggerFactory.Object).BuildServiceProvider();
+        var request = new CreateMealRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Insulin = 5.5,
+            Carbs = 45.0,
+            DataSource = "aaps",
+            SyncIdentifier = Guid.NewGuid().ToString(),
+        };
+        ExtractStatus(await controller.CreateMeal(request, default)).Should().Be(StatusCodes.Status201Created);
+        var failure = new InvalidOperationException("food types failed");
+        _foodServiceMock
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var retry = await controller.CreateMeal(request, default);
+
+        ExtractStatus(retry).Should().Be(StatusCodes.Status200OK);
+        var body = ExtractBody(retry);
+        body.CarbIntake.Id.Should().Be((await _dbContext.CarbIntakes.SingleAsync()).Id);
+        _foodServiceMock.Verify(
+            s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning)
+            .Which.Should().Match<(LogLevel Level, string Message, Exception? Exception)>(e =>
+                e.Exception == failure
+                && e.Message.Contains(nameof(CarbIntake))
+                && e.Message.Contains(body.CarbIntake.Id.ToString()));
     }
 
     [Fact]
@@ -293,18 +361,18 @@ public class NutritionControllerMealsTests : IDisposable
         (await verify.CarbIntakes.CountAsync()).Should().Be(1, "the unrelated carb intake was removed during the create");
     }
 
-    private BolusRepository CreateBolusRepo(IV4RecordBroadcaster<Bolus> broadcaster) =>
+    private BolusRepository CreateBolusRepo(IRecordChangePublisher broadcaster) =>
         new(
             new TestNocturneDbContextFactory(_dbContext),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
             broadcaster);
 
-    private CarbIntakeRepository CreateCarbIntakeRepo(IV4RecordBroadcaster<CarbIntake> broadcaster) =>
+    private CarbIntakeRepository CreateCarbIntakeRepo(IRecordChangePublisher broadcaster) =>
         new(
             new TestNocturneDbContextFactory(_dbContext),
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<CarbIntakeRepository>.Instance,
             broadcaster);
@@ -335,17 +403,16 @@ public class NutritionControllerMealsTests : IDisposable
 
     /// <summary>Runs a write from another caller inside the repository's single upsert.</summary>
     private sealed class InterleavingBroadcaster<TModel>(Action? onCreated = null, Action? onUpdated = null)
-        : IV4RecordBroadcaster<TModel> where TModel : class
+        : IRecordChangePublisher where TModel : class
     {
-        public Task BroadcastCreatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
+        public Task PublishAsync(RecordsChanged batch, CancellationToken ct)
         {
-            onCreated?.Invoke();
-            return Task.CompletedTask;
-        }
+            foreach (var change in batch.Changes.Where(c => c.Origin == WriteOrigin.Live && c.RecordType == typeof(TModel)))
+            {
+                if (change.Created.Count > 0) onCreated?.Invoke();
+                if (change.Updated.Count > 0) onUpdated?.Invoke();
+            }
 
-        public Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-        {
-            onUpdated?.Invoke();
             return Task.CompletedTask;
         }
     }

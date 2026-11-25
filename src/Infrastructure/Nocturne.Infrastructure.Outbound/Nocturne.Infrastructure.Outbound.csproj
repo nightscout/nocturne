@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net11.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- This project reads the clock only through an injected TimeProvider; BannedSymbols.txt
+             holds it there. -->
+        <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
+    </PropertyGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="BannedSymbols.txt"/>
+    </ItemGroup>
+</Project>

@@ -41,11 +41,10 @@ namespace Nocturne.API.Tests.Controllers.V4;
 /// <c>V4ReadOnlyControllerBaseTests</c> and <c>V4CrudControllerBaseTests</c>.
 /// </summary>
 /// <remarks>
-/// Grouped rather than split per controller because only four of these controllers have a test
-/// class of their own; those four are covered in place, next to their existing fixtures
-/// (<c>AuditControllerTests</c>, <c>FoodsControllerTests</c>, <c>NutritionControllerTests</c>,
-/// <c>ActivityControllerV4Tests</c>). <c>V4ReadLimitCoverageTests</c> guards that the whole
-/// surface stays covered.
+/// Grouped rather than split per controller because only three of these controllers have a test
+/// class of their own; those three are covered in place, next to their existing fixtures
+/// (<c>AuditControllerTests</c>, <c>FoodsControllerTests</c>, <c>ActivityControllerV4Tests</c>).
+/// <c>V4ReadLimitCoverageTests</c> guards that the whole surface stays covered.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class V4ReadLimitClampTests
@@ -64,7 +63,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpans_LimitAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = FullAccess(new StateSpansController(service.Object));
+        var controller = FullAccess(new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>()));
 
         await controller.GetStateSpans(limit: Ceiling, offset: 0);
 
@@ -77,7 +76,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpans_LimitAboveCeiling_IsClamped()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = FullAccess(new StateSpansController(service.Object));
+        var controller = FullAccess(new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>()));
 
         await controller.GetStateSpans(limit: AboveCeiling, offset: -1);
 
@@ -90,7 +89,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpansCategorySubRoutes_LimitAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await InvokeCategorySubRoutes(controller, Ceiling, 0);
 
@@ -101,7 +100,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpansCategorySubRoutes_LimitAboveCeiling_IsClamped()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await InvokeCategorySubRoutes(controller, AboveCeiling, -1);
 
@@ -112,7 +111,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_LimitAboveWindow_IsClampedInTheReportedPage()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         var result = await controller.GetActivities(limit: MergedWindow + 1, offset: -1);
 
@@ -126,7 +125,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_LimitAboveWindow_FetchesEachCategoryOnlyToTheWindow()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await controller.GetActivities(limit: MergedWindow + 1, offset: 0);
 
@@ -137,7 +136,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_OffsetInsideWindow_FetchesOnlyAsDeepAsThePageReaches()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await controller.GetActivities(limit: 100, offset: 50);
 
@@ -148,7 +147,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_OffsetPastWindow_FetchesNothingRatherThanReopeningIt()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         var result = await controller.GetActivities(limit: 100, offset: MergedWindow * 10);
 
@@ -162,7 +161,7 @@ public class V4ReadLimitClampTests
     public async Task StateSpanActivities_ReadsExactlyTheDrawnActivityCategories()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = new StateSpansController(service.Object, Mock.Of<ISignalRBroadcastService>());
 
         await controller.GetActivities(limit: 100, offset: 0);
 
@@ -242,7 +241,7 @@ public class V4ReadLimitClampTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TherapySettings>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static ProfileController CreateProfileController(Mock<ITherapySettingsRepository> repo) =>
@@ -255,7 +254,8 @@ public class V4ReadLimitClampTests
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>());
+            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>());
 
     private static void VerifyTherapySettingsFetched(Mock<ITherapySettingsRepository> repo, int limit, int offset) =>
         repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
@@ -501,6 +501,7 @@ public class V4ReadLimitClampTests
         new(
             Mock.Of<IDiscrepancyPersistenceService>(),
             repo.Object,
+            Mock.Of<IHttpClientFactory>(),
             Options.Create(new CompatibilityProxyConfiguration()),
             Mock.Of<ILogger<CompatibilityController>>());
 
@@ -581,19 +582,24 @@ public class V4ReadLimitClampTests
         repo.Verify(r => r.GetCompletedInstancesAsync(Ceiling, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static TrackersController CreateTrackersController(Mock<ITrackerRepository> repo) =>
-        new(
-            repo.Object,
-            Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<ITrackerAlertRuleSyncService>(),
-            Mock.Of<IAlertRepository>(),
-            Mock.Of<ITenantAccessor>(),
-            Mock.Of<IAlertAcknowledgementService>(),
-            new TrackerDeviceEventWriter(
-                Mock.Of<IDeviceEventRepository>(),
-                Mock.Of<IPatientDeviceStamper>(),
-                Mock.Of<ILogger<TrackerDeviceEventWriter>>()),
-            Mock.Of<ILogger<TrackersController>>())
+    private static TrackersController CreateTrackersController(Mock<ITrackerRepository> repo)
+    {
+        repo.Setup(r => r.GetCompletedInstancesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return new(
+            new TrackerService(
+                repo.Object,
+                Mock.Of<ISignalRBroadcastService>(),
+                Mock.Of<ITrackerAlertRuleSyncService>(),
+                Mock.Of<IAlertRepository>(),
+                Mock.Of<ITenantAccessor>(),
+                Mock.Of<IAlertAcknowledgementService>(),
+                new TrackerDeviceEventWriter(
+                    Mock.Of<IDeviceEventRepository>(),
+                    Mock.Of<IPatientDeviceStamper>(),
+                    Mock.Of<ILogger<TrackerDeviceEventWriter>>()),
+                TimeProvider.System,
+                Mock.Of<ILogger<TrackerService>>()))
         {
             ControllerContext = new ControllerContext
             {
@@ -614,4 +620,5 @@ public class V4ReadLimitClampTests
                 },
             },
         };
+    }
 }

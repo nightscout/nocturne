@@ -27,6 +27,22 @@ describe("alert notifications", () => {
     expect(created.create).toHaveBeenCalledWith("Urgent low", "52", "alert-a", false);
   });
 
+  it("raises the notice that a rule cannot run, with its text", () => {
+    raiseAlertNotification({
+      id: "n",
+      type: "alert.unevaluable",
+      title: "Urgent low",
+      subtitle: "alert_unevaluable_subtitle",
+    } as InAppNotificationDto);
+
+    expect(created.create).toHaveBeenCalledWith(
+      "Urgent low",
+      "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+      "alert-n",
+      false
+    );
+  });
+
   it("closes an alert's notification when the alert is archived", () => {
     raiseAlertNotification(alert("c"));
 

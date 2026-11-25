@@ -92,12 +92,28 @@ public class TenantResolutionMiddleware
         // so it must be reachable from the apex in multi-tenant deployments. The
         // service pins each tenant itself and never reads as the request's tenant.
         "/api/v4/me/tenants/overview",
+        // The same aggregation over a period, reached from the same host.
+        new TenantlessPath("/api/v4/me/tenants/overview/review", HttpMethods.Get),
+        // One person of the same aggregation, read for the panel beside the list.
+        new TenantlessPath("/api/v4/me/tenants/overview/person", HttpMethods.Get),
+        // The tenants whose live changes the same page hears about, which the web app signs into
+        // the bridge's overview ticket. Keyed on SubjectId and refused to every credential issued
+        // for one tenant.
+        new TenantlessPath("/api/v4/me/overview-admission", HttpMethods.Get),
         // The subject's tenant list, which drives the tenantless dashboard's navigation
         // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
         // GET only: the same path takes a POST that creates a tenant, and self-service
         // provisioning is a tenant-affecting write with no place on a host that resolves
         // no tenant — in the hosted deployment it goes through billing instead.
         new TenantlessPath("/api/v4/me/tenants", HttpMethods.Get),
+        // The subject's teams, which belong to no tenant. Keyed on SubjectId alone and refused to
+        // every credential but the person's own session, and a team answers only its members.
+        new TenantlessPath("/api/v4/me/teams", HttpMethods.Get),
+        new TenantlessPath("/api/v4/me/teams", HttpMethods.Post),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Get, Prefix: true),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Post, Prefix: true),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Put, Prefix: true),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Delete, Prefix: true),
         // The caller's own global subject-role scopes. Tenantless, MemberScopeMiddleware
         // returns before applying tenant-derived scopes, so this reports whatever the JWT
         // carries — empty for an ordinary subject, non-empty for one holding global roles.
@@ -113,6 +129,9 @@ public class TenantResolutionMiddleware
         // Another instance's server relaying a support issue to the apex it was configured with
         // (GitHubIssueOptions.RelayUrl). The issue goes to GitHub, not to any tenant here.
         new TenantlessPath("/api/v4/support/relay", HttpMethods.Post),
+        // The web server's bot reports which chat platforms are online from the apex it was
+        // configured with. The instance key authenticates it; the channel read stays per tenant.
+        new TenantlessPath("/api/v4/system/heartbeat", HttpMethods.Post),
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
@@ -168,6 +187,10 @@ public class TenantResolutionMiddleware
         // as the sole tenant like the passkey ceremonies it also follows; TotpController.Login
         // matches a token the tenantless OIDC callback minted at that same apex.
         new TenantlessPath("/api/auth/totp/login", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/totp/trusted-device-policy", HttpMethods.Get, SoleTenantAtApex: true),
+        // GET the list, DELETE one by id and POST revoke-all. trusted_devices carries no tenant
+        // column either.
+        new TenantlessPath("/api/auth/trusted-devices", Prefix: true, SoleTenantAtApex: true),
         // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
         // /login is admitted only by its own entry above. Routing has no DELETE beneath /login.
         new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true, SoleTenantAtApex: true),
@@ -179,7 +202,9 @@ public class TenantResolutionMiddleware
         // to route the callback home, which on a tenantless host is where the caller already is —
         // the same shape as the login/callback pair above.
         new TenantlessPath("/api/auth/oidc/link", HttpMethods.Get),
-        new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get),
+        // The callback also completes a link under a recovery session, which is a code on the
+        // site's tenant, so the apex of a single-tenant install serves it as that tenant.
+        new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get, SoleTenantAtApex: true),
         // GET is [AllowAnonymous] and serves any subject's picture by id on every tenant host
         // already; it is admitted here because the page renders through it.
         "/api/v4/me/avatar",
@@ -191,11 +216,18 @@ public class TenantResolutionMiddleware
         // tenant subdomain yet); the target tenant is resolved from the query string.
         new TenantlessPath("/api/auth/platform-access", Prefix: true),
         new TenantlessPath("/api/v4/admin/demo/", Prefix: true),
+        new TenantlessPath("/api/v4/admin/platform-policy", Prefix: true),
         new TenantlessPath("/api/v4/admin/platform-settings", Prefix: true),
+        new TenantlessPath("/api/v4/admin/tenant-invites", Prefix: true),
         new TenantlessPath("/api/v4/admin/tenants", Prefix: true),
         new TenantlessPath("/api/v4/dev-only/", Prefix: true),
         new TenantlessPath("/api/v4/platform/", Prefix: true),
         new TenantlessPath("/api/v4/setup/", Prefix: true),
+        // Tenant creation invites: the link opens on the bare domain, and creates a tenant that
+        // does not exist yet, so neither the lookups nor the owner's passkey ceremony can resolve
+        // one. With several tenants the bare domain resolves none, so these must be tenantless.
+        new TenantlessPath("/api/v4/tenant-invites/", Prefix: true),
+        new TenantlessPath("/api/auth/passkey/tenant-invite/", HttpMethods.Post, Prefix: true),
         // Cross-tenant overview hub: authorizes a subject in-band and joins per-tenant groups
         // itself, so the connection is negotiated from the apex with no tenant. Prefix, not
         // exact path: SignalR appends /negotiate to the hub path.

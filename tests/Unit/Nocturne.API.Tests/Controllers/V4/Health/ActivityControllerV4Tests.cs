@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Health;
 using System.Reflection;
 using FluentAssertions;
@@ -35,7 +36,7 @@ public class ActivityControllerV4Tests
         _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
             .Returns(Scope.TreatmentsReadWrite);
         _service.Setup(s => s.CountActivitiesByCategoryAsync(
-                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, long>());
         _service.Setup(s => s.GetStoredActivitiesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
@@ -47,7 +48,7 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task GetActivities_LimitAtWindow_ReachesServiceUnchanged()
     {
-        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, 0, CancellationToken.None);
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, 0, null, null, CancellationToken.None);
 
         VerifyFetched(count: V4ReadLimits.MaxMergedPageWindow, skip: 0);
     }
@@ -55,7 +56,7 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task GetActivities_LimitAboveWindow_IsClampedToWindow()
     {
-        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow + 1, 0, CancellationToken.None);
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow + 1, 0, null, null, CancellationToken.None);
 
         VerifyFetched(count: V4ReadLimits.MaxMergedPageWindow, skip: 0);
     }
@@ -63,7 +64,7 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task GetActivities_OffsetInsideWindow_LeavesOnlyTheRemainder()
     {
-        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, 1, CancellationToken.None);
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, 1, null, null, CancellationToken.None);
 
         VerifyFetched(count: V4ReadLimits.MaxMergedPageWindow - 1, skip: 1);
     }
@@ -71,7 +72,7 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task GetActivities_OffsetAtWindow_LeavesNothing()
     {
-        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, V4ReadLimits.MaxMergedPageWindow, CancellationToken.None);
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, V4ReadLimits.MaxMergedPageWindow, null, null, CancellationToken.None);
 
         VerifyFetched(count: 0, skip: V4ReadLimits.MaxMergedPageWindow);
     }
@@ -81,7 +82,7 @@ public class ActivityControllerV4Tests
     {
         const int past = V4ReadLimits.MaxMergedPageWindow * 10;
 
-        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, past, CancellationToken.None);
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, past, null, null, CancellationToken.None);
 
         VerifyFetched(count: 0, skip: past);
     }
@@ -89,13 +90,38 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task GetActivities_NegativeOffset_IsNormalizedToZero()
     {
-        await _controller.GetActivities(100, -1, CancellationToken.None);
+        await _controller.GetActivities(100, -1, null, null, CancellationToken.None);
 
         VerifyFetched(count: 100, skip: 0);
     }
 
     private void VerifyFetched(int count, int skip) =>
-        _service.Verify(x => x.GetActivitiesAsync(null, count, skip, It.IsAny<CancellationToken>()), Times.Once);
+        _service.Verify(x => x.GetActivitiesAsync(null, count, skip, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+    [Fact]
+    public async Task GetActivities_Window_ReachesTheReadAndTheCount()
+    {
+        var from = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc);
+        var to = from.AddHours(6);
+
+        await _controller.GetActivities(100, 0, from, to, CancellationToken.None);
+
+        _service.Verify(x => x.GetActivitiesAsync(null, 100, 0, from, to, It.IsAny<CancellationToken>()), Times.Once);
+        _service.Verify(x => x.CountActivitiesByCategoryAsync(
+            It.IsAny<IReadOnlySet<string>>(), null, from, to, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetActivities_WindowWiderThanTheDateSpanLimit_IsRefusedWithoutReading()
+    {
+        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var to = from.AddDays(V4ReadLimits.MaxDateSpanDays + 2);
+
+        var result = await _controller.GetActivities(100, 0, from, to, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _service.VerifyNoOtherCalls();
+    }
 
     [Fact]
     public async Task CreateActivities_SleepRecordWithoutSleepScope_ReturnsForbidden()
@@ -106,7 +132,7 @@ public class ActivityControllerV4Tests
         var result = await _controller.CreateActivities(
             [new UpsertActivityRequest { Type = "sleep", Mills = 1700000000000 }], CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _service.Verify(
             x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
@@ -132,7 +158,7 @@ public class ActivityControllerV4Tests
             new UpsertActivityRequest { Type = "exercise", Mills = 1700000000000 },
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _service.Verify(
             x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
@@ -158,7 +184,7 @@ public class ActivityControllerV4Tests
             [new UpsertActivityRequest { Type = type, Mills = 1700000000000 }],
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode
+        result.Result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode
             .Should().Be(allowed ? StatusCodes.Status201Created : StatusCodes.Status403Forbidden);
     }
 
@@ -173,7 +199,7 @@ public class ActivityControllerV4Tests
 
         var result = await _controller.DeleteActivity(id, CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
+        result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _service.Verify(x => x.DeleteActivityAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }

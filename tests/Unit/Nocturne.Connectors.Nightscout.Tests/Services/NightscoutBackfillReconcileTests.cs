@@ -11,6 +11,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -208,6 +209,8 @@ public class NightscoutBackfillReconcileTests
     {
         private const string Url = "https://nightscout.example.com";
 
+        private readonly NightscoutLookups _lookups = new();
+
         public string[] Entries { get; init; } = [];
         public string[] DeviceStatuses { get; init; } = [];
         public string[] Activities { get; init; } = [];
@@ -319,8 +322,9 @@ public class NightscoutBackfillReconcileTests
                 Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 registration.Object,
+                _lookups,
+                MockTenantAccessor.Create().Object,
                 publisher.Object);
         }
     }

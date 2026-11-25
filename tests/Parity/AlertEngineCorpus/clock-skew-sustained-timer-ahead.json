@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "name": "clock-skew-sustained-timer-ahead",
+  "description": "a sustained timer set at 12:00, then the clock reads 11:50: the timer is 10 minutes ahead, so the node is unknown, the timer is kept, and clock_anomaly reports sustained; at 11:57 it is within the tolerance and reads zero elapsed (false); at 12:10 the run completes from its first-true instant",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 10,
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "above",
+            "value": 180
+          }
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-04-01T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T12:00:00Z",
+        "latest_received_at": "2026-04-01T12:00:00Z",
+        "last_reading_at": "2026-04-01T12:00:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T11:50:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T11:50:00Z",
+        "latest_received_at": "2026-04-01T11:50:00Z",
+        "last_reading_at": "2026-04-01T11:50:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T11:57:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T11:57:00Z",
+        "latest_received_at": "2026-04-01T11:57:00Z",
+        "last_reading_at": "2026-04-01T11:57:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:10:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T12:10:00Z",
+        "latest_received_at": "2026-04-01T12:10:00Z",
+        "last_reading_at": "2026-04-01T12:10:00Z"
+      }
+    }
+  ]
+}

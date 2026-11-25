@@ -47,7 +47,9 @@
 		"vitest": "^4.1.6"
 	},
 	"dependencies": {
+		"@nocturne/api-client": "workspace:*",
 		"@nocturne/app": "workspace:*",
+		"@nocturne/charts": "workspace:*",
 		"@nocturne/ui": "workspace:*",
 		"water-ui": "workspace:*",
 		"lucide": "^1.47.0",

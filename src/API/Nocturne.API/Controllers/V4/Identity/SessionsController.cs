@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +12,14 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages the authenticated user's web login sessions. A session is one login/device —
-/// a refresh-token rotation chain sharing a single OIDC session ID — so revoking a
-/// session logs that device out everywhere its tokens are used.
+/// The web login sessions of the signed-in account. Each session is one login on one device. A
+/// caller can list sessions, revoke a session and revoke all other sessions. A revoked session
+/// cannot be renewed, and it ends when its current access token expires. Revoking all other
+/// sessions also ends the trust of every other trusted device.
 /// </summary>
+/// <remarks>
+/// A session is a refresh-token rotation chain sharing a single OIDC session ID.
+/// </remarks>
 /// <seealso cref="IRefreshTokenService"/>
 [ApiController]
 [Tags("Identity")]
@@ -24,6 +29,8 @@ namespace Nocturne.API.Controllers.V4.Identity;
 public class SessionsController : ControllerBase
 {
     private readonly IRefreshTokenService _refreshTokenService;
+    private readonly ITrustedDeviceService _trustedDevices;
+    private readonly IAuthAuditService _auditService;
     private readonly OidcOptions _options;
     private readonly ILogger<SessionsController> _logger;
 
@@ -32,10 +39,14 @@ public class SessionsController : ControllerBase
     /// </summary>
     public SessionsController(
         IRefreshTokenService refreshTokenService,
+        ITrustedDeviceService trustedDevices,
+        IAuthAuditService auditService,
         IOptions<OidcOptions> options,
         ILogger<SessionsController> logger)
     {
         _refreshTokenService = refreshTokenService;
+        _trustedDevices = trustedDevices;
+        _auditService = auditService;
         _options = options.Value;
         _logger = logger;
     }
@@ -76,6 +87,7 @@ public class SessionsController : ControllerBase
     /// <summary>
     /// Revoke a login session, logging that device out. Revoking the current
     /// session is allowed and acts as a logout.
+    /// The demo's shared visitor cannot call it (403).
     /// </summary>
     /// <remarks>
     /// The demo's subject is shared, so these sessions belong to other visitors and revoking one
@@ -114,7 +126,8 @@ public class SessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Revoke every session except the current one (log out everywhere else).
+    /// Revoke every session except the current one (log out everywhere else). Every trusted device except the current one stops being trusted.
+    /// The demo's shared visitor cannot call it (403).
     /// </summary>
     /// <remarks>
     /// On the shared demo subject, "everything else" is every other visitor currently using it.
@@ -122,7 +135,7 @@ public class SessionsController : ControllerBase
     /// <inheritdoc cref="IRefreshTokenService.RevokeOtherSessionsForSubjectAsync"/>
     [HttpPost("revoke-others")]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["List"])]
+    [RemoteCommand(Invalidates = ["List", "TrustedDevices_List"])]
     [ProducesResponseType(typeof(RevokeOthersResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<RevokeOthersResultDto>> RevokeOthers(CancellationToken ct)
@@ -147,6 +160,18 @@ public class SessionsController : ControllerBase
         _logger.LogInformation(
             "Other sessions revoked: subject_id={SubjectId} tokens={Count}",
             subjectId, revoked);
+
+        // Someone signing every other device out has usually lost one. A trust left on it would
+        // let its next sign-in skip the authenticator code.
+        var untrusted = await _trustedDevices.RevokeOthersAsync(
+            subjectId.Value, Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName], ct);
+        if (untrusted > 0)
+        {
+            await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
+                ipAddress: HttpContext.GetClientAddress(),
+                userAgent: Request.Headers.UserAgent.ToString(),
+                detailsJson: JsonSerializer.Serialize(new { others = true, count = untrusted, reason = "sessions_revoked" }));
+        }
 
         return Ok(new RevokeOthersResultDto { RevokedTokenCount = revoked });
     }

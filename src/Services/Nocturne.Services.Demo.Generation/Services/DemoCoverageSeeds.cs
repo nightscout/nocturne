@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -78,7 +79,7 @@ public static class DemoCoverageSeeds
     private static Entry CreateComparisonReading(Entry source)
     {
         var mills = source.Mills + 120_000;
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        var timestamp = mills.ToUtcDateTime();
         var variation = source.Mills / 300_000 % 5 - 2;
         var glucose = Math.Clamp(source.GlucoseMgdl() + variation, 40, 400);
 
@@ -88,13 +89,13 @@ public static class DemoCoverageSeeds
             Device = ComparisonCgmSerial,
             Mills = mills,
             Date = timestamp,
-            DateString = timestamp.ToString("o"),
+            DateString = timestamp.ToString("o", CultureInfo.InvariantCulture),
             Mgdl = glucose,
             Sgv = glucose,
             Direction = source.Direction,
             Delta = source.Delta,
             DataSource = source.DataSource,
-            CreatedAt = timestamp.ToString("o"),
+            CreatedAt = timestamp.ToString("o", CultureInfo.InvariantCulture),
             ModifiedAt = timestamp,
         };
     }

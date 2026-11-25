@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -50,21 +49,28 @@ public class GuestLinkService : IGuestLinkService
     private readonly IOAuthGrantRepository _grants;
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TimeProvider _time;
     private readonly ILogger<GuestLinkService> _logger;
 
     /// <param name="contexts">Opens the unit of work a revoke runs on.</param>
     /// <param name="grants">The stored grants.</param>
+    /// <param name="sessionCache">Evicts a dismissed link's cached guest session.</param>
+    /// <param name="grantRevocation">Stages a revoke and evicts the revoked grant's sessions.</param>
+    /// <param name="time">The clock every expiry and activation is judged against.</param>
+    /// <param name="logger">Logs links created, activated, revoked and dismissed, and refused attempts on another subject's link.</param>
     public GuestLinkService(
         INocturneDbContextFactory contexts,
         IOAuthGrantRepository grants,
         GuestSessionCacheService sessionCache,
         GrantRevocationService grantRevocation,
+        TimeProvider time,
         ILogger<GuestLinkService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _grants = grants ?? throw new ArgumentNullException(nameof(grants));
         _sessionCache = sessionCache;
         _grantRevocation = grantRevocation;
+        _time = time;
         _logger = logger;
     }
 
@@ -75,6 +81,7 @@ public class GuestLinkService : IGuestLinkService
         string label,
         string baseUrl,
         IReadOnlySet<string> creatorScopes,
+        DateTime? expiresNoLaterThan,
         IEnumerable<string>? scopes = null,
         bool limitTo24Hours = false,
         CancellationToken ct = default)
@@ -92,7 +99,8 @@ public class GuestLinkService : IGuestLinkService
 
         var code = GenerateCode();
         var hash = CredentialHash.GuestCode(code);
-        var now = DateTime.UtcNow;
+        var now = Now();
+        var expiresAt = expiresNoLaterThan is { } cap && cap < now + LinkLifetime ? cap : now + LinkLifetime;
 
         var grantId = await _grants.CreateAsync(
             new NewOAuthGrant(
@@ -103,7 +111,7 @@ public class GuestLinkService : IGuestLinkService
                 label,
                 TokenHash: hash,
                 LegacySecretHash: null,
-                ExpiresAt: now + LinkLifetime,
+                ExpiresAt: expiresAt,
                 limitTo24Hours,
                 CreatedBySubjectId: createdBySubjectId),
             ct);
@@ -161,7 +169,7 @@ public class GuestLinkService : IGuestLinkService
     {
         var normalized = code.Replace("-", "").ToUpperInvariant();
         var hash = CredentialHash.GuestCode(normalized);
-        var now = DateTime.UtcNow;
+        var now = Now();
 
         var grant = await _grants.ActivateGuestAsync(hash, now, new GrantPresentation(ipAddress, userAgent), ct);
 
@@ -170,7 +178,7 @@ public class GuestLinkService : IGuestLinkService
             return new GuestLinkActivationResult(false, null, "Invalid or expired code");
         }
 
-        _logger.LogInformation("Guest link {GrantId} activated from {IpAddress}", grant.Id, ipAddress);
+        _logger.LogInformation("Guest link {GrantId} activated", grant.Id);
 
         return new GuestLinkActivationResult(true, ToSession(grant), null);
     }
@@ -178,11 +186,12 @@ public class GuestLinkService : IGuestLinkService
     /// <inheritdoc />
     public async Task<GuestSessionInfo?> ValidateSessionAsync(Guid grantId, CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = Now();
 
         var grant = await FindGuestAsync(_grants, grantId, ct);
 
-        if (grant is null || grant.IsRevoked || !(grant.ExpiresAt > now) || grant.ActivatedAt is null)
+        if (grant is null || grant.IsRevoked || grant.ExpiresAt is null
+            || OAuthGrantState.IsExpiredAt(grant.ExpiresAt, now) || grant.ActivatedAt is null)
             return null;
 
         return ToSession(grant);
@@ -215,7 +224,7 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        await _grantRevocation.StageAsync(unit, grant, ct);
+        await _grantRevocation.StageAsync(unit, grant, Now(), ct);
         await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
         _grantRevocation.EvictSessions([grant]);
 
@@ -227,7 +236,7 @@ public class GuestLinkService : IGuestLinkService
     /// <inheritdoc />
     public async Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = Now();
 
         var grant = await FindGuestAsync(_grants, grantId, ct);
 
@@ -241,7 +250,7 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        var isTerminal = grant.RevokedAt.HasValue || grant.ExpiresAt <= now;
+        var isTerminal = grant.RevokedAt.HasValue || OAuthGrantState.IsExpiredAt(grant.ExpiresAt, now);
         if (!isTerminal)
         {
             _logger.LogWarning(
@@ -260,11 +269,11 @@ public class GuestLinkService : IGuestLinkService
 
     /// <inheritdoc />
     public Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default) =>
-        _grants.CountLiveGuestLinksAsync(dataOwnerSubjectId, DateTime.UtcNow, ct);
+        _grants.CountLiveGuestLinksAsync(dataOwnerSubjectId, Now(), ct);
 
     /// <inheritdoc />
     public Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default) =>
-        _grants.HasRedeemableGuestCodeAsync(DateTime.UtcNow, ct);
+        _grants.HasRedeemableGuestCodeAsync(Now(), ct);
 
     /// <summary>The grant <paramref name="grantId"/> if it is a guest link, in any state.</summary>
     private static async Task<OAuthGrantRecord?> FindGuestAsync(IOAuthGrantRepository grants, Guid grantId, CancellationToken ct)
@@ -273,19 +282,9 @@ public class GuestLinkService : IGuestLinkService
         return grant is { GrantType: OAuthGrantTypes.Guest } ? grant : null;
     }
 
-    private static string GenerateCode()
-    {
-        Span<byte> bytes = stackalloc byte[CodeLength];
-        RandomNumberGenerator.Fill(bytes);
+    private DateTime Now() => _time.GetUtcNow().UtcDateTime;
 
-        var sb = new StringBuilder(CodeLength);
-        for (var i = 0; i < CodeLength; i++)
-        {
-            sb.Append(CodeAlphabet[bytes[i] % CodeAlphabet.Length]);
-        }
-
-        return sb.ToString();
-    }
+    private static string GenerateCode() => RandomNumberGenerator.GetString(CodeAlphabet, CodeLength);
 
     private static string FormatCode(string code)
     {
@@ -302,12 +301,12 @@ public class GuestLinkService : IGuestLinkService
             grant.ExpiresAt!.Value,
             grant.LimitTo24Hours);
 
-    private static GuestLinkInfo MapToInfo(OAuthGrantRecord grant)
+    private GuestLinkInfo MapToInfo(OAuthGrantRecord grant)
     {
-        var now = DateTime.UtcNow;
+        var now = Now();
         var status = grant.RevokedAt.HasValue
             ? GuestLinkStatus.Revoked
-            : grant.ExpiresAt <= now
+            : OAuthGrantState.IsExpiredAt(grant.ExpiresAt, now)
                 ? GuestLinkStatus.Expired
                 : grant.ActivatedAt.HasValue
                     ? GuestLinkStatus.Active

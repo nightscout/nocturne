@@ -1,12 +1,15 @@
+using Nocturne.API.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Platform;
+using Nocturne.API.Extensions;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Services;
@@ -32,6 +35,7 @@ public class ServicesControllerDeleteFailureMappingTests
     private ServicesController CreateController() =>
         new(
             _dataSourceService.Object,
+            Mock.Of<IConnectionService>(),
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),
@@ -111,20 +115,32 @@ public class ServicesControllerDeleteFailureMappingTests
         failure.Value.Should().BeOfType<DataSourceDeleteResult>();
     }
 
-    [Fact]
-    public async Task DeleteConnectorData_SyncRunning_Returns409()
+    [Theory]
+    [InlineData(ConnectorId, "sync_running")]
+    [InlineData(OuraConnectorConfiguration.Name, "import_running")]
+    public async Task DeleteConnectorData_SyncRunning_Returns409_WithACodeForWhatIsRunning(string connector, string code)
     {
+        _ = typeof(OuraConnectorConfiguration);
         _dataSourceService
-            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.DeleteConnectorDataAsync(connector, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DataSourceDeleteResult.Failed(
-                ConnectorId,
+                connector,
                 DataSourceDeleteError.SyncRunning,
                 "A sync is running"));
 
-        var response = await CreateController().DeleteConnectorData(ConnectorId, cancellationToken: CancellationToken.None);
+        var response = await CreateController().DeleteConnectorData(connector, cancellationToken: CancellationToken.None);
 
         var conflict = response.Result.Should().BeOfType<ObjectResult>().Subject;
         conflict.StatusCode.Should().Be(409);
-        conflict.Value.Should().BeOfType<ProblemDetails>();
+        conflict.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Extensions.Should().Contain(ProblemCodeExtensions.CodeExtension, code);
+    }
+
+    [Fact]
+    public void ListingConnectionsIsRefusedToADelegatedCredential()
+    {
+        typeof(ServicesController).GetMethod(nameof(ServicesController.GetConnections))!
+            .GetCustomAttributes(typeof(RequireInteractiveSessionAttribute), inherit: false)
+            .Should().ContainSingle();
     }
 }

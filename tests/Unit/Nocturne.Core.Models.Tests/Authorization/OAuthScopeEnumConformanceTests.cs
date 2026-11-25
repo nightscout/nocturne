@@ -155,6 +155,8 @@ public class OAuthScopeEnumConformanceTests
             [OAuthScope.SleepReadWrite] = Scope.SleepReadWrite,
             [OAuthScope.FoodRead] = Scope.FoodRead,
             [OAuthScope.FoodReadWrite] = Scope.FoodReadWrite,
+            [OAuthScope.ConnectorsRead] = Scope.ConnectorsRead,
+            [OAuthScope.ConnectorsReadWrite] = Scope.ConnectorsReadWrite,
             [OAuthScope.DeviceNotify] = Scope.DeviceNotify,
             [OAuthScope.DeviceActuate] = Scope.DeviceActuate,
             [OAuthScope.HealthRead] = Scope.HealthRead,

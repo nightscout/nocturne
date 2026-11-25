@@ -19,7 +19,7 @@ public class GlookoV4TreatmentMapperManualInsulinTests
         var logger = Mock.Of<ILogger>();
         var config = new GlookoConnectorConfiguration();
         var timeMapper = new GlookoTimeMapper(config, logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
     }
 
     #region MapV3ManualInsulin — gkInsulinBasal
@@ -35,7 +35,6 @@ public class GlookoV4TreatmentMapperManualInsulinTests
 
         basalInjections.Should().HaveCount(1);
         basalInjections[0].Units.Should().Be(22);
-        basalInjections[0].DataSource.Should().Be("glooko-connector");
         basalInjections[0].LegacyId.Should().StartWith("glooko_");
         boluses.Should().BeEmpty();
     }
@@ -100,7 +99,6 @@ public class GlookoV4TreatmentMapperManualInsulinTests
         boluses[0].BolusType.Should().Be(BolusType.Normal);
         boluses[0].Automatic.Should().BeFalse();
         boluses[0].InsulinType.Should().Be("Admelog®");
-        boluses[0].DataSource.Should().Be("glooko-connector");
         boluses[0].LegacyId.Should().StartWith("glooko_");
         basalInjections.Should().BeEmpty();
     }

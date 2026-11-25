@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Glucose;
@@ -23,7 +24,7 @@ namespace Nocturne.API.Services.Glucose;
 /// </summary>
 /// <remarks>
 /// Each tenant's sleep schedule and timezone are read from <see cref="IUISettingsService"/> to
-/// determine the overnight evaluation window. <see cref="CompressionLowDetectionJob"/> runs it for each
+/// determine the overnight evaluation window. <see cref="Nocturne.API.Services.BackgroundServices.CompressionLowDetectionJob"/> runs it for each
 /// tenant's nights as they end.
 /// </remarks>
 /// <seealso cref="CompressionLowDetection"/>
@@ -36,7 +37,7 @@ public class CompressionLowDetectionService
 
     public const string NotificationType = "glucose.compression_low_review";
 
-    public static string NotificationSourceId(DateOnly nightOf) => nightOf.ToString("yyyy-MM-dd");
+    public static string NotificationSourceId(DateOnly nightOf) => nightOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     internal const double MinDropRateMgDlPerMin = 2.0;
     internal const int MinDropDurationMinutes = 10;
@@ -438,7 +439,7 @@ public class CompressionLowDetectionService
             metadata: new Dictionary<string, object>
             {
                 ["Count"] = count,
-                ["NightOf"] = nightOf.ToString("yyyy-MM-dd")
+                ["NightOf"] = nightOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             },
             cancellationToken: cancellationToken);
     }

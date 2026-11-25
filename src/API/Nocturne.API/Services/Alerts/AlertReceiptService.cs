@@ -59,6 +59,7 @@ public sealed class AlertReceiptService(
 
         var excursion = await db.AlertExcursions
             .AsNoTracking()
+            .OfCondition(includeTest: true)
             .Where(e => e.Id == excursionId && e.EndedAt == null)
             .Select(e => new { e.Id, e.TenantId })
             .FirstOrDefaultAsync(ct);

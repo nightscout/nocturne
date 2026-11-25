@@ -12,8 +12,8 @@ using Nocturne.API.Services.Glucose;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// V4 Summary controller providing widget-friendly summary data.
-/// Designed for mobile widgets, watch faces, and other constrained displays.
+/// Compact summary for widgets and small displays, such as watch faces and mobile widgets. Returns
+/// current glucose, IOB, COB, active tracker states and alarm status in one response.
 /// </summary>
 /// <remarks>
 /// Returns a compact <see cref="V4SummaryResponse"/> that aggregates current glucose,
@@ -34,6 +34,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/summary")]
 [Produces("application/json")]
+[ErrorEnvelope]
 public class SummaryController : ControllerBase
 {
     private readonly IWidgetSummaryService _widgetSummaryService;
@@ -84,24 +85,16 @@ public class SummaryController : ControllerBase
             includePredictions
         );
 
-        try
-        {
-            var summary = await _widgetSummaryService.GetSummaryAsync(
-                hours,
-                includePredictions,
-                HttpContext.RequestAborted
-            );
+        var summary = await _widgetSummaryService.GetSummaryAsync(
+            hours,
+            includePredictions,
+            HttpContext.RequestAborted
+        );
 
-            var redacted = WidgetSummaryReadScopeGuard.Redact(summary, HttpContext.GetGrantedScopes());
-            if (!TrackerReadAccess.Allows(HttpContext))
-                redacted.Trackers = [];
+        var redacted = WidgetSummaryReadScopeGuard.Redact(summary, HttpContext.GetGrantedScopes());
+        if (!TrackerReadAccess.Allows(HttpContext))
+            redacted.Trackers = [];
 
-            return Ok(redacted);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating V4 summary for user {UserId}", userId);
-            throw;
-        }
+        return Ok(redacted);
     }
 }

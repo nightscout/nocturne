@@ -25,6 +25,8 @@ export interface ServerHttpClientOptions {
   guestSessionToken?: string;
   platformAccessToken?: string;
   recoverySessionToken?: string;
+  /** Read by the API at sign-in only, to decide whether the authenticator code is needed. */
+  trustedDeviceToken?: string;
   hashedInstanceKey?: string | null;
   extraHeaders?: Record<string, string>;
   responseCookies?: CookieSetter;
@@ -91,6 +93,11 @@ export function createServerHttpClient(
           `${AUTH_COOKIE_NAMES.recoverySession}=${options.recoverySessionToken}`
         );
       }
+      if (options?.trustedDeviceToken) {
+        cookies.push(
+          `${AUTH_COOKIE_NAMES.trustedDevice}=${options.trustedDeviceToken}`
+        );
+      }
       if (cookies.length > 0) {
         headers.set("Cookie", cookies.join("; "));
       }
@@ -137,5 +144,8 @@ export function createServerApiClient(
   fetchFn: typeof fetch,
   options?: ServerHttpClientOptions
 ): ApiClient {
-  return new ApiClient(baseUrl, createServerHttpClient(fetchFn, options));
+  const http = createServerHttpClient(fetchFn, options);
+  // The generated file-upload remotes send their multipart body through `apiClient.http`, which
+  // the generated ApiClient hands to its sub-clients and does not keep.
+  return Object.assign(new ApiClient(baseUrl, http), { http });
 }

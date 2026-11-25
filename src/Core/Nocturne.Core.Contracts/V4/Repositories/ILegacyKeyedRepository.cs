@@ -1,3 +1,4 @@
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
@@ -71,6 +72,41 @@ public enum UpsertOutcome
 /// <see cref="ILegacyKeyedRepository{TRecord}.GetCorrelationIdsByLegacyIdAsync"/>.
 /// </summary>
 public sealed record LegacyCorrelation(string LegacyId, Guid CorrelationId);
+
+/// <summary>
+/// A stored legacy id and the 24-hex id a record keyed by it goes out on the wire under, from
+/// <see cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync"/>,
+/// <see cref="ILegacyKeyedRepository{TRecord}.ResolveHashedLegacyIdsAsync"/> and
+/// <see cref="ILegacyKeyedRepository{TRecord}.ResolveKeyedOwnIdsAsync"/>.
+/// </summary>
+public sealed record WireLegacyId(string WireId, string LegacyId);
+
+/// <summary>
+/// An id that names a stored record with no legacy id by its own uuid
+/// (<see cref="MongoObjectId.TryGetOwnIdRange"/>), from
+/// <see cref="ILegacyKeyedRepository{TRecord}.FindUnkeyedOwnIdsAsync"/>, and whether Nightscout
+/// write-back may have sent that record upstream, as
+/// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/> decides it, with
+/// what <see cref="WriteBackSendable"/> carries for it.
+/// </summary>
+public sealed record UnkeyedOwnId(
+    string WireId, bool WriteBackMaySend, string? DataSource = null, string? SentFingerprint = null, bool Live = true);
+
+/// <summary>
+/// A legacy id held by a record Nightscout write-back may have sent upstream, from
+/// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/>.
+/// </summary>
+/// <param name="DataSource">The record's <see cref="IV4Record.DataSource"/>, which an upstream edit applied to it keeps.</param>
+/// <param name="SentFingerprint">
+/// The documents of the record a pull may bring back as an echo, in the list
+/// <see cref="WriteBackFingerprint.Stored"/> describes (<see cref="Treatments.IWriteBackSentRecords"/>),
+/// or null where the table keeps none or the record was written back before they were kept.
+/// </param>
+/// <param name="Live">
+/// Whether the row is live rather than the user's deletion. A deletion keeps what was sent before it,
+/// which no longer describes the record once a live row of it is sent again.
+/// </param>
+public sealed record WriteBackSendable(string LegacyId, string? DataSource, string? SentFingerprint, bool Live = true);
 
 /// <summary>
 /// A V4 repository addressable by the legacy MongoDB <c>_id</c> its records were decomposed from.
@@ -148,8 +184,9 @@ public interface ILegacyKeyedRepository<TRecord>
     /// <summary>
     /// Whether a record the user deleted answers to <paramref name="id"/> under any key the lookups
     /// above resolve: its own id, the 24-hex prefix of that id, its legacy id, or the echo of a
-    /// legacy id (<see cref="GetByLegacyIdUuidPrefixAsync"/>, <see cref="GetByLegacyIdHashAsync"/>).
-    /// A record the system swept does not count.
+    /// legacy id (<see cref="GetByLegacyIdUuidPrefixAsync"/>, <see cref="GetByLegacyIdHashAsync"/>),
+    /// or, on a type keyed on a sync identifier, that identifier whatever its data source. A record
+    /// the system swept does not count.
     /// </summary>
     Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default);
 
@@ -160,6 +197,14 @@ public interface ILegacyKeyedRepository<TRecord>
     /// records are included, stamped with their delete (<see cref="HistoryRecord{T}"/>).
     /// </summary>
     Task<IReadOnlyList<HistoryRecord<TRecord>>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="IV4Repository{T}.GetAsync"/> over the rows stored deleted as well as the live ones, with
+    /// the same window, duplicate rule and order: one row per dose, a deleted one flagged
+    /// (<see cref="HistoryRecord{T}"/>). A deleted copy that another copy stands in for is not listed.
+    /// </summary>
+    Task<IReadOnlyList<HistoryRecord<TRecord>>> GetIncludingDeletedAsync(
+        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default);
 
     /// <summary>
     /// The stored, non-empty correlation id of each live row carrying one of
@@ -176,6 +221,124 @@ public interface ILegacyKeyedRepository<TRecord>
     Task<IReadOnlySet<string>> GetHeldLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
+    /// <summary>The ids among <paramref name="legacyIds"/> a deleted row is stored under, whoever deleted it.</summary>
+    Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Stores <paramref name="records"/> as rows already deleted, in one save: nothing reads them live,
+    /// and nothing a live write sets off (deduplication, a change broadcast) runs for them. The rows
+    /// are a system delete whatever the scope's audit actor, so a later upload of their ids writes them
+    /// again.
+    /// </summary>
+    Task StoreDeletedAsync(IReadOnlyCollection<TRecord> records, CancellationToken ct = default);
+
+    /// <summary>
+    /// The ids among <paramref name="legacyIds"/> held, as <see cref="GetHeldLegacyIdsAsync"/> holds
+    /// them, by a record Nightscout write-back may have sent upstream: one written by a live write at
+    /// least once, and whose <see cref="IV4Record.DataSource"/> is not <paramref name="skippedSource"/>,
+    /// the source write-back skips. A record only ever written by an import (a Nightscout migration,
+    /// a connector's initial backfill) was never offered to write-back. A live record governs over
+    /// the user's deletion of the same id, and the latest of several deletions governs over the rest.
+    /// </summary>
+    Task<IEnumerable<WriteBackSendable>> GetLegacyIdsWriteBackMaySendAsync(
+        IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct = default);
+
+    /// <summary>
+    /// The ids among <paramref name="ids"/> that name a stored record with no legacy id, live or
+    /// deleted, by <see cref="MongoObjectId.TryGetOwnIdRange"/>: the read-only half of
+    /// <see cref="AdoptOwnIdsAsync"/>, which may then give each record that id. An id a live record
+    /// already carries as its legacy id is left out, as <see cref="AdoptOwnIdsAsync"/> leaves it.
+    /// </summary>
+    /// <param name="skippedSource">The source write-back skips, as in <see cref="GetLegacyIdsWriteBackMaySendAsync"/>.</param>
+    Task<IEnumerable<UnkeyedOwnId>> FindUnkeyedOwnIdsAsync(
+        IReadOnlyCollection<string> ids, string skippedSource, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gives each stored record that has no legacy id, live or deleted, the id among
+    /// <paramref name="ids"/> that names it by <see cref="MongoObjectId.TryGetOwnIdRange"/>, as its
+    /// legacy id.
+    /// </summary>
+    /// <remarks>
+    /// Such a record goes out on the wire, and to an upstream Nightscout through write-back, under
+    /// its own uuid or that uuid's 24-hex prefix. Every ingest path matches a returning record by
+    /// legacy id alone, so without this the copy a pull brings back is stored a second time, and the
+    /// copy of a record the user deleted is stored again. Once adopted, the legacy id updates the live
+    /// record in place and the user's deletion holds it off. An id a live record already carries as
+    /// its legacy id is left alone: that record is the match.
+    /// </remarks>
+    /// <returns>The records that took an id, carrying it.</returns>
+    Task<IEnumerable<TRecord>> AdoptOwnIdsAsync(IReadOnlyCollection<string> ids, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gives each stored record that has no legacy id, live or deleted, and carries one of the
+    /// correlation ids in <paramref name="legacyIdByCorrelation"/>, the legacy id that correlation id
+    /// maps to: the siblings of a group whose anchor took its id through <see cref="AdoptOwnIdsAsync"/>.
+    /// </summary>
+    /// <returns>How many records took an id.</returns>
+    Task<int> AdoptLegacyIdsByCorrelationAsync(
+        IReadOnlyDictionary<Guid, string> legacyIdByCorrelation, CancellationToken ct = default);
+
+    /// <summary>
+    /// The stored legacy ids, live or deleted, that are uuids whose 24-hex prefix
+    /// (<see cref="MongoObjectId.FromGuid"/>) is one of <paramref name="ids"/>, each paired with that
+    /// prefix.
+    /// </summary>
+    /// <remarks>
+    /// Write-back sends a uuid-shaped legacy id upstream as that prefix, the only id form an AAPS
+    /// client reading the upstream instance accepts, so the copy a pull brings back names the record
+    /// by the prefix rather than by its legacy id. A caller rewrites the incoming id to the legacy id
+    /// before its legacy-id upsert, which then matches the record, or finds the user's deletion.
+    /// </remarks>
+    Task<IEnumerable<WireLegacyId>> ResolveUuidLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default);
+
+    /// <summary>
+    /// The legacy ids, live or deleted, of the records timed within <paramref name="from"/> and
+    /// <paramref name="to"/> that are neither ObjectIds nor uuids and whose hash
+    /// (<see cref="MongoObjectId.Coerce"/>) is one of <paramref name="ids"/>, each paired with it.
+    /// </summary>
+    /// <remarks>
+    /// Treatment write-back sends such a legacy id upstream as that hash, as <c>_id</c> and
+    /// <c>identifier</c> alike, so the copy a pull brings back names the record by the hash alone.
+    /// The hash does not reverse, so the candidates are the legacy ids of the window, hashed here;
+    /// a pulled copy carries its record's time, which bounds the window.
+    /// </remarks>
+    Task<IEnumerable<WireLegacyId>> ResolveHashedLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// As <see cref="ResolveHashedLegacyIdsAsync"/>, for the carbs write-back splits off a meal stored
+    /// as one record (<see cref="PreBolusSplit.ForWriteBack"/>): the legacy ids, of any shape, whose
+    /// <see cref="PreBolusSplit.WriteBackCarbsId"/> hashes to one of <paramref name="ids"/>.
+    /// </summary>
+    Task<IEnumerable<WireLegacyId>> ResolvePreBolusCarbsLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// The stored legacy ids, live or deleted, of the records that carry one and whose own uuid, in
+    /// canonical form or as its 24-hex prefix (<see cref="MongoObjectId.TryGetOwnIdRange"/>), is one
+    /// of <paramref name="ids"/>, each paired with that id.
+    /// </summary>
+    /// <remarks>
+    /// The v1 and v3 reads serve a treatment under its uuid's prefix whatever its legacy id, and
+    /// treatment write-back sent edits under the id they were served by: the full uuid up to v0.2.3,
+    /// its prefix from v0.2.4. A copy upstream may name the record by either.
+    /// </remarks>
+    Task<IEnumerable<WireLegacyId>> ResolveKeyedOwnIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default);
+
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes the live records stored under <paramref name="legacyIds"/> or with <paramref name="ids"/>,
+    /// which their client sent again with <c>isValid: false</c>, and broadcasts their delete. A copy
+    /// another source reported, which deduplication linked to a deleted record, is promoted in its place
+    /// rather than deleted: that source still reports the record.
+    /// </summary>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> InvalidateAsync(
+        IReadOnlyCollection<string> legacyIds, IReadOnlyCollection<Guid> ids, WriteOrigin origin,
+        CancellationToken ct = default);
 }

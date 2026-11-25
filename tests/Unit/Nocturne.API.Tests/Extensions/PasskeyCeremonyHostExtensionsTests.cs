@@ -1,14 +1,13 @@
-using Fido2NetLib;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Services.Auth;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -38,21 +37,13 @@ public class PasskeyCeremonyHostExtensionsTests
 
     private static PasskeyService ServiceFor(string rpId)
     {
-        var fido2Config = new Fido2Configuration
-        {
-            ServerDomain = rpId,
-            ServerName = "Test",
-            Origins = new HashSet<string> { $"https://{rpId}" },
-        };
-
         var contexts = TestDbContextFactory.CreateInMemoryContext().AsFactory();
         return new PasskeyService(
-            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts), new TenantMemberService(new TenantMembershipRepository(contexts)),
-            new Fido2(fido2Config),
+            new PasskeyCredentialRepository(contexts), new SpentPasskeyChallenges(), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             new EphemeralDataProtectionProvider(),
-            Options.Create(fido2Config),
+            PasskeyServiceTests.RelyingParty(rpId),
             NullLogger<PasskeyService>.Instance,
-            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"));
+            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"), TimeProvider.System);
     }
 
     [Fact]

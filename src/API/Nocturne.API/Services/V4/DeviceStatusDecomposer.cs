@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.DeviceStatuses;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -11,6 +13,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -20,7 +23,10 @@ namespace Nocturne.API.Services.V4;
 /// Decomposes legacy <see cref="DeviceStatus"/> records into typed v4 snapshot tables.
 /// Extracts APS (<see cref="V4Models.ApsSnapshot"/> for OpenAPS/AAPS/Trio and Loop), pump
 /// (<see cref="V4Models.PumpSnapshot"/>), and uploader (<see cref="V4Models.UploaderSnapshot"/>)
-/// snapshots, and persists them with idempotent create-or-update via <c>LegacyId</c> matching.
+/// snapshots, and persists them with idempotent create-or-update via <c>LegacyId</c> matching. The
+/// sections no snapshot holds go to <see cref="V4Models.DeviceStatusExtras"/>, and a sensor state the
+/// status reports (<see cref="ReportedSensorStates"/>) to a <see cref="V4Models.SensorStateReport"/>
+/// written with them.
 /// Device override state is folded into one <see cref="StateSpanCategory.Override"/> span per
 /// override period.
 /// </summary>
@@ -31,6 +37,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private readonly IPumpSnapshotRepository _pumpRepo;
     private readonly IUploaderSnapshotRepository _uploaderRepo;
     private readonly IDeviceStatusExtrasRepository _extrasRepo;
+    private readonly ISensorStateReportRepository _sensorStateRepo;
     private readonly IStateSpanService _stateSpanService;
     private readonly IDeviceService _deviceService;
     private readonly IAuditContext _auditContext;
@@ -48,6 +55,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         IPumpSnapshotRepository pumpRepo,
         IUploaderSnapshotRepository uploaderRepo,
         IDeviceStatusExtrasRepository extrasRepo,
+        ISensorStateReportRepository sensorStateRepo,
         IStateSpanService stateSpanService,
         IDeviceService deviceService,
         IAuditContext auditContext,
@@ -60,6 +68,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         _pumpRepo = pumpRepo;
         _uploaderRepo = uploaderRepo;
         _extrasRepo = extrasRepo;
+        _sensorStateRepo = sensorStateRepo;
         _stateSpanService = stateSpanService;
         _deviceService = deviceService;
         _auditContext = auditContext;
@@ -84,6 +93,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         NormalizeMills(ds);
         ds.Id = group.LegacyId;
+        group = group with { OverrideRebuilt = await IsRebuiltOverrideAsync(group, ds.Override, ct) };
 
         using (SystemAttributedBatchWrites(_auditContext))
         {
@@ -94,12 +104,14 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             if (group.Uploader is { } uploader && ds.Uploader == null && !ds.UploaderBattery.HasValue)
                 await _uploaderRepo.DeleteAsync(uploader.Id, origin, ct);
             await _extrasRepo.DeleteByCorrelationIdAsync(group.CorrelationId, ct);
+            await _sensorStateRepo.DeleteByCorrelationIdAsync(group.CorrelationId, origin, ct);
             await RetractOverrideAsync(group, ct);
         }
 
-        return await DecomposeAsync(
-            [new BatchStatus(ds, group.LegacyId, group.CorrelationId, ResolveTimestamp(ds))], source: null, group, origin,
-            new DeviceStatusDecomposition(), ct);
+        BatchStatus status = new(ds, group.LegacyId, group.CorrelationId, ResolveTimestamp(ds));
+        var result = new DeviceStatusDecomposition { CorrelationId = status.CorrelationId };
+        result.Begin([status.CorrelationId]);
+        return await DecomposeAsync([status], source: null, group, origin, result, ct);
     }
 
     /// <inheritdoc />
@@ -109,11 +121,16 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         => ds.Pump != null || ds.OpenAps != null || ds.Loop != null
             || ds.Uploader != null || ds.UploaderBattery.HasValue;
 
-    /// <summary>AAPS sends <c>date</c> instead of <c>mills</c>; normalize before decomposition.</summary>
-    private static void NormalizeMills(DeviceStatus ds)
+    /// <summary>
+    /// AAPS sends <c>date</c> instead of <c>mills</c>. A status without <c>created_at</c> is dated
+    /// by its receipt; see <see cref="ResolveTimestamp"/>.
+    /// </summary>
+    private void NormalizeMills(DeviceStatus ds)
     {
         if (ds.Mills == 0 && ds.Date is > 0)
             ds.Mills = ds.Date.Value;
+
+        ds.CreatedAt ??= _time.GetUtcNow().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 
     private Task StampLoopAsync(V4Models.DecompositionResult result, CancellationToken ct) =>
@@ -148,22 +165,35 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
     private const int OverrideQueryLimit = 10;
 
-    private static StateSpan BuildOverrideSpan(DeviceStatus ds, DateTime timestamp, string? legacyId)
+    /// <summary>
+    /// The end the observation declares, or <see langword="null"/> for one with no duration or one whose
+    /// end is not after the status time. The span starts at the status time, so an end already past it
+    /// cannot be stored as-is.
+    /// </summary>
+    private static DateTime? DeclaredOverrideEnd(DeviceStatus ds, DateTime timestamp)
     {
         DateTime? end = ds.Override!.Duration is > 0
             ? (ParseTimestampToDateTime(ds.Override.Timestamp) ?? timestamp)
                 .AddSeconds(ds.Override.Duration.Value)
             : null;
+        return end > timestamp ? end : null;
+    }
+
+    /// <summary>The end of a span, held back to the first later contrary observation or span start.</summary>
+    private static DateTime? BoundedEnd(DateTime? end, DateTime? firstLater) =>
+        firstLater < (end ?? DateTime.MaxValue) ? firstLater : end;
+
+    private static StateSpan BuildOverrideSpan(DeviceStatus ds, DateTime timestamp, string? legacyId)
+    {
         return new StateSpan
         {
             Category = StateSpanCategory.Override,
             State = OverrideState.Custom.ToString(),
             StartTimestamp = timestamp,
-            // The span starts at the status time, so an end already past it cannot be stored as-is.
-            EndTimestamp = end > timestamp ? end : null,
+            EndTimestamp = DeclaredOverrideEnd(ds, timestamp),
             Source = ds.Device,
             OriginalId = legacyId,
-            Metadata = BuildOverrideMetadata(ds.Override),
+            Metadata = BuildOverrideMetadata(ds.Override!),
         };
     }
 
@@ -195,9 +225,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// whose source happens to equal the device.
     /// </summary>
     private static bool IsUploaderSpan(StateSpan span, string? device) =>
-        span.Source == device
-        && span.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
-            != StateSpanMetadataExtensions.TreatmentsCollection;
+        span.Source == device && !span.Metadata.IsFromTreatment();
 
     /// <summary>
     /// Moves a span's start to a status and keys the span to that status. Upserts match on
@@ -272,7 +300,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         DateTime Timestamp,
         V4Models.ApsSnapshot? Aps,
         V4Models.PumpSnapshot? Pump,
-        V4Models.UploaderSnapshot? Uploader);
+        V4Models.UploaderSnapshot? Uploader,
+        bool OverrideRebuilt = false);
 
     /// <summary>
     /// Resolves <paramref name="storedId"/>, the id a projected status carries (its legacy id, else its
@@ -346,6 +375,33 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     }
 
     /// <summary>
+    /// Whether <paramref name="submitted"/> is the override the read rebuilds from the span of a status stored
+    /// without an override object. A client that edits such a status sends that rebuild back, and it must not be
+    /// stored as if Loop had uploaded it.
+    /// </summary>
+    private async Task<bool> IsRebuiltOverrideAsync(StoredGroup group, OverrideStatus? submitted, CancellationToken ct)
+    {
+        if (submitted is null || group.Aps is not { OverrideJson: null })
+            return false;
+
+        var span = (await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.Override,
+                from: group.Timestamp,
+                to: group.Timestamp,
+                count: int.MaxValue,
+                cancellationToken: ct))
+            .FirstOrDefault(s => IsUploaderSpan(s, group.Aps.Device)
+                && s.StartTimestamp <= group.Timestamp
+                && (!s.EndTimestamp.HasValue || s.EndTimestamp.Value > group.Timestamp));
+        if (span is null)
+            return false;
+
+        var rebuilt = new DeviceStatus();
+        DeviceStatusProjectionService.ProjectOverrideData(rebuilt, span);
+        return JsonSerializer.Serialize(rebuilt.Override, JsonOptions) == JsonSerializer.Serialize(submitted, JsonOptions);
+    }
+
+    /// <summary>
     /// Withdraws the group's override observation. A span the status opened starts at its device's
     /// next status instead, or is deleted when there is none. A span it ended stays ended.
     /// </summary>
@@ -398,12 +454,116 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         foreach (var ds in statuses)
             NormalizeMills(ds);
 
+        var echoes = await PointAtStoredStatusesAsync(statuses, source, ct);
+        if (echoes.Count > 0)
+            statuses = [.. statuses.Where(s => !echoes.Contains(s))];
+        if (statuses.Count == 0)
+            return into ?? new DeviceStatusDecomposition();
+
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses.Select(s => s.Id), SnapshotTables, ct);
         var batch = statuses
             .Select(ds => new BatchStatus(ds, ds.Id, CorrelationIdFor(ds.Id, correlationIds), ResolveTimestamp(ds)))
             .ToList();
-        return await DecomposeAsync(batch, source, group: null, origin, into ?? new DeviceStatusDecomposition(), ct);
+        var result = into ?? new DeviceStatusDecomposition();
+        result.CorrelationId = batch[0].CorrelationId;
+        result.Begin([.. batch.Select(s => s.CorrelationId)]);
+
+        var writing = await SettleInvalidAsync(batch, source, origin, result, ct);
+        return writing.Count == 0 ? result : await DecomposeAsync(writing, source, group: null, origin, result, ct);
     }
+
+    /// <summary>
+    /// Settles the statuses of <paramref name="batch"/> sent with <c>isValid: false</c> by
+    /// <see cref="InvalidUploads{TUpload}"/>: a status whose id holds a live group deletes it, and one
+    /// whose id holds none is stored as snapshots already deleted. A status is named only by its id.
+    /// </summary>
+    /// <remarks>
+    /// A status stored deleted keeps its snapshots alone: its extras and sensor state are read only
+    /// with a live snapshot, and resolving its devices would mark them in use.
+    /// </remarks>
+    /// <returns>The statuses that write as usual.</returns>
+    private async Task<IReadOnlyList<BatchStatus>> SettleInvalidAsync(
+        IReadOnlyList<BatchStatus> batch, string? source, WriteOrigin origin, DeviceStatusDecomposition result,
+        CancellationToken ct)
+    {
+        var ids = batch.Where(s => s.Status.IsValid == false).Select(s => s.LegacyId).OfType<string>()
+            .Distinct(StringComparer.Ordinal).ToList();
+        if (!batch.Any(s => s.Status.IsValid == false))
+            return batch;
+
+        var live = (await _apsRepo.GetByLegacyIdsAsync(ids, ct)).Select(r => r.LegacyId)
+            .Concat((await _pumpRepo.GetByLegacyIdsAsync(ids, ct)).Select(r => r.LegacyId))
+            .Concat((await _uploaderRepo.GetByLegacyIdsAsync(ids, ct)).Select(r => r.LegacyId))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        var indexed = batch.Select((status, index) => (Status: status, Index: index)).ToList();
+        var sorted = await InvalidUploads<(BatchStatus Status, int Index)>.SortAsync(indexed, indexed, new(
+            s => s.Status.LegacyId,
+            s => s.Index,
+            s => s.Status.Status.IsValid,
+            (s, valid) => s.Status.Status.IsValid = valid,
+            s => live.Contains(s.Status.LegacyId!),
+            _ => true,
+            async (unstored, token) =>
+            {
+                var deleted = new HashSet<string>(await _apsRepo.GetDeletedLegacyIdsAsync(unstored, token), StringComparer.Ordinal);
+                deleted.UnionWith(await _pumpRepo.GetDeletedLegacyIdsAsync(unstored, token));
+                deleted.UnionWith(await _uploaderRepo.GetDeletedLegacyIdsAsync(unstored, token));
+                return deleted;
+            }), ct);
+
+        using (SystemAttributedBatchWrites(_auditContext))
+        {
+            foreach (var (status, _) in sorted.Invalidating.DistinctBy(s => s.Status.LegacyId, StringComparer.Ordinal))
+            {
+                if (await DeleteStoredAsync(status.LegacyId!, origin, ct) > 0)
+                    result.AddInvalidated(status.Status);
+            }
+
+            var models = sorted.StoredDeleted
+                .Select(s => BuildModels(s.Status, source, pumpDeviceId: null, uploaderDeviceId: null, NoLinks.Instance, group: null))
+                .ToList();
+            if (models.Select(m => m.Aps).OfType<V4Models.ApsSnapshot>().ToList() is { Count: > 0 } aps)
+                await _apsRepo.StoreDeletedAsync(aps, ct);
+            if (models.Select(m => m.Pump).OfType<V4Models.PumpSnapshot>().ToList() is { Count: > 0 } pumps)
+                await _pumpRepo.StoreDeletedAsync(pumps, ct);
+            if (models.Select(m => m.Uploader).OfType<V4Models.UploaderSnapshot>().ToList() is { Count: > 0 } uploaders)
+                await _uploaderRepo.StoreDeletedAsync(uploaders, ct);
+        }
+
+        return [.. sorted.Writing.Select(s => s.Status)];
+    }
+
+    /// <summary>The links of a status that resolved no device.</summary>
+    private sealed class NoLinks : IPatientDeviceLinks
+    {
+        public static readonly NoLinks Instance = new();
+
+        public Guid? Resolve(Guid? deviceId, long mills) => null;
+    }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
+    /// </summary>
+    /// <remarks>
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private Task<IReadOnlySet<DeviceStatus>> PointAtStoredStatusesAsync(
+        IEnumerable<DeviceStatus> statuses, string? source, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, WireForms.UuidPrefix),
+                Table(_pumpRepo, WireForms.UuidPrefix),
+                Table(_uploaderRepo, WireForms.UuidPrefix),
+            ],
+            _ => source == DataSources.NightscoutConnector,
+            ct);
 
     /// <summary>
     /// The snapshot tables a status's stored correlation id is read from, in the APS, pump, uploader
@@ -429,7 +589,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         V4Models.ApsSnapshot? Aps,
         V4Models.PumpSnapshot? Pump,
         V4Models.UploaderSnapshot? Uploader,
-        V4Models.DeviceStatusExtras? Extras);
+        V4Models.DeviceStatusExtras? Extras,
+        V4Models.SensorStateReport? SensorState);
 
     /// <remarks>
     /// <paramref name="group"/> is the stored group a replacement rewrites row by row, or
@@ -439,9 +600,6 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         IReadOnlyList<BatchStatus> batch, string? source, StoredGroup? group, WriteOrigin origin,
         DeviceStatusDecomposition result, CancellationToken ct)
     {
-        result.CorrelationId = batch[0].CorrelationId;
-        result.Begin([.. batch.Select(s => s.CorrelationId)]);
-
         var devices = await ResolveDevicesAsync(batch, ct);
         var links = await _deviceService.GetPatientDeviceLinksAsync(devices.Select(d => d.Pump), ct);
         var spans = await PreloadSpansAsync(batch, ct);
@@ -518,6 +676,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             aps.PatientDeviceId = links.Resolve(pumpDeviceId, status.Mills);
             if (group is not null)
                 (aps.DataSource, aps.SyncIdentifier) = (group.Aps?.DataSource, group.Aps?.SyncIdentifier);
+            // The edited document holds the read's span rebuild, not an override Loop sent.
+            if (group is { OverrideRebuilt: true })
+                aps.OverrideJson = null;
         }
 
         V4Models.UploaderSnapshot? uploader = null;
@@ -529,13 +690,18 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 (uploader.DataSource, uploader.SyncIdentifier) = (group.Uploader?.DataSource, group.Uploader?.SyncIdentifier);
         }
 
-        return new BatchModels(aps, pump, uploader, BuildExtras(ds, correlationId));
+        var extras = BuildExtras(ds, correlationId);
+        var statusSource = group is null
+            ? source
+            : group.Pump?.DataSource ?? group.Uploader?.DataSource ?? group.Aps?.DataSource;
+        return new BatchModels(
+            aps, pump, uploader, extras, extras is null ? null : ReportedSensorStates.Of(ds, extras, statusSource));
     }
 
     /// <summary>
-    /// One bulk upsert per snapshot table, then the extras of the groups still holding a snapshot. A
-    /// replacement writes its group's rows by their stored ids instead: a row may carry no legacy id,
-    /// or another one, for the bulk upsert to match it by.
+    /// One bulk upsert per snapshot table, then the extras of the groups still holding a snapshot, each
+    /// with its sensor state report. A replacement writes its group's rows by their stored ids
+    /// instead: a row may carry no legacy id, or another one, for the bulk upsert to match it by.
     /// </summary>
     private async Task WriteSnapshotsAsync(
         IReadOnlyList<BatchModels> models, StoredGroup? group, V4Models.DecompositionResult result,
@@ -545,6 +711,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var pumpList = models.Select(m => m.Pump).OfType<V4Models.PumpSnapshot>().ToList();
         var uploaderList = models.Select(m => m.Uploader).OfType<V4Models.UploaderSnapshot>().ToList();
         var extrasList = models.Select(m => m.Extras).OfType<V4Models.DeviceStatusExtras>().ToList();
+        var sensorStates = models.Select(m => m.SensorState).OfType<V4Models.SensorStateReport>().ToList();
+        using var kept = KeptCorrelationIds.Open();
 
         if (group is not null)
         {
@@ -554,7 +722,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 await WriteOntoStoredAsync(_apsRepo, group.Aps, aps, result, origin, ct);
             foreach (var uploader in uploaderList)
                 await WriteOntoStoredAsync(_uploaderRepo, group.Uploader, uploader, result, origin, ct);
-            await BulkCreateAsync(_extrasRepo, Unheld(extrasList), result, origin, ct);
+            await WriteExtrasAsync(Unheld(extrasList));
             return;
         }
 
@@ -563,7 +731,26 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             await BulkUpsertAsync(_apsRepo, apsList, result, origin, ct);
             await BulkUpsertAsync(_pumpRepo, pumpList, result, origin, ct);
             await BulkUpsertAsync(_uploaderRepo, uploaderList, result, origin, ct);
-            await BulkCreateAsync(_extrasRepo, await UnstoredAsync(Unheld(extrasList)), result, origin, ct);
+            await WriteExtrasAsync(await UnstoredAsync(Unheld(extrasList)));
+        }
+
+        // A sensor state report is a part of its status's extras: written only with them, under the
+        // correlation id its repository holds a re-send off by. That is the id the group's stored
+        // snapshots kept when the history clamp hides them (KeptCorrelationIds).
+        async Task WriteExtrasAsync(List<V4Models.DeviceStatusExtras> extras)
+        {
+            foreach (var e in extras)
+                e.CorrelationId = kept.Resolve(e.CorrelationId);
+            foreach (var s in sensorStates)
+            {
+                if (s.CorrelationId is { } id)
+                    s.CorrelationId = kept.Resolve(id);
+            }
+
+            await BulkCreateAsync(_extrasRepo, extras, result, origin, ct);
+            var groups = extras.Select(e => e.CorrelationId).ToHashSet();
+            await BulkCreateAsync(
+                _sensorStateRepo, [.. sensorStates.Where(s => s.CorrelationId is { } id && groups.Contains(id))], result, origin, ct);
         }
 
         // A group with no snapshot has no legacy-keyed row to keep its correlation id, so its re-send
@@ -687,15 +874,22 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                   && metadata.OverrideScaleFactor() == observed.OverrideScaleFactor());
 
         var covered = false;
+        var conflicted = false;
+        var restated = new List<StateSpan>();
         var containing = spans[StateSpanCategory.Override]
             .Where(s => s.StartTimestamp <= at && (s.EndTimestamp == null || s.EndTimestamp >= at))
             .ToList();
         foreach (var span in containing)
         {
+            var unchanged = Unchanged(span);
             // Of two conflicting observations at one instant, the first decomposed wins.
-            if (Unchanged(span) || span.StartTimestamp >= at)
+            if (unchanged || span.StartTimestamp >= at)
             {
-                covered |= IsUploaderSpan(span, device);
+                var uploaders = IsUploaderSpan(span, device);
+                covered |= uploaders;
+                conflicted |= !unchanged;
+                if (uploaders && unchanged)
+                    restated.Add(span);
                 continue;
             }
 
@@ -707,7 +901,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             touched.Add(span);
         }
 
-        if (observed is null || covered)
+        if (observed is null)
             return touched;
 
         var next = spans[StateSpanCategory.Override]
@@ -723,6 +917,23 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             .OrderBy(m => m.Timestamp).ThenBy(m => m.Id)
             .FirstOrDefault()?.Timestamp;
 
+        var firstLater = contraryAt ?? next?.StartTimestamp;
+
+        if (covered)
+        {
+            // A conflict decomposed at this instant ends the restated span here. An extension outlives the
+            // status that made it, as a span it ended stays ended.
+            var end = BoundedEnd(DeclaredOverrideEnd(ds, at), firstLater);
+            foreach (var span in restated.Where(s => !conflicted && s.EndTimestamp is not null && (end is null || end > s.EndTimestamp)))
+            {
+                span.EndTimestamp = end;
+                spans.Change(span);
+                touched.Add(span);
+            }
+
+            return touched;
+        }
+
         var opened = BuildOverrideSpan(ds, at, key);
 
         if (next is not null
@@ -736,9 +947,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             return touched;
         }
 
-        var firstLater = contraryAt ?? next?.StartTimestamp;
-        if (firstLater < (opened.EndTimestamp ?? DateTime.MaxValue))
-            opened.EndTimestamp = firstLater;
+        opened.EndTimestamp = BoundedEnd(opened.EndTimestamp, firstLater);
 
         spans.Open(opened);
         touched.Add(opened);
@@ -946,7 +1155,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
-        var command = ApsSnapshotCurves.FreshestOpenApsCommand(ds.OpenAps!);
+        var openAps = ds.OpenAps!;
+        var command = ApsSnapshotCurves.FreshestOpenApsCommand(openAps);
         var apsSystem = DetectOpenApsVariant(ds);
 
         var snapshot = new V4Models.ApsSnapshot
@@ -958,27 +1168,28 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             DataSource = source,
             CorrelationId = correlationId,
             AidAlgorithm = apsSystem,
-            Iob = ds.OpenAps.Iob?.Iob,
-            BasalIob = ds.OpenAps.Iob?.BasalIob,
-            BolusIob = ds.OpenAps.Iob?.BolusIob,
-            Cob = ds.OpenAps.Cob ?? command?.COB,
+            Iob = openAps.Iob?.Iob,
+            BasalIob = openAps.Iob?.BasalIob,
+            BolusIob = openAps.Iob?.BolusIob,
+            Cob = openAps.Cob ?? command?.COB,
             CurrentBg = command?.Bg,
             EventualBg = command?.EventualBG,
             TargetBg = command?.TargetBG,
             RecommendedBolus = command?.InsulinReq,
             SensitivityRatio = command?.SensitivityRatio,
-            Enacted = ds.OpenAps.Enacted != null
-                && (ds.OpenAps.Enacted.Received == true || ds.OpenAps.Enacted.Recieved == true),
-            EnactedRate = ds.OpenAps.Enacted?.Rate,
-            EnactedDuration = ds.OpenAps.Enacted?.Duration,
-            EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
-                ? ds.OpenAps.Enacted.Smb
-                : ds.OpenAps.Enacted?.Units,
-            AidVersion = ds.OpenAps?.Version,
+            Enacted = openAps.Enacted != null
+                && (openAps.Enacted.Received == true || openAps.Enacted.Recieved == true),
+            EnactedRate = openAps.Enacted?.Rate,
+            EnactedDuration = openAps.Enacted?.Duration,
+            EnactedBolusVolume = openAps.Enacted?.Smb is > 0
+                ? openAps.Enacted.Smb
+                : openAps.Enacted?.Units,
+            AidVersion = openAps.Version,
+            AdditionalProperties = UploadedExtras.OfOpenAps(openAps),
         };
         ApsSnapshotCurves.FillColumns(snapshot, command);
-        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Suggested, snapshot, JsonOptions);
-        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(ds.OpenAps.Enacted, snapshot, JsonOptions);
+        snapshot.SuggestedJson = ApsSnapshotCurves.SerializeCommand(openAps.Suggested, snapshot, JsonOptions);
+        snapshot.EnactedJson = ApsSnapshotCurves.SerializeCommand(openAps.Enacted, snapshot, JsonOptions);
         return snapshot;
     }
 
@@ -1009,6 +1220,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         };
         ApsSnapshotCurves.FillColumns(snapshot, ds.Loop);
         snapshot.LoopJson = ApsSnapshotCurves.SerializeLoop(ds.Loop, snapshot, JsonOptions);
+        snapshot.OverrideJson = ds.Override is null ? null : JsonSerializer.Serialize(ds.Override, JsonOptions);
         return snapshot;
     }
 
@@ -1036,9 +1248,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             Clock = ds.Pump.Clock,
             Iob = ds.Pump.Iob?.Iob,
             BolusIob = ds.Pump.Iob?.BolusIob,
-            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
-                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
-                : null,
+            AdditionalProperties = UploadedExtras.OfPump(ds.Pump),
         };
     }
 
@@ -1059,6 +1269,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             IsCharging = ds.IsCharging ?? ds.Uploader?.IsCharging,
             Temperature = ds.Uploader?.Temperature,
             Type = ds.Uploader?.Type,
+            AdditionalProperties = ds.Uploader?.ExtensionData is { Count: > 0 } reported
+                ? reported.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
         };
     }
 
@@ -1069,13 +1282,15 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// <summary>
     /// Distinguishes between vanilla OpenAPS, AAPS, and Trio based on payload heuristics.
     /// All three post under the "openaps" devicestatus key.
-    /// - AAPS: uploader name contains "AndroidAPS"
+    /// - AAPS: uploader name contains "AndroidAPS", or the top-level <c>app</c> is "AAPS" (what
+    ///   NSClientV3 sends, with an empty uploader block)
     /// - Trio: openaps block includes a version field
     /// - Vanilla OpenAPS: neither of the above
     /// </summary>
     internal static V4Models.AidAlgorithm DetectOpenApsVariant(DeviceStatus ds)
     {
-        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true)
+        if (ds.Uploader?.Name?.Contains("AndroidAPS", StringComparison.OrdinalIgnoreCase) == true
+            || IsAapsApp(ds))
             return V4Models.AidAlgorithm.AndroidAps;
 
         if (!string.IsNullOrEmpty(ds.OpenAps?.Version))
@@ -1084,16 +1299,25 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         return V4Models.AidAlgorithm.OpenAps;
     }
 
+    private static bool IsAapsApp(DeviceStatus ds) =>
+        ds.ExtensionData?.TryGetValue("app", out var app) == true
+        && app.ValueKind == JsonValueKind.String
+        && app.GetString() is { } name
+        && (name.Equals("AAPS", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("AndroidAPS", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>
     /// Resolves the best available timestamp for a device status record.
     /// Priority: Mills (already normalized from date) > OpenAPS IOB time >
     /// <see cref="ApsSnapshotCurves.FreshestOpenApsCommand"/> timestamp > Loop timestamp > Pump clock > CreatedAt >
-    /// Loop predicted start date > now.
+    /// Loop predicted start date > now. <see cref="NormalizeMills"/> sets CreatedAt to the receipt time
+    /// when the upload has none, as Nightscout does, so the last two are reached only when CreatedAt
+    /// does not parse.
     /// </summary>
     internal DateTime ResolveTimestamp(DeviceStatus ds)
     {
         if (ds.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(ds.Mills).UtcDateTime;
+            return ds.Mills.ToUtcDateTime();
 
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;
@@ -1169,6 +1393,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         deleted += await DeleteUnkeyedAsync(_pumpRepo, group.Pump, group.LegacyId, origin, ct);
         deleted += await DeleteUnkeyedAsync(_uploaderRepo, group.Uploader, group.LegacyId, origin, ct);
         deleted += await _extrasRepo.DeleteByCorrelationIdAsync(group.CorrelationId, ct);
+        deleted += await _sensorStateRepo.DeleteByCorrelationIdAsync(group.CorrelationId, origin, ct);
         deleted += await RetractOverrideAsync(group, ct);
 
         if (deleted > 0)

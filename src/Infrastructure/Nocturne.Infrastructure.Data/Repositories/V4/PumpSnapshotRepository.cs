@@ -24,14 +24,14 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    /// <param name="changes">Optional; null tells no one of a write.</param>
     // logger is unused but retained for DI + direct test construction.
     public PumpSnapshotRepository(
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<PumpSnapshotRepository> logger,
-        IV4RecordBroadcaster<PumpSnapshot>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 
@@ -80,24 +80,4 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
     }
 
-    /// <summary>
-    /// Gets pump snapshots by correlation IDs.
-    /// </summary>
-    /// <param name="correlationIds">The correlation IDs to match.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching pump snapshots.</returns>
-    public async Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
-    {
-        var ids = correlationIds.ToList();
-        if (ids.Count == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.PumpSnapshots
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-
-        return entities.Select(PumpSnapshotMapper.ToDomainModel);
-    }
 }

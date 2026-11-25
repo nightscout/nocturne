@@ -74,6 +74,11 @@ public class ConnectorPropertyAttribute : Attribute
     public string[]? AllowedValues { get; set; }
 
     /// <summary>
+    ///     The only values a numeric property takes, offered as a choice in place of a free number.
+    /// </summary>
+    public int[]? AllowedNumbers { get; set; }
+
+    /// <summary>
     ///     Minimum value for numeric properties. Use NotSet if not applicable.
     /// </summary>
     public int MinValue { get; set; } = NotSet;
@@ -97,6 +102,13 @@ public class ConnectorPropertyAttribute : Attribute
     ///     Format hint for string validation (e.g., "uri", "email").
     /// </summary>
     public string? Format { get; set; }
+
+    /// <summary>
+    ///     Whether turning this boolean on makes Nocturne send the tenant's records to the
+    ///     connector's destination. A delegated credential may not turn it on
+    ///     (<see cref="Services.DelegatedConfigurationGuard"/>).
+    /// </summary>
+    public bool SendsRecords { get; set; }
 
     public string GetKeyName() => Key.ToString();
 

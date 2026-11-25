@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using System.Linq;
 using Nocturne.Core.Contracts.Devices;
@@ -64,11 +65,11 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
     /// (<see cref="DecomposerBase.SystemAttributedBatchWrites"/>); its id names the stored reading as
     /// reads resolve it (<see cref="EntryTable{TRecord}.Named"/>).
     /// </remarks>
-    public Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
-        => DecomposeBatchAsync([entry], origin, edit: true, ct);
+    public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
+        => await DecomposeBatchAsync([entry], origin, edit: true, ct);
 
     /// <inheritdoc />
-    public Task<DecompositionResult> DecomposeBatchAsync(
+    public Task<EntryDecomposition> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
         => DecomposeBatchAsync(entries, origin, edit: false, ct);
 
@@ -81,37 +82,61 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
     /// <remarks>
     /// <paramref name="edit"/> marks a user's edit of the readings its ids name, which may carry no
     /// legacy id or another one. Otherwise an upload's id that only names a reading with no legacy id
-    /// is that reading's echo and is skipped (<see cref="EntryTable{TRecord}.Echoes"/>).
+    /// is that reading's echo and is skipped (<see cref="EntryTable{TRecord}.Echoes"/>), and each
+    /// other entry is pointed at the reading it names (<see cref="PointEntriesAtStoredRecordsAsync"/>),
+    /// where a write-back echo is skipped too.
     /// </remarks>
-    private async Task<DecompositionResult> DecomposeBatchAsync(
+    private async Task<EntryDecomposition> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, bool edit, CancellationToken ct)
     {
-        var result = new DecompositionResult();
+        var result = new EntryDecomposition();
         if (entries.Count == 0)
             return result;
 
-        var sensor = new EntryTable<SensorGlucose>(_sensorGlucoseRepository);
-        var meter = new EntryTable<MeterGlucose>(_meterGlucoseRepository);
-        var calibration = new EntryTable<Calibration>(_calibrationRepository);
+        var sensor = new EntryTable<SensorGlucose>(_sensorGlucoseRepository, (entry, id) => BuildSensorGlucoseAsync(entry, id, ct));
+        var meter = new EntryTable<MeterGlucose>(_meterGlucoseRepository, (entry, id) => Task.FromResult(MapToMeterGlucose(entry, id)));
+        var calibration = new EntryTable<Calibration>(_calibrationRepository, (entry, id) => Task.FromResult(MapToCalibration(entry, id)));
 
-        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
         await sensor.ReadServedAsync(ServedIds("sgv"), ct);
         await meter.ReadServedAsync(ServedIds("mbg"), ct);
         await calibration.ReadServedAsync(ServedIds("cal"), ct);
+        var echoes = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
+        if (!edit)
+        {
+            echoes.UnionWith(entries.Where(e => !PulledFromNightscout(e) && (e.Type?.ToLowerInvariant() switch
+            {
+                "sgv" => sensor.Echoes(e.Id),
+                "mbg" => meter.Echoes(e.Id),
+                "cal" => calibration.Echoes(e.Id),
+                _ => false,
+            })));
+            echoes.UnionWith(await PointEntriesAtStoredRecordsAsync(entries.Where(e => !echoes.Contains(e)), ct));
+        }
+
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
+
+        var batch = entries.Select((entry, index) => new BatchEntry(index, entry)).ToList();
+        var uploads = batch
+            .Where(b => !echoes.Contains(b.Entry) || (b.Entry.IsValid == false && !PulledFromNightscout(b.Entry)))
+            .ToList();
+        var invalid = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
+        invalid.UnionWith(await sensor.SortInvalidAsync(OfType(uploads, "sgv"), OfType(batch, "sgv"), edit, correlationIds, ct));
+        invalid.UnionWith(await meter.SortInvalidAsync(OfType(uploads, "mbg"), OfType(batch, "mbg"), edit, correlationIds, ct));
+        invalid.UnionWith(await calibration.SortInvalidAsync(OfType(uploads, "cal"), OfType(batch, "cal"), edit, correlationIds, ct));
 
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var entry in entries)
+        foreach (var entry in entries.Where(e => !echoes.Contains(e) && !invalid.Contains(e)))
         {
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
-                    await sensor.AddAsync(entry, edit, correlationIds, id => BuildSensorGlucoseAsync(entry, id, ct), result);
+                    await sensor.AddAsync(entry, edit, correlationIds, result);
                     break;
                 case "mbg":
-                    await meter.AddAsync(entry, edit, correlationIds, id => Task.FromResult(MapToMeterGlucose(entry, id)), result);
+                    await meter.AddAsync(entry, edit, correlationIds, result);
                     break;
                 case "cal":
-                    await calibration.AddAsync(entry, edit, correlationIds, id => Task.FromResult(MapToCalibration(entry, id)), result);
+                    await calibration.AddAsync(entry, edit, correlationIds, result);
                     break;
                 default:
                     result.SkippedUnsupported++;
@@ -130,6 +155,13 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         await AttributeAsync(sensor.Models, DeviceAttributionCategories.SensorGlucose, ct);
         await AttributeAsync(meter.Models, DeviceAttributionCategories.MeterGlucose, ct);
 
+        using (SystemAttributedBatchWrites(_auditContext))
+        {
+            await sensor.SettleInvalidAsync(result, origin, ct);
+            await meter.SettleInvalidAsync(result, origin, ct);
+            await calibration.SettleInvalidAsync(result, origin, ct);
+        }
+
         using (edit ? null : SystemAttributedBatchWrites(_auditContext))
         {
             await sensor.WriteAsync(result, origin, ct);
@@ -139,12 +171,48 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
 
         return result;
 
+        static List<BatchEntry> OfType(IEnumerable<BatchEntry> entries, string type) =>
+            [.. entries.Where(b => string.Equals(b.Entry.Type, type, StringComparison.OrdinalIgnoreCase))];
+
         IEnumerable<string> ServedIds(string type) => entries
-            .Where(e => string.Equals(e.Type, type, StringComparison.OrdinalIgnoreCase))
+            .Where(e => string.Equals(e.Type, type, StringComparison.OrdinalIgnoreCase) && (edit || !PulledFromNightscout(e)))
             .Select(e => edit ? MongoObjectId.Coerce(e.Id) : e.Id)
             .Where(id => edit ? MongoObjectId.IsObjectId(id) : MongoObjectId.IsGuidPrefixShaped(id))
             .OfType<string>();
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
+    /// table that type is stored in.
+    /// </summary>
+    /// <remarks>
+    /// An entry another uploader sent names a stored record only by the 24-hex prefix the v1 reads
+    /// serve. A uuid it sends is a legacy id of its own, stored beside the record that uuid names,
+    /// which <see cref="EntryReadService.GetByIdAsync"/> resolves ahead of it. A pulled copy may still
+    /// carry the raw uuid older write-backs sent.
+    /// </remarks>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private async Task<HashSet<Entry>> PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    {
+        var echoes = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
+        foreach (var byType in entries.GroupBy(e => e.Type?.ToLowerInvariant()))
+        {
+            var table = byType.Key switch
+            {
+                "sgv" => Table(_sensorGlucoseRepository, WireForms.UuidPrefix),
+                "mbg" => Table(_meterGlucoseRepository, WireForms.UuidPrefix),
+                "cal" => Table(_calibrationRepository, WireForms.UuidPrefix),
+                _ => (KeyedTable?)null,
+            };
+            if (table is { } keyed)
+                echoes.UnionWith(await PointAtStoredRecordsAsync(
+                    byType, [keyed], PulledFromNightscout, ct, MongoObjectId.IsGuidPrefixShaped));
+        }
+
+        return echoes;
+    }
+
+    private static bool PulledFromNightscout(Entry entry) => entry.DataSource == DataSources.NightscoutConnector;
 
     private async Task AttributeAsync<TRecord>(
         List<TRecord> records, IReadOnlyList<DeviceCategory> categories, CancellationToken ct)
@@ -186,12 +254,18 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
     /// One reading table's part of a batch: the rows its served-shaped ids name, and the models it
     /// writes by legacy id or onto a stored row.
     /// </summary>
-    private sealed class EntryTable<TRecord>(ILegacyKeyedRepository<TRecord> repository)
+    private sealed class EntryTable<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository, Func<Entry, Guid?, Task<TRecord>> map)
         where TRecord : class, IV4Record
     {
         private IReadOnlyList<TRecord> _served = [];
         private readonly List<TRecord> _upserts = [];
         private readonly List<(TRecord Stored, TRecord Model)> _ontoStored = [];
+        private readonly Dictionary<string, TRecord> _live = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _invalidatedLegacyIds = new(StringComparer.Ordinal);
+        private readonly HashSet<Guid> _invalidatedIds = [];
+        private readonly List<TRecord> _storedDeleted = [];
+        private readonly List<Entry> _invalidating = [];
 
         /// <summary>Every model the batch writes to the table, in batch order.</summary>
         public List<TRecord> Models { get; } = [];
@@ -205,12 +279,13 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
 
         /// <summary>
         /// Whether <paramref name="id"/> is the 24-hex form <see cref="MongoObjectId.FromGuid"/> gave a
-        /// stored reading that has no legacy id: the id Nightscout write-back sent it under, now pulled
-        /// back by the connector. Keyed on <c>LegacyId</c>, the bulk upsert cannot see that reading and
-        /// would store it a second time, and an echo must not overwrite it. A reading with a legacy id
-        /// was written back under that id, which the bulk upsert already matches.
+        /// stored reading that has no legacy id, sent by an uploader other than the Nightscout
+        /// connector. Such a reading is often a connector's, keyed by its sync key alone: taking the
+        /// id onto it would rewrite its source and sync key, and the connector's next poll would store
+        /// it again. A pulled copy of it is pointed at it instead
+        /// (<see cref="PointEntriesAtStoredRecordsAsync"/>).
         /// </summary>
-        private bool Echoes(string? id) => id is not null && ByPrefix(id) is { LegacyId: null };
+        public bool Echoes(string? id) => id is not null && ByPrefix(id) is { LegacyId: null };
 
         /// <summary>
         /// The stored reading an edit's <paramref name="id"/> names when no reading carries it as its
@@ -236,19 +311,14 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             .MinBy(r => r.Id);
 
         /// <summary>
-        /// Maps <paramref name="entry"/> under the correlation id of the row it writes, unless it is an
-        /// upload's echo. An edit naming a row by another id writes under that row's legacy id, or onto
-        /// the row itself when it has none.
+        /// Maps <paramref name="entry"/> under the correlation id of the row it writes. An edit naming a
+        /// row by another id writes under that row's legacy id, or onto the row itself when it has none.
         /// </summary>
         public async Task AddAsync(
-            Entry entry, bool edit, Dictionary<string, Guid> correlationIds,
-            Func<Guid?, Task<TRecord>> map, DecompositionResult result)
+            Entry entry, bool edit, Dictionary<string, Guid> correlationIds, DecompositionResult result)
         {
-            if (!edit && Echoes(entry.Id))
-                return;
-
             var stored = edit && entry.Id is { } id ? Named(id) : null;
-            var model = await map(stored?.CorrelationId ?? CorrelationIdFor(entry.Id, correlationIds));
+            var model = await map(entry, stored?.CorrelationId ?? CorrelationIdFor(entry.Id, correlationIds));
             Models.Add(model);
             result.CorrelationId ??= model.CorrelationId;
             if (stored is null)
@@ -267,6 +337,70 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             }
         }
 
+        /// <summary>
+        /// Sorts this table's uploads sent with <c>isValid: false</c> by <see cref="InvalidUploads{TUpload}"/>.
+        /// A client names a reading by its legacy id, by the 24-hex form the v1 reads serve it under,
+        /// or, in an edit, as <see cref="Named"/> resolves it. No id is synthetic: a reading the
+        /// creates match by its time alone is not one the upload names.
+        /// </summary>
+        /// <returns>The uploads the rule took, which write nothing live.</returns>
+        public async Task<IReadOnlyList<Entry>> SortInvalidAsync(
+            IReadOnlyList<BatchEntry> uploads, IReadOnlyList<BatchEntry> batch, bool edit,
+            Dictionary<string, Guid> correlationIds, CancellationToken ct)
+        {
+            if (!uploads.Any(u => u.Entry.IsValid == false))
+                return [];
+
+            var ids = uploads.Where(u => u.Entry.IsValid == false).Select(u => u.Entry.Id).OfType<string>()
+                .Distinct(StringComparer.Ordinal).ToList();
+            foreach (var record in await repository.GetByLegacyIdsAsync(ids, ct))
+                _live.TryAdd(record.LegacyId!, record);
+
+            var sorted = await InvalidUploads<BatchEntry>.SortAsync(uploads, batch, new InvalidUploadRule<BatchEntry>(
+                u => u.Entry.Id,
+                u => u.Index,
+                u => u.Entry.IsValid,
+                (u, valid) => u.Entry.IsValid = valid,
+                u => LiveNamedBy(u.Entry.Id!, edit) is not null,
+                _ => true,
+                repository.GetDeletedLegacyIdsAsync), ct);
+
+            foreach (var upload in sorted.Invalidating)
+            {
+                var record = LiveNamedBy(upload.Entry.Id!, edit)!;
+                _invalidating.Add(upload.Entry);
+                if (record.LegacyId is { } legacyId)
+                    _invalidatedLegacyIds.Add(legacyId);
+                else
+                    _invalidatedIds.Add(record.Id);
+            }
+
+            foreach (var upload in sorted.StoredDeleted)
+                _storedDeleted.Add(await map(upload.Entry, CorrelationIdFor(upload.Entry.Id, correlationIds)));
+
+            return [.. uploads.Where(u => u.Entry.IsValid == false).Select(u => u.Entry)];
+        }
+
+        private TRecord? LiveNamedBy(string id, bool edit) =>
+            _live.GetValueOrDefault(id) ?? (edit ? Named(id) : ByPrefix(id));
+
+        /// <summary>
+        /// Deletes the readings <see cref="SortInvalidAsync"/> found invalidated, and stores the other
+        /// invalid uploads as rows already deleted with no device attributed, so a deleted document
+        /// registers none.
+        /// </summary>
+        public async Task SettleInvalidAsync(EntryDecomposition result, WriteOrigin origin, CancellationToken ct)
+        {
+            if (_invalidatedLegacyIds.Count > 0 || _invalidatedIds.Count > 0)
+            {
+                await repository.InvalidateAsync(_invalidatedLegacyIds, _invalidatedIds, origin, ct);
+                foreach (var entry in _invalidating)
+                    result.AddInvalidated(entry);
+            }
+            if (_storedDeleted.Count > 0)
+                await repository.StoreDeletedAsync(_storedDeleted, ct);
+        }
+
         public async Task WriteAsync(DecompositionResult result, WriteOrigin origin, CancellationToken ct)
         {
             await BulkUpsertAsync(repository, _upserts, result, origin, ct);
@@ -274,6 +408,9 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
                 await WriteOntoStoredAsync(repository, stored, model, result, origin, ct);
         }
     }
+
+    /// <summary>An entry of a batch, with its position in it.</summary>
+    private sealed record BatchEntry(int Index, Entry Entry);
 
     /// <summary>
     /// A legacy id sent more than once in a batch is written as its last version; a version that
@@ -374,10 +511,10 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         }
 
         DateTime? from = fromMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            ? fromMills.Value.ToUtcDateTime()
             : null;
         DateTime? to = toMills.HasValue
-            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            ? toMills.Value.ToUtcDateTime()
             : null;
 
         var sgDeleted = typeFilter is null or "sgv"
@@ -415,7 +552,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return new SensorGlucose
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Mgdl = WrittenMgdl(entry),
             Direction = MapDirection(entry.Direction),
             TrendRate = entry.TrendRate,
@@ -441,7 +578,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return new MeterGlucose
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Mgdl = WrittenMgdl(entry),
             Device = entry.Device,
             App = entry.App,
@@ -460,7 +597,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         return new Calibration
         {
             LegacyId = entry.Id,
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            Timestamp = entry.Mills.ToUtcDateTime(),
             Slope = entry.Slope,
             Intercept = entry.Intercept,
             Scale = entry.Scale,

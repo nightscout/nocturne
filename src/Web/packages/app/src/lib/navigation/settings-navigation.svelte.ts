@@ -7,6 +7,7 @@
 import type { Component } from "svelte";
 import Building from "@lucide/svelte/icons/building";
 import Building2 from "@lucide/svelte/icons/building-2";
+import MailPlus from "@lucide/svelte/icons/mail-plus";
 import FileSearch from "@lucide/svelte/icons/file-search";
 import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
@@ -22,6 +23,7 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import User from "@lucide/svelte/icons/user";
 import UserPlus from "@lucide/svelte/icons/user-plus";
 import Users from "@lucide/svelte/icons/users";
+import UsersRound from "@lucide/svelte/icons/users-round";
 import { satisfiesScope } from "#lib/authorization/scopes.js";
 
 /** One settings destination. */
@@ -34,6 +36,8 @@ export type SettingsLink = {
   strict?: boolean;
   /** Scopes of which the viewer must hold at least one to be offered the link. */
   anyScope?: readonly string[];
+  /** Not offered to the demo visitor, whom the API refuses on the page behind it. */
+  notForDemoSubject?: boolean;
 };
 
 /**
@@ -55,6 +59,8 @@ export interface SettingsViewer {
   grantedScopes: readonly string[];
   /** Whether the viewer administers the platform. */
   isPlatformAdmin: boolean;
+  /** Whether the API refuses the viewer as the demo subject, as `page.data.refusedAsDemoSubject` carries it. */
+  refusedAsDemoSubject?: boolean;
 }
 
 function settingsGroups(): SettingsGroup[] {
@@ -62,7 +68,7 @@ function settingsGroups(): SettingsGroup[] {
     {
       id: "personal",
       title: "My settings",
-      description: "Your sign-in, your display, and your linked chat accounts.",
+      description: "Your sign-in, your display, your teams, and your linked chat accounts.",
       links: [
         {
           title: "Account",
@@ -75,6 +81,13 @@ function settingsGroups(): SettingsGroup[] {
           description: "Theme, units, language, and display preferences.",
           href: "/settings/appearance",
           icon: Palette,
+        },
+        {
+          title: "Teams",
+          description: "The teams that you are a member of, and their managers.",
+          href: "/settings/teams",
+          icon: UsersRound,
+          notForDemoSubject: true,
         },
         {
           title: "Discord",
@@ -171,6 +184,12 @@ function settingsGroups(): SettingsGroup[] {
           icon: Building2,
         },
         {
+          title: "Invite people",
+          description: "Links that let people make their own site on this server.",
+          href: "/settings/admin/invites",
+          icon: MailPlus,
+        },
+        {
           title: "Access requests",
           description: "People who ask to join this server.",
           href: "/settings/access-requests",
@@ -217,8 +236,9 @@ export function visibleSettingsGroups(viewer: SettingsViewer): SettingsGroup[] {
       ...group,
       links: group.links.filter(
         (link) =>
-          !link.anyScope ||
-          link.anyScope.some((scope) => satisfiesScope(viewer.grantedScopes, scope))
+          !(link.notForDemoSubject && viewer.refusedAsDemoSubject) &&
+          (!link.anyScope ||
+            link.anyScope.some((scope) => satisfiesScope(viewer.grantedScopes, scope)))
       ),
     }))
     .filter((group) => group.links.length > 0);

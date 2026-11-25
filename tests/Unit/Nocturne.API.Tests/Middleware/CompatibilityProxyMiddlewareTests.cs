@@ -15,6 +15,7 @@ using Nocturne.API.Services.Compatibility;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Microsoft.Extensions.Hosting;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -133,7 +134,7 @@ public class CompatibilityProxyMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        await stored.WaitAsync(TimeSpan.FromSeconds(10));
+        await stored.WaitAsync(Eventually.DefaultPatience);
         _requestServices!.ScopeFactoryRequested.Should().BeTrue();
         _forwardingServiceMock.Verify(
             s => s.ForwardToNightscoutAsync(It.IsAny<ClonedRequest>(), It.IsAny<CancellationToken>()),
@@ -165,7 +166,7 @@ public class CompatibilityProxyMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        (await stored.Task.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(CredentialRouteRedactor.TokenExchangePath);
+        (await stored.Task.WaitAsync(Eventually.DefaultPatience)).Should().Be(CredentialRouteRedactor.TokenExchangePath);
         _forwardingServiceMock.Verify(
             s => s.ForwardToNightscoutAsync(cloned, It.IsAny<CancellationToken>()),
             Times.Once);
@@ -199,7 +200,7 @@ public class CompatibilityProxyMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        (await storingTenant.Task.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(tenant.TenantId);
+        (await storingTenant.Task.WaitAsync(Eventually.DefaultPatience)).Should().Be(tenant.TenantId);
     }
 
     [Fact]
@@ -336,7 +337,7 @@ public class CompatibilityProxyMiddlewareTests
 
         // Act — should not throw
         await middleware.InvokeAsync(context);
-        await forwarded.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await forwarded.Task.WaitAsync(Eventually.DefaultPatience);
 
         // Assert — response is still correct
         context.Response.Body.Seek(0, SeekOrigin.Begin);

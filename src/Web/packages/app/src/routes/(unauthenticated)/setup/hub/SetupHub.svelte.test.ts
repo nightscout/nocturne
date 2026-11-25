@@ -247,7 +247,7 @@ describe("SetupHub", () => {
 
       const card = page.getByTestId("hub-step-down");
       await expect.element(card.getByText("Can see and log treatments")).toBeVisible();
-      await expect.element(card.getByText("They can also log insulin and carbs, and change alerts.")).toBeVisible();
+      await expect.element(card.getByText("They can also log insulin and carbs, change alerts, and set up data sources.")).toBeVisible();
       await card.getByRole("button", { name: "Step down" }).click();
       await page.getByRole("alertdialog").getByRole("button", { name: "Step down" }).click();
 

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -74,6 +75,7 @@ public sealed class SqliteTestDatabase : IDisposable
 
         Connection = new SqliteConnection("DataSource=:memory:");
         Connection.Open();
+        Connection.CreateFunction<string?, string?, int?>(ArrayPositionFunction, ArrayPosition, isDeterministic: true);
 
         var builder = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(Connection)
@@ -104,6 +106,29 @@ public sealed class SqliteTestDatabase : IDisposable
         seed.SaveChanges();
     }
 
+    /// <summary>
+    /// PostgreSQL's <c>array_position</c> over the JSON array a parameter array is bound as here: the
+    /// one-based position of the first element equal to the value, or null. Elements are compared as text.
+    /// </summary>
+    public const string ArrayPositionFunction = "array_position";
+
+    private static int? ArrayPosition(string? array, string? value)
+    {
+        if (array is null || value is null)
+            return null;
+
+        using var json = JsonDocument.Parse(array);
+        var position = 1;
+        foreach (var element in json.RootElement.EnumerateArray())
+        {
+            if ((element.ValueKind == JsonValueKind.String ? element.GetString() : element.GetRawText()) == value)
+                return position;
+            position++;
+        }
+
+        return null;
+    }
+
     public SqliteConnection Connection { get; }
 
     public DbContextOptions<NocturneDbContext> Options { get; }
@@ -124,10 +149,12 @@ public sealed class SqliteTestDatabase : IDisposable
     /// <summary>
     /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>
     /// as the context pool and behind <c>INocturneDbContextFactory</c>, every context over the same
-    /// connection, and the subject repository the authentication pipeline reads through.
+    /// connection, and the subject repository the authentication pipeline reads through, with no
+    /// account link route (<see cref="AccountLinkRoutes.Off"/>).
     /// </summary>
     public IServiceCollection AddToServices(IServiceCollection services)
     {
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddSingleton(ContextFactory);
         services.AddSingleton(ContextFactory.AsNocturneFactory());
         services.AddTransient<ISubjectRepository, SubjectRepository>();

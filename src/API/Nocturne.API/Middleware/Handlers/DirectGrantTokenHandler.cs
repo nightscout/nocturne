@@ -22,7 +22,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     internal const string TokenPrefix = "noc_";
 
     /// <summary>
-    /// Handler priority (150 - after session cookies, before OIDC/legacy JWT)
+    /// Handler priority (150 - after session cookies, before OIDC and the session bearer handler)
     /// </summary>
     public int Priority => 150;
 
@@ -40,7 +40,9 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// Creates a new instance of DirectGrantTokenHandler
     /// </summary>
     /// <param name="grants">The stored grants, pinned per read to the request's tenant.</param>
+    /// <param name="timeProvider">Gives the instant a grant must be active at.</param>
     /// <param name="lastUsedClaims">Decides which concurrent request stamps the grant.</param>
+    /// <param name="logger">Logs each lookup's outcome and a failed last-used stamp.</param>
     public DirectGrantTokenHandler(
         IOAuthGrantRepository grants,
         TimeProvider timeProvider,
@@ -92,7 +94,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         {
             _ = RecordLastUsedAsync(
                 _grants, _logger, grant.Id, tenantCtx.TenantId,
-                context.Connection.RemoteIpAddress?.ToString(),
+                context.GetClientAddress(),
                 context.Request.Headers.UserAgent.FirstOrDefault());
         }
 

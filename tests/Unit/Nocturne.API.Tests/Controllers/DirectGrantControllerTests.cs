@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
@@ -74,9 +75,10 @@ public class DirectGrantControllerTests : IDisposable
             auditService,
             new GrantRevocationService(
                 new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            TimeProvider.System,
             new Mock<ILogger<DirectGrantService>>().Object);
 
-        _controller = new DirectGrantController(new SubjectRepository(_dbContext.AsFactory()), directGrantService);
+        _controller = new DirectGrantController(new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), directGrantService);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,
@@ -221,6 +223,40 @@ public class DirectGrantControllerTests : IDisposable
         Assert.True(grant.LimitTo24Hours);
     }
 
+    // A token the caller mints for themselves follows what they read (the sum of their reasons), not
+    // what they may give: the limit is stamped on the grant and would outlive a team reason.
+    public static TheoryData<string, GrantCeiling?, bool, bool> OwnTokenHistoryLimits => new()
+    {
+        { "mixed, direct reason limited, sum not", new GrantCeiling(new HashSet<string> { Scope.FullAccess }, null, true), false, false },
+        { "team only, sum not limited", null, false, false },
+        { "mixed, sum limited", new GrantCeiling(new HashSet<string> { Scope.FullAccess }, null, true), true, true },
+    };
+
+    [Theory]
+    [MemberData(nameof(OwnTokenHistoryLimits))]
+    public async Task Create_OwnToken_FollowsTheSumsHistoryLimitNotTheGrantCeiling(
+        string caller, GrantCeiling? ceiling, bool sumClamped, bool expectedLimit)
+    {
+        _controller.HttpContext.SetGrantCeiling(ceiling);
+        if (sumClamped)
+        {
+            _controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+        }
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = caller,
+            Scopes = ["glucose.read"],
+            LimitTo24Hours = false,
+        });
+
+        var response = Assert.IsType<CreateDirectGrantResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(expectedLimit, response.LimitTo24Hours);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == response.Id);
+        Assert.Equal(expectedLimit, grant.LimitTo24Hours);
+    }
+
     [Theory]
     [InlineData("*")]
     [InlineData("treatments.readwrite")]
@@ -252,6 +288,22 @@ public class DirectGrantControllerTests : IDisposable
         });
 
         Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Create_ByATenantSettingsHolder_StoresTheConnectorScopes()
+    {
+        _controller.HttpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.TenantSettings };
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Connector repair",
+            Scopes = [Scope.ConnectorsReadWrite, Scope.ConnectorsRead],
+        });
+
+        var response = Assert.IsType<CreateDirectGrantResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == response.Id);
+        Assert.Equal([Scope.ConnectorsRead, Scope.ConnectorsReadWrite], grant.Scopes.Order(StringComparer.Ordinal));
     }
 
     [Fact]

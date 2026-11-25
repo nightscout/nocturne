@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { wuchale } from "wuchale/vite";
+import { WUCHALE_CONFIG_PATH } from "./wuchale.dev.js";
 
 /**
  * Server rendering, with the translation transform in the pipeline.
@@ -15,13 +16,17 @@ import { wuchale } from "wuchale/vite";
 export default defineConfig({
   plugins: [
     svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } }),
-    wuchale(),
+    wuchale({ configPath: WUCHALE_CONFIG_PATH }),
   ],
   test: {
     // Its own suffix: `*.ssr.test.ts` already belongs to tests that run under
     // the node config without the production translation transform.
     include: ["src/**/*.render.test.ts"],
     environment: "node",
+    // The static chart theme reads the stylesheets as text, which vitest empties unless it processes them.
+    css: { include: [/\.css\?raw$/] },
+    // Draw on the test's thread from the source, not in a worker from a bundle built earlier.
+    env: { NOCTURNE_REPORT_IMAGE_WORKER: "off" },
     // As in the app's SSR build (vite.config.ts `ssr.noExternal`): layerchart's and @layerstack's
     // dist import `svelte` without declaring it, which Node cannot resolve from pnpm's store, so
     // they go through Vite. Matched against the resolved path.

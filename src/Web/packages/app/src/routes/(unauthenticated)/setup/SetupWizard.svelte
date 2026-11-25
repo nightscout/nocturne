@@ -25,12 +25,13 @@
   import { isGlucoseUnits } from "#lib/utils/formatting.js";
   import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import { startOrResumeMigration } from "./migration-session";
+  import { watchImport } from "#lib/migration/background-import.svelte.js";
   import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
   import type {
     UploaderApp,
     DataSourceInfo,
     PatientRelationship,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import StepSidebar from "./StepSidebar.svelte";
   import SetupChrome from "./SetupChrome.svelte";
@@ -409,13 +410,45 @@
     if (path !== "migration" || !nightscoutConnected) return;
     try {
       migrationStartError = undefined;
+      migrationJobId = undefined;
+      importResult = null;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
+      // The app follows the run from here, whichever way setup is left.
+      if (migrationJobId) watchImport(migrationJobId);
     } catch (err) {
       // Every 400 from start-from-connector means the saved connector is missing or has no URL.
       migrationStartError =
         errorStatus(err) === 400
           ? "Your Nightscout connection is not saved yet."
           : describeSubmitError(err, "Could not start the import. Try again.");
+    }
+  }
+
+  // The recent data is in, so the app has something to show: setup ends on the dashboard, where
+  // the app's own notice follows the rest of the run. Where the server cannot record setup as
+  // finished, the finish step says the same and offers the retry.
+  async function handleRecentDataReady() {
+    const result = await markSetupComplete().catch(() => undefined);
+    if (!result?.completed) {
+      goToFinish();
+      return;
+    }
+    await goto(resolve(""), { refreshAll: true });
+  }
+
+  // Counts the runs this visit to the step has watched, so a retry mounts a fresh ImportProgress.
+  let importAttempt = $state(0);
+  let retryingImport = $state(false);
+
+  async function retryImport() {
+    retryingImport = true;
+    try {
+      await startImport();
+      importSettled = false;
+      importProgress = 0;
+      importAttempt++;
+    } finally {
+      retryingImport = false;
     }
   }
 </script>
@@ -426,10 +459,6 @@
 
 <SetupChrome>
   {#snippet actions()}
-    <span class="hidden font-mono text-xs text-muted-foreground sm:inline">
-      Step {activeIndex + 1} of {activeSteps.length}
-    </span>
-
     {#if !setupRequired}
       <!-- Marks onboarding complete on the server so it is not offered again. -->
       <Button variant="ghost-muted" size="xs" onclick={handleExitSetup}>
@@ -483,7 +512,7 @@
             <div
               class="flex items-center gap-3 text-xs text-muted-foreground"
             >
-              <span class="font-mono uppercase tracking-wide">Step {String(activeIndex + 1).padStart(2, "0")} / {String(activeSteps.length).padStart(2, "0")}</span>
+              <span>Step {activeIndex + 1} of {activeSteps.length}</span>
               <span aria-hidden="true">·</span>
               <span>{activeStep?.short}</span>
             </div>
@@ -492,10 +521,10 @@
                 <Badge variant="secondary">
                   {#if path === "migration"}
                     <Cable />
-                    Nightscout Migration
+                    Nightscout migration
                   {:else}
                     <Sprout />
-                    Fresh Start
+                    Fresh start
                   {/if}
                 </Badge>
               {/if}
@@ -507,7 +536,7 @@
             </div>
           </div>
 
-          <div class="flex-1 px-1 py-3 @lg/card:px-5 @max-4xl/wizard:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-44">
+          <div class="flex-1 px-1 py-3 @lg/card:px-5 @max-4xl/wizard:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-24">
             <StepArtwork
               art={activeStep?.art ?? "welcome"}
               progress={artProgress}
@@ -573,6 +602,7 @@
                   onSelectConnector={handleSelectConnector}
                   onSelectUploader={handleSelectUploader}
                   onSkip={goToFinish}
+                  signInRequiredForApps={page.data?.isHandedOffSession === true}
                 />
               </div>
             {:else if activeStep?.id === "sync"}
@@ -598,10 +628,10 @@
                   </div>
                   <ConnectorSetup
                     connectorId={selectedConnectorId}
+                    variant="setup"
                     primaryAction="save-and-finish"
                     showToggle={false}
                     showDangerZone={false}
-                    showCapabilities={true}
                     onComplete={handleConnectorSaved}
                     onCancel={handleBack}
                   />
@@ -630,15 +660,18 @@
                 {/if}
               </div>
             {:else if activeStep?.id === "import"}
-              <ImportProgress
-                jobId={migrationJobId}
-                startError={migrationStartError}
-                voice={voice}
-                onProgressChange={(pct) => importProgress = pct}
-                onResult={(result) => importResult = result}
-                onSettled={() => importSettled = true}
-                onComplete={goToFinish}
-              />
+              {#key importAttempt}
+                <ImportProgress
+                  jobId={migrationJobId}
+                  startError={migrationStartError}
+                  voice={voice}
+                  onProgressChange={(pct) => importProgress = pct}
+                  onResult={(result) => importResult = result}
+                  onSettled={() => importSettled = true}
+                  onRecentReady={handleRecentDataReady}
+                  onComplete={goToFinish}
+                />
+              {/key}
             {:else if activeStep?.id === "finish"}
               <Finish
                 path={path}
@@ -654,9 +687,9 @@
 
           {#if !setupRequired}
             <div
-              class="flex flex-col-reverse gap-3 @lg/card:flex-row @lg/card:justify-between @lg/card:items-center px-4 py-3.5 @xl/card:px-7 @xl/card:py-4.5 border-t bg-background @4xl/wizard:bg-muted/40 sticky bottom-0 z-10 @4xl/wizard:static *:@lg/card:w-auto *:w-full"
+              class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 @xl/card:px-7 @xl/card:py-4.5 border-t bg-background @4xl/wizard:bg-muted/40 sticky bottom-0 z-10 @4xl/wizard:static"
             >
-              <div class="empty:hidden [&>button]:w-full @lg/card:[&>button]:w-auto">
+              <div class="empty:hidden">
                 {#if stepIndex > 0 && currentStep?.id !== "finish" && !importBlocking}
                   <Button variant="outline" onclick={handleBack}>
                     <ArrowLeft class="h-4 w-4" />
@@ -664,7 +697,7 @@
                   </Button>
                 {/if}
               </div>
-              <div class="flex flex-col-reverse gap-3 @lg/card:flex-row @lg/card:items-center *:w-full *:@lg/card:w-auto">
+              <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
                 {#if currentStep?.id === "finish"}
                   <Button onclick={handleContinueToHub}>
                     Continue
@@ -672,6 +705,11 @@
                   </Button>
                 {:else if currentStep?.id === "import"}
                   {#if importSettled}
+                    {#if importResult === "failed" || migrationStartError}
+                      <Button variant="outline" onclick={retryImport} disabled={retryingImport}>
+                        Try again
+                      </Button>
+                    {/if}
                     <Button onclick={handleNext}>
                       Continue
                       <ArrowRight class="h-4 w-4" />

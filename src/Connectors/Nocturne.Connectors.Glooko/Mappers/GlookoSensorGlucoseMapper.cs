@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
 
@@ -10,10 +9,11 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 
 public class GlookoSensorGlucoseMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly GlookoConnectorConfiguration _config;
     private readonly string _connectorSource;
     private readonly ILogger _logger;
-    private readonly TimeProvider _clock;
     private readonly GlookoTimeMapper _timeMapper;
     private readonly HashSet<string> _unrecognisedTrends = new(StringComparer.OrdinalIgnoreCase);
 
@@ -21,14 +21,12 @@ public class GlookoSensorGlucoseMapper
         GlookoConnectorConfiguration config,
         string connectorSource,
         GlookoTimeMapper timeMapper,
-        ILogger logger,
-        TimeProvider clock)
+        ILogger logger)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
@@ -55,7 +53,6 @@ public class GlookoSensorGlucoseMapper
     /// </summary>
     public IEnumerable<SensorGlucose> TransformEgvsToSensorGlucose(IEnumerable<GlookoEgv>? egvs)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<SensorGlucose>();
         if (egvs == null) return results;
 
@@ -72,21 +69,17 @@ public class GlookoSensorGlucoseMapper
             // Prefer Glooko's guid; else the RAW fake-UTC display string (stable across timezone
             // re-correction, unlike corrected ticks) so a re-sync upserts rather than duplicates.
             var key = !string.IsNullOrEmpty(egv.Guid)
-                ? $"glooko_egv_{egv.Guid}"
-                : $"glooko_egv_raw_{egv.DisplayTime}";
+                ? LegacyIds.Of("egv", egv.Guid)
+                : LegacyIds.Of("egv_raw", egv.DisplayTime);
 
             results.Add(new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = date.Value,
                 LegacyId = key,
                 SyncIdentifier = key,
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 Mgdl = mgdl,
                 Direction = ParseTrendToDirection(egv.TrendArrow),
-                CreatedAt = now,
-                ModifiedAt = now
             });
         }
 
@@ -99,7 +92,6 @@ public class GlookoSensorGlucoseMapper
 
     public IEnumerable<SensorGlucose> TransformV3ToSensorGlucose(GlookoV3GraphResponse graphData, string? meterUnits)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<SensorGlucose>();
         if (graphData?.Series == null) return results;
 
@@ -117,18 +109,14 @@ public class GlookoSensorGlucoseMapper
 
             results.Add(new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                LegacyId = $"glooko_v3_{reading.X}",
+                LegacyId = LegacyIds.Of("v3", reading.X),
                 // Keyed on the raw fake-UTC unix (stable across timezone re-correction), so re-imports
                 // update the row in place rather than duplicating it.
-                SyncIdentifier = $"glooko_v3_{reading.X}",
+                SyncIdentifier = LegacyIds.Of("v3", reading.X),
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 Mgdl = mgdl,
                 Direction = GlucoseDirection.Flat,
-                CreatedAt = now,
-                ModifiedAt = now
             });
         }
 
@@ -145,7 +133,6 @@ public class GlookoSensorGlucoseMapper
     /// </summary>
     public IEnumerable<BGCheck> TransformV3ToBGChecks(GlookoV3GraphResponse graphData, string? meterUnits)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<BGCheck>();
         if (graphData?.Series == null) return results;
 
@@ -162,21 +149,17 @@ public class GlookoSensorGlucoseMapper
             if (mgdl <= 0) continue;
 
             var legacyId = !string.IsNullOrEmpty(reading.Id)
-                ? $"glooko_v3_bg_{reading.Id}"
-                : $"glooko_v3_bg_{reading.X}";
+                ? LegacyIds.Of("v3_bg", reading.Id)
+                : LegacyIds.Of("v3_bg", reading.X);
 
             results.Add(new BGCheck
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
                 LegacyId = legacyId,
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 Glucose = mgdl,
                 Units = GlucoseUnit.MgDl,
                 GlucoseType = GlucoseType.Finger,
-                CreatedAt = now,
-                ModifiedAt = now
             });
         }
 
@@ -228,7 +211,6 @@ public class GlookoSensorGlucoseMapper
 
     private SensorGlucose? ParseSensorGlucose(GlookoCgmReading reading)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         try
         {
             if (reading.Value <= 0 || reading.SoftDeleted == true) return null;
@@ -240,27 +222,23 @@ public class GlookoSensorGlucoseMapper
             var mgdl = reading.Value / 100.0;
 
             var legacyId = !string.IsNullOrEmpty(reading.Guid)
-                ? $"glooko_cgm_{reading.Guid}"
-                : $"glooko_{date.Value.Ticks}";
+                ? LegacyIds.Of("cgm", reading.Guid)
+                : LegacyIds.Of(date.Value.Ticks);
 
             // Stable across timezone re-correction: prefer Glooko's guid, else the RAW fake-UTC string
             // (not the corrected ticks, which move when the timeline changes) — so re-imports upsert.
             var syncId = !string.IsNullOrEmpty(reading.Guid)
-                ? $"glooko_cgm_{reading.Guid}"
-                : $"glooko_cgm_raw_{reading.Timestamp}";
+                ? LegacyIds.Of("cgm", reading.Guid)
+                : LegacyIds.Of("cgm_raw", reading.Timestamp);
 
             return new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = date.Value,
                 LegacyId = legacyId,
                 SyncIdentifier = syncId,
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 Mgdl = mgdl,
                 Direction = ParseTrendToDirection(reading.Trend),
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -272,7 +250,6 @@ public class GlookoSensorGlucoseMapper
 
     private BGCheck? ParseBGCheck(GlookoMeterReading reading)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         try
         {
             if (reading.Value <= 0 || reading.SoftDeleted == true) return null;
@@ -284,21 +261,17 @@ public class GlookoSensorGlucoseMapper
             var mgdl = reading.Value / 100.0;
 
             var legacyId = !string.IsNullOrEmpty(reading.Guid)
-                ? $"glooko_meter_{reading.Guid}"
-                : $"glooko_meter_{date.Value.Ticks}";
+                ? LegacyIds.Of("meter", reading.Guid)
+                : LegacyIds.Of("meter", date.Value.Ticks);
 
             return new BGCheck
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = date.Value,
                 LegacyId = legacyId,
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 Glucose = mgdl,
                 Units = GlucoseUnit.MgDl,
                 GlucoseType = GlucoseType.Finger,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -337,5 +310,5 @@ public class GlookoSensorGlucoseMapper
     }
 
     private static double ConvertToMgdl(double value, string? meterUnits) =>
-        meterUnits?.ToLowerInvariant() == "mmoll" ? value * GlucoseConstants.MgdlPerMmol : value;
+        GlucoseUnits.ToMgdl(value, GlucoseUnits.Parse(meterUnits) ?? GlucoseUnit.MgDl);
 }

@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -40,6 +41,7 @@ internal sealed class AlertSnoozeService(
         var instance = await db.AlertInstances
             .Include(i => i.AlertExcursion)
                 .ThenInclude(e => e!.AlertRule)
+            .OfCondition(includeTest: true)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
 
         if (instance is null)
@@ -61,20 +63,13 @@ internal sealed class AlertSnoozeService(
         // mid-snooze; the resume dispatch creates fresh rows.
         await repository.ExpirePendingDeliveriesAsync([instanceId], ct);
 
-        try
+        await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
-            {
-                tenantId,
-                excursionId = instance.AlertExcursionId,
-                instanceId,
-                snoozedUntil = until,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_snoozed for instance {InstanceId}", instanceId);
-        }
+            tenantId,
+            excursionId = instance.AlertExcursionId,
+            instanceId,
+            snoozedUntil = until,
+        });
 
         await alarmRelay.ClearIfQuietAsync([instance.AlertExcursionId], ct);
 
@@ -97,6 +92,7 @@ internal sealed class AlertSnoozeService(
                 .AsNoTracking()
                 .Include(i => i.AlertExcursion)
                     .ThenInclude(e => e!.AlertRule)
+                .OfCondition(includeTest: true)
                 .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
         }
 
@@ -116,15 +112,17 @@ internal sealed class AlertSnoozeService(
 
         // Same freshness bar as the sweep's snooze context: a stale value would describe a patient
         // who may have moved on, so the re-notification carries no reading instead.
-        var latest = await canonicalGlucose.GetLatestAsync(ct);
+        var latest = (await AlertReadings.SelectAsync(canonicalGlucose, now, ct)).Selected;
         var fresh = latest is not null && now - latest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
             ? latest
             : null;
+        var trend = fresh is null ? default : await ReadingTrend.ForAsync(fresh, canonicalGlucose, ct);
         var baseContext = new SensorContext
         {
-            LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
+            LatestValue = fresh?.Mgdl.ToDecimal(),
             LatestTimestamp = fresh?.Timestamp,
-            TrendRate = (decimal?)fresh?.TrendRate,
+            TrendRate = trend.Rate,
+            TrendBucket = trend.Bucket,
             LastReadingAt = latest?.Timestamp,
         };
 
@@ -141,7 +139,7 @@ internal sealed class AlertSnoozeService(
         {
             context = await contextEnricher.EnrichAsync(baseContext, [rule], ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Failed to enrich context for snooze resume of instance {InstanceId}; delivering without DND check",
@@ -163,7 +161,7 @@ internal sealed class AlertSnoozeService(
         var payload = AlertPayloads.Build(
             rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
 
-        await deliveryService.DispatchAsync(instance.Id, channels, payload, ct);
+        await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",

@@ -12,14 +12,15 @@ namespace Nocturne.Connectors.Twiist.Configurations;
     ServiceNames.TwiistConnector,
     "TWIIST",
     "ConnectSource.Twiist",
-    "twiist-connector",
+    DataSources.TwiistConnector,
     "twiist",
     ConnectorCategory.Cgm,
     "Connect to Twiist Insight (Omnipod 5 / Tidepool Loop) via the follower API",
     "Twiist Insight",
     SupportsHistoricalSync = false,
     SupportsManualSync = true,
-    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals]
+    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals],
+    LegacyIdPrefix = "twiist"
 )]
 public class TwiistConnectorConfiguration : BaseConnectorConfiguration
 {

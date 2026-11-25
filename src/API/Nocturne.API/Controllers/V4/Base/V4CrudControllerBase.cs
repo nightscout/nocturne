@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
@@ -70,7 +71,12 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <returns>A <typeparamref name="TModel"/> instance with updated fields.</returns>
     protected abstract TModel MapUpdateToModel(Guid id, TUpdateRequest request, TModel existing);
 
-    /// <summary>Creates a new record and returns it with a `Location` header pointing to the created resource.</summary>
+    /// <summary>
+    /// Creates a new record and returns it with a `Location` header pointing to the created resource.
+    /// A request with no `Timestamp` is rejected with `400 Bad Request`. A record whose
+    /// `(dataSource, syncIdentifier)` is held by a record the owner deleted is refused with
+    /// `409 Conflict`; restore the deleted record instead.
+    /// </summary>
     /// <param name="request">The data used to create the record.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
@@ -93,8 +99,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var model = MapCreateToModel(request);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
 
         if (await OnBeforeCreateAsync(model, request, ct) is { } result)
             return result;
@@ -107,12 +113,19 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
-    /// <summary>Creates or updates many records in one request, and returns them.</summary>
+    /// <summary>
+    /// Creates or updates many records in one request, and returns them. Each item's outcome is
+    /// decided on its own. For types that upsert, an item carrying both `dataSource` and `syncIdentifier` updates
+    /// the matching record in place, and an item whose pair is held by a deleted record is skipped;
+    /// other types, and items without both fields, insert. An empty body, too many items, an item
+    /// with no `timestamp`, an item with `syncIdentifier` but no `dataSource`, or an item that fails
+    /// validation fails the whole request with `400 Bad Request` before anything is saved.
+    /// </summary>
     /// <param name="requests">The records to write, at most 1000 of them.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
-    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, basal
-    /// injections, sensor glucose, notes, device events and BG checks upsert on the sync key: an item
+    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, carb
+    /// intakes, basal injections, sensor glucose, notes, device events, BG checks and temp basals upsert on the sync key: an item
     /// carrying both `dataSource` and `syncIdentifier` updates in place the row already matched by
     /// that pair, and an item whose pair is held by a record the owner deleted is skipped. Every other
     /// type — calibrations, meter readings and bolus calculations — inserts, as does any item not
@@ -133,7 +146,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         [FromBody] IReadOnlyList<TCreateRequest> requests, CancellationToken ct = default)
     {
         var naming = BulkNaming;
-        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Singular, naming.Plural, ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Plural, ct) is { } invalid)
             return invalid;
 
         var models = new List<TModel>(requests.Count);
@@ -147,10 +160,15 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         await RecordUpsertTargetsAsync(footprint, models, ct);
         var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
         footprint?.AddRange(written.Select(w => w.Timestamp));
-        return StatusCode(StatusCodes.Status201Created, await OnAfterBulkCreateAsync(written, ct));
+        var returned = await OnAfterBulkCreateAsync(written, ct);
+        await EnrichCommittedAsync(returned, ct);
+        return StatusCode(StatusCodes.Status201Created, returned);
     }
 
-    /// <summary>Updates an existing record by ID and returns the updated record.</summary>
+    /// <summary>
+    /// Updates an existing record by ID and returns the updated record. Returns `404 Not Found` if
+    /// the record does not exist, and `400 Bad Request` if the request has no `Timestamp`.
+    /// </summary>
     /// <param name="id">The unique identifier of the record to update.</param>
     /// <param name="request">The data to apply to the existing record.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -174,8 +192,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
 
         var model = MapUpdateToModel(id, request, existing);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
 
         if (await OnBeforeUpdateAsync(model, request, existing, ct) is { } result)
             return result;
@@ -184,6 +202,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         {
             var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.AddRange([existing.Timestamp, updated.Timestamp]);
+            await EnrichCommittedAsync([updated], ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -215,7 +234,11 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         }
     }
 
-    /// <summary>Lists soft-deleted records available for restoration, ordered by deletion date (newest first).</summary>
+    /// <summary>
+    /// Lists soft-deleted records available for restoration, ordered by deletion date (newest
+    /// first). Needs write access, not only read access, and is refused to read-only credentials
+    /// such as a public share link.
+    /// </summary>
     /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
     /// <param name="offset">Number of records to skip for pagination. Defaults to `0`.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -237,12 +260,17 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
-        var data = await Repository.GetDeletedAsync(limit, offset, ct);
+        var data = (await Repository.GetDeletedAsync(limit, offset, ct)).ToList();
+        await OnBeforeReturnAsync(data, ct);
         var total = await Repository.CountDeletedAsync(ct);
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
 
-    /// <summary>Restores a soft-deleted record by ID.</summary>
+    /// <summary>
+    /// Restores a soft-deleted record by ID. Returns `404 Not Found` if no soft-deleted record has
+    /// the ID. A record whose legacy id or `(dataSource, syncIdentifier)` is now held by a live
+    /// record is refused with `409 Conflict` and stays deleted.
+    /// </summary>
     /// <param name="id">The unique identifier of the soft-deleted record.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
@@ -266,6 +294,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
             var restored = await Repository.RestoreAsync(id, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.Add(restored.Timestamp);
             await OnAfterRestoreAsync(restored, ct);
+            await EnrichCommittedAsync([restored], ct);
             return Ok(restored);
         }
         catch (KeyNotFoundException)
@@ -274,7 +303,13 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         }
     }
 
-    /// <summary>Restores multiple soft-deleted records by their IDs.</summary>
+    /// <summary>
+    /// Restores multiple soft-deleted records by their IDs. IDs that match no soft-deleted record
+    /// are ignored. A record left deleted because a live record holds its key is listed in
+    /// `conflicts`; the rest of the batch is still restored. If a live record takes one of those
+    /// keys while the batch is saving, nothing is restored and the request is refused with
+    /// `409 Conflict`.
+    /// </summary>
     /// <param name="ids">The unique identifiers of the soft-deleted records.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
@@ -295,8 +330,18 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var result = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
         TenantCacheWriteFootprint.Of(HttpContext)?.AddRange(result.Restored.Select(r => r.Timestamp));
+        await EnrichCommittedAsync([.. result.Restored], ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Runs <see cref="V4ReadOnlyControllerBase{TModel, TRepository}.OnBeforeReturnAsync"/> for an action
+    /// that has already committed its write, and logs a failure of it instead of throwing.
+    /// </summary>
+    /// <param name="records">The records the action returns.</param>
+    /// <param name="ct">Cancellation token. A cancellation of the request is not swallowed.</param>
+    protected Task EnrichCommittedAsync(IReadOnlyCollection<TModel> records, CancellationToken ct)
+        => CommittedWriteEnrichment.RunAsync(this, records, () => OnBeforeReturnAsync(records, ct), ct);
 
     /// <summary>
     /// Records in <paramref name="footprint"/> the stored timestamps of the rows a create of

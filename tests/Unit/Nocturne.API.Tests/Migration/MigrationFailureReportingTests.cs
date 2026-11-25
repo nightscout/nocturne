@@ -6,8 +6,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -93,13 +95,48 @@ public class MigrationFailureReportingTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
-        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(), TimeProvider.System);
+        MigrationJobHarness.CreateService(provider);
 
-    private static TestMigrationConnectionRequest TestRequest() => new()
+    private static TestMigrationConnectionRequest TestRequest(string? apiSecret = "secret") => new()
     {
         Mode = MigrationMode.Api,
         NightscoutUrl = "https://example-nightscout.invalid",
+        NightscoutApiSecret = apiSecret,
     };
+
+    private static Task<MigrationJobStatus> RunWithSecretAsync(IServiceProvider provider, params string[] collections) =>
+        MigrationJobHarness.RunAsync(provider, onCreated: null, collections, apiSecret: "secret");
+
+    /// <summary>
+    /// A site can be readable without a secret, so a run sent with none is told one is needed, not
+    /// that one was rejected.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_of_a_run_with_no_secret_asks_for_one()
+    {
+        var handler = new RoutedNightscout(path => path.StartsWith("/api/v1/count/")
+            ? Json(HttpStatusCode.NotFound)
+            : Json(HttpStatusCode.Unauthorized));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+
+        status.State.Should().Be(MigrationJobState.Failed);
+        status.ErrorMessage.Should().StartWith(NightscoutMessages.ApiSecretMissing);
+        status.ErrorMessage.Should().NotContain("rejected");
+    }
+
+    [Fact]
+    public async Task The_connection_test_with_no_secret_asks_for_one_when_refused()
+    {
+        await using var provider = MigrationJobHarness.BuildProvider(
+            new RoutedNightscout(_ => Json(HttpStatusCode.Unauthorized)));
+
+        var result = await BuildService(provider).TestConnectionAsync(TestRequest(apiSecret: null));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorMessage.Should().Be(NightscoutMessages.ApiSecretMissing);
+    }
 
     [Fact]
     public async Task A_rejected_api_secret_on_the_first_page_fails_the_run()
@@ -111,7 +148,7 @@ public class MigrationFailureReportingTests
             : Json(HttpStatusCode.Unauthorized));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
-        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+        var status = await RunWithSecretAsync(provider, "entries");
 
         status.State.Should().Be(MigrationJobState.Failed);
         status.ErrorMessage.Should().StartWith(ApiSecretMessage);
@@ -125,7 +162,7 @@ public class MigrationFailureReportingTests
         var handler = new RoutedNightscout(_ => Json(HttpStatusCode.Unauthorized));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
-        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+        var status = await RunWithSecretAsync(provider, "entries");
 
         status.State.Should().Be(MigrationJobState.Failed);
         status.ErrorMessage.Should().StartWith(ApiSecretMessage);
@@ -148,7 +185,7 @@ public class MigrationFailureReportingTests
         // The migration client is a guarded connector client, so a mistyped host is refused before
         // the socket opens. Its message says which of "not found" and "forbidden address" happened;
         // the generic unreachable wording would throw that away.
-        var handler = new ThrowingHost(() => new Nocturne.Core.Models.Net.OutboundRefusedException(
+        var handler = new ThrowingHost(() => new Nocturne.Infrastructure.Outbound.OutboundRefusedException(
             "Could not find 'mynightscout.xyx'. Check the address is spelled correctly and that the site is online."));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
@@ -224,7 +261,7 @@ public class MigrationFailureReportingTests
             : Json(HttpStatusCode.OK));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
-        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+        var status = await RunWithSecretAsync(provider, "entries");
 
         status.State.Should().Be(MigrationJobState.Failed);
         status.ErrorMessage.Should().StartWith(ApiSecretMessage);
@@ -420,7 +457,7 @@ public class MigrationFailureReportingTests
             Timeout = TimeSpan.FromMilliseconds(200),
         };
 
-        using var job = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var job = new CancellationTokenSource(Eventually.DefaultPatience);
         var read = () => MigrationJob.ReadPageFromSourceAsync<Treatment>(
             client, "/api/v1/treatments.json", "treatments", job.Token);
 
@@ -482,7 +519,7 @@ public class MigrationFailureReportingTests
                 """,
         };
 
-        var status = MigrationJob.StatusFromRecord(run);
+        var status = MigrationJob.StatusFromRecord(run, DateTime.UtcNow);
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(9);
         status.CollectionProgress["treatments"].FailureReason.Should()
@@ -500,7 +537,7 @@ public class MigrationFailureReportingTests
             CollectionOutcomes = "{ not an outcome array",
         };
 
-        var status = MigrationJob.StatusFromRecord(run);
+        var status = MigrationJob.StatusFromRecord(run, DateTime.UtcNow);
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(4);
         status.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(2);

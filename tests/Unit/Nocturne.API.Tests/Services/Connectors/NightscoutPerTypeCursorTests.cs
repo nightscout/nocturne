@@ -11,8 +11,10 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -33,15 +35,25 @@ public class NightscoutPerTypeCursorTests
         DateTime? latestEntry = null,
         DateTime? latestTreatment = null,
         DateTime? latestDeviceStatus = null,
-        DateTime? latestActivity = null)
+        DateTime? latestActivity = null,
+        bool entriesAdvanceTheWatermark = false)
     {
+        var storedEntry = latestEntry;
         var glucose = new Mock<IGlucosePublisher>();
         glucose.Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(latestEntry);
+            .ReturnsAsync(() => storedEntry);
         glucose.Setup(p => p.PublishEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Entry>, string, WriteOrigin, CancellationToken>((entries, _, _, _) =>
+            {
+                if (entriesAdvanceTheWatermark)
+                    storedEntry = DateTimeOffset.FromUnixTimeMilliseconds(entries.Max(e => e.Mills)).UtcDateTime;
+            })
             .ReturnsAsync(true);
 
         var treatments = new Mock<ITreatmentPublisher>();
+        treatments.Setup(p => p.GetOpenSpanTreatmentsAsync(
+                It.IsAny<string>(), It.IsAny<StoredTreatmentKey?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         treatments.Setup(p => p.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestTreatment);
         treatments.Setup(p => p.PublishTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -63,6 +75,7 @@ public class NightscoutPerTypeCursorTests
         publisher.Setup(p => p.Treatments).Returns(treatments.Object);
         publisher.Setup(p => p.Device).Returns(device.Object);
         publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+        publisher.Setup(p => p.State).Returns(new InMemoryConnectorStateStore());
 
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri(config.Url) };
 
@@ -71,8 +84,9 @@ public class NightscoutPerTypeCursorTests
             new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisher.Object);
     }
 
@@ -104,7 +118,7 @@ public class NightscoutPerTypeCursorTests
         handler.RequestUrls.First(u => u.Contains("treatments.json"));
 
     private static string DeviceStatusUrl(SequentialMockHandler handler) =>
-        handler.RequestUrls.Single(u => u.Contains("devicestatus.json"));
+        handler.RequestUrls.First(u => u.Contains("devicestatus.json"));
 
     [Fact]
     public async Task Treatments_OpenEndedSync_NoPriorTreatments_ImportsFullHistory_NotGlucoseCursor()
@@ -203,14 +217,17 @@ public class NightscoutPerTypeCursorTests
     }
 
     [Fact]
-    public async Task DeviceStatus_OpenEndedSync_NoWatermark_FallsBackToRequestFrom()
+    public async Task DeviceStatus_OpenEndedSync_NoWatermark_ImportsFullHistoryThenResumesFromWhereItReached()
     {
-        // No device-status watermark available → must fall back to request.From (current behaviour),
-        // never re-fetching the full initial window of high-volume telemetry every sync.
+        // No device status stored → the whole history, spread across runs by the low-water mark.
+        // Falling back to request.From would leave everything older than it out of reach for good.
+        // A status with no APS, pump or uploader fields leaves no stored watermark, so the next run
+        // resumes from the newest status the crawl published rather than crawling it all again.
         var from = DateTime.UtcNow.AddHours(-1);
+        var newest = DateTime.UtcNow.AddHours(-2);
         var handler = new SequentialMockHandler();
         handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
-        handler.Enqueue(JsonResponse(Array.Empty<DeviceStatus>()));
+        handler.Enqueue(JsonResponse(new[] { new DeviceStatus { Id = "xdrip", CreatedAt = newest.ToString("O") } }));
 
         var config = Config();
         var service = CreateService(handler, config, latestDeviceStatus: null);
@@ -218,9 +235,41 @@ public class NightscoutPerTypeCursorTests
         var request = new SyncRequest { From = from, To = null, DataTypes = [SyncDataType.DeviceStatus] };
 
         await service.SyncDataAsync(request, config, CancellationToken.None);
+        Uri.UnescapeDataString(DeviceStatusUrl(handler)).Should().NotContain("$gte");
 
-        var cursor = ExtractCursor(DeviceStatusUrl(handler));
-        cursor.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
+        handler.RequestUrls.Clear();
+        await service.SyncDataAsync(request, config, CancellationToken.None);
+        ExtractCursor(handler.RequestUrls.First(u => u.Contains("devicestatus.json")))
+            .Should().BeCloseTo(newest.AddMinutes(-5), TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksForGlucoseOnlyFromTheFirstRunsNewestEntry()
+    {
+        var newest = DateTime.UtcNow.AddHours(-1);
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
+        handler.Enqueue(JsonResponse(new[] { new Entry { Mills = newest.ToMills(), Sgv = 120, Type = "sgv" } }));
+
+        var config = Config();
+        var service = CreateService(handler, config, entriesAdvanceTheWatermark: true);
+
+        (await service.SyncDataAsync(config, CancellationToken.None)).Success.Should().BeTrue();
+        handler.RequestUrls.First(u => u.Contains("entries.json") && u.Contains($"count={MaxCount}"))
+            .Should().NotContain("$gte", "nothing was stored, so the first run reads the whole history");
+
+        handler.RequestUrls.Clear();
+        (await service.SyncDataAsync(config, CancellationToken.None)).Success.Should().BeTrue();
+        var scheduled = handler.RequestUrls.First(u => u.Contains("entries.json") && u.Contains($"count={MaxCount}"));
+
+        // The wire bound reaches below the resume point by the recent re-read window, so the
+        // second run is compared with a catch-up a caller started from the resume point itself.
+        handler.RequestUrls.Clear();
+        await service.SyncDataAsync(
+            new SyncRequest { From = newest.AddMinutes(-5), DataTypes = [SyncDataType.Glucose] }, config, CancellationToken.None);
+        var fromResumePoint = handler.RequestUrls.First(u => u.Contains("entries.json") && u.Contains($"count={MaxCount}"));
+
+        Uri.UnescapeDataString(scheduled).Should().Contain("$gte").And.Be(Uri.UnescapeDataString(fromResumePoint));
     }
 
     private static HttpResponseMessage JsonResponse<T>(T data) =>

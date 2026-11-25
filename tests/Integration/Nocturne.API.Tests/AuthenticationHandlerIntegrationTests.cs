@@ -220,7 +220,7 @@ public class AuthenticationHandlerIntegrationTests : ApiIntegrationTestBase
 
         // Every step asserts: silent early-outs previously masked a broken exchange
         // (the anonymous-exchange 401 fixed in #473, and the exchanged JWT failing all
-        // subsequent requests through LegacyJwtHandler claim mapping, #474).
+        // subsequent requests through SessionBearerHandler claim mapping, #474).
         Assert.True(
             createResponse.IsSuccessStatusCode,
             $"Subject creation failed: {createResponse.StatusCode}"

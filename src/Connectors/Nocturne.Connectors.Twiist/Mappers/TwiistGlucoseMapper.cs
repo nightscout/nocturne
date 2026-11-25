@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -11,6 +13,8 @@ namespace Nocturne.Connectors.Twiist.Mappers;
 /// </summary>
 public class TwiistGlucoseMapper(ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TwiistConnectorConfiguration>();
+
     /// <summary>
     /// Maps Twiist glucose direction strings to GlucoseDirection enum values.
     /// Direction strings come from the summary's lastGlucoseTrend field.
@@ -42,20 +46,20 @@ public class TwiistGlucoseMapper(ILogger logger)
     /// Maps decoded glucose blob records to SensorGlucose V4 models.
     /// </summary>
     public IEnumerable<SensorGlucose> MapGlucoseRecords(
-        IReadOnlyList<GlucoseRecord> records, DateTime now, string? lastTrend = null)
+        IReadOnlyList<GlucoseRecord> records, string? lastTrend = null)
     {
         if (records.Count == 0) return [];
 
         return records
             .Where(r => r.Mgdl > 0)
-            .Select(r => ConvertRecord(r, now))
+            .Select(r => ConvertRecord(r))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .OrderBy(sg => sg.Mills)
             .ToList();
     }
 
-    private SensorGlucose? ConvertRecord(GlucoseRecord record, DateTime now)
+    private SensorGlucose? ConvertRecord(GlucoseRecord record)
     {
         try
         {
@@ -63,15 +67,11 @@ public class TwiistGlucoseMapper(ILogger logger)
 
             return new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = record.Timestamp,
-                LegacyId = $"twiist_glucose_{epochMs}",
+                LegacyId = LegacyIds.Of("glucose", epochMs),
                 Device = DataSources.TwiistConnector,
-                DataSource = DataSources.TwiistConnector,
                 Mgdl = record.Mgdl,
                 Direction = GlucoseDirection.None,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (ArgumentException ex)

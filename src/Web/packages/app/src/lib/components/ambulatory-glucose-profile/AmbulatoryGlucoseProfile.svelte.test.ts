@@ -3,14 +3,14 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import AmbulatoryGlucoseProfile from "./AmbulatoryGlucoseProfile.svelte";
 import type { AveragedStats } from "#lib/api/index.js";
-import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { ChartThresholdsDto } from "@nocturne/api-client";
 
 const realtime = vi.hoisted(() => ({
 	chartThresholds: null as ChartThresholdsDto | null,
 }));
 
 vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
-	const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
+	const { resolveChartThresholds } = await import("@nocturne/charts/core");
 	return {
 		tenantChartThresholds: () => ({
 			get current() {

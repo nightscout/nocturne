@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { untrack } from "svelte";
 import { glucoseUnits, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-import type { SeriesFinders } from "./chart-data-view.svelte";
+import type { SeriesFinders } from "@nocturne/charts";
 import { createPointInspection, type PointInspection } from "./point-inspection.svelte";
 
 const no_context_finders: SeriesFinders = {
@@ -61,5 +61,26 @@ describe("createPointInspection glucose preview", () => {
     glucoseUnits.current = "mg/dl";
     const mgdl_option = untrack(() => inspect_at_120().pickerOptions).find((o) => o.type === "glucose");
     expect(mgdl_option?.preview).toBe("120 mg/dL");
+  });
+});
+
+describe("createPointInspection dialog choice", () => {
+  function inspect_glucose_only(alwaysPick?: () => boolean): PointInspection {
+    let inspection!: PointInspection;
+    cleanups.push(
+      $effect.root(() => {
+        inspection = createPointInspection(no_context_finders, () => [], series_data, undefined, alwaysPick);
+      })
+    );
+    inspection.inspect(new Date("2026-01-01T12:00:00Z"), { sgv: 120, color: "green" });
+    return inspection;
+  }
+
+  it("opens the glucose view directly at a point with only glucose to inspect", () => {
+    expect(inspect_glucose_only().activeDialog).toBe("glucose");
+  });
+
+  it("opens the picker there when the picker offers more than inspection", () => {
+    expect(inspect_glucose_only(() => true).activeDialog).toBe("picker");
   });
 });

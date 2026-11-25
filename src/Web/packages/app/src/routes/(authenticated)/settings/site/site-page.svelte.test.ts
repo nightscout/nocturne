@@ -3,13 +3,15 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
-import type { TenantSettingsDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantSettingsDto } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({
   getTenantSettings: vi.fn(),
   setDisplayName: vi.fn(),
   setPublicDocs: vi.fn(),
+  getSubdomain: vi.fn(),
+  changeSubdomain: vi.fn(),
 }));
 
 const settings: TenantSettingsDto = {
@@ -23,6 +25,12 @@ vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getTenantSettings: mocks.getTenantSettings,
   setDisplayName: mocks.setDisplayName,
   setPublicDocs: mocks.setPublicDocs,
+  getSubdomain: mocks.getSubdomain,
+  changeSubdomain: mocks.changeSubdomain,
+}));
+
+vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  validateSlug: () => remoteQuery(() => ({ isValid: true })),
 }));
 
 import SitePage from "./+page.svelte";
@@ -33,6 +41,9 @@ describe("site details page", () => {
     page.data.effectivePermissions = ["tenant.settings"];
     page.data.refusedAsDemoSubject = undefined;
     mocks.getTenantSettings.mockImplementation(() => remoteQuery(() => settings));
+    mocks.getSubdomain.mockImplementation(() =>
+      remoteQuery(() => ({ slug: "sam", address: "https://sam.example.org", baseDomain: "example.org", canChange: false })),
+    );
     mocks.setDisplayName.mockResolvedValue({ ...settings, displayName: "Sam's site" });
   });
 

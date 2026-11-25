@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
@@ -5,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.V4;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -32,19 +32,27 @@ internal sealed record LegacyTreatmentRepositories(
 );
 
 /// <summary>
-/// The time window, page size and direction of one time-range projection read.
+/// The time window, page size and direction of one time-range projection read, and whether it also
+/// reads the rows stored deleted, each of which is fetched with <see cref="FetchedRecord.Deleted"/> set.
 /// </summary>
 internal readonly record struct LegacyTreatmentRange(
     DateTime? From,
     DateTime? To,
     int Limit,
-    bool Descending
-);
+    bool Descending,
+    bool IncludeDeleted = false
+)
+{
+    /// <summary>The range between two instants given in Unix milliseconds, either optional.</summary>
+    internal static LegacyTreatmentRange FromMills(
+        long? fromMills, long? toMills, int limit, bool descending, bool includeDeleted = false) =>
+        new(fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending, includeDeleted);
+}
 
 /// <summary>
 /// One record fetched for projection, carrying the table that owns it, the row's primary key, the
 /// creation and modification stamps of the row it came from, and whether that row is soft-deleted,
-/// which only a modified-since read returns.
+/// which only a modified-since read and a time-range read that includes deleted rows return.
 /// </summary>
 internal readonly record struct FetchedRecord(
     ILegacyTreatmentTable Table,
@@ -93,6 +101,7 @@ internal interface ILegacyTreatmentTable
     /// <summary>
     /// A page of records within the requested window: the newest <see cref="LegacyTreatmentRange.Limit"/>
     /// newest first, or the oldest oldest first when <see cref="LegacyTreatmentRange.Descending"/> is false.
+    /// Live rows only, unless <see cref="LegacyTreatmentRange.IncludeDeleted"/>.
     /// </summary>
     Task<IReadOnlyList<FetchedRecord>> InRangeAsync(
         LegacyTreatmentRepositories repositories,
@@ -266,14 +275,13 @@ internal sealed class LegacyKeyedRecords<TRecord>(
 internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     Func<LegacyTreatmentRepositories, ILegacyKeyedRepository<TRecord>> repository,
     Func<NocturneDbContext, IQueryable<TEntity>> table,
-    Nocturne.Core.Models.RecordType dedupType,
     Func<TEntity, TRecord> toRecord,
     Func<TRecord, CarbFoodIndex, Treatment> project,
     Func<NocturneDbContext, DateTime?, DateTime?, CancellationToken, Task<long>>? count = null,
     Func<LegacyTreatmentRepositories, IReadOnlyCollection<Guid>, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null
 ) : ILegacyKeyedTreatmentTable
     where TRecord : class, IV4Record
-    where TEntity : class, ISystemTimestamped, IIdentified, ISoftDeletable, IObservationTimestamped
+    where TEntity : class, ISystemTimestamped, IDuplicateFlagged, ISoftDeletable, IObservationTimestamped
 {
     /// <inheritdoc />
     public string RecordType { get; } = typeof(TRecord).Name;
@@ -286,7 +294,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         LegacyTreatmentRepositories repositories, NocturneDbContext context, DateTime? from, DateTime? to,
         ILogger logger, CancellationToken ct) =>
         count is null
-            ? await repository(repositories).CountAsync(from, to, ct)
+            ? await repository(repositories).CountAsync(from, to, null, null, ct)
             : await count(context, from, to, ct);
 
     /// <inheritdoc />
@@ -306,6 +314,13 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         CancellationToken ct
     )
     {
+        if (range.IncludeDeleted)
+        {
+            var rows = await repository(repositories).GetIncludingDeletedAsync(
+                range.From, range.To, range.Limit, range.Descending, ct);
+            return rows.Select(row => Fetch(row.Record, row.Deleted)).ToList();
+        }
+
         var records = await repository(repositories).GetAsync(
             range.From, range.To, device: null, source: null, range.Limit, offset: 0, range.Descending, ct);
         return records.Select(Fetch).ToList();
@@ -338,13 +353,21 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         var at = instants.ToList();
         return table(context)
             .AsNoTracking()
-            .ExcludeNonPrimary(context, dedupType)
+            .ExcludeDuplicates()
             .Where(e => at.Contains(e.Timestamp))
             .InObservationOrder(descending: true);
     }
 
-    internal FetchedRecord Fetch(TRecord record) =>
-        new(this, record, record.Id, record.CreatedAt, record.ModifiedAt);
+    internal FetchedRecord Fetch(TRecord record) => Fetch(record, deleted: false);
+
+    private FetchedRecord Fetch(TRecord record, bool deleted) =>
+        new(this, record, record.Id, record.CreatedAt, record.ModifiedAt, deleted);
+
+    private FetchedRecord Fetch(TEntity entity)
+    {
+        var record = toRecord(entity);
+        return new(this, record, record.Id, record.CreatedAt, entity.SysUpdatedAt, entity.DeletedAt is not null);
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FetchedRecord>> ModifiedSinceAsync(
@@ -357,7 +380,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     {
         var entities = await HistoryPage.GetAsync(
             context,
-            table(context).IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(context, dedupType),
+            table(context).IncludingDeleted().AsNoTracking().ExcludeDuplicatesKeepingDeleted(),
             e => e.SysUpdatedAt,
             e => e.Id,
             cursorMills,
@@ -366,11 +389,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
             RecordType,
             ct);
 
-        return entities
-            .Select(e => (Record: toRecord(e), e.SysUpdatedAt, Deleted: e.DeletedAt is not null))
-            .Select(x => new FetchedRecord(
-                this, x.Record, x.Record.Id, x.Record.CreatedAt, x.SysUpdatedAt, x.Deleted))
-            .ToList();
+        return entities.Select(Fetch).ToList();
     }
 
     /// <inheritdoc />
@@ -402,15 +421,11 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     {
         var entities = await table(context)
             .AsNoTracking()
-            .ExcludeNonPrimary(context, dedupType)
+            .ExcludeDuplicates()
             .Where(filter)
             .ToListAsync(ct);
 
-        return entities
-            .Select(e => (Record: toRecord(e), e.SysUpdatedAt))
-            .Select(x => new FetchedRecord(
-                this, x.Record, x.Record.Id, x.Record.CreatedAt, x.SysUpdatedAt))
-            .ToList();
+        return entities.Select(Fetch).ToList();
     }
 
     /// <inheritdoc />
@@ -441,34 +456,36 @@ internal sealed class LegacyStateSpanTable(
     /// <inheritdoc />
     public Task<long> CountAsync(
         LegacyTreatmentRepositories repositories, NocturneDbContext context, DateTime? from, DateTime? to,
-        ILogger logger, CancellationToken ct) => LegacyTreatmentTables.GuardedAsync(this, logger, () => InWindow(context, from, to).LongCountAsync(ct), 0L);
+        ILogger logger, CancellationToken ct) =>
+        LegacyTreatmentTables.GuardedAsync(
+            this, logger, () => Visible(context).InWindow(s => s.StartTimestamp, from, to).LongCountAsync(ct), 0L);
 
+    /// <summary>
+    /// Every served span of this category, duplicate copies included: the id lookups and the bulk
+    /// writes reach each copy, as the record tables' do.
+    /// </summary>
     internal IQueryable<StateSpanEntity> Rows(NocturneDbContext context) =>
         Served(context.StateSpans.AsNoTracking());
 
+    /// <summary>The served spans a read shows, by <see cref="ReadVisibilityFilter"/>.</summary>
+    private IQueryable<StateSpanEntity> Visible(NocturneDbContext context) => Rows(context).ExcludeDuplicates();
+
     /// <inheritdoc />
-    public IQueryable<string> TreatmentKeys(NocturneDbContext context) => Rows(context).Select(s => s.OriginalId!);
+    public IQueryable<string> TreatmentKeys(NocturneDbContext context) => Rows(context).Select(s => s.LegacyId!);
 
     private IQueryable<StateSpanEntity> Served(IQueryable<StateSpanEntity> spans) =>
         spans.Where(s => s.Category == _category).Where(fromTreatment);
 
     /// <summary>The served spans of this category whose latest delete was the user's.</summary>
     internal IQueryable<StateSpanEntity> UserTombstones(NocturneDbContext context) =>
-        context.StateSpans.UserTombstones(context).Where(s => s.Category == _category).Where(fromTreatment);
+        context.StateSpans.UserTombstones().Where(s => s.Category == _category).Where(fromTreatment);
 
-    /// <summary>Spans starting inside the window, bounds inclusive.</summary>
-    internal IQueryable<StateSpanEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to)
-    {
-        var rows = Rows(context);
-        if (from is { } lower)
-            rows = rows.Where(s => s.StartTimestamp >= lower);
-        if (to is { } upper)
-            rows = rows.Where(s => s.StartTimestamp <= upper);
-        return rows;
-    }
+    /// <summary>Served spans starting inside the window, bounds inclusive, duplicate copies included.</summary>
+    internal IQueryable<StateSpanEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to) =>
+        Rows(context).InWindow(s => s.StartTimestamp, from, to);
 
     internal FetchedRecord Fetched(StateSpanEntity span) =>
-        new(this, span, span.Id, span.CreatedAt, span.UpdatedAt);
+        new(this, span, span.Id, span.CreatedAt, span.UpdatedAt, span.DeletedAt is not null);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FetchedRecord>> InRangeAsync(
@@ -478,7 +495,10 @@ internal sealed class LegacyStateSpanTable(
         CancellationToken ct
     )
     {
-        var spans = await InStartOrder(InWindow(context, range.From, range.To), range.Descending)
+        var rows = range.IncludeDeleted
+            ? Served(context.StateSpans.IncludingDeleted().AsNoTracking()).ExcludeDuplicates()
+            : Visible(context);
+        var spans = await InStartOrder(rows.InWindow(s => s.StartTimestamp, range.From, range.To), range.Descending)
             .Take(range.Limit)
             .ToListAsync(ct);
 
@@ -505,7 +525,7 @@ internal sealed class LegacyStateSpanTable(
     private IQueryable<StateSpanEntity> At(NocturneDbContext context, IReadOnlyCollection<DateTime> instants)
     {
         var at = instants.ToList();
-        return InStartOrder(Rows(context).Where(s => at.Contains(s.StartTimestamp)), descending: true);
+        return InStartOrder(Visible(context).Where(s => at.Contains(s.StartTimestamp)), descending: true);
     }
 
     private static IOrderedQueryable<StateSpanEntity> InStartOrder(IQueryable<StateSpanEntity> spans, bool descending) =>
@@ -523,10 +543,10 @@ internal sealed class LegacyStateSpanTable(
     {
         var spans = await HistoryPage.GetAsync(
             context,
-            Served(context.StateSpans.IncludingDeleted().AsNoTracking()),
+            Served(context.StateSpans.IncludingDeleted().AsNoTracking()).ExcludeDuplicatesKeepingDeleted(),
             s => s.UpdatedAt, s => s.Id, cursorMills, limit, logger, RecordType, ct);
 
-        return spans.Select(span => Fetched(span) with { Deleted = span.DeletedAt is not null }).ToList();
+        return spans.Select(Fetched).ToList();
     }
 
     /// <inheritdoc />
@@ -545,7 +565,7 @@ internal sealed class LegacyStateSpanTable(
     )
     {
         var keys = treatmentKeys.ToList();
-        var spans = await Rows(context).Where(s => keys.Contains(s.OriginalId!)).ToListAsync(ct);
+        var spans = await Visible(context).Where(s => keys.Contains(s.LegacyId!)).ToListAsync(ct);
         return spans.Select(Fetched).ToList();
     }
 
@@ -557,13 +577,10 @@ internal sealed class LegacyStateSpanTable(
 
         var treatment = project(span, metadata);
         treatment.Id = span.Id.ToString();
+        treatment.LegacyId = span.LegacyId;
+        treatment.RecordId = span.Id;
         treatment.Mills = span.StartTimestamp.ToMills();
-        treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
-        treatment.EnteredBy = metadata.TryReadString("enteredBy");
-        treatment.Notes = metadata.TryReadString(LegacyTreatmentTables.NotesKey);
-        treatment.SyncIdentifier = metadata.TryReadString(LegacyTreatmentTables.SyncIdentifierKey);
-        treatment.InsulinType = metadata.TryReadString(LegacyTreatmentTables.InsulinTypeKey);
-        treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
+        LegacyTreatmentTables.RestoreServedFields(treatment, metadata);
         return treatment;
     }
 }
@@ -600,15 +617,12 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
     internal static IQueryable<ProfileActivationEntity> Rows(NocturneDbContext context) =>
         Served(context.ProfileActivations.AsNoTracking());
 
-    /// <summary>Activations starting inside the window, bounds inclusive.</summary>
-    internal static IQueryable<ProfileActivationEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to)
+    /// <summary>Activations starting inside the window, bounds inclusive; deleted ones too when <paramref name="includeDeleted"/>.</summary>
+    internal static IQueryable<ProfileActivationEntity> InWindow(
+        NocturneDbContext context, DateTime? from, DateTime? to, bool includeDeleted = false)
     {
-        var rows = Rows(context);
-        if (from is { } lower)
-            rows = rows.Where(a => a.Timestamp >= lower);
-        if (to is { } upper)
-            rows = rows.Where(a => a.Timestamp <= upper);
-        return rows;
+        var rows = includeDeleted ? Served(context.ProfileActivations.IncludingDeleted().AsNoTracking()) : Rows(context);
+        return rows.InWindow(from, to);
     }
 
     private FetchedRecord Fetched(ProfileActivationEntity entity) =>
@@ -657,7 +671,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
         CancellationToken ct
     )
     {
-        var rows = await InStartOrder(InWindow(context, range.From, range.To), range.Descending)
+        var rows = await InStartOrder(InWindow(context, range.From, range.To, range.IncludeDeleted), range.Descending)
             .Take(range.Limit)
             .ToListAsync(ct);
 
@@ -742,7 +756,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
 /// </summary>
 internal static class LegacyTreatmentTables
 {
-    // DeviceEventType → legacy Nightscout eventType string (reverse of TreatmentTypes.DeviceEventTypeMap)
+    // DeviceEventType → legacy Nightscout eventType string (reverse of TreatmentTypeMaps.DeviceEventTypeMap)
     private static readonly Dictionary<DeviceEventType, string> DeviceEventTypeToString =
         new()
         {
@@ -770,14 +784,15 @@ internal static class LegacyTreatmentTables
     internal static readonly IReadOnlyList<LegacyStateSpanTable> StateSpanTables =
     [
         new(StateSpanCategory.Override,
-            s => s.OriginalId != null && EF.Functions.JsonContains(s.MetadataJson!, TreatmentsCollectionJson),
+            s => s.LegacyId != null && EF.Functions.JsonContains(s.MetadataJson!, StateSpanMetadataExtensions.TreatmentsCollectionJson),
             (s, metadata) => new Treatment
             {
-                EventType = "Temporary Override",
+                EventType = TreatmentTypes.TemporaryOverride,
                 RawTimestamp = TreatmentUploadedTimestamp.OfSpan(metadata)
                     ?? JsonSerializer.SerializeToElement(NightscoutKitTimestamp(s.StartTimestamp)),
                 Duration = UploadedDuration(metadata)
                     ?? (metadata.TryReadString("durationType") == "indefinite" ? null : DurationMinutes(s)),
+                DurationIsUploaded = UploadedDuration(metadata) is not null,
                 Reason = metadata.TryReadString("reason"),
                 ReasonDisplay = metadata.TryReadString("reasonDisplay"),
                 TargetTop = (double?)metadata.TryReadDecimal("targetTop"),
@@ -787,13 +802,14 @@ internal static class LegacyTreatmentTables
                 AdditionalProperties = UploadedFields(metadata, UploadedOverrideFields),
             }),
         new(StateSpanCategory.TemporaryTarget,
-            s => s.OriginalId != null
+            s => s.LegacyId != null
                 && EF.Functions.JsonExists(s.MetadataJson!, StateSpanMetadataExtensions.UtcOffsetKey),
             (s, metadata) => new Treatment
             {
-                EventType = metadata.TryReadString(UploadedEventTypeKey) ?? "Temporary Target",
+                EventType = metadata.TryReadString(UploadedEventTypeKey) ?? TreatmentTypes.TemporaryTarget,
                 Duration = UploadedDuration(metadata)
                     ?? (s.State == nameof(TemporaryTargetState.Cancelled) ? 0 : DurationMinutes(s)),
+                DurationIsUploaded = UploadedDuration(metadata) is not null,
                 TargetTop = (double?)metadata.TryReadDecimal("targetTop"),
                 TargetBottom = (double?)metadata.TryReadDecimal("targetBottom"),
                 Reason = metadata.TryReadString("reason"),
@@ -852,6 +868,25 @@ internal static class LegacyTreatmentTables
     internal static IQueryable<StateSpanEntity> ServedStateSpansFromSource(NocturneDbContext context, string source) =>
         TrackedSpans(context, table => table.Rows(context).Where(s => s.Source == source));
 
+    /// <summary>
+    /// The spans <see cref="ServedStateSpansFromSource"/> returns that are still open, or that were
+    /// uploaded indefinite and given no duration since, whatever end a later override closed them at.
+    /// An indefinite upload keeps a duration of zero.
+    /// </summary>
+    internal static IQueryable<StateSpanEntity> OpenStateSpansFromSource(NocturneDbContext context, string source) =>
+        ServedStateSpansFromSource(context, source).Where(s =>
+            (s.EndTimestamp == null && s.State != CancelledTemporaryTarget)
+            || (EF.Functions.JsonContains(s.MetadataJson!, IndefiniteOverrideJson)
+                && (!EF.Functions.JsonExists(s.MetadataJson!, StateSpanMetadataExtensions.UploadedDurationKey)
+                    || EF.Functions.JsonContains(s.MetadataJson!, NoUploadedDurationJson))));
+
+    private const string CancelledTemporaryTarget = nameof(TemporaryTargetState.Cancelled);
+
+    private const string IndefiniteOverrideJson = """{"durationType":"indefinite"}""";
+
+    private const string NoUploadedDurationJson =
+        $$"""{"{{StateSpanMetadataExtensions.UploadedDurationKey}}":0}""";
+
     private static IQueryable<StateSpanEntity> TrackedSpans(
         NocturneDbContext context, Func<LegacyStateSpanTable, IQueryable<StateSpanEntity>> rows)
     {
@@ -877,7 +912,7 @@ internal static class LegacyTreatmentTables
         if (eventType == TreatmentTypes.ProfileSwitch)
             return await ProfileActivationTable.LatestSwitchAsync(context, from, to, ct);
 
-        if (!TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out var type))
+        if (!TreatmentTypeMaps.DeviceEventTypeMap.TryGetValue(eventType, out var type))
             return [];
 
         var latest = await repositories.DeviceEvents.GetLatestByEventTypeAsync(type, to, ct);
@@ -889,39 +924,39 @@ internal static class LegacyTreatmentTables
 
     private static readonly LegacyTreatmentTable<DeviceEvent, DeviceEventEntity> DeviceEventTable = new(
         repositories => repositories.DeviceEvents,
-        c => c.DeviceEvents, RecordType.DeviceEvent, DeviceEventMapper.ToDomainModel,
+        c => c.DeviceEvents, DeviceEventMapper.ToDomainModel,
         (r, _) => ProjectDeviceEvent(r));
 
     internal static readonly IReadOnlyList<ILegacyTreatmentTable> All =
     [
         new LegacyTreatmentTable<Bolus, BolusEntity>(
             repositories => repositories.Boluses,
-            c => c.Boluses, RecordType.Bolus, BolusMapper.ToDomainModel,
+            c => c.Boluses, BolusMapper.ToDomainModel,
             (r, _) => ProjectCorrectionBolus(r),
             correlated: (repositories, ids, ct) => repositories.Boluses.GetByCorrelationIdsAsync(ids, ct)),
         new LegacyTreatmentTable<CarbIntake, CarbIntakeEntity>(
             repositories => repositories.CarbIntakes,
-            c => c.CarbIntakes, RecordType.CarbIntake, CarbIntakeMapper.ToDomainModel,
+            c => c.CarbIntakes, CarbIntakeMapper.ToDomainModel,
             (r, foods) => ProjectCarbCorrection(r, foods.For(r.Id)),
             CountCarbIntakesServedApartAsync,
             (repositories, ids, ct) => repositories.CarbIntakes.GetByCorrelationIdsAsync(ids, ct)),
         new LegacyTreatmentTable<BGCheck, BGCheckEntity>(
             repositories => repositories.BGChecks,
-            c => c.BGChecks, RecordType.BGCheck, BGCheckMapper.ToDomainModel,
+            c => c.BGChecks, BGCheckMapper.ToDomainModel,
             (r, _) => ProjectBgCheck(r)),
         new LegacyTreatmentTable<Note, NoteEntity>(
             repositories => repositories.Notes,
-            c => c.Notes, RecordType.Note, NoteMapper.ToDomainModel,
+            c => c.Notes, NoteMapper.ToDomainModel,
             (r, _) => ProjectNote(r),
             CountNotesServedApartAsync),
         DeviceEventTable,
         new LegacyTreatmentTable<TempBasal, TempBasalEntity>(
             repositories => repositories.TempBasals,
-            c => c.TempBasals, RecordType.TempBasal, TempBasalMapper.ToDomainModel,
+            c => c.TempBasals, TempBasalMapper.ToDomainModel,
             (r, _) => TempBasalToTreatmentMapper.ToTreatment(r)),
         new LegacyTreatmentTable<BolusCalculation, BolusCalculationEntity>(
             repositories => repositories.BolusCalculations,
-            c => c.BolusCalculations, RecordType.BolusCalculation, BolusCalculationMapper.ToDomainModel,
+            c => c.BolusCalculations, BolusCalculationMapper.ToDomainModel,
             (r, _) => ProjectBolusCalculation(r)),
         .. StateSpanTables,
         ProfileActivationTable,
@@ -951,8 +986,8 @@ internal static class LegacyTreatmentTables
     /// </summary>
     private static async Task<long> CountNotesServedApartAsync(
         NocturneDbContext context, DateTime? from, DateTime? to, CancellationToken ct) =>
-        await InWindow(context, context.Notes, RecordType.Note, from, to).LongCountAsync(ct)
-        - await InWindow(context, NotesServedWithAnotherRecord(context), RecordType.Note, from, to).LongCountAsync(ct);
+        await VisibleInWindow(context.Notes, from, to).LongCountAsync(ct)
+        - await VisibleInWindow(NotesServedWithAnotherRecord(context), from, to).LongCountAsync(ct);
 
     /// <summary>
     /// The carb intakes served as treatments of their own in the window, bounds inclusive: every
@@ -964,8 +999,8 @@ internal static class LegacyTreatmentTables
     private static async Task<long> CountCarbIntakesServedApartAsync(
         NocturneDbContext context, DateTime? from, DateTime? to, CancellationToken ct)
     {
-        var carbs = InWindow(context, context.CarbIntakes, RecordType.CarbIntake, from, to);
-        var boluses = InWindow(context, context.Boluses, RecordType.Bolus, from, to);
+        var carbs = VisibleInWindow(context.CarbIntakes, from, to);
+        var boluses = VisibleInWindow(context.Boluses, from, to);
         var pairedMeals = carbs
             .Where(c => c.CorrelationId != null && boluses.Any(b => b.CorrelationId == c.CorrelationId))
             .Select(c => c.CorrelationId)
@@ -974,17 +1009,9 @@ internal static class LegacyTreatmentTables
         return await carbs.LongCountAsync(ct) - await pairedMeals.LongCountAsync(ct);
     }
 
-    private static IQueryable<TEntity> InWindow<TEntity>(
-        NocturneDbContext context, IQueryable<TEntity> rows, RecordType recordType, DateTime? from, DateTime? to)
-        where TEntity : V4TimeSeriesEntityBase
-    {
-        rows = rows.AsNoTracking().ExcludeNonPrimary(context, recordType);
-        if (from is { } lower)
-            rows = rows.Where(r => r.Timestamp >= lower);
-        if (to is { } upper)
-            rows = rows.Where(r => r.Timestamp <= upper);
-        return rows;
-    }
+    private static IQueryable<TEntity> VisibleInWindow<TEntity>(IQueryable<TEntity> rows, DateTime? from, DateTime? to)
+        where TEntity : V4TimeSeriesEntityBase, IDuplicateFlagged =>
+        rows.AsNoTracking().ExcludeDuplicates().InWindow(from, to);
 
     /// <summary>
     /// A <see cref="ProfileActivation"/> as the Profile Switch, or AAPS effective switch Note, it was
@@ -1014,6 +1041,7 @@ internal static class LegacyTreatmentTables
             {
                 EventType = TreatmentTypes.ProfileSwitch,
                 Duration = duration,
+                DurationIsUploaded = UploadedDuration(metadata) is not null,
                 DurationInMilliseconds = span.DurationInMilliseconds
                     ?? (duration is { } minutes ? (long)Math.Round(minutes * 60_000) : null),
                 Profile = span.ProfileName,
@@ -1026,22 +1054,32 @@ internal static class LegacyTreatmentTables
             };
         }
 
-        treatment.PumpId = span.PumpId;
-        treatment.PumpType = span.PumpType;
-        treatment.PumpSerial = span.PumpSerial;
         if (span.App is { } app)
             treatment.AdditionalProperties = new Dictionary<string, object> { [ProfileSpanMetadata.AppKey] = app };
 
         treatment.Id = activation.Id.ToString();
+        treatment.LegacyId = activation.LegacyId;
+        treatment.RecordId = activation.Id;
         treatment.Mills = activation.Mills;
         treatment.DataSource = activation.DataSource;
+        RestoreServedFields(treatment, metadata);
+        return treatment;
+    }
+
+    /// <summary>
+    /// Sets the upload fields a span's or activation's metadata keeps for every treatment it is served
+    /// as, as <c>TreatmentDecomposer.AddServedTreatmentFields</c> wrote them.
+    /// </summary>
+    internal static void RestoreServedFields(Treatment treatment, IDictionary<string, object>? metadata)
+    {
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
         treatment.EnteredBy = metadata.TryReadString(ProfileActivationLegacyFields.EnteredByKey);
         treatment.Notes = metadata.TryReadString(NotesKey);
         treatment.SyncIdentifier = metadata.TryReadString(SyncIdentifierKey);
         treatment.InsulinType = metadata.TryReadString(InsulinTypeKey);
         treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
-        return treatment;
+        SpanUploadedFields.Restore(treatment, metadata);
+        TreatmentClientId.RestoreFromMetadata(treatment, metadata);
     }
 
     /// <summary>The tables whose records pair into a Meal Bolus.</summary>
@@ -1066,9 +1104,6 @@ internal static class LegacyTreatmentTables
             return fallback;
         }
     }
-
-    private const string TreatmentsCollectionJson =
-        $$"""{"{{StateSpanMetadataExtensions.CollectionKey}}":"{{StateSpanMetadataExtensions.TreatmentsCollection}}"}""";
 
     /// <summary>
     /// Metadata key for the <c>timestamp</c> a span's treatment was uploaded with, served verbatim:
@@ -1139,10 +1174,11 @@ internal static class LegacyTreatmentTables
     internal static List<Treatment> Assemble(
         IReadOnlyList<FetchedRecord> rows,
         CarbFoodIndex foods,
-        IReadOnlyDictionary<string, string>? notes = null)
+        IReadOnlyDictionary<string, string>? notes = null,
+        IReadOnlyDictionary<string, string>? deletedNotes = null)
     {
         var treatments = new List<Treatment>();
-        var paired = PairMeals(rows, foods, notes, treatments);
+        var paired = PairMeals(rows, foods, notes, deletedNotes, treatments);
 
         foreach (var row in rows)
         {
@@ -1151,17 +1187,28 @@ internal static class LegacyTreatmentTables
 
             var treatment = row.Table.Project(row.Record, foods);
             if (row.Record is not DeviceEvent)
-                treatment = WithNotes(treatment, ServedKey(row.Record), notes);
+                treatment = WithNotes(treatment, ServedKey(row.Record), row.Deleted, notes, deletedNotes);
             treatments.Add(Stamp(treatment, row.Created, row.Modified, row.Deleted));
         }
 
         return treatments;
     }
 
+    /// <remarks>A deleted treatment is served with the text of its deleted Note when no live Note holds one.</remarks>
     private static Treatment WithNotes(
-        Treatment treatment, string? key, IReadOnlyDictionary<string, string>? notes)
+        Treatment treatment,
+        string? key,
+        bool deleted,
+        IReadOnlyDictionary<string, string>? notes,
+        IReadOnlyDictionary<string, string>? deletedNotes)
     {
-        if (key is not null && notes?.GetValueOrDefault(key) is { } text)
+        if (key is null)
+            return treatment;
+
+        var text = notes?.GetValueOrDefault(key);
+        if (text is null && deleted)
+            text = deletedNotes?.GetValueOrDefault(key);
+        if (text is not null)
             treatment.Notes = text;
         return treatment;
     }
@@ -1172,7 +1219,7 @@ internal static class LegacyTreatmentTables
     /// </summary>
     internal static string? ServedKey(object record) => record switch
     {
-        StateSpanEntity span => span.OriginalId,
+        StateSpanEntity span => span.LegacyId,
         Note => null,
         IV4Record v4 => v4.LegacyId,
         _ => null,
@@ -1192,6 +1239,7 @@ internal static class LegacyTreatmentTables
         IReadOnlyList<FetchedRecord> records,
         CarbFoodIndex foods,
         IReadOnlyDictionary<string, string>? notes,
+        IReadOnlyDictionary<string, string>? deletedNotes,
         List<Treatment> treatments
     )
     {
@@ -1220,7 +1268,9 @@ internal static class LegacyTreatmentTables
                 WithNotes(
                     ProjectMealBolus(bolus.Record, carb.Record, foods.For(carb.Record.Id)),
                     bolus.Record.LegacyId ?? carb.Record.LegacyId,
-                    notes),
+                    key.Deleted,
+                    notes,
+                    deletedNotes),
                 Oldest(bolus.Record.CreatedAt, carb.Record.CreatedAt),
                 Newest(bolus.Modified, carb.Modified),
                 key.Deleted));
@@ -1270,6 +1320,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bolus.Id.ToString(),
+            LegacyId = bolus.LegacyId,
+            RecordId = bolus.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bolus.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(bolus.AdditionalProperties)
@@ -1279,7 +1331,7 @@ internal static class LegacyTreatmentTables
             Insulin = bolus.Insulin,
             PreBolus = TreatmentUploadedPreBolus.Of(bolus.AdditionalProperties),
             Carbs = carb.Carbs,
-            FoodType = DeriveFoodType(foods),
+            FoodType = TreatmentFood.DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
@@ -1296,6 +1348,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bolus.Id.ToString(),
+            LegacyId = bolus.LegacyId,
+            RecordId = bolus.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bolus.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(bolus.AdditionalProperties) ?? TreatmentTypes.CorrectionBolus,
@@ -1318,12 +1372,15 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = carb.Id.ToString(),
+            LegacyId = carb.LegacyId,
+            RecordId = carb.Id,
+            PreBolusMealId = PreBolusSplit.MealIdOf(carb.AdditionalProperties),
             AdditionalProperties = TreatmentClientId.ToTreatment(carb.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(carb.AdditionalProperties),
             EventType = TreatmentUploadedEventType.Of(carb.AdditionalProperties) ?? TreatmentTypes.CarbCorrection,
             Mills = carb.Mills,
             Carbs = carb.Carbs,
-            FoodType = DeriveFoodType(foods),
+            FoodType = TreatmentFood.DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
@@ -1333,18 +1390,6 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = carb.SyncIdentifier,
             UtcOffset = carb.UtcOffset,
         };
-
-    private static string? DeriveFoodType(List<TreatmentFood> foods)
-    {
-        if (foods.Count == 0) return null;
-
-        var names = foods
-            .Select(f => f.FoodName ?? f.Note)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .ToList();
-
-        return names.Count > 0 ? string.Join(", ", names) : null;
-    }
 
     private static double? DeriveTotalFat(List<TreatmentFood> foods)
     {
@@ -1366,6 +1411,8 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bgCheck.Id.ToString(),
+            LegacyId = bgCheck.LegacyId,
+            RecordId = bgCheck.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bgCheck.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bgCheck.AdditionalProperties),
             EventType = TreatmentTypes.BgCheck,
@@ -1385,9 +1432,11 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = note.Id.ToString(),
+            LegacyId = note.LegacyId,
+            RecordId = note.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(note.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(note.AdditionalProperties),
-            EventType = note.EventType ?? "Note",
+            EventType = note.EventType ?? TreatmentTypes.Note,
             Mills = note.Mills,
             Notes = note.Text,
             IsAnnouncement = note.IsAnnouncement,
@@ -1403,6 +1452,8 @@ internal static class LegacyTreatmentTables
         return new Treatment
         {
             Id = deviceEvent.Id.ToString(),
+            LegacyId = deviceEvent.LegacyId,
+            RecordId = deviceEvent.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(deviceEvent.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(deviceEvent.AdditionalProperties),
             EventType = eventTypeString ?? deviceEvent.EventType.ToString(),
@@ -1419,9 +1470,11 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bc.Id.ToString(),
+            LegacyId = bc.LegacyId,
+            RecordId = bc.Id,
             AdditionalProperties = TreatmentClientId.ToTreatment(bc.AdditionalProperties),
             RawTimestamp = TreatmentUploadedTimestamp.Of(bc.AdditionalProperties),
-            EventType = "Bolus Wizard",
+            EventType = TreatmentTypes.BolusWizard,
             Mills = bc.Mills,
             BloodGlucoseInput = bc.BloodGlucoseInput,
             BloodGlucoseInputSource = bc.BloodGlucoseInputSource,

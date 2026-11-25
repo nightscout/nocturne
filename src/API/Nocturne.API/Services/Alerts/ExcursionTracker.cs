@@ -7,7 +7,7 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Moves a rule's excursion through idle → confirming → active → hysteresis → idle. Each call
+/// Moves a rule's excursion through idle → active → hysteresis → idle. Each call
 /// loads the rule's state, asks an <see cref="IExcursionDecider"/> what happens, and persists
 /// the answer through <see cref="ExcursionTransitionWriter"/>, all under the rule's
 /// <see cref="AlertRuleEvaluationGate"/> lease.

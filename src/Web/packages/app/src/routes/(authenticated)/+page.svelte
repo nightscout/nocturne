@@ -8,15 +8,21 @@
   } from "#lib/components/dashboard/index.js";
   import { showsCurrentGlucoseWidget } from "#lib/components/dashboard/top-widget-ids.js";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
-  import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
-  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import {
+    colorTheme,
+    dashboardTopWidgets,
+    glucoseChartLookback,
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { WidgetId } from "@nocturne/api-client";
   import { isMainSectionEnabled, showsPredictions } from "#lib/types/dashboard-widgets.js";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";
-  import TenantsOverview from "#lib/components/tenants/TenantsOverview.svelte";
+  import PeoplePage from "#lib/components/people/PeoplePage.svelte";
   import HistoryLimitNotice from "#lib/components/layout/HistoryLimitNotice.svelte";
   import FirstReadingChartArea from "#lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
   import SetupStrip from "#lib/components/setup-hub/SetupStrip.svelte";
+  import LogEventButton from "#lib/components/entries/LogEventButton.svelte";
+  import { canLogEvents } from "#lib/components/entries/can-log-events.js";
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import type { PageData } from "./$types";
 
@@ -54,29 +60,53 @@
   // The Current glucose widget attaches this mark to its own tile while it carries the reading.
   const readingInWidget = $derived(showsCurrentGlucoseWidget(topWidgets));
 
+  // The Nightscout theme lays the dashboard out as cgm-remote-monitor does: its own header,
+  // no widget grid, and the header's Hours row sets the chart's window.
+  const nightscoutLayout = $derived(colorTheme.current === "nightscout");
+
   // Get focusHours setting for chart default time range
   const focusHours = $derived(
-    featureSettings?.display?.focusHours ?? 12
+    nightscoutLayout
+      ? glucoseChartLookback.current
+      : (featureSettings?.display?.focusHours ?? 12)
   );
 
   const showPredictions = $derived(showsPredictions(uiSettings));
+  // Room under the last card for the floating Log event button, so it never covers content.
+  const reserveFloatingAction = $derived(canLogEvents());
 </script>
 
 {#if data.tenantless}
-  <TenantsOverview />
+  <PeoplePage />
 {:else}
-  <div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">
+  <div
+    class="@container p-3 @md:p-6 space-y-3 @md:space-y-6 {reserveFloatingAction
+      ? 'max-md:pb-24'
+      : ''}"
+  >
     <HistoryLimitNotice />
 
-    <div
-      {@attach readingInWidget
-        ? undefined
-        : coachmark({
-            ...coachFor("quick-tour.current-bg"),
-          })}
-    >
-      <CurrentBGDisplay />
-    </div>
+    {#if nightscoutLayout}
+      <div
+        {@attach coachmark([
+          coachFor("quick-tour.current-bg"),
+          coachFor("share-tour.reading"),
+        ])}
+      >
+        <CurrentBGDisplay layout="nightscout" />
+      </div>
+    {:else}
+      <div
+        {@attach readingInWidget
+          ? undefined
+          : coachmark([
+              coachFor("quick-tour.current-bg"),
+              coachFor("share-tour.reading"),
+            ])}
+      >
+        <CurrentBGDisplay />
+      </div>
+    {/if}
 
     <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
       <!--
@@ -84,21 +114,25 @@
         (`dashboardTopWidgets`), and tenant settings carry no top-placement row
         to gate it with.
       -->
-      <div
-        {@attach coachmark({
-          ...coachFor("quick-tour.widgets"),
-        })}
-      >
-        <WidgetGrid widgets={topWidgets} />
-      </div>
+      {#if !nightscoutLayout}
+        <div
+          {@attach coachmark({
+            ...coachFor("quick-tour.widgets"),
+          })}
+        >
+          <WidgetGrid widgets={topWidgets} />
+        </div>
+      {/if}
 
       {#if isMainSectionEnabled(widgets, WidgetId.GlucoseChart)}
         {#snippet glucoseChart(chartVisible: boolean)}
           <div
             {@attach chartVisible
-              ? coachmark({
-                  ...coachFor("quick-tour.chart"),
-                })
+              ? coachmark([
+                  coachFor("quick-tour.chart"),
+                  coachFor("guest-tour.chart"),
+                  coachFor("share-tour.chart"),
+                ])
               : undefined}
           >
             <GlucoseChartCard
@@ -134,5 +168,8 @@
     {#if isMainSectionEnabled(widgets, WidgetId.Treatments)}
       <RecentTreatmentsCard />
     {/if}
+
+    <!-- On a phone the status line, and the Log event button in it, is hidden. -->
+    <LogEventButton placement="floating" />
   </div>
 {/if}

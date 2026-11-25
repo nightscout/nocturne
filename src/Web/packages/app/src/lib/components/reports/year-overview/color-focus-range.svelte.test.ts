@@ -187,10 +187,10 @@ describe("year overview color focus", () => {
       expect(bounds.width).toBeGreaterThan(300);
 
       await page.screenshot({ path: "test-results/color-focus-mobile.png" });
-      // The window was saved without a color range, so the high color dot covers the handle's
-      // middle; the handle is grabbed above the bar.
+        const focusBounds = maximumSlider().element().getBoundingClientRect();
+        const colorBounds = page.getByTestId("color-range-high-handle").element().getBoundingClientRect();
+        expect(focusBounds.bottom).toBeLessThanOrEqual(colorBounds.top);
       await userEvent.dragAndDrop(maximumSlider(), track, {
-        sourcePosition: { x: 5, y: 3 },
         targetPosition: { x: bounds.width * 0.6, y: bounds.height / 2 },
       });
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -27,10 +28,10 @@
   let dragIndex = $state<number | null>(null);
   let dropIndex = $state<number | null>(null);
 
-  // Clone rules into local state when dialog opens
+  // Reads `rules` untracked: a refresh while the dialog is open must not replace the draft.
   $effect(() => {
     if (open) {
-      localRules = rules.map((r) => ({ ...r }));
+      localRules = untrack(() => rules).map((r) => ({ ...r }));
     }
   });
 

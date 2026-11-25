@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
@@ -26,6 +25,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     private readonly Mock<IPumpSnapshotRepository> _pumpRepoMock;
     private readonly Mock<IUploaderSnapshotRepository> _uploaderRepoMock;
     private readonly Mock<IDeviceStatusExtrasRepository> _extrasRepoMock;
+    private readonly Mock<ISensorStateReportRepository> _sensorStateRepoMock = new();
     private readonly Mock<IStateSpanService> _stateSpanServiceMock;
     private readonly List<StateSpan> _spans;
     private readonly Mock<IDeviceService> _deviceServiceMock;
@@ -68,16 +68,18 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => [.. records]);
 
-        _decomposer = new DeviceStatusDecomposer(
-            _apsRepoMock.Object,
-            _pumpRepoMock.Object,
-            _uploaderRepoMock.Object,
-            _extrasRepoMock.Object,
-            _stateSpanServiceMock.Object,
-            _deviceServiceMock.Object,
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        _sensorStateRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.SensorStateReport>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.SensorStateReport> records, WriteOrigin origin, CancellationToken _) => [.. records]);
+
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
+            aps: _apsRepoMock.Object,
+            pump: _pumpRepoMock.Object,
+            uploader: _uploaderRepoMock.Object,
+            extras: _extrasRepoMock.Object,
+            sensorState: _sensorStateRepoMock.Object,
+            stateSpans: _stateSpanServiceMock.Object,
+            devices: _deviceServiceMock.Object);
     }
 
     public void Dispose()
@@ -505,9 +507,9 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
             },
         ]);
 
-        var decomposer = new DeviceStatusDecomposer(
-            aps.Object, pump.Object, uploader.Object, extras.Object, spans.Object, devices.Object,
-            Mock.Of<IAuditContext>(), loop.Object, TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        var decomposer = DeviceStatusDecomposerDoubles.Build(
+            aps.Object, pump.Object, uploader.Object, extras.Object,
+            stateSpans: spans.Object, devices: devices.Object, closedLoop: loop.Object);
 
         var statuses = Enumerable.Range(0, count).Select(i => new DeviceStatus
         {

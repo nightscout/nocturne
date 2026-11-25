@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.ClientDevices;
@@ -116,6 +115,70 @@ public class InAppNotificationService : IInAppNotificationService
         };
 
         var created = await _repository.CreateAsync(entity, cancellationToken);
+        return await AnnounceAsync(userId, type, created);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> CreateNotificationUnlessActiveAsync(
+        string userId,
+        string type,
+        string title,
+        string sourceId,
+        NotificationCategory? category = null,
+        string? source = null,
+        string? subtitle = null,
+        Dictionary<string, object>? metadata = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (await _repository.FindBySourceAsync(userId, type, sourceId, cancellationToken) is not null)
+            return false;
+
+        var template = _templateRegistry.GetTemplate(type);
+        var resolvedCategory = category
+            ?? template?.Category
+            ?? throw new ArgumentException($"No category provided and no template registered for type '{type}'", nameof(type));
+        var resolvedSource = source ?? template?.Source;
+        if (resolvedSource != null)
+        {
+            await SupersedeOldestOverCapAsync(userId, resolvedSource, cancellationToken);
+        }
+
+        var created = await _repository.CreateUnlessActiveAsync(new InAppNotificationEntity
+        {
+            UserId = userId,
+            Type = type,
+            Category = resolvedCategory,
+            Urgency = template?.DefaultUrgency ?? NotificationUrgency.Info,
+            Icon = template?.Icon,
+            Source = resolvedSource,
+            Title = title,
+            Subtitle = subtitle,
+            SourceId = sourceId,
+            ActionsJson = InAppNotificationRepository.SerializeActions(template?.DefaultActions),
+            ResolutionConditionsJson = InAppNotificationRepository.SerializeConditions(template?.DefaultResolutionConditions),
+            MetadataJson = InAppNotificationRepository.SerializeMetadata(metadata)
+        }, cancellationToken);
+        if (created is null)
+            return false;
+
+        await AnnounceAsync(userId, type, created);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ReplaceMetadataBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        Dictionary<string, object> metadata,
+        CancellationToken cancellationToken = default
+    ) =>
+        _repository.ReplaceMetadataBySourceAsync(
+            userId, type, sourceId, InAppNotificationRepository.SerializeMetadata(metadata), cancellationToken);
+
+    private async Task<InAppNotificationDto> AnnounceAsync(string userId, string type, InAppNotificationEntity created)
+    {
         var dto = InAppNotificationRepository.ToDto(created);
 
         _logger.LogInformation(
@@ -125,33 +188,14 @@ public class InAppNotificationService : IInAppNotificationService
             userId
         );
 
-        // Broadcast the notification created event
-        try
-        {
-            await _broadcastService.BroadcastNotificationCreatedAsync(userId, dto);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification created event for {NotificationId}",
-                dto.Id
-            );
-        }
+        await _broadcastService.BroadcastNotificationCreatedAsync(userId, dto);
 
         // Mirror qualifying non-alert notifications to the user's registered devices. Alerts reach
         // devices via device_action channels, so alert.firing is excluded by Qualifies.
         if (DeviceNotificationMirror.Qualifies(dto))
         {
-            try
-            {
-                await _broadcastService.BroadcastDeviceNotificationAsync(
-                    new DeviceNotificationMirror { UserId = userId, Notification = dto });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to mirror notification {NotificationId} to devices", dto.Id);
-            }
+            await _broadcastService.BroadcastDeviceNotificationAsync(
+                new DeviceNotificationMirror { UserId = userId, Notification = dto });
         }
 
         return dto;
@@ -227,20 +271,8 @@ public class InAppNotificationService : IInAppNotificationService
             reason
         );
 
-        // Broadcast the notification archived event
-        var dto = InAppNotificationRepository.ToDto(archived);
-        try
-        {
-            await _broadcastService.BroadcastNotificationArchivedAsync(archived.UserId, dto, reason);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification archived event for {NotificationId}",
-                notificationId
-            );
-        }
+        await _broadcastService.BroadcastNotificationArchivedAsync(
+            archived.UserId, InAppNotificationRepository.ToDto(archived), reason);
 
         return true;
     }
@@ -271,7 +303,7 @@ public class InAppNotificationService : IInAppNotificationService
             return false;
         }
 
-        await BroadcastUpdatedSafeAsync(updated);
+        await BroadcastUpdatedAsync(updated);
         return true;
     }
 
@@ -285,7 +317,7 @@ public class InAppNotificationService : IInAppNotificationService
 
         foreach (var entity in updated)
         {
-            await BroadcastUpdatedSafeAsync(entity);
+            await BroadcastUpdatedAsync(entity);
         }
 
         _logger.LogInformation(
@@ -297,26 +329,9 @@ public class InAppNotificationService : IInAppNotificationService
         return updated.Count;
     }
 
-    /// <summary>
-    /// Broadcast a notification-updated event, logging and swallowing any failure so a
-    /// broadcast hiccup never fails the mark-read operation.
-    /// </summary>
-    private async Task BroadcastUpdatedSafeAsync(InAppNotificationEntity entity)
-    {
-        var dto = InAppNotificationRepository.ToDto(entity);
-        try
-        {
-            await _broadcastService.BroadcastNotificationUpdatedAsync(entity.UserId, dto);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification updated event for {NotificationId}",
-                entity.Id
-            );
-        }
-    }
+    private Task BroadcastUpdatedAsync(InAppNotificationEntity entity) =>
+        _broadcastService.BroadcastNotificationUpdatedAsync(
+            entity.UserId, InAppNotificationRepository.ToDto(entity));
 
     /// <inheritdoc />
     public async Task<string?> GetNotificationTypeAsync(
@@ -336,7 +351,7 @@ public class InAppNotificationService : IInAppNotificationService
     }
 
     /// <inheritdoc />
-    public async Task<bool> ExecuteActionAsync(
+    public async Task<NotificationActionResult> ExecuteActionAsync(
         Guid notificationId,
         string actionId,
         string userId,
@@ -351,7 +366,7 @@ public class InAppNotificationService : IInAppNotificationService
                 "Attempted to execute action on non-existent notification {NotificationId}",
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         // Verify the notification belongs to the user
@@ -362,7 +377,7 @@ public class InAppNotificationService : IInAppNotificationService
                 userId,
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         _logger.LogDebug(
@@ -371,60 +386,46 @@ public class InAppNotificationService : IInAppNotificationService
             notificationId
         );
 
-        // Handle built-in actions
-        switch (actionId.ToLowerInvariant())
+        var builtInArchive = actionId.ToLowerInvariant() switch
         {
-            case "dismiss":
-                return await ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Dismissed,
-                    userId,
-                    cancellationToken
-                );
+            "dismiss" => NotificationArchiveReason.Dismissed,
+            "navigate" => NotificationArchiveReason.Completed,
+            _ => (NotificationArchiveReason?)null,
+        };
 
-            case "navigate":
-                return await ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Completed,
-                    userId,
-                    cancellationToken
-                );
+        if (_actionHandlers.TryGetValue(notification.Type, out var handler))
+        {
+            var metadata = InAppNotificationRepository.DeserializeMetadata(notification.MetadataJson);
+            var result = await handler.HandleAsync(
+                notificationId,
+                actionId,
+                userId,
+                notification.SourceId,
+                metadata,
+                cancellationToken
+            );
 
-            default:
-                // Dispatch to type-specific action handler if registered
-                if (_actionHandlers.TryGetValue(notification.Type, out var handler))
+            if (result.Handled || result.RefusedScope is not null || builtInArchive is null)
+            {
+                if (result.RefusedScope is null && result.Archive is { } reason)
                 {
-                    var metadata = DeserializeMetadata(notification.MetadataJson);
-                    var result = await handler.HandleAsync(
-                        notificationId,
-                        actionId,
-                        userId,
-                        notification.SourceId,
-                        metadata,
-                        cancellationToken
-                    );
-
-                    if (result.Archive is { } reason)
-                    {
-                        await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
-                    }
-
-                    return result.Handled;
+                    await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
                 }
 
-                // No handler registered — default to archiving as completed
-                _logger.LogInformation(
-                    "No action handler for type {Type}, archiving notification {NotificationId} as completed",
-                    notification.Type,
-                    notificationId
-                );
-                return await ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Completed,
-                    userId,
-                    cancellationToken
-                );
+                return result;
+            }
+
+            _logger.LogInformation(
+                "Handler for type {Type} declined {ActionId}, archiving notification {NotificationId}",
+                notification.Type,
+                actionId,
+                notificationId
+            );
         }
+
+        var archiveReason = builtInArchive ?? NotificationArchiveReason.Completed;
+        var archived = await ArchiveNotificationAsync(notificationId, archiveReason, userId, cancellationToken);
+        return new NotificationActionResult(archived, archived ? archiveReason : null);
     }
 
     /// <inheritdoc />
@@ -455,25 +456,5 @@ public class InAppNotificationService : IInAppNotificationService
         }
 
         return await ArchiveNotificationAsync(notification.Id, reason, userId, cancellationToken);
-    }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
-    private static Dictionary<string, object>? DeserializeMetadata(string? json)
-    {
-        if (string.IsNullOrEmpty(json))
-            return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions);
-        }
-        catch
-        {
-            return null;
-        }
     }
 }

@@ -8,13 +8,25 @@ import {
 	parseRule,
 	applyChannelDestination,
 	buildBody,
+	buildCreateBody,
+	freshnessIssue,
+	toReplayRule,
 	parseChannelMetadata,
 	validateChannels,
 	type ChannelDef,
 	type ConditionNode,
+	type PredictedCondition,
+	curveChoice,
+	setCurveChoice,
+	clearCurveChoice,
+	ForecastCurve,
+	AlertLimitFact,
+	limitSource,
+	setLimitSource,
+	type ThresholdCondition,
 } from "./types";
-import { AlertConditionType, AlertRuleSeverity, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
-import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertConditionType, AlertRuleSeverity, ChannelType } from "@nocturne/api-client";
+import type { AlertRuleResponse } from "@nocturne/api-client";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {
@@ -111,6 +123,34 @@ describe("nodeFromApi / nodeToApi", () => {
 			conditionType: "threshold",
 			conditionParams: { direction: "above", value: 180 },
 		});
+	});
+});
+
+describe("a limit from a fact", () => {
+	it("reads a stored limit from a fact without giving it a number, so it saves as it was", () => {
+		const state = parseRule({
+			name: "Below target",
+			conditionType: AlertConditionType.Threshold,
+			conditionParams: { direction: "below", value_from: { fact: "target_low", offset: -10 } },
+		});
+
+		expect(buildBody(state).conditionParams).toEqual({
+			direction: "below",
+			value_from: { fact: "target_low", offset: -10 },
+		});
+	});
+
+	it("takes a number or a fact, never both", () => {
+		const p: ThresholdCondition = { direction: "below", value: 65 };
+
+		setLimitSource(p, AlertLimitFact.TargetHigh, 70);
+		expect(p).toEqual({ direction: "below", value: undefined, value_from: { fact: "target_high", offset: undefined } });
+		expect(limitSource(p)).toBe(AlertLimitFact.TargetHigh);
+
+		setLimitSource(p, "value", 70);
+		expect(p.value_from).toBeUndefined();
+		expect(p.value).toBe(70);
+		expect(limitSource(p)).toBe("value");
 	});
 });
 
@@ -739,5 +779,128 @@ describe("reading a stored rule", () => {
 
 		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
 		expect(body.autoResolveParams).toEqual({ type: "composite", composite: { operator: "and" } });
+	});
+});
+
+describe("the missing-data settings in a save", () => {
+	it("leaves both out of a rule read without them, so an update keeps the stored values", () => {
+		const body = buildBody(parseRule({ name: "Low", conditionType: AlertConditionType.Threshold }));
+
+		expect(body.onUnknown).toBeUndefined();
+		expect(body.glucoseFreshnessMinutes).toBeUndefined();
+		expect(body.clearGlucoseFreshness).toBeUndefined();
+	});
+
+	it("sends the stored choice and bound back unchanged", () => {
+		const body = buildBody(
+			parseRule({
+				name: "Low",
+				conditionType: AlertConditionType.Threshold,
+				onUnknown: "not_met",
+				glucoseFreshnessMinutes: 20,
+			}),
+		);
+
+		expect(body).toMatchObject({ onUnknown: "not_met", glucoseFreshnessMinutes: 20 });
+	});
+
+	it("asks for the default bound only when told to, and a create never does", () => {
+		const state = parseRule({ name: "Low", conditionType: AlertConditionType.Threshold, glucoseFreshnessMinutes: 20 });
+		state.glucoseFreshnessMinutes = undefined;
+		state.clearGlucoseFreshness = true;
+
+		expect(buildBody(state).clearGlucoseFreshness).toBe(true);
+		expect(buildCreateBody(state)).not.toHaveProperty("clearGlucoseFreshness");
+	});
+
+	it("replays the stored choice and bound, and sends the default for a cleared bound", () => {
+		const state = parseRule({
+			name: "Low",
+			conditionType: AlertConditionType.Threshold,
+			onUnknown: "met",
+			glucoseFreshnessMinutes: 20,
+		});
+
+		expect(toReplayRule(state, "id", 11)).toMatchObject({
+			id: "id",
+			onUnknown: "met",
+			glucoseFreshnessMinutes: 20,
+		});
+
+		state.glucoseFreshnessMinutes = undefined;
+		state.clearGlucoseFreshness = true;
+		expect(toReplayRule(state, "id", 11).glucoseFreshnessMinutes).toBe(11);
+	});
+
+	it("knows whether the rule loaded with a bound of its own", () => {
+		expect(parseRule({ name: "Low", glucoseFreshnessMinutes: 20 }).hasStoredFreshnessBound).toBe(true);
+		expect(parseRule({ name: "Low" }).hasStoredFreshnessBound).toBe(false);
+	});
+
+	it("refuses a bound outside the range the API gave", () => {
+		const options = { minGlucoseFreshnessMinutes: 1, maxGlucoseFreshnessMinutes: 1440 };
+		const state = parseRule(null);
+
+		state.glucoseFreshnessMinutes = 1440;
+		expect(freshnessIssue(state, options)).toBeNull();
+		state.glucoseFreshnessMinutes = 1441;
+		expect(freshnessIssue(state, options)).toBe("Enter a whole number from 1 to 1440.");
+		state.glucoseFreshnessMinutes = 0;
+		expect(freshnessIssue(state, options)).not.toBeNull();
+		state.glucoseFreshnessMinutes = 2.5;
+		expect(freshnessIssue(state, options)).not.toBeNull();
+		state.glucoseFreshnessMinutes = undefined;
+		expect(freshnessIssue(state, options)).toBeNull();
+	});
+});
+
+describe("curve choice", () => {
+	const plain = (): PredictedCondition => ({ operator: "<", value: 70, within_minutes: 30 });
+
+	it("reads no choice when the condition names no curve", () => {
+		expect(curveChoice(plain())).toBeUndefined();
+	});
+
+	it("keeps one choice at a time, so a save never sends two", () => {
+		const p = plain();
+		setCurveChoice(p, "curve");
+		expect(p).toMatchObject({ curve: ForecastCurve.Iob, min_of: undefined, max_of: undefined });
+		setCurveChoice(p, "min_of");
+		expect(p.curve).toBeUndefined();
+		expect(p.min_of).toEqual([ForecastCurve.Iob, ForecastCurve.Cob, ForecastCurve.Uam, ForecastCurve.Zt]);
+		p.min_of = [ForecastCurve.Uam];
+		setCurveChoice(p, "max_of");
+		expect(p).toMatchObject({ curve: undefined, min_of: undefined, max_of: [ForecastCurve.Uam] });
+		expect(curveChoice(p)).toBe("max_of");
+	});
+
+	it("never stores the default as a choice", () => {
+		const stored = nodeFromApi("predicted", { operator: "<", value: 70, within_minutes: 30, curve: ForecastCurve.Default });
+		expect(stored?.predicted?.curve).toBeUndefined();
+		expect(curveChoice({ ...plain(), curve: ForecastCurve.Default })).toBeUndefined();
+
+		const p = plain();
+		p.max_of = [ForecastCurve.Default, ForecastCurve.Zt];
+		setCurveChoice(p, "curve");
+		expect(p.curve).toBe(ForecastCurve.Zt);
+	});
+
+	it("clears every choice, back to the default forecast", () => {
+		const p = plain();
+		setCurveChoice(p, "min_of");
+		clearCurveChoice(p);
+		expect(curveChoice(p)).toBeUndefined();
+		const sent: unknown = JSON.parse(JSON.stringify(nodeToApi({ type: "predicted", predicted: p })?.conditionParams));
+		expect(sent).toEqual({ operator: "<", value: 70, within_minutes: 30 });
+	});
+});
+
+describe("loop conditions", () => {
+	it("start with a comparison the engine reads, and take a clear margin", () => {
+		for (const kind of ["eventual_glucose", "carbs_required"] as const) {
+			const node = defaultPayload(kind);
+			expect(node.type).toBe(kind);
+			expect(node[kind]).toMatchObject({ operator: expect.any(String), value: expect.any(Number) });
+		}
 	});
 });

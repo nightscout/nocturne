@@ -26,7 +26,7 @@ public class StateSpanRepositoryTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<IDeduplicationService> _mockDedup;
+    private readonly Mock<IDuplicateLinker> _mockDedup;
     private readonly StateSpanRepository _repository;
     private readonly Mock<ILogger<StateSpanRepository>> _logger = new();
     private readonly SaveCounter _saves = new();
@@ -55,7 +55,7 @@ public class StateSpanRepositoryTests : IDisposable
 
         _context = _db.CreateContext();
         _context.AttributedTo(_auditContext);
-        _mockDedup = new Mock<IDeduplicationService>();
+        _mockDedup = new Mock<IDuplicateLinker>();
         _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new StateSpanRepository(
             _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object);
@@ -450,18 +450,17 @@ public class StateSpanRepositoryTests : IDisposable
         var primaryEntity = SpanEntity(
             _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Automatic.ToString(),
             new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), null);
-        primaryEntity.OriginalId = "pm-primary";
+        primaryEntity.LegacyId = "pm-primary";
         primaryEntity.Source = "primary";
 
         var duplicateEntity = SpanEntity(
             _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Manual.ToString(),
             new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc), null);
-        duplicateEntity.OriginalId = "pm-duplicate";
+        duplicateEntity.LegacyId = "pm-duplicate";
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var current = await _repository.GetCurrentPumpModeAsync();
 
@@ -480,11 +479,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        var canonicalId = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(canonicalId, primaryEntity.Id, isPrimary: true),
-            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var spans = (await _repository.GetStateSpansAsync()).ToList();
 
@@ -501,8 +496,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var spans = await _repository.GetActivityStateSpansAsync();
 
@@ -520,11 +514,7 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        var canonicalId = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(canonicalId, primaryEntity.Id, isPrimary: true),
-            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, primaryEntity.Id, duplicateEntity.Id);
 
         var active = await _repository.GetActiveAtAsync(
             StateSpanCategory.Override, null, new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -549,14 +539,8 @@ public class StateSpanRepositoryTests : IDisposable
         windowDuplicate.Source = "duplicate";
 
         _context.StateSpans.AddRange(carriedPrimary, carriedDuplicate, windowPrimary, windowDuplicate);
-        var carriedGroup = Guid.NewGuid();
-        var windowGroup = Guid.NewGuid();
-        _context.LinkedRecords.AddRange(
-            Link(carriedGroup, carriedPrimary.Id, isPrimary: true),
-            Link(carriedGroup, carriedDuplicate.Id, isPrimary: false),
-            Link(windowGroup, windowPrimary.Id, isPrimary: true),
-            Link(windowGroup, windowDuplicate.Id, isPrimary: false));
-        await _context.SaveChangesAsync();
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, carriedPrimary.Id, carriedDuplicate.Id);
+        await DuplicateGroups.LinkAsync(_context, RecordType.StateSpan, windowPrimary.Id, windowDuplicate.Id);
 
         var result = await _repository.GetByCategories(
             [StateSpanCategory.Override, StateSpanCategory.PumpMode], from, from.AddDays(1));
@@ -564,18 +548,6 @@ public class StateSpanRepositoryTests : IDisposable
         result[StateSpanCategory.Override].Should().ContainSingle().Which.Source.Should().Be("primary");
         result[StateSpanCategory.PumpMode].Should().ContainSingle().Which.Source.Should().Be("primary");
     }
-
-    private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
-    {
-        Id = Guid.NewGuid(),
-        CanonicalId = canonicalId,
-        RecordType = "statespan",
-        RecordId = recordId,
-        SourceTimestamp = 0,
-        DataSource = isPrimary ? "primary" : "duplicate",
-        IsPrimary = isPrimary,
-        SysCreatedAt = DateTime.UtcNow,
-    };
 
     // --- GetActiveAtAsync ---
 
@@ -879,7 +851,7 @@ public class StateSpanRepositoryTests : IDisposable
     /// <summary>Primary keys of every row carrying <paramref name="originalId"/>, deleted included.</summary>
     private Task<List<StateSpanEntity>> RowsForAsync(string originalId) =>
         _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
-            .Where(s => s.OriginalId == originalId)
+            .Where(s => s.LegacyId == originalId)
             .ToListAsync();
 
     [Fact]
@@ -900,6 +872,47 @@ public class StateSpanRepositoryTests : IDisposable
         rows.Should().ContainSingle("the resync must not insert a second row")
             .Which.Id.Should().Be(originalRowId);
         rows[0].DeletedAt.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(null, "nocturne")]
+    [InlineData("glooko-exercise-1", "nightscout")]
+    public async Task UpdateActivityStateSpanAsync_KeepsTheStoredKeyAndSource_SoAResyncUpdatesIt(
+        string? editedOriginalId, string editedSource)
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        var edited = ConnectorSpan();
+        edited.State = "Cycling";
+        edited.OriginalId = editedOriginalId;
+        edited.Source = editedSource;
+        var updated = await _repository.UpdateActivityStateSpanAsync("glooko-exercise-1", edited);
+
+        updated.Should().NotBeNull();
+        updated!.OriginalId.Should().Be("glooko-exercise-1");
+        updated.Source.Should().Be("glooko-connector");
+        updated.State.Should().Be("Cycling");
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _context.StateSpans.AsNoTracking().Where(s => s.DeletedAt == null).ToListAsync())
+            .Should().ContainSingle("the resync updates the edited row rather than inserting a second span")
+            .Which.State.Should().Be("Running");
+    }
+
+    [Fact]
+    public async Task UpdateActivityStateSpanAsync_ByRowId_KeepsTheStoredKeyAndSource()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var rowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        var edited = ConnectorSpan();
+        edited.OriginalId = rowId.ToString();
+        edited.Source = "nightscout";
+        var updated = await _repository.UpdateActivityStateSpanAsync(rowId.ToString(), edited);
+
+        updated!.OriginalId.Should().Be("glooko-exercise-1");
+        updated.Source.Should().Be("glooko-connector");
     }
 
     [Fact]
@@ -1151,7 +1164,355 @@ public class StateSpanRepositoryTests : IDisposable
     };
 
     private Task<Dictionary<string, StateSpanEntity>> LiveRowsAsync() =>
-        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.OriginalId!);
+        _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.LegacyId!);
+
+    private Task<IReadOnlyList<string>> RewriteAsync(IReadOnlyList<StateSpan> spans) =>
+        _repository.RewriteFromUpstreamAsync("connector", spans);
+
+    // --- Rewrite from upstream ---
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_AShortenedSpanNothingEnded_TakesItsNewEnd()
+    {
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 12),
+            Span(StateSpanCategory.Override, "Custom", 14, "ov-b"),
+        ]);
+        var after = (await LiveRowsAsync())["ov-b"];
+
+        var written = await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 10)]);
+
+        written.Should().Equal("ov-a");
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["ov-a"].SupersededById.Should().BeNull();
+        rows["ov-b"].UpdatedAt.Should().Be(after.UpdatedAt, "a span the rewrite does not move is not written");
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanShortenedBeforeTheSpanThatEndedIt_TakesItsOwnEnd()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 9)]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        rows["ov-a"].SupersededById.Should().BeNull("an uploaded end is the span's own, which a later delete of ov-b must not move");
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(null)]
+    public async Task RewriteFromUpstreamAsync_ASpanWhoseEndLiesAfterTheSpanThatEndedIt_StaysEndedThere(int? endHour)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour)]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["ov-a"].SupersededById.Should().Be(ended);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanMadeOpenBehindALaterSpan_EndsAtIt()
+    {
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.TemporaryTarget, "Active", 8, "tt-a", endHour: 9),
+            Span(StateSpanCategory.TemporaryTarget, "Active", 10, "tt-b"),
+        ]);
+
+        await RewriteAsync([Span(StateSpanCategory.TemporaryTarget, "Active", 8, "tt-a")]);
+
+        var rows = await LiveRowsAsync();
+        rows["tt-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["tt-a"].SupersededById.Should().Be(rows["tt-b"].Id);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanThatMovesItsStart_ReSettlesTheSpanItEnded()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 12, "ov-c"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 11, "ov-b")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+        rows["ov-b"].StartTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(12), "it still ends where ov-c starts");
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-c"].Id);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanNoLiveRowHolds_WritesNothing()
+    {
+        await _repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 9)]);
+        await _repository.DeleteStateSpanAsync("ov-a");
+
+        var written = await RewriteAsync(
+            [Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 10), Span(StateSpanCategory.Override, "Custom", 8, "ov-none")]);
+
+        written.Should().BeEmpty();
+        (await LiveRowsAsync()).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(9, 11)]
+    [InlineData(7, 9)]
+    public async Task RewriteFromUpstreamAsync_TwoNeighboursWhoseStartsBothMove_EndTheEarlierAtTheLatersNewStart(
+        int earlierStart, int laterStart)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", earlierStart, "ov-a"),
+            Span(StateSpanCategory.Override, "Custom", laterStart, "ov-b"),
+        ]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(laterStart));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanWhoseCategoryChanges_ReleasesTheSpanItEnded()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.TemporaryTarget, "Active", 10, "ov-b")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-b"].Category.Should().Be(nameof(StateSpanCategory.TemporaryTarget));
+        rows["ov-a"].EndTimestamp.Should().BeNull("no override follows it any more");
+        rows["ov-a"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanAnotherSourceStores_IsNotWritten()
+    {
+        var theirs = Span(StateSpanCategory.Override, "Custom", 8, "ov-a");
+        theirs.Source = "uploader";
+        await _repository.UpsertStateSpanAsync(theirs);
+        var before = (await LiveRowsAsync())["ov-a"];
+
+        var written = await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 9)]);
+
+        written.Should().BeEmpty();
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.EndTimestamp.Should().BeNull();
+        row.UpdatedAt.Should().Be(before.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_AStartMovedEarlierPastASpan_EndsAtThatSpan()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 7, "ov-b")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(8));
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-a"].Id);
+        rows["ov-a"].EndTimestamp.Should().BeNull("the span that ended it now starts before it");
+        rows["ov-a"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_AStartMovedLaterPastTheSpanThatEndedIt_EndsThatSpanInstead()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 11, "ov-a")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().BeNull();
+        rows["ov-a"].SupersededById.Should().BeNull();
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-a"].Id);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanWhoseSupersederIsDeleted_EndsAtItsFirstLiveSuccessor()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 12, "ov-c"));
+        var deleted = (await LiveRowsAsync())["ov-b"].Id;
+        await _repository.DeleteStateSpanAsync("ov-b");
+        await _context.StateSpans.Where(s => s.LegacyId == "ov-a").ExecuteUpdateAsync(u => u
+            .SetProperty(s => s.EndTimestamp, BatchDay.AddHours(10))
+            .SetProperty(s => s.SupersededById, deleted));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(12));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-c"].Id);
+    }
+
+    // --- An uploaded end against a superseded end ---
+
+    /// <summary>A crawl writes an upload by the upsert, a reconcile by the rewrite; both must leave one row.</summary>
+    private async Task UploadAsync(bool republish, params StateSpan[] spans)
+    {
+        if (republish)
+            await RewriteAsync(spans);
+        else
+            await _repository.BulkUpsertAsync(spans);
+    }
+
+    [Theory]
+    [InlineData(false, 11)]
+    [InlineData(true, 11)]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    public async Task AnUploadedEndPastTheSpanThatEndedIt_KeepsTheEndThatSpanGave_ByEitherWriter(bool republish, int? endHour)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+
+        await UploadAsync(republish, Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10), "an upload does not stretch a span over the span that ended it");
+        rows["ov-a"].SupersededById.Should().Be(ended);
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false, 9)]
+    [InlineData(true, 9)]
+    [InlineData(false, 10)]
+    [InlineData(true, 10)]
+    public async Task AnUploadedEndAtOrBeforeTheSpanThatEndedIt_IsTheUploadsOwn_ByEitherWriter(bool republish, int endHour)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await UploadAsync(republish, Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(endHour));
+        rows["ov-a"].SupersededById.Should().BeNull("an uploaded end is the span's own, which a later delete of ov-b must not move");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnUploadPastTheSpanThatEndedIt_WhenThatSpanMoves_EndsAtItsNewStart_ByEitherWriter(bool republish)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await UploadAsync(republish,
+            Span(StateSpanCategory.Override, "Custom", 12, "ov-b"),
+            Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 13));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(12));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+    }
+
+    [Fact]
+    public async Task UpdateStateSpansAsync_AFoldThatEndsASupersededSpanLater_KeepsTheEndItsSupersederGave()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+        var extended = Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 11);
+        extended.Id = "ov-a";
+
+        await _repository.UpdateStateSpansAsync([extended]);
+
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        row.SupersededById.Should().Be(ended);
+    }
+
+    [Fact]
+    public async Task UpdateStateSpansAsync_AFoldThatLeavesASupersededEndAlone_KeepsItsSuperseder()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+        var moved = Span(StateSpanCategory.Override, "Custom", 9, "ov-a", endHour: 10);
+        moved.Id = "ov-a";
+
+        await _repository.UpdateStateSpansAsync([moved]);
+
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.StartTimestamp.Should().Be(BatchDay.AddHours(9));
+        row.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        row.SupersededById.Should().Be(ended, "the fold handed back the end it read, which a delete of ov-b must still reopen");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UpdateStateSpansAsync_AFoldThatMovesTheSpanThatEndedAnOpenedSpan_EndsItAtTheNewStart(bool supersederFirst)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 8, "tt-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 10, "tt-b"));
+        var opened = Span(StateSpanCategory.TemporaryTarget, "Custom", 8, "tt-a");
+        opened.Id = "tt-a";
+        var moved = Span(StateSpanCategory.TemporaryTarget, "Custom", 11, "tt-b");
+        moved.Id = "tt-b";
+
+        var folded = await _repository.UpdateStateSpansAsync(supersederFirst ? [moved, opened] : [opened, moved]);
+
+        var rows = await LiveRowsAsync();
+        rows["tt-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11), "the fold saves tt-b at 11 before tt-a is ended");
+        rows["tt-a"].SupersededById.Should().Be(rows["tt-b"].Id);
+        folded.Single(s => s!.OriginalId == "tt-a")!.EndTimestamp.Should().Be(BatchDay.AddHours(11));
+    }
+
+    [Fact]
+    public async Task UpdateStateSpansAsync_AFoldThatAlsoMovesTheOpenedSpansStart_DoesNotEndItAtItself()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 8, "tt-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 10, "tt-b"));
+        var moved = Span(StateSpanCategory.TemporaryTarget, "Custom", 11, "tt-b");
+        moved.Id = "tt-b";
+        var opened = Span(StateSpanCategory.TemporaryTarget, "Custom", 7, "tt-a");
+        opened.Id = "tt-a";
+
+        await _repository.UpdateStateSpansAsync([moved, opened]);
+
+        var rows = await LiveRowsAsync();
+        rows["tt-a"].StartTimestamp.Should().Be(BatchDay.AddHours(7));
+        rows["tt-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["tt-a"].SupersededById.Should().Be(rows["tt-b"].Id, "the stored tt-a at 8 is the span itself, not its successor");
+    }
+
+    [Fact]
+    public async Task UpdateStateSpanAsync_AnEditedEndPastTheSpanThatEndedIt_IsTheEditors()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await _repository.UpdateStateSpanAsync("ov-a", Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 11));
+
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.EndTimestamp.Should().Be(BatchDay.AddHours(11), "a user's edit wins over supersession");
+        row.SupersededById.Should().BeNull();
+    }
 
     /// <summary>
     /// Ending each inserted open span at its stored successor reads the store once for the batch, so a
@@ -1190,8 +1551,8 @@ public class StateSpanRepositoryTests : IDisposable
             _context, [Span(StateSpanCategory.TemporaryTarget, "Custom", 1, "tt-backfill")], [], CancellationToken.None);
 
         successors.Later.Values.Should().ContainSingle()
-            .Which.Select(s => s.OriginalId).Should().Equal(
-                Enumerable.Range(0, StateSpanRepository.SuccessorCandidates).Select(i => $"tt-history-{i}"));
+            .Which.Select(s => s.LegacyId).Should().Equal(
+                Enumerable.Range(0, StateSpanSuccession.Candidates).Select(i => $"tt-history-{i}"));
     }
 
     /// <summary>
@@ -1213,7 +1574,7 @@ public class StateSpanRepositoryTests : IDisposable
         };
         await _repository.BulkUpsertAsync(
         [
-            .. Enumerable.Range(0, StateSpanRepository.SuccessorCandidates + 2)
+            .. Enumerable.Range(0, StateSpanSuccession.Candidates + 2)
                 .Select(i => Override(300 + i, $"ov-same-{i}", StateSpanMetadataExtensions.DeviceStatusCollection, "Run", 301 + i)),
             Override(400, "ov-other", StateSpanMetadataExtensions.DeviceStatusCollection, "Sleep", 401),
         ]);
@@ -1393,7 +1754,7 @@ public class StateSpanRepositoryTests : IDisposable
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
-        stalePointer.OriginalId = "pr-x";
+        stalePointer.LegacyId = "pr-x";
         stalePointer.SupersededById = successorId;
         _context.StateSpans.Add(stalePointer);
         await _context.SaveChangesAsync();
@@ -1413,7 +1774,7 @@ public class StateSpanRepositoryTests : IDisposable
         var successorId = (await LiveRowsAsync())["pr-b"].Id;
         var stalePointer = SpanEntity(
             _context.TenantId, StateSpanCategory.Profile, "Active", BatchDay.AddHours(1), BatchDay.AddHours(2));
-        stalePointer.OriginalId = "pr-x";
+        stalePointer.LegacyId = "pr-x";
         stalePointer.SupersededById = successorId;
         _context.StateSpans.Add(stalePointer);
         await _context.SaveChangesAsync();
@@ -1590,7 +1951,7 @@ public class StateSpanRepositoryTests : IDisposable
         {
             var tombstone = SpanEntity(
                 _context.TenantId, StateSpanCategory.Exercise, "Running", BatchDay.AddHours(hour), null);
-            tombstone.OriginalId = "ex-twice-deleted";
+            tombstone.LegacyId = "ex-twice-deleted";
             tombstone.DeletedAt = BatchDay.AddHours(hour + 1);
             _context.StateSpans.Add(tombstone);
             _context.Entry(tombstone).Property("DeletedByUser").CurrentValue = true;
@@ -1647,6 +2008,68 @@ public class StateSpanRepositoryTests : IDisposable
                 inputs.Select(i => i.RecordId).SequenceEqual(expectedIds)),
             It.IsAny<CancellationToken>()), Times.Once);
         _mockDedup.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ACancelledDedup_PropagatesAfterReportingTheCommittedWrite()
+    {
+        var legacyReads = new Mock<ILegacyReadCacheInvalidation>();
+        legacyReads.Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>())).Returns(Task.CompletedTask);
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+        var repository = new StateSpanRepository(
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object, legacyReads.Object);
+
+        var act = () => repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-cancelled")]);
+
+        var thrown = (await act.Should().ThrowAsync<OperationCanceledException>()).Which;
+        legacyReads.Verify(r => r.WrittenAsync(It.Is<IReadOnlyCollection<Type>>(t => t.Contains(typeof(StateSpan)))), Times.Once);
+        CommittedWrite.TryGet<IReadOnlyList<StateSpanUpsert>>(thrown, out var committed).Should().BeTrue();
+        committed!.Should().ContainSingle().Which.Span.OriginalId.Should().Be("ov-cancelled");
+        (await LiveRowsAsync()).Should().ContainKey("ov-cancelled");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ALinkedWrite_TellsTheLegacyReadCacheAgainAfterTheLink()
+    {
+        var order = new List<string>();
+        var legacyReads = new Mock<ILegacyReadCacheInvalidation>();
+        legacyReads
+            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
+            .Callback(() => order.Add("reported"))
+            .Returns(Task.CompletedTask);
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("linked"))
+            .ReturnsAsync(new DeduplicationBatchResult(0, 0, 0, 0));
+        var repository = new StateSpanRepository(
+            _context.AsFactory(), _mockDedup.Object, _auditContext, _logger.Object, legacyReads.Object);
+
+        await repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-linked")]);
+
+        order.Should().Equal("reported", "linked", "reported");
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ADedupThatFails_IsLoggedAndTheUpsertReturns()
+    {
+        _mockDedup
+            .Setup(d => d.DeduplicateBatchAsync(
+                It.IsAny<RecordType>(), It.IsAny<IReadOnlyList<DeduplicationInput>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("dedup failed"));
+
+        var written = await _repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 9, "ov-failed")]);
+
+        written.Should().ContainSingle().Which.Outcome.Should().Be(UpsertOutcome.Created);
+        _logger.Verify(l => l.Log(
+            LogLevel.Warning,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<InvalidOperationException>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     [Fact]
@@ -1825,7 +2248,7 @@ public class StateSpanRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteStateSpanAsync_ClearsTheSupersededByOfALiveSpanPointingAtIt()
+    public async Task DeleteStateSpanAsync_ReopensTheSpanItSuperseded()
     {
         await SupersededPairAsync("connector");
 
@@ -1833,17 +2256,296 @@ public class StateSpanRepositoryTests : IDisposable
 
         var first = (await LiveRowsAsync())["first"];
         first.SupersededById.Should().BeNull();
-        first.EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        first.EndTimestamp.Should().BeNull();
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Override, active: true))
+            .Should().ContainSingle().Which.OriginalId.Should().Be("first");
     }
 
     [Fact]
-    public async Task DeleteBySourceAsync_ClearsTheSupersededByOfALiveSpanPointingAtADeletedOne()
+    public async Task DeleteBySourceAsync_ReopensALiveSpanADeletedOneSuperseded()
     {
         await SupersededPairAsync("other-connector");
 
         await _repository.DeleteBySourceAsync("other-connector");
 
-        (await LiveRowsAsync()).Should().ContainSingle().Which.Value.SupersededById.Should().BeNull();
+        var first = (await LiveRowsAsync()).Should().ContainSingle().Which.Value;
+        first.SupersededById.Should().BeNull();
+        first.EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteStateSpanAsync_EndsTheReopenedSpanAtItsNextLiveSuccessor()
+    {
+        await SupersededPairAsync("connector");
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "third"));
+
+        await _repository.DeleteStateSpanAsync("second");
+
+        var rows = await LiveRowsAsync();
+        rows["first"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["first"].SupersededById.Should().Be(rows["third"].Id);
+        rows["third"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteStateSpanAsync_LeavesAnUploadedEndOnASpanPointingAtIt()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "second"));
+        var uploadedEnd = SpanEntity(
+            _context.TenantId, StateSpanCategory.Override, "Custom", BatchDay.AddHours(8), BatchDay.AddHours(8.5));
+        uploadedEnd.LegacyId = "first";
+        uploadedEnd.SupersededById = await RowIdAsync("second");
+        _context.StateSpans.Add(uploadedEnd);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        await _repository.DeleteStateSpanAsync("second");
+
+        var first = (await LiveRowsAsync())["first"];
+        first.SupersededById.Should().BeNull();
+        first.EndTimestamp.Should().Be(BatchDay.AddHours(8.5));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeleteBySourceAsync_NeverEndsAReopenedSpanAtASpanTheSameDeleteRemoves(bool laterSurvivor)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "kept"));
+        foreach (var (hour, id) in new[] { (9, "removed-1"), (10, "removed-2") })
+        {
+            var removed = Span(StateSpanCategory.Override, "Custom", hour, id);
+            removed.Source = "removed-connector";
+            await _repository.UpsertStateSpanAsync(removed);
+        }
+
+        if (laterSurvivor)
+            await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 11, "later"));
+
+        await _repository.DeleteBySourceAsync("removed-connector");
+
+        var rows = await LiveRowsAsync();
+        rows["kept"].EndTimestamp.Should().Be(laterSurvivor ? BatchDay.AddHours(11) : (DateTime?)null);
+        rows["kept"].SupersededById.Should().Be(laterSurvivor ? rows["later"].Id : (Guid?)null);
+    }
+
+    [Fact]
+    public async Task DeleteStateSpanAsync_PumpMode_ReopensPastALaterSpanOfAnotherState()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 8, "pm-first"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Automatic", 9, "pm-second"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, "Suspended", 10, "pm-suspended"));
+
+        await _repository.DeleteStateSpanAsync("pm-second");
+
+        var first = (await LiveRowsAsync())["pm-first"];
+        first.EndTimestamp.Should().BeNull();
+        first.SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteStateSpanAsync_ReopensPastASnapshotOfTheSameOverride()
+    {
+        var day = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(LoopOverride(
+            "treatment", day.AddHours(8), "Loop", TreatmentMetadata("N Night", 0.9)));
+        await _repository.UpsertStateSpanAsync(LoopOverride(
+            "different", day.AddHours(9), "Loop", TreatmentMetadata("X Exercise", 0.5)));
+        await _repository.UpsertStateSpanAsync(LoopOverride(
+            "snapshot", day.AddHours(10), "loop://iPhone", DeviceStatusMetadata("Night", 0.9)));
+        (await LiveRowsAsync())["treatment"].EndTimestamp.Should().Be(day.AddHours(9));
+
+        await _repository.DeleteStateSpanAsync("different");
+
+        var treatment = (await LiveRowsAsync())["treatment"];
+        treatment.EndTimestamp.Should().BeNull("a snapshot of the same override does not end it");
+        treatment.SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_OfADeletedSuperseder_EndsTheSpanItReopenedAgain()
+    {
+        var (_, supersessor) = await SupersededPairAsync("connector");
+        await _repository.DeleteStateSpanAsync("second");
+
+        await _repository.RestoreAsync(supersessor, WriteOrigin.Live);
+
+        var rows = await LiveRowsAsync();
+        rows["first"].EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        rows["first"].SupersededById.Should().Be(supersessor);
+        rows["second"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_OfASupersederBetweenTwoSpans_EndsTheEarlierAtItAndLeavesItEndedByTheLater()
+    {
+        var (_, supersessor) = await SupersededPairAsync("connector");
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "third"));
+        await _repository.DeleteStateSpanAsync("second");
+        (await LiveRowsAsync())["first"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+
+        await _repository.RestoreAsync(supersessor, WriteOrigin.Live);
+
+        var rows = await LiveRowsAsync();
+        rows["first"].EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        rows["first"].SupersededById.Should().Be(supersessor);
+        rows["second"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["second"].SupersededById.Should().Be(rows["third"].Id);
+        rows["third"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_LeavesAnUploadedEndThatRunsPastTheRestoredSpan()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "first", endHour: 11));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "second"));
+        var second = await RowIdAsync("second");
+        await _repository.DeleteStateSpanAsync("second");
+
+        await _repository.RestoreAsync(second, WriteOrigin.Live);
+
+        var first = (await LiveRowsAsync())["first"];
+        first.EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        first.SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_OfAPumpModeSpan_EndsAnOpenSpanOfItsOwnStateOnly()
+    {
+        var automatic = PumpModeState.Automatic.ToString();
+        await _repository.UpsertStateSpanAsync(
+            Span(StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(), 9, "suspended"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, automatic, 10, "automatic"));
+        var suspended = await RowIdAsync("suspended");
+        var restoredAutomatic = await RowIdAsync("automatic");
+        await _repository.DeleteStateSpanAsync("suspended");
+        await _repository.DeleteStateSpanAsync("automatic");
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.PumpMode, automatic, 8, "open"));
+
+        await _repository.RestoreAsync(suspended, WriteOrigin.Live);
+
+        (await LiveRowsAsync())["open"].EndTimestamp.Should().BeNull();
+
+        await _repository.RestoreAsync(restoredAutomatic, WriteOrigin.Live);
+
+        var open = (await LiveRowsAsync())["open"];
+        open.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        open.SupersededById.Should().Be(restoredAutomatic);
+    }
+
+    [Fact]
+    public async Task BulkRestoreAsync_OfASourcesSpans_RebuildsTheSupersessionTheirDeleteUndid()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "kept"));
+        foreach (var (hour, id) in new[] { (9, "removed-1"), (10, "removed-2") })
+        {
+            var removed = Span(StateSpanCategory.Override, "Custom", hour, id);
+            removed.Source = "removed-connector";
+            await _repository.UpsertStateSpanAsync(removed);
+        }
+
+        var removedIds = new[] { await RowIdAsync("removed-1"), await RowIdAsync("removed-2") };
+        await _repository.DeleteBySourceAsync("removed-connector");
+        (await LiveRowsAsync())["kept"].EndTimestamp.Should().BeNull();
+
+        await _repository.BulkRestoreAsync(removedIds, WriteOrigin.Live);
+
+        var rows = await LiveRowsAsync();
+        rows["kept"].EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        rows["kept"].SupersededById.Should().Be(removedIds[0]);
+        rows["removed-1"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["removed-1"].SupersededById.Should().Be(removedIds[1]);
+        rows["removed-2"].EndTimestamp.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplaceBySourceAsync_UndoesTheSupersessionAPurgedSpanGaveAnotherSource(bool laterSpanWritten)
+    {
+        await SupersededPairAsync("seeder");
+        var later = Span(StateSpanCategory.Override, "Custom", 10, "seeded-later");
+        later.Source = "seeder";
+
+        await _repository.ReplaceBySourceAsync("seeder", laterSpanWritten ? [later] : []);
+
+        var rows = await LiveRowsAsync();
+        rows.Should().NotContainKey("second");
+        rows["first"].EndTimestamp.Should().Be(laterSpanWritten ? BatchDay.AddHours(10) : (DateTime?)null);
+        rows["first"].SupersededById.Should().Be(laterSpanWritten ? rows["seeded-later"].Id : (Guid?)null);
+    }
+
+    [Fact]
+    public async Task ReplaceBySourceAsync_WritesItsOwnSpansAsGiven()
+    {
+        var early = Span(StateSpanCategory.Override, "Custom", 8, "seeded-early");
+        var late = Span(StateSpanCategory.Override, "Custom", 10, "seeded-late");
+        early.Source = late.Source = "seeder";
+
+        await _repository.ReplaceBySourceAsync("seeder", [early, late]);
+
+        var rows = await LiveRowsAsync();
+        rows["seeded-early"].EndTimestamp.Should().BeNull();
+        rows["seeded-early"].SupersededById.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestoreAsync_AnswersTheSuccessorTheRestoredSpanWasEndedAt(bool bulk)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "restored"));
+        var restoredId = await RowIdAsync("restored");
+        await _repository.DeleteStateSpanAsync("restored");
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "arrived-meanwhile"));
+        var successor = await RowIdAsync("arrived-meanwhile");
+
+        var answered = await RestoreAsync(restoredId, bulk);
+
+        answered.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        answered.SupersededById.Should().Be(successor.ToString());
+        var stored = (await LiveRowsAsync())["restored"];
+        stored.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        stored.SupersededById.Should().Be(successor);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestoreAsync_AnswersOpenASpanWhoseSupersederWasDeleted(bool bulk)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "restored"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "superseder"));
+        var restoredId = await RowIdAsync("restored");
+        await _repository.DeleteStateSpanAsync("restored");
+        await _repository.DeleteStateSpanAsync("superseder");
+
+        var answered = await RestoreAsync(restoredId, bulk);
+
+        answered.EndTimestamp.Should().BeNull();
+        answered.SupersededById.Should().BeNull();
+        var stored = (await LiveRowsAsync())["restored"];
+        stored.EndTimestamp.Should().BeNull();
+        stored.SupersededById.Should().BeNull();
+    }
+
+    private async Task<StateSpan> RestoreAsync(Guid id, bool bulk) => bulk
+        ? (await _repository.BulkRestoreAsync([id], WriteOrigin.Live)).Restored.Should().ContainSingle().Subject
+        : await _repository.RestoreAsync(id, WriteOrigin.Live);
+
+    [Fact]
+    public async Task ReplaceBySourceAsync_ReopensADeletedSpanAPurgedSpanEnded_SoItsRestoreIsOpen()
+    {
+        var (superseded, _) = await SupersededPairAsync("seeder");
+        await _repository.DeleteStateSpanAsync("first");
+
+        await _repository.ReplaceBySourceAsync("seeder", []);
+
+        var tombstone = (await RowsForAsync("first")).Should().ContainSingle().Subject;
+        tombstone.DeletedAt.Should().NotBeNull();
+        tombstone.EndTimestamp.Should().BeNull();
+        tombstone.SupersededById.Should().BeNull();
+        (await _repository.RestoreAsync(superseded, WriteOrigin.Live)).EndTimestamp.Should().BeNull();
     }
 
     [Fact]

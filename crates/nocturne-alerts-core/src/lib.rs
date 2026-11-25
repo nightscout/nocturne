@@ -15,6 +15,7 @@
 pub const TZDB_VERSION: &str = chrono_tz::IANA_TZDB_VERSION;
 
 pub mod classify;
+pub mod clock_anomaly;
 mod compare;
 pub mod context;
 pub mod engine;
@@ -22,10 +23,13 @@ pub mod enums;
 pub mod eval;
 pub mod excursion;
 pub mod facts;
-mod leaf_identity;
+pub mod leaf_identity;
 pub mod model;
+pub mod next_change;
 pub mod paths;
 pub mod replay;
 pub mod sustained;
+pub mod truth;
+pub mod unknown;
 pub mod validate;
 pub mod wall_clock;

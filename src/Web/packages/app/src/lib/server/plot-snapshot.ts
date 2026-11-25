@@ -13,10 +13,11 @@ import {
   chartPointColor,
   chartPointColorMode,
   chartShowPoints,
+  glucoseRangePalette,
   glucoseUnits,
   predictionMinutes,
 } from "#lib/stores/appearance-store.svelte.js";
-import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import type { TransformedChartData } from "@nocturne/charts/core";
 
 type Cookies = { get(name: string): string | undefined };
 
@@ -72,6 +73,7 @@ export function renderPlotSnapshot(options: {
           areaMode: chartAreaMode.resolve(layers),
           areaOpacity: chartAreaOpacity.resolve(layers),
           units: glucoseUnits.resolve(layers),
+          rangePalette: glucoseRangePalette.resolve(layers),
         },
       },
       // Its gradient and clip ids must not collide with the page's own.

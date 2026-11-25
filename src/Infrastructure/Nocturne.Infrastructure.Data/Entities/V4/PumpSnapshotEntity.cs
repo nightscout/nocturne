@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -8,15 +9,20 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.PumpSnapshot
 /// </summary>
 [Table("pump_snapshots")]
-public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
+public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// Stable per-source identifier for synchronization. Unlike <see cref="V4TimeSeriesEntityBase.LegacyId"/> (insert-only),
     /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
     /// uploader retries of the same loop cycle don't duplicate the snapshot.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>

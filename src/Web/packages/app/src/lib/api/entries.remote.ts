@@ -28,7 +28,7 @@ export const getBolusesAndCarbs = query(entriesSchema, async (props) => {
 
   const [bolusResponse, carbResponse] = await Promise.all([
     apiClient.bolus.getAll(from.toISOString(), to.toISOString(), 10000),
-    apiClient.nutrition.getCarbIntakes(from.toISOString(), to.toISOString(), 10000),
+    apiClient.carbIntake.getAll(from.toISOString(), to.toISOString(), 10000),
   ]);
 
   return {
@@ -59,7 +59,7 @@ export const getEntryByTreatmentId = query(
       },
       {
         kind: "carbs" as const,
-        fetch: () => apiClient.nutrition.getCarbIntakeById(treatmentId),
+        fetch: () => apiClient.carbIntake.getById(treatmentId),
       },
       {
         kind: "bgCheck" as const,

@@ -1,15 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
-using Nocturne.API.Helpers;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Migration;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Migration endpoints for importing data from Nightscout.
+/// Import data from Nightscout. Test a source, start an import, check or cancel a job, and list past
+/// jobs and sources.
 /// </summary>
 /// <seealso cref="IMigrationJobService"/>
 /// <seealso cref="IConnectorConfigurationService"/>
@@ -22,6 +25,7 @@ public class MigrationController : ControllerBase
     private readonly IMigrationJobService _migrationService;
     private readonly IConnectorConfigurationService _connectorConfigService;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MigrationController> _logger;
 
     /// <summary>
@@ -30,13 +34,16 @@ public class MigrationController : ControllerBase
     /// <param name="migrationService">Service for managing Nightscout data migration jobs.</param>
     /// <param name="connectorConfigService">Service for reading saved connector credentials.</param>
     /// <param name="tenantAccessor">Resolves the current request's tenant, used to own and scope migration jobs.</param>
+    /// <param name="timeProvider">The clock a connector's history limit is counted back from.</param>
     /// <param name="logger">Logger instance.</param>
     public MigrationController(
         IMigrationJobService migrationService,
         IConnectorConfigurationService connectorConfigService,
         ITenantAccessor tenantAccessor,
+        TimeProvider timeProvider,
         ILogger<MigrationController> logger)
     {
+        _timeProvider = timeProvider;
         _migrationService = migrationService;
         _connectorConfigService = connectorConfigService;
         _tenantAccessor = tenantAccessor;
@@ -52,6 +59,13 @@ public class MigrationController : ControllerBase
         [FromBody] TestMigrationConnectionRequest request,
         CancellationToken ct)
     {
+        if (request.Mode == MigrationMode.Api)
+        {
+            request = request with { NightscoutUrl = await NightscoutUrlAsync(request.NightscoutUrl) };
+            if (string.IsNullOrEmpty(request.NightscoutUrl))
+                return NightscoutUrlRequired();
+        }
+
         var result = await _migrationService.TestConnectionAsync(request, ct);
         return Ok(result);
     }
@@ -66,16 +80,19 @@ public class MigrationController : ControllerBase
         [FromBody] StartMigrationRequest request,
         CancellationToken ct)
     {
-        // Validate request based on mode
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         if (request.Mode == MigrationMode.Api)
         {
+            request = request with { NightscoutUrl = await NightscoutUrlAsync(request.NightscoutUrl) };
             if (string.IsNullOrEmpty(request.NightscoutUrl))
             {
-                return Problem(detail: "Nightscout URL is required for API mode", statusCode: 400, title: "Bad Request");
+                return NightscoutUrlRequired();
             }
-            if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out _))
+            if (!NightscoutAddress.TryResolve(request.NightscoutUrl, out _))
             {
-                return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+                return Problem(detail: NightscoutAddress.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
             }
         }
         else
@@ -92,7 +109,8 @@ public class MigrationController : ControllerBase
 
         try
         {
-            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            var jobInfo = await _migrationService.StartMigrationAsync(
+                request, _tenantAccessor.Context, await HttpContext.CredentialMakerAsync(ct), ct);
             return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
         }
         catch (MigrationAlreadyRunningException ex)
@@ -105,7 +123,20 @@ public class MigrationController : ControllerBase
     }
 
     /// <summary>
-    /// Start a migration using saved connector credentials (e.g., after Nightscout connector setup).
+    /// The URL an API-mode request reads (<see cref="IMigrationJobService.ResolveNightscoutUrl"/>).
+    /// Only a blank one turns on the caller's standing, so the instance is counted only then.
+    /// </summary>
+    private async Task<string?> NightscoutUrlAsync(string? requested) =>
+        string.IsNullOrWhiteSpace(requested)
+            ? _migrationService.ResolveNightscoutUrl(requested, await InstanceStanding.HeldByAsync(HttpContext))
+            : requested;
+
+    private ObjectResult NightscoutUrlRequired() =>
+        Problem(detail: "Nightscout URL is required for API mode", statusCode: 400, title: "Bad Request");
+
+    /// <summary>
+    /// Start a migration using saved connector credentials (e.g., after Nightscout connector setup),
+    /// over the history the connector is set to import.
     /// </summary>
     [HttpPost("start-from-connector/{connectorName}")]
     [RemoteCommand(Invalidates = ["GetHistory"])]
@@ -115,22 +146,25 @@ public class MigrationController : ControllerBase
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var source = await NightscoutConnectorSource.ReadAsync(_connectorConfigService, connectorName, ct);
         if (source is null)
         {
             return Problem(detail: $"No saved configuration found for connector '{connectorName}'", statusCode: 400, title: "Bad Request");
         }
 
-        var (url, apiSecret) = source;
+        var (url, apiSecret, _) = source;
 
         if (string.IsNullOrEmpty(url))
         {
             return Problem(detail: "Nightscout URL not found in connector configuration", statusCode: 400, title: "Bad Request");
         }
 
-        if (!NightscoutBaseUri.TryFor(url, out _))
+        if (!NightscoutAddress.TryResolve(url, out _))
         {
-            return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+            return Problem(detail: NightscoutAddress.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
         }
 
         var request = new StartMigrationRequest
@@ -138,11 +172,13 @@ public class MigrationController : ControllerBase
             Mode = MigrationMode.Api,
             NightscoutUrl = url,
             NightscoutApiSecret = apiSecret,
+            StartDate = source.HistoryStart(_timeProvider.GetUtcNow().UtcDateTime),
         };
 
         try
         {
-            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            var jobInfo = await _migrationService.StartMigrationAsync(
+                request, _tenantAccessor.Context, await HttpContext.CredentialMakerAsync(ct), ct);
             return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
         }
         catch (MigrationAlreadyRunningException ex)
@@ -204,9 +240,9 @@ public class MigrationController : ControllerBase
     [HttpGet("pending-config")]
     [RemoteQuery]
     [ProducesResponseType(typeof(PendingMigrationConfig), StatusCodes.Status200OK)]
-    public ActionResult<PendingMigrationConfig> GetPendingConfig()
+    public async Task<ActionResult<PendingMigrationConfig>> GetPendingConfig()
     {
-        var config = _migrationService.GetPendingConfig();
+        var config = _migrationService.GetPendingConfig(await InstanceStanding.HeldByAsync(HttpContext));
         return Ok(config);
     }
 

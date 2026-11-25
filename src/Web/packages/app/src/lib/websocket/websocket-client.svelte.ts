@@ -148,7 +148,7 @@ export class WebSocketClient {
 
     try {
       this.socket = io(
-        this.config.url,
+        `${this.config.url}${this.config.namespace ?? ""}`,
         realtimeSocketOptions(this.config, (cb) => {
           // Fetched fresh on every (re)connect so a short-lived ticket never goes
           // stale across reconnections; only the first may use a prefetched one.
@@ -199,6 +199,23 @@ export class WebSocketClient {
     this.prefetchedTicket = { result: this.fetchTicket(), requestedAt };
   }
 
+  /** Open the socket only once a ticket is in hand, so a viewer the API denies
+   *  opens no connection at all and stays `unauthorized`. A transient failure
+   *  opens it anyway, and the handshake retries as {@link connect}'s does. */
+  async connectIfAdmitted(): Promise<void> {
+    this.prefetchTicket();
+    const prefetched = this.prefetchedTicket;
+    if (!prefetched) return this.connect();
+    const { denied } = await prefetched.result;
+    if (this.prefetchedTicket !== prefetched) return;
+    if (denied) {
+      this.prefetchedTicket = null;
+      this.connectionStatus = "unauthorized";
+      return;
+    }
+    this.connect();
+  }
+
   /** The prefetched result, once, if it is recent and holds a token or a
    *  definitive denial; otherwise a fresh fetch. */
   private async takeTicket(): Promise<TicketResult> {
@@ -217,7 +234,7 @@ export class WebSocketClient {
    *  resolves. */
   private async fetchTicket(): Promise<TicketResult> {
     try {
-      const res = await fetch(`${this.config.url}/realtime/ticket`, {
+      const res = await fetch(`${this.config.url}${this.config.ticketPath ?? "/realtime/ticket"}`, {
         credentials: "include",
         headers: { Accept: "application/json" },
         signal: AbortSignal.timeout(8000),
@@ -465,6 +482,11 @@ export class WebSocketClient {
       this.updateMessageStats();
       const event = parseSyncProgress(data);
       if (event) this.eventHandlers.syncProgress?.(event);
+    });
+
+    this.socket.on("overviewUpdate", () => {
+      this.updateMessageStats();
+      this.eventHandlers.overviewUpdate?.();
     });
   }
 

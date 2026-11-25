@@ -78,7 +78,6 @@ public class ConnectorSyncExecutorTests
     {
         public string ServiceName => nameof(StubService<TConfig>);
         public List<SyncDataType> SupportedDataTypes => [];
-        public Task<bool> AuthenticateAsync() => Task.FromResult(true);
         public void Dispose() { }
 
         public Task<SyncResult> SyncDataAsync(

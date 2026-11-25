@@ -19,7 +19,7 @@ The crate is pure evaluation: no I/O, no clock, no persistence.
 - State lives in caller-owned stores the host persists between evaluations:
   sustained-condition timers ([`sustained::TimerStore`], keyed by rule and
   condition path, recording each set and clear) and the excursion state
-  machine ([`excursion::ExcursionTracker`], idle → confirming → active →
+  machine ([`excursion::ExcursionTracker`], idle → active →
   hysteresis, expiring against the persisted `hysteresis_started_at`,
   semantics §6.1, and holding an auto-resolved rule off until its condition or
   its auto-resolve tree is false, §6.3).
@@ -54,6 +54,10 @@ cargo test --workspace --features nocturne-alerts-ffi/uniffi
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --check
 ```
+
+`tests/properties.rs` and the FFI crate's `tests/envelope_properties.rs` state
+the tracker, timer-store, reader and envelope invariants as property tests
+(proptest).
 
 The parity suite names the scenario, tick, rule and field of any divergence
 from the committed `.expected.json` snapshots. Never fix a divergence by

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatNumber } from "#lib/utils/formatting.js";
-  import type { ConnectorDataSummary } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ConnectorDataSummary } from "@nocturne/api-client";
   import { deleteConfiguration } from "#lib/api/generated/configurations.generated.remote.js";
   import { deleteConnectorData } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
@@ -15,7 +15,8 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
   import { DangerZoneDialog } from "#lib/components/ui/danger-zone-dialog/index.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
@@ -43,7 +44,13 @@
   }: Props = $props();
 
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -60,8 +67,9 @@
     Notes: "notes",
     DeviceEvents: "device events",
     StateSpans: "state spans",
-    DeviceStatus: "device statuses",
+    DeviceStatus: "device status records",
     TempBasals: "temp basals",
+    BasalInjections: "basal injections",
     HeartRate: "heart rate readings",
     Steps: "step counts",
     BodyWeight: "body weights",
@@ -120,13 +128,16 @@
     } catch (e) {
       deleteDataResult = {
         success: false,
-        error: describeSubmitError(e, "Failed to delete data"),
+        error: describeSubmitError(e, "Failed to delete data", {
+          sync_running: "A sync is in progress for this connector. Wait until it is complete, then try again.",
+          import_running: "An import is in progress for this connector. Wait until it is complete, then try again.",
+        }),
       };
     }
   }
 </script>
 
-{#if canManage && (hasExistingConfig || hasData)}
+{#if canSetUp && (hasExistingConfig || hasData)}
   <Separator class="my-6" />
 
   <Card variant="destructive">
@@ -174,6 +185,15 @@
             <p class="text-sm text-muted-foreground">
               Permanently delete all data synced by this connector.
             </p>
+            {#if !canManage}
+              <p
+                id="connector-delete-data-reason"
+                class="text-sm text-muted-foreground"
+                data-testid="connector-delete-data-reason"
+              >
+                Only members who can manage this site's settings can delete synced data.
+              </p>
+            {/if}
             {#if dataSummary}
               <div
                 class="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap"
@@ -191,7 +211,8 @@
           <Button
             class="shrink-0"
             variant="destructive"
-            disabled={!hasData}
+            disabled={!hasData || !canManage}
+            aria-describedby={canManage ? undefined : "connector-delete-data-reason"}
             onclick={() => {
               deleteDataResult = null;
               allowReimport = false;

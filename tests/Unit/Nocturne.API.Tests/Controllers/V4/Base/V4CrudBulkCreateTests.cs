@@ -86,7 +86,7 @@ public class V4CrudBulkCreateTests
             new CreateBolusRequest { Timestamp = T0.AddMinutes(10), Insulin = 3.0 },
         ]);
 
-        Rejected(result.Result, "Timestamp must be set on every bolus");
+        Rejected(result.Result, "Timestamp is required");
         NothingWritten(repo);
     }
 
@@ -174,7 +174,7 @@ public class V4CrudBulkCreateTests
             new UpsertNoteRequest { Text = "two" },
         ]);
 
-        Rejected(result.Result, "Timestamp must be set on every note");
+        Rejected(result.Result, "Timestamp is required");
         repo.Verify(
             r => r.BulkCreateAsync(It.IsAny<IEnumerable<Note>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);

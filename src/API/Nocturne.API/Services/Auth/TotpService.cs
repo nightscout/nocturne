@@ -42,21 +42,33 @@ public class TotpService : ITotpService
     private readonly INocturneDbContextFactory _contexts;
     private readonly ITotpCredentialRepository _credentials;
     private readonly ISubjectRepository _subjects;
+    private readonly ITrustedDeviceService _trustedDevices;
+    private readonly StepUpCodeAttempts _attempts;
     private readonly IDataProtector _protector;
     private readonly IDataProtector _stepUpProtector;
     private readonly ILogger<TotpService> _logger;
 
+    /// <param name="contexts">Context factory for reading and redeeming the single-use step-up tokens.</param>
+    /// <param name="credentials">Repository of the stored TOTP credentials and their consumed steps.</param>
+    /// <param name="subjects">Repository for looking up the subject a step-up token names.</param>
+    /// <param name="trustedDevices">Tells whether a sign-in comes from a device trusted to skip the code, and forgets those devices when an authenticator is removed.</param>
+    /// <param name="attempts">Bounds the wrong codes tried at the sign-in step, per step-up token and per subject.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting setup challenge tokens.</param>
+    /// <param name="logger">Logger for credential changes, rejected codes and undecryptable tokens.</param>
     public TotpService(
         INocturneDbContextFactory contexts,
         ITotpCredentialRepository credentials,
         ISubjectRepository subjects,
+        ITrustedDeviceService trustedDevices,
+        StepUpCodeAttempts attempts,
         IDataProtectionProvider dataProtectionProvider,
         ILogger<TotpService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
+        _trustedDevices = trustedDevices ?? throw new ArgumentNullException(nameof(trustedDevices));
+        _attempts = attempts ?? throw new ArgumentNullException(nameof(attempts));
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Totp.Setup");
         // A distinct purpose string keeps a setup challenge (which carries a secret the caller
         // already knows) from being redeemed as proof that a primary factor completed.
@@ -156,6 +168,16 @@ public class TotpService : ITotpService
             return null;
         }
 
+        var (attempt, retryAfter) = _attempts.Begin(stepUp.Id, stepUp.SubjectId);
+        switch (attempt)
+        {
+            case StepUpAttemptVerdict.MemberLocked:
+                throw new TotpStepUpLockedException(stepUp.SubjectId, retryAfter);
+            case StepUpAttemptVerdict.TokenSpent:
+                TotpHelper.Verify(DummySecret, code);
+                return null;
+        }
+
         var subject = await _subjects.GetAsync(stepUp.SubjectId, CancellationToken.None);
 
         if (subject is not { IsActive: true })
@@ -208,13 +230,23 @@ public class TotpService : ITotpService
 
         if (matchedCredential is null)
         {
+            // The row records the spend, so it outlasts the in-process count.
+            if (attempt == StepUpAttemptVerdict.LastForToken)
+            {
+                await db.TotpStepUpTokens
+                    .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(t => t.ConsumedAt, DateTime.UtcNow));
+            }
+
             return null;
         }
 
         // Consume the step-up token itself, conditionally, so the token yields one session however
         // many valid codes are presented within its window. Consumed after the code is verified, so
-        // a mistyped code does not force the user back through the primary factor. No rows updated
-        // means a concurrent request already redeemed it.
+        // a mistyped code, up to StepUpCodeAttempts.WrongCodesPerToken of them, does not force the
+        // user back through the primary factor. No rows updated means a concurrent request already
+        // redeemed it.
         var stepUpConsumed = await db.TotpStepUpTokens
             .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .ExecuteUpdateAsync(setters => setters
@@ -238,6 +270,8 @@ public class TotpService : ITotpService
             return null;
         }
 
+        _attempts.Succeeded(stepUp.Id, subject.Id);
+
         _logger.LogInformation(
             "TOTP verification succeeded for subject {SubjectId}",
             subject.Id);
@@ -253,18 +287,32 @@ public class TotpService : ITotpService
         return credentials.Select(c => new TotpCredentialInfo(c.Id, c.Label, c.CreatedAt, c.LastUsedAt)).ToList();
     }
 
-    public async Task RemoveCredentialAsync(Guid credentialId, Guid subjectId)
+    public async Task<int> RemoveCredentialAsync(Guid credentialId, Guid subjectId)
     {
         if (!await _credentials.RemoveAsync(credentialId, subjectId, CancellationToken.None))
             throw new InvalidOperationException("Credential not found.");
 
+        // A device was trusted on the strength of a code from the authenticators enrolled then.
+        // Removing one, most often because the phone holding it is lost, ends that trust.
+        var untrusted = await _trustedDevices.RevokeAllAsync(subjectId);
+
         _logger.LogInformation(
             "TOTP credential {CredentialId} removed for subject {SubjectId}",
             credentialId, subjectId);
+
+        return untrusted;
     }
 
-    public Task<int> GetCredentialCountAsync(Guid subjectId) =>
-        _credentials.CountAsync(subjectId, CancellationToken.None);
+    public async Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(
+        Guid subjectId, string? trustedDeviceToken)
+    {
+        if (await _credentials.CountAsync(subjectId, CancellationToken.None) == 0)
+            return SecondFactorRequirement.NotEnrolled;
+
+        return await _trustedDevices.IsTrustedAsync(subjectId, trustedDeviceToken)
+            ? SecondFactorRequirement.SatisfiedByTrustedDevice
+            : SecondFactorRequirement.CodeRequired;
+    }
 
     private string CreateChallengeToken(byte[] secret, Guid subjectId)
     {

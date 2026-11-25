@@ -54,8 +54,8 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     private TenantService Service() => new(
         (new Factory(_db.Options, _tenantId)).AsNocturneFactory(),
         new TenantRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
-        new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
-        new SubjectRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
+        new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -63,7 +63,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>());
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
     private async Task<Guid> SeedMemberAsync(
@@ -95,7 +95,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         var result = await Service().RemoveMemberAsync(_tenantId, ownerSubjectId);
 
         result.Ok.Should().BeFalse();
-        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
+        result.ErrorDescription.Should().Be("Cannot remove the only owner, or the last owner who can sign in");
         await using var db = Context();
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == ownerSubjectId)).Should().BeTrue();
     }
@@ -105,7 +105,15 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     public async Task RemoveMemberAsync_removesAnOwnerWhenAnotherRemains()
     {
         var firstOwner = await SeedMemberAsync(isOwner: true);
-        await SeedMemberAsync(isOwner: true);
+        var secondOwner = await SeedMemberAsync(isOwner: true);
+        await using (var seed = Context())
+        {
+            seed.PasskeyCredentials.Add(new PasskeyCredentialEntity
+            {
+                Id = Guid.CreateVersion7(), SubjectId = secondOwner, CredentialId = secondOwner.ToByteArray(), PublicKey = [1],
+            });
+            await seed.SaveChangesAsync();
+        }
 
         var result = await Service().RemoveMemberAsync(_tenantId, firstOwner);
 
@@ -123,7 +131,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         var result = await Service().RemoveMemberAsync(_tenantId, owner);
 
         result.Ok.Should().BeFalse();
-        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
+        result.ErrorDescription.Should().Be("Cannot remove the only owner, or the last owner who can sign in");
         await using var db = Context();
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
     }
@@ -137,7 +145,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         var result = await Service().RemoveMemberAsync(_tenantId, owner);
 
         result.Ok.Should().BeFalse();
-        result.ErrorDescription.Should().Be("Cannot remove the last owner of a tenant");
+        result.ErrorDescription.Should().Be("Cannot remove the only owner, or the last owner who can sign in");
         await using var db = Context();
         (await db.TenantMembers.AnyAsync(m => m.SubjectId == owner)).Should().BeTrue();
     }
@@ -211,6 +219,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         await using (var db = Context())
         {
             db.Tenants.Add(new TenantEntity { Id = otherTenantId, Slug = "other", DisplayName = "Other" });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = otherTenantId, SubjectId = subjectId });
             db.ChatIdentityDirectory.AddRange(
                 Link("chat-user", _tenantId, subjectId, "here"),
                 Link("chat-user", otherTenantId, subjectId, "elsewhere"),
@@ -222,7 +231,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         result.Ok.Should().BeTrue();
         var directory = new ChatIdentityDirectoryService(
-            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         (await directory.GetCandidatesAsync("discord", "chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))

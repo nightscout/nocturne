@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Extensions;
 using Nocturne.API.Tests.Infrastructure;
@@ -182,7 +183,7 @@ public class ClockFacesControllerTests
         };
 
         Gate(action, guest, Scope.NormalizeGuest(Scope.AllowedGuestScopes))
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Theory]
@@ -212,7 +213,7 @@ public class ClockFacesControllerTests
         var caretaker = new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = Guid.NewGuid() };
 
         Gate(action, caretaker, Scope.NormalizeMemberPermissions(RoleSeeds.Permissions[RoleSeeds.Caretaker]))
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]

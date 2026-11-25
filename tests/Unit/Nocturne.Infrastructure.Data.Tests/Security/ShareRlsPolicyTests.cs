@@ -103,6 +103,29 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
+    public void BuildPolicySql_SpanEarlyEndColumn_EndsTheSpanAtTheEarlierOfItsTwoEnds()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql("dnd_windows", null, spanEndColumn: "ends_at", spanEarlyEndColumn: "cleared_at");
+
+        sql.Should().Contain(
+            "USING (current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
+            " AND (((\"ends_at\" IS NULL OR \"ends_at\" >= now() - interval '24 hours')" +
+            " AND (\"cleared_at\" IS NULL OR \"cleared_at\" >= now() - interval '24 hours'))" +
+            " OR NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));");
+        ShareDataCategories.SpanEndColumnFor("dnd_windows").Should().Be("ends_at");
+        ShareDataCategories.SpanEarlyEndColumnFor("dnd_windows").Should().Be("cleared_at");
+    }
+
+    [Fact]
+    public void BuildPolicySql_SpanEarlyEndColumnWithoutASpanEndColumn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql("dnd_windows", null, spanEarlyEndColumn: "cleared_at");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void BuildPolicySql_UnixMillisRecencyColumn_ComparesWithTheWindowStartInMilliseconds()
     {
         var sql = ShareRlsPolicy.BuildPolicySql(
@@ -253,6 +276,7 @@ public class ShareRlsPolicyTests
             Expect(ShareDataCategories.RecencyColumnFor(table), "recency",
                 ShareDataCategories.RecencyIsUnixMillis(table) ? [typeof(long)] : timestamp);
             Expect(ShareDataCategories.SpanEndColumnFor(table), "span end", timestamp);
+            Expect(ShareDataCategories.SpanEarlyEndColumnFor(table), "span early end", timestamp);
             Expect(ShareDataCategories.OpenSpanBoundFor(table)?.StartColumn, "open-span start", timestamp);
             if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
             {

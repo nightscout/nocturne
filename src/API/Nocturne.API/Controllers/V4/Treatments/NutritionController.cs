@@ -1,50 +1,48 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
-using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Validators.V4;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for managing nutrition data: carbohydrate intakes, food breakdown, and meals.
+/// The foods in each carb intake, and meals. Create, read, update, and delete the food lines of a carb
+/// intake. Create a meal, and list meals.
 /// </summary>
 /// <remarks>
-/// Three logical resource groups are exposed under <c>/api/v4/nutrition</c>:
+/// Two logical resource groups are exposed under <c>/api/v4/nutrition</c>; the carb intakes
+/// themselves are <see cref="CarbIntakeController"/>:
 /// <list type="bullet">
-///   <item><description><b>Carb Intakes</b> (<c>/carbs</c>) — standard CRUD for <see cref="CarbIntake"/> records backed by <see cref="ICarbIntakeRepository"/>.</description></item>
 ///   <item><description><b>Food Breakdown</b> (<c>/carbs/{id}/foods</c>) — per-carb-intake food attribution lines managed via <see cref="ITreatmentFoodService"/>.</description></item>
 ///   <item><description><b>Meals</b> (<c>/meals</c>) — atomic creation of a correlated <see cref="Bolus"/> + <see cref="CarbIntake"/> pair, and event-centric meal retrieval grouped by <c>CorrelationId</c>.</description></item>
 /// </list>
 ///
 /// The <c>POST /meals</c> endpoint is idempotent on <c>(DataSource, SyncIdentifier)</c>: if a matching
 /// bolus already exists its <c>CorrelationId</c> is propagated to both records. The two repositories
-/// write on their own contexts, so <see cref="GuardRecreationAsync"/> — not the transaction opened
-/// here — is what keeps a refused meal from writing one half.
+/// write on their own contexts, so <see cref="GuardRecreationAsync"/> is what keeps a refused meal
+/// from writing one half. The food types of the carb intake of an existing meal are filled through
+/// <see cref="CommittedWriteEnrichment"/>, so a failure there leaves them unset and the meal is still
+/// answered.
 ///
-/// Demo mode is respected in <c>GET /meals</c>: when enabled only records from
-/// <c>DataSources.DemoService</c> are returned; otherwise demo records are excluded.
+/// Meal retrieval, including its demo-mode filtering, is <see cref="IMealReadService"/>.
 /// </remarks>
 /// <seealso cref="ICarbIntakeRepository"/>
 /// <seealso cref="IBolusRepository"/>
 /// <seealso cref="ITreatmentFoodService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Carb Foods and Meals")]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
 [RequireScope(Scope.TreatmentsRead)]
@@ -64,220 +62,22 @@ public class NutritionController : ControllerBase, IWriteScopedController
     private readonly ICarbIntakeRepository _carbIntakeRepo;
     private readonly IBolusRepository _bolusRepo;
     private readonly ITreatmentFoodService _treatmentFoodService;
-    private readonly IDemoModeService _demoModeService;
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IFoodRepository _foodRepo;
+    private readonly IMealReadService _mealReadService;
 
     public NutritionController(
         ICarbIntakeRepository carbIntakeRepo,
         IBolusRepository bolusRepo,
         ITreatmentFoodService treatmentFoodService,
-        IDemoModeService demoModeService,
-        INocturneDbContextFactory contexts)
+        IFoodRepository foodRepo,
+        IMealReadService mealReadService)
     {
         _carbIntakeRepo = carbIntakeRepo;
         _bolusRepo = bolusRepo;
         _treatmentFoodService = treatmentFoodService;
-        _demoModeService = demoModeService;
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _foodRepo = foodRepo;
+        _mealReadService = mealReadService;
     }
-
-    #region Carb Intakes
-
-    /// <summary>
-    /// Get carb intakes with optional filtering
-    /// </summary>
-    /// <param name="includeTotal">Count every record in the range and return it as `pagination.total`. Defaults to `false`.</param>
-    [HttpGet("carbs")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(PaginatedResponse<CarbIntake>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<CarbIntake>>> GetCarbIntakes(
-        [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] int limit = 100, [FromQuery] int offset = 0,
-        [FromQuery] string sort = "timestamp_desc",
-        [FromQuery] string? device = null, [FromQuery] string? source = null,
-        [FromQuery] bool includeTotal = false,
-        CancellationToken ct = default)
-    {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
-
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
-        var data = (await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct: ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => _carbIntakeRepo.CountAsync(from, to, ct));
-        return Ok(new PaginatedResponse<CarbIntake> { Data = data, Pagination = pagination });
-    }
-
-    /// <summary>
-    /// Get a carb intake by ID
-    /// </summary>
-    [HttpGet("carbs/{id:guid}")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<CarbIntake>> GetCarbIntakeById(Guid id, CancellationToken ct = default)
-    {
-        var result = await _carbIntakeRepo.GetByIdAsync(id, ct);
-        return result is null ? NotFound() : Ok(result);
-    }
-
-    /// <summary>
-    /// Create a new carb intake
-    /// </summary>
-    [HttpPost("carbs")]
-    [RequireDeclaredWriteScope]
-    [RemoteForm(Invalidates = ["GetCarbIntakes"])]
-    [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<CarbIntake>> CreateCarbIntake([FromBody] CreateCarbIntakeRequest request, CancellationToken ct = default)
-    {
-        if (request.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        var model = MapCreateToModel(request);
-
-        var created = await _carbIntakeRepo.CreateAsync(model, WriteOrigin.Live, ct);
-        return CreatedAtAction(nameof(GetCarbIntakeById), new { id = created.Id }, created);
-    }
-
-    /// <summary>
-    /// Create or update carb intakes in bulk (max 1000).
-    /// </summary>
-    /// <remarks>
-    /// Array semantics are per-item upsert, not all-or-nothing: each intake carrying both
-    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
-    /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
-    /// is persisted.
-    /// </remarks>
-    [HttpPost("carbs/bulk")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(typeof(CarbIntake[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CarbIntake[]>> CreateCarbIntakesBulk(
-        [FromBody] CreateCarbIntakeRequest[] requests,
-        CancellationToken ct = default)
-    {
-        if (await this.ValidateBulkAsync(requests, "Carb intake", "intake", "intakes", ct) is { } invalid)
-            return invalid;
-
-        var models = requests.Select(MapCreateToModel).ToList();
-        var persisted = await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct);
-        return StatusCode(201, persisted.ToArray());
-    }
-
-    private static CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new()
-    {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
-        Carbs = request.Carbs,
-        SyncIdentifier = request.SyncIdentifier,
-        CarbTime = request.CarbTime,
-        AbsorptionTime = request.AbsorptionTime,
-        FatGrams = request.FatGrams,
-        ProteinGrams = request.ProteinGrams,
-        // Records split from one source share a correlation_id; it is a free-standing
-        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
-        CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
-    };
-
-    /// <summary>
-    /// Update an existing carb intake
-    /// </summary>
-    [HttpPut("carbs/{id:guid}")]
-    [RequireDeclaredWriteScope]
-    [RemoteForm(Invalidates = ["GetCarbIntakes", "GetCarbIntakeById"])]
-    [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<CarbIntake>> UpdateCarbIntake(Guid id, [FromBody] UpdateCarbIntakeRequest request, CancellationToken ct = default)
-    {
-        if (request.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        var existing = await _carbIntakeRepo.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = new CarbIntake
-        {
-            Id = id,
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
-            Carbs = request.Carbs,
-            SyncIdentifier = request.SyncIdentifier,
-            CarbTime = request.CarbTime,
-            AbsorptionTime = request.AbsorptionTime,
-            FatGrams = request.FatGrams,
-            ProteinGrams = request.ProteinGrams,
-            CorrelationId = request.CorrelationId ?? existing.CorrelationId,
-            LegacyId = existing.LegacyId,
-            CreatedAt = existing.CreatedAt,
-            AdditionalProperties = existing.AdditionalProperties,
-        };
-
-        try
-        {
-            var updated = await _carbIntakeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
-
-    /// <summary>
-    /// Delete a carb intake
-    /// </summary>
-    [HttpDelete("carbs/{id:guid}")]
-    [RequireDeclaredWriteScope]
-    [RemoteCommand(Invalidates = ["GetCarbIntakes"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> DeleteCarbIntake(Guid id, CancellationToken ct = default)
-    {
-        try
-        {
-            await _carbIntakeRepo.DeleteAsync(id, WriteOrigin.Live, ct);
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
-
-    /// <summary>
-    /// Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).
-    /// </summary>
-    [HttpDelete("carbs/by-sync-id")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> DeleteCarbIntakeBySyncIdentifier(
-        [FromQuery] string dataSource,
-        [FromQuery] string syncIdentifier,
-        CancellationToken ct = default)
-    {
-        if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
-            return BadRequest("dataSource and syncIdentifier are required");
-
-        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
-        return deleted > 0 ? NoContent() : NotFound();
-    }
-
-    #endregion
 
     #region Carb Intake Food Breakdown
 
@@ -308,15 +108,10 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CarbIntakeFoodRequest request,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var carbIntake = await db.Set<CarbIntakeEntity>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == id, ct);
-
-        if (carbIntake == null)
+        if (await _carbIntakeRepo.GetByIdAsync(id, ct) is null)
             return NotFound();
 
-        var entry = await BuildFoodEntryAsync(db, request, id, null, ct);
+        var entry = await BuildFoodEntryAsync(request, id, null, ct);
         if (entry == null)
             return BadRequest();
 
@@ -340,14 +135,13 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CarbIntakeFoodRequest request,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var breakdown = await _treatmentFoodService.GetByCarbIntakeIdAsync(id, ct);
         var existing = breakdown?.Foods.FirstOrDefault(f => f.Id == foodEntryId);
 
         if (existing == null)
             return NotFound();
 
-        var entry = await BuildFoodEntryAsync(db, request, id, existing, ct);
+        var entry = await BuildFoodEntryAsync(request, id, existing, ct);
         if (entry == null)
             return BadRequest();
 
@@ -399,7 +193,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// </summary>
     [HttpPost("meals")]
     [RequireDeclaredWriteScope]
-    [RemoteForm(Invalidates = ["GetCarbIntakes", "GetMeals"])]
+    [RemoteForm(Invalidates = ["CarbIntake_GetAll", "GetMeals"])]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -408,22 +202,15 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CreateMealRequest request,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        if (request.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(request.Timestamp))
+            return this.TimestampRequiredProblem();
 
         // The meal's bolus + carb intake share a correlation_id; it is a free-standing
         // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
         var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
-        var timestamp = request.Timestamp.UtcDateTime;
 
         var bolusModel = new Bolus
         {
-            Timestamp = timestamp,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
             Insulin = request.Insulin,
             BolusType = request.BolusType,
             Kind = BolusKind.Manual,
@@ -432,27 +219,19 @@ public class NutritionController : ControllerBase, IWriteScopedController
             InsulinType = request.InsulinType,
             BolusCalculationId = request.BolusCalculationId,
             CorrelationId = correlationId,
-        };
+        }.WithHeaderFrom(request);
 
         var carbModel = new CarbIntake
         {
-            Timestamp = timestamp,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
             Carbs = request.Carbs,
             SyncIdentifier = request.SyncIdentifier,
             CarbTime = request.CarbTime,
             AbsorptionTime = request.AbsorptionTime,
             CorrelationId = correlationId,
-        };
+        }.WithHeaderFrom(request);
 
         if (!string.IsNullOrEmpty(request.DataSource) && !string.IsNullOrEmpty(request.SyncIdentifier))
             await GuardRecreationAsync(request.DataSource, request.SyncIdentifier, ct);
-
-        // No transaction (see GuardRecreationAsync): one on this context would hold only the links
-        // the scoped DeduplicationService writes here, and a later failure would roll them back.
 
         // Peek at an existing bolus with the same (DataSource, SyncIdentifier) BEFORE
         // the upsert. If one exists, its CorrelationId is authoritative and must be
@@ -460,13 +239,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
         Guid? existingBolusCorrelationId = null;
         if (!string.IsNullOrEmpty(bolusModel.DataSource) && !string.IsNullOrEmpty(bolusModel.SyncIdentifier))
         {
-            var existingEntity = await db.Boluses
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    e => e.DataSource == bolusModel.DataSource
-                      && e.SyncIdentifier == bolusModel.SyncIdentifier,
-                    ct);
-            existingBolusCorrelationId = existingEntity?.CorrelationId;
+            existingBolusCorrelationId = await _bolusRepo.GetCorrelationIdBySyncKeyAsync(
+                bolusModel.DataSource, bolusModel.SyncIdentifier, ct);
         }
 
         if (existingBolusCorrelationId.HasValue)
@@ -477,6 +251,12 @@ public class NutritionController : ControllerBase, IWriteScopedController
 
         var bolus = await _bolusRepo.UpsertAsync(bolusModel, WriteOrigin.Live, ct);
         var carb = await _carbIntakeRepo.UpsertAsync(carbModel, WriteOrigin.Live, ct);
+
+        if (!carb.Created)
+        {
+            CarbIntake[] carbs = [carb.Record];
+            await CommittedWriteEnrichment.RunAsync(this, carbs, () => _treatmentFoodService.ApplyFoodTypesAsync(carbs, ct), ct);
+        }
 
         var response = new CreateMealResponse
         {
@@ -520,126 +300,20 @@ public class NutritionController : ControllerBase, IWriteScopedController
     [HttpGet("meals")]
     [RemoteQuery]
     [ProducesResponseType(typeof(MealEvent[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MealEvent[]>> GetMeals(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] bool? attributed = null,
         CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
         var fromTimestamp = from ?? DateTime.UtcNow.Date;
         var toTimestamp = to ?? DateTime.UtcNow.Date.AddDays(1);
+        if (this.RejectDateSpan(fromTimestamp, toTimestamp) is { } overlong)
+            return overlong;
 
-        var query = db.Set<CarbIntakeEntity>()
-            .AsNoTracking()
-            .Where(c => c.Timestamp >= fromTimestamp && c.Timestamp <= toTimestamp && c.Carbs > 0);
-
-        if (_demoModeService.IsEnabled)
-            query = query.Where(c => c.DataSource == DataSources.DemoService);
-        else
-            query = query.Where(c => c.DataSource != DataSources.DemoService);
-
-        var carbIntakeEntities = await query
-            .OrderByDescending(c => c.Timestamp)
-            .ToListAsync(ct);
-
-        if (carbIntakeEntities.Count == 0)
-            return Ok(Array.Empty<MealEvent>());
-
-        var carbIntakeIds = carbIntakeEntities.Select(c => c.Id).ToList();
-        var foodEntries = await _treatmentFoodService.GetByCarbIntakeIdsAsync(carbIntakeIds, ct);
-        var foodsByCarbIntake = foodEntries
-            .GroupBy(f => f.CarbIntakeId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var correlationIds = carbIntakeEntities
-            .Where(c => c.CorrelationId.HasValue)
-            .Select(c => c.CorrelationId!.Value)
-            .Distinct()
-            .ToList();
-
-        var correlatedBolusEntities = correlationIds.Count > 0
-            ? await db.Set<BolusEntity>()
-                .AsNoTracking()
-                .Where(b => b.CorrelationId.HasValue && correlationIds.Contains(b.CorrelationId!.Value))
-                .ToListAsync(ct)
-            : [];
-
-        var bolusesByCorrelation = correlatedBolusEntities
-            .GroupBy(b => b.CorrelationId!.Value)
-            .ToDictionary(g => g.Key, g => g.Select(BolusMapper.ToDomainModel).ToArray());
-
-        var events = new List<MealEvent>();
-
-        // Pass 1: carb intakes WITH a CorrelationId — group by that key so an
-        // event with multiple carb intakes (or multiple boluses) emits ONE event.
-        var correlatedGroups = carbIntakeEntities
-            .Where(c => c.CorrelationId.HasValue)
-            .GroupBy(c => c.CorrelationId!.Value);
-
-        foreach (var group in correlatedGroups)
-        {
-            var members = group.ToList();
-            events.Add(BuildEvent(
-                correlationId: group.Key,
-                carbEntities: members,
-                boluses: bolusesByCorrelation.TryGetValue(group.Key, out var bs) ? bs : [],
-                foodsByCarbIntake: foodsByCarbIntake));
-        }
-
-        // Pass 2: orphan carb intakes (null CorrelationId) — each becomes its
-        // own event with empty Boluses. Do NOT collapse them together.
-        foreach (var orphan in carbIntakeEntities.Where(c => !c.CorrelationId.HasValue))
-        {
-            events.Add(BuildEvent(
-                correlationId: null,
-                carbEntities: [orphan],
-                boluses: [],
-                foodsByCarbIntake: foodsByCarbIntake));
-        }
-
-        var filtered = attributed.HasValue
-            ? events.Where(e => e.IsAttributed == attributed.Value)
-            : events;
-
-        return Ok(filtered.OrderByDescending(e => e.Timestamp).ToArray());
-    }
-
-    private static MealEvent BuildEvent(
-        Guid? correlationId,
-        IReadOnlyList<CarbIntakeEntity> carbEntities,
-        Bolus[] boluses,
-        IReadOnlyDictionary<Guid, List<TreatmentFood>> foodsByCarbIntake)
-    {
-        var carbModels = carbEntities.Select(CarbIntakeMapper.ToDomainModel).ToArray();
-        var foods = carbEntities
-            .SelectMany(c => foodsByCarbIntake.TryGetValue(c.Id, out var list) ? list : [])
-            .ToArray();
-
-        var totalCarbs = carbEntities.Sum(c => c.Carbs);
-        var attributedCarbs = (double)foods.Sum(f => f.Carbs);
-        var totalInsulin = boluses.Sum(b => b.Insulin);
-
-        // The event timestamp is the earliest point across carb intakes and
-        // boluses in the group — easy to reason about for chronological rendering.
-        var earliestCarb = carbEntities.Min(c => c.Timestamp);
-        var timestamp = boluses.Length > 0
-            ? (boluses.Min(b => b.Timestamp) < earliestCarb ? boluses.Min(b => b.Timestamp) : earliestCarb)
-            : earliestCarb;
-
-        return new MealEvent
-        {
-            CorrelationId = correlationId,
-            Timestamp = timestamp,
-            CarbIntakes = carbModels,
-            Boluses = boluses,
-            Foods = foods,
-            TotalCarbs = totalCarbs,
-            AttributedCarbs = attributedCarbs,
-            UnspecifiedCarbs = totalCarbs - attributedCarbs,
-            TotalInsulin = totalInsulin,
-            IsAttributed = foods.Length > 0,
-        };
+        var meals = await _mealReadService.GetMealsAsync(fromTimestamp, toTimestamp, attributed, ct);
+        return Ok(meals.ToArray());
     }
 
     #endregion
@@ -647,7 +321,6 @@ public class NutritionController : ControllerBase, IWriteScopedController
     #region Private Helpers
 
     private async Task<TreatmentFood?> BuildFoodEntryAsync(
-        NocturneDbContext db,
         CarbIntakeFoodRequest request,
         Guid carbIntakeId,
         TreatmentFood? existing,
@@ -675,22 +348,19 @@ public class NutritionController : ControllerBase, IWriteScopedController
         }
 
         Guid? foodId = existing?.FoodId;
-        FoodEntity? foodEntity = null;
+        CatalogFoodPortion? catalogFood = null;
 
         if (!string.IsNullOrWhiteSpace(request.FoodId))
         {
-            foodEntity = Guid.TryParse(request.FoodId, out var foodGuid)
-                ? await db.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == foodGuid, ct)
-                : await db.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.OriginalId == request.FoodId, ct);
+            catalogFood = await _foodRepo.GetCatalogFoodAsync(request.FoodId, ct);
 
-            if (foodEntity == null)
+            if (catalogFood == null)
                 return null;
-            foodId = foodEntity.Id;
+            foodId = catalogFood.Id;
         }
         else if (foodId.HasValue)
         {
-            foodEntity = await db.Foods.AsNoTracking()
-                .FirstOrDefaultAsync(f => f.Id == foodId.Value, ct);
+            catalogFood = await _foodRepo.GetCatalogFoodAsync(foodId.Value, ct);
         }
 
         var portions = request.Portions ?? existing?.Portions ?? 0m;
@@ -716,10 +386,10 @@ public class NutritionController : ControllerBase, IWriteScopedController
                 };
         }
 
-        if (foodEntity == null)
+        if (catalogFood == null)
             return null;
 
-        var carbsPerPortion = (decimal)foodEntity.Carbs;
+        var carbsPerPortion = catalogFood.CarbsPerPortion.ToDecimal();
 
         if (inputMode == CarbIntakeFoodInputMode.Portions)
         {

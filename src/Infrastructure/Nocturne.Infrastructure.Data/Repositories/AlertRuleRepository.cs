@@ -19,10 +19,10 @@ public class AlertRuleRepository : IAlertRuleRepository
     private readonly TimeProvider _time;
 
     /// <summary>A repository whose calls each open their own context and save what they write.</summary>
-    public AlertRuleRepository(INocturneDbContextFactory contexts, TimeProvider? time = null)
+    public AlertRuleRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts;
-        _time = time ?? TimeProvider.System;
+        _time = time;
     }
 
     /// <summary>
@@ -32,10 +32,10 @@ public class AlertRuleRepository : IAlertRuleRepository
     /// A read tracks its rows, so a write on the same unit edits the rows it read in place: no row
     /// is loaded twice, and only the columns the write changed are saved.
     /// </summary>
-    public AlertRuleRepository(DbUnitOfWork unit, TimeProvider? time = null)
+    public AlertRuleRepository(DbUnitOfWork unit, TimeProvider time)
     {
         _unit = unit;
-        _time = time ?? TimeProvider.System;
+        _time = time;
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
@@ -72,7 +72,9 @@ public class AlertRuleRepository : IAlertRuleRepository
         if (entity is null)
             return false;
 
+        var wasEnabled = entity.IsEnabled;
         Apply(entity, rule);
+        StampEnabled(entity, wasEnabled, Now);
         entity.UpdatedAt = Now;
         await SaveAsync(db, ct);
         return true;
@@ -96,11 +98,13 @@ public class AlertRuleRepository : IAlertRuleRepository
         if (entity is null)
             return false;
 
-        var retained = RetainedSecrets(entity.Channels);
         var keptRows = entity.Channels
             .Where(c => kept is not null && kept(AlertRuleMapper.ToSnapshot(c)))
             .OrderBy(c => c.SortOrder)
             .ToList();
+        var retained = Retained.Of(
+            entity.Channels,
+            channels.Select(Retained.KeyOf).Concat(keptRows.Select(c => (c.ChannelType, c.Destination))));
         foreach (var replaced in entity.Channels.Except(keptRows).ToList())
         {
             entity.Channels.Remove(replaced);
@@ -128,7 +132,10 @@ public class AlertRuleRepository : IAlertRuleRepository
         if (entity is null)
             return false;
 
-        entity.Channels.Add(NewChannel(entity, channel, entity.Channels.Count, RetainedSecrets(entity.Channels), Now));
+        var retained = Retained.Of(
+            entity.Channels,
+            entity.Channels.Select(c => (c.ChannelType, c.Destination)).Append(Retained.KeyOf(channel)));
+        entity.Channels.Add(NewChannel(entity, channel, entity.Channels.Count, retained, Now));
         await SaveAsync(db, ct);
         return true;
     }
@@ -151,6 +158,24 @@ public class AlertRuleRepository : IAlertRuleRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<bool> RestampChannelAsync(
+        Guid ruleId, Guid channelId, Guid addedBySubjectId, DateTime? stopsAt, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+
+        var entity = await LoadAsync(db, ruleId, withChannels: true, ct);
+        var channel = entity?.Channels.FirstOrDefault(c => c.Id == channelId);
+        if (channel is null)
+            return false;
+
+        channel.AddedBySubjectId = addedBySubjectId;
+        channel.StopsAt = stopsAt;
+        await SaveAsync(db, ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<bool?> ToggleEnabledAsync(Guid ruleId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -162,6 +187,7 @@ public class AlertRuleRepository : IAlertRuleRepository
 
         var wasEnabled = entity.IsEnabled;
         entity.IsEnabled = !wasEnabled;
+        StampEnabled(entity, wasEnabled, Now);
         entity.UpdatedAt = Now;
         await SaveAsync(db, ct);
         return wasEnabled;
@@ -335,11 +361,22 @@ public class AlertRuleRepository : IAlertRuleRepository
             UpdatedAt = now,
         };
         Apply(entity, rule.Rule);
+        StampEnabled(entity, wasEnabled: false, now);
 
         var sortOrder = 0;
         foreach (var channel in rule.Channels)
-            entity.Channels.Add(NewChannel(entity, channel, sortOrder++, NoRetainedSecrets, now));
+            entity.Channels.Add(NewChannel(entity, channel, sortOrder++, Retained.None, now));
         return entity;
+    }
+
+    /// <summary>
+    /// Every write of <see cref="AlertRuleEntity.IsEnabled"/> passes here. A rule turned on is
+    /// stamped with the instant; a rule left on, or turned off, keeps the stamp it has.
+    /// </summary>
+    private static void StampEnabled(AlertRuleEntity entity, bool wasEnabled, DateTime now)
+    {
+        if (entity.IsEnabled && !wasEnabled)
+            entity.EnabledAt = now;
     }
 
     private static void Apply(AlertRuleEntity entity, AlertRuleWrite rule)
@@ -357,37 +394,82 @@ public class AlertRuleRepository : IAlertRuleRepository
         entity.AutoResolveParams = rule.AutoResolveParams;
         entity.ClientConfiguration = rule.ClientConfiguration;
         entity.ReviewReason = rule.ReviewReason;
+        entity.OnUnknown = rule.OnUnknown;
+        entity.GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes;
     }
 
     private static AlertRuleChannelEntity NewChannel(
         AlertRuleEntity rule,
         AlertRuleChannelWrite channel,
         int sortOrder,
-        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets,
-        DateTime now) => new()
+        Retained retained,
+        DateTime now)
     {
-        Id = Guid.CreateVersion7(),
-        TenantId = rule.TenantId,
-        AlertRuleId = rule.Id,
-        ChannelType = channel.ChannelType,
-        Destination = channel.Destination,
-        DestinationLabel = channel.DestinationLabel,
-        Metadata = channel.Metadata,
-        Secret = channel.KeepsStoredSecret
-            ? retainedSecrets.GetValueOrDefault((channel.ChannelType, channel.Destination))
-            : channel.Secret,
-        SortOrder = sortOrder,
-        CreatedAt = now,
-    };
-
-    private static readonly IReadOnlyDictionary<(ChannelType, string), string> NoRetainedSecrets =
-        new Dictionary<(ChannelType, string), string>();
+        var key = (channel.ChannelType, channel.Destination);
+        var stamps = retained.Stamps.GetValueOrDefault(key);
+        return new AlertRuleChannelEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = rule.TenantId,
+            AlertRuleId = rule.Id,
+            ChannelType = channel.ChannelType,
+            Destination = channel.Destination,
+            DestinationLabel = channel.DestinationLabel,
+            Metadata = channel.Metadata,
+            Secret = channel.KeepsStoredSecret ? retained.Secrets.GetValueOrDefault(key) : channel.Secret,
+            AddedBySubjectId = stamps is null ? channel.AddedBySubjectId : stamps.AddedBySubjectId,
+            StopsAt = stamps is null ? channel.StopsAt : stamps.StopsAt,
+            RecipientSubjectId = channel.RecipientSubjectId ?? stamps?.RecipientSubjectId,
+            SortOrder = sortOrder,
+            CreatedAt = now,
+        };
+    }
 
     /// <summary>
-    /// The stored ciphertext of every channel that carries a signing secret, keyed by the pair a
-    /// caller can still name after a read: a replacement mints new ids, and the secret is never
-    /// echoed back, so a channel arriving without one is matched to its predecessor by type and
-    /// destination.
+    /// What a replacement channel carries over from the stored channel of its type and destination:
+    /// a replacement mints new ids, so that pair is all a caller can still name after a read.
+    /// </summary>
+    private sealed record Retained(
+        IReadOnlyDictionary<(ChannelType, string), string> Secrets,
+        IReadOnlyDictionary<(ChannelType, string), StoredStamps> Stamps)
+    {
+        public static readonly Retained None = new(
+            new Dictionary<(ChannelType, string), string>(),
+            new Dictionary<(ChannelType, string), StoredStamps>());
+
+        /// <param name="stored">The rule's channels as stored.</param>
+        /// <param name="incoming">The type and destination of every channel the rule holds after the write.</param>
+        public static Retained Of(
+            IEnumerable<AlertRuleChannelEntity> stored, IEnumerable<(ChannelType, string)> incoming) =>
+            new(RetainedSecrets(stored), RetainedStamps(stored, incoming));
+
+        public static (ChannelType, string) KeyOf(AlertRuleChannelWrite channel) =>
+            (channel.ChannelType, channel.Destination);
+    }
+
+    private sealed record StoredStamps(Guid? AddedBySubjectId, DateTime? StopsAt, Guid? RecipientSubjectId);
+
+    /// <summary>
+    /// The stamps of every stored channel, so a channel sent back unchanged is not stamped again by
+    /// whoever saves the rule next. As for <see cref="RetainedSecrets"/>, a pair is matched only when
+    /// one stored channel and one channel after the write hold it: with duplicates the key cannot
+    /// tell which copy is which, so each copy takes the stamps its writer gives it.
+    /// </summary>
+    private static IReadOnlyDictionary<(ChannelType, string), StoredStamps> RetainedStamps(
+        IEnumerable<AlertRuleChannelEntity> stored, IEnumerable<(ChannelType, string)> incoming)
+    {
+        var single = incoming.GroupBy(k => k).Where(g => g.Count() == 1).Select(g => g.Key).ToHashSet();
+        return stored
+            .GroupBy(c => (c.ChannelType, c.Destination))
+            .Where(g => g.Count() == 1 && single.Contains(g.Key))
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(c => new StoredStamps(c.AddedBySubjectId, c.StopsAt, c.RecipientSubjectId)).Single());
+    }
+
+    /// <summary>
+    /// The stored ciphertext of every channel that carries a signing secret. The secret is never
+    /// echoed back, so a channel arriving without one is matched to its predecessor (<see cref="Retained"/>).
     /// </summary>
     /// <remarks>
     /// A pair held by more than one stored secret retains none of them: the key cannot tell which

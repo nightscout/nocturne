@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Monitoring;
@@ -15,8 +17,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -38,6 +40,7 @@ public class TrackersControllerTenantAccessTests
     private readonly Mock<ITrackerRepository> _repository = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly Mock<IAlertRepository> _alerts = new();
+    private readonly Mock<IPatientDeviceRepository> _patientDevices = new();
 
     public TrackersControllerTenantAccessTests()
     {
@@ -55,7 +58,7 @@ public class TrackersControllerTenantAccessTests
 
     private TrackersController Controller(HttpContext httpContext)
     {
-        var controller = new TrackersController(
+        var controller = new TrackersController(new TrackerService(
             _repository.Object,
             _broadcast.Object,
             Mock.Of<ITrackerAlertRuleSyncService>(),
@@ -66,16 +69,17 @@ public class TrackersControllerTenantAccessTests
                 Mock.Of<IDeviceEventRepository>(),
                 Mock.Of<IPatientDeviceStamper>(),
                 NullLogger<TrackerDeviceEventWriter>.Instance),
-            Mock.Of<ILogger<TrackersController>>()
-        );
+            TimeProvider.System,
+            NullLogger<TrackerService>.Instance));
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
         return controller;
     }
 
-    private TrackersController AsMember(string subjectId = MemberId, string scope = Scope.AlertsRead)
+    private TrackersController AsMember(
+        string subjectId = MemberId, string scope = Scope.AlertsRead, params string[] alsoHolding)
     {
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = new HashSet<string> { scope };
+        httpContext.Items["GrantedScopes"] = new HashSet<string>([scope, .. alsoHolding]);
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -111,28 +115,21 @@ public class TrackersControllerTenantAccessTests
         return Controller(httpContext);
     }
 
-    private TrackerDefinitionEntity Definition(string createdBy = CreatorId)
+    private TrackerDefinition Definition(string createdBy = CreatorId)
     {
-        var definition = new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(),
-            CreatedBy = createdBy,
-            Name = "Sensor",
-            LifespanHours = 240,
-        };
+        var definition = TrackerDefinition.Restore(Guid.NewGuid(), "Sensor", createdBy: createdBy, lifespanHours: 240);
         _repository
             .Setup(r => r.GetDefinitionByIdAsync(definition.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(definition);
         return definition;
     }
 
-    private TrackerInstanceEntity Instance(TrackerDefinitionEntity definition)
+    private TrackerInstance Instance(TrackerDefinition definition)
     {
-        var instance = new TrackerInstanceEntity
+        var instance = new TrackerInstance
         {
             Id = Guid.NewGuid(),
             CreatedBy = CreatorId,
-            DefinitionId = definition.Id,
             Definition = definition,
             StartedAt = DateTime.UtcNow.AddDays(-1),
         };
@@ -142,9 +139,9 @@ public class TrackersControllerTenantAccessTests
         return instance;
     }
 
-    private TrackerPresetEntity Preset(TrackerDefinitionEntity definition)
+    private TrackerPreset Preset(TrackerDefinition definition)
     {
-        var preset = new TrackerPresetEntity
+        var preset = new TrackerPreset
         {
             Id = Guid.NewGuid(),
             CreatedBy = CreatorId,
@@ -163,7 +160,7 @@ public class TrackersControllerTenantAccessTests
     [Fact]
     public async Task GetDefinitions_MemberSeesEveryTracker_WhoeverCreatedIt()
     {
-        var definitions = new List<TrackerDefinitionEntity>
+        var definitions = new List<TrackerDefinition>
         {
             Definition(createdBy: CreatorId),
             Definition(createdBy: MemberId),
@@ -176,6 +173,37 @@ public class TrackersControllerTenantAccessTests
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerDefinitionDto[]>()
             .Which.Select(d => d.Id).Should().BeEquivalentTo(definitions.Select(d => d.Id));
+    }
+
+    [Fact]
+    public async Task GetTemplates_MemberReadsTheTemplatesOfTheTenantsDevices()
+    {
+        _patientDevices
+            .Setup(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PatientDevice { CatalogId = "omnipod-5", Rank = 0 }]);
+
+        var result = await AsMember(alsoHolding: Scope.DevicesRead).GetTemplates(_patientDevices.Object);
+
+        var templates = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Subject;
+        templates.Select(t => t.Id).Should().Contain(TrackerTemplates.Pod).And.NotContain(TrackerTemplates.Site);
+        templates.Single(t => t.Id == TrackerTemplates.Pod).Definition.Name.Should().Be("Omnipod 5 pod");
+    }
+
+    [Fact]
+    public async Task GetTemplates_WithoutDevicesRead_NamesNoDevice()
+    {
+        _patientDevices
+            .Setup(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PatientDevice { CatalogId = "omnipod-5", Rank = 0 }]);
+
+        var result = await AsMember().GetTemplates(_patientDevices.Object);
+
+        var templates = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Subject;
+        templates.Select(t => t.Id).Should().Contain(TrackerTemplates.Site);
+        templates.Should().OnlyContain(t => t.Definition.DeviceComponent == null);
+        _patientDevices.Verify(d => d.GetCurrentAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -233,6 +261,8 @@ public class TrackersControllerTenantAccessTests
         (await controller.GetDefinitions()).Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerDefinitionDto[]>().Which.Should().BeEmpty();
         (await controller.GetDefinition(definition.Id)).Result.Should().BeOfType<NotFoundResult>();
+        (await controller.GetTemplates(_patientDevices.Object)).Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<TrackerTemplateDto[]>().Which.Should().BeEmpty();
         (await controller.GetActiveInstances()).Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerInstanceDto[]>().Which.Should().BeEmpty();
         (await controller.GetInstanceHistory()).Result.Should().BeOfType<OkObjectResult>()
@@ -252,15 +282,15 @@ public class TrackersControllerTenantAccessTests
     {
         var definition = Definition();
         _repository
-            .Setup(r => r.UpdateDefinitionAsync(definition.Id, It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, TrackerDefinitionEntity e, CancellationToken _) => e);
+            .Setup(r => r.UpdateDefinitionAsync(It.Is<TrackerDefinition>(d => d.Id == definition.Id), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerDefinition e, CancellationToken _) => e);
 
         var result = await AsMember().UpdateDefinition(
             definition.Id, new UpdateTrackerDefinitionRequest { Name = "Renamed" });
 
         result.Result.Should().BeOfType<OkObjectResult>();
         _repository.Verify(r => r.UpdateDefinitionAsync(
-            definition.Id, It.Is<TrackerDefinitionEntity>(e => e.Name == "Renamed" && e.CreatedBy == CreatorId),
+            It.Is<TrackerDefinition>(e => e.Id == definition.Id && e.Name == "Renamed" && e.CreatedBy == CreatorId),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -319,8 +349,8 @@ public class TrackersControllerTenantAccessTests
         var definition = Definition();
         var preset = Preset(definition);
         _repository
-            .Setup(r => r.CreatePresetAsync(It.IsAny<TrackerPresetEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TrackerPresetEntity p, CancellationToken _) => p);
+            .Setup(r => r.CreatePresetAsync(It.IsAny<TrackerPreset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerPreset p, CancellationToken _) => p);
         _repository
             .Setup(r => r.GetActiveInstancesForDefinitionAsync(definition.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
@@ -328,7 +358,7 @@ public class TrackersControllerTenantAccessTests
             .Setup(r => r.StartInstanceAsync(
                 definition.Id, MemberId, It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TrackerInstanceEntity { Id = Guid.NewGuid(), DefinitionId = definition.Id, Definition = definition });
+            .ReturnsAsync(new TrackerInstance { Id = Guid.NewGuid(), Definition = definition });
 
         var controller = AsMember();
 
@@ -360,7 +390,7 @@ public class TrackersControllerTenantAccessTests
         };
 
         ActionGate.Evaluate(typeof(TrackersController), action, new HashSet<string> { Scope.AlertsRead }, member)
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
         ActionGate.Evaluate(typeof(TrackersController), action, new HashSet<string> { Scope.AlertsReadWrite }, member)
             .Should().BeNull();
     }
@@ -372,12 +402,8 @@ public class TrackersControllerTenantAccessTests
     {
         var createdId = Guid.NewGuid();
         _repository
-            .Setup(r => r.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TrackerDefinitionEntity e, CancellationToken _) =>
-            {
-                e.Id = createdId;
-                return e;
-            });
+            .Setup(r => r.CreateDefinitionAsync(It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerDefinition e, CancellationToken _) => TrackerDefinition.Restore(createdId, e.Name));
 
         await AsMember().CreateDefinition(new CreateTrackerDefinitionRequest { Name = "Sensor" });
 
@@ -389,8 +415,8 @@ public class TrackersControllerTenantAccessTests
     {
         var definition = Definition();
         _repository
-            .Setup(r => r.UpdateDefinitionAsync(definition.Id, It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, TrackerDefinitionEntity e, CancellationToken _) => e);
+            .Setup(r => r.UpdateDefinitionAsync(It.Is<TrackerDefinition>(d => d.Id == definition.Id), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerDefinition e, CancellationToken _) => e);
 
         await AsMember().UpdateDefinition(definition.Id, new UpdateTrackerDefinitionRequest { Name = "Renamed" });
 

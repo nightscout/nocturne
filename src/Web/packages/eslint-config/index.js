@@ -122,7 +122,9 @@ const typeRules = {
 
 // A barrel import makes Vite compile all ~3,600 icons for SSR; a per-icon path compiles one.
 const LUCIDE_ICON_HINT = 'Import each icon from its own file: `import Bell from "@lucide/svelte/icons/bell"`.';
-const iconImports = {
+// Flat config replaces a rule's options wholesale, so a package's own restrictions are merged
+// in here rather than set in a later block.
+const iconImports = ({ paths = [], patterns = [] } = {}) => ({
   rules: {
     "@typescript-eslint/no-restricted-imports": [
       "error",
@@ -130,15 +132,17 @@ const iconImports = {
         paths: [
           { name: "lucide-svelte", message: `lucide-svelte is deprecated; use @lucide/svelte. ${LUCIDE_ICON_HINT}` },
           { name: "@lucide/svelte", allowTypeImports: true, message: LUCIDE_ICON_HINT },
-          { name: "@lucide/svelte/icons", allowTypeImports: true, message: LUCIDE_ICON_HINT }
+          { name: "@lucide/svelte/icons", allowTypeImports: true, message: LUCIDE_ICON_HINT },
+          ...paths
         ],
         patterns: [
-          { group: ["lucide-svelte/*"], message: `lucide-svelte is deprecated; use @lucide/svelte. ${LUCIDE_ICON_HINT}` }
+          { group: ["lucide-svelte/*"], message: `lucide-svelte is deprecated; use @lucide/svelte. ${LUCIDE_ICON_HINT}` },
+          ...patterns
         ]
       }
     ]
   }
-};
+});
 
 // Tests read fixtures and sources under the repo and build patterns from their own
 // identifiers; neither path nor pattern comes from a request, so every finding here
@@ -204,7 +208,7 @@ export function nodeConfig({ ignores = [] } = {}) {
     { languageOptions: { globals: { ...globals.node } } },
     { ignores: [...BUILD_OUTPUT, ...ignores] },
     typeRules,
-    iconImports,
+    iconImports(),
     testFilePolicy
   );
 }
@@ -218,13 +222,16 @@ export function nodeConfig({ ignores = [] } = {}) {
  * as a package's contracts. `shadcnSettings` is `settings.shadcn`, for a package whose
  * components.json does not name the component directory. `rawButtonFiles` are globs
  * where a raw <button> is allowed, for a surface drawn in a palette no Button variant
- * carries; raw inputs, selects and textareas stay errors there.
+ * carries; raw inputs, selects and textareas stay errors there. `restrictedImports` adds
+ * `paths` and `patterns` to @typescript-eslint/no-restricted-imports, for a package that
+ * must not reach for some modules.
  *
  * @param {{
  *   componentDirs?: string[],
  *   noRestyle?: Record<string, unknown>,
  *   shadcnSettings?: Record<string, unknown>,
  *   rawButtonFiles?: string[],
+ *   restrictedImports?: { paths?: unknown[], patterns?: unknown[] },
  *   ignores?: string[]
  * }} [options]
  */
@@ -233,6 +240,7 @@ export function svelteConfig({
   noRestyle = { allow: ["layout"] },
   shadcnSettings,
   rawButtonFiles = [],
+  restrictedImports,
   ignores = []
 } = {}) {
   return ts.config(
@@ -303,7 +311,7 @@ export function svelteConfig({
         ]
       : []),
     typeRules,
-    iconImports,
+    iconImports(restrictedImports),
     testFilePolicy,
     {
       // Flat config replaces no-restricted-syntax's options wholesale, so every .svelte

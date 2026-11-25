@@ -1,4 +1,3 @@
-using Nocturne.Core.Clinical.LoopAnalysis;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -863,8 +862,8 @@ public class ChartDataServiceTests
         public void EmptyInputs_ReturnsEmpty()
         {
             var result = ChartDataService.MapTrackerMarkers(
-                Enumerable.Empty<TrackerDefinitionEntity>(),
-                Enumerable.Empty<TrackerInstanceEntity>(),
+                Enumerable.Empty<TrackerDefinition>(),
+                Enumerable.Empty<TrackerInstance>(),
                 TestMills,
                 TestMills + 86400000L
             );
@@ -876,33 +875,23 @@ public class ChartDataServiceTests
         public void FiltersInstancesByTimeRange_DurationMode()
         {
             var defId = Guid.NewGuid();
-            var definition = new TrackerDefinitionEntity
-            {
-                Id = defId,
-                CreatedBy = "user1",
-                Name = "CGM Sensor",
-                Category = TrackerCategory.Sensor,
-                Icon = "activity",
-                Mode = TrackerMode.Duration,
-                LifespanHours = 24, // 1 day lifespan
-            };
+            var definition = TrackerDefinition.Restore(defId, "CGM Sensor", createdBy: "user1", category: TrackerCategory.Sensor, icon: "activity", mode: TrackerMode.Duration, lifespanHours: 24);
 
             var startTime = TestMills;
             var endTime = TestMills + (48L * 60 * 60 * 1000); // +2 days
 
             // Instance started at startTime: ExpectedEndAt = startTime + 24h = within range
             var startedAtDateTime = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
-            var inRangeInstance = new TrackerInstanceEntity
+            var inRangeInstance = new TrackerInstance
             {
                 Id = Guid.NewGuid(),
-                DefinitionId = defId,
                 CreatedBy = "user1",
                 StartedAt = startedAtDateTime, // expires at startTime + 24h
                 Definition = definition,
             };
 
-            var defs = new List<TrackerDefinitionEntity> { definition };
-            var instances = new List<TrackerInstanceEntity> { inRangeInstance };
+            var defs = new List<TrackerDefinition> { definition };
+            var instances = new List<TrackerInstance> { inRangeInstance };
 
             var result = ChartDataService.MapTrackerMarkers(defs, instances, startTime, endTime);
 
@@ -918,15 +907,7 @@ public class ChartDataServiceTests
         public void EventMode_UsesScheduledAt()
         {
             var defId = Guid.NewGuid();
-            var definition = new TrackerDefinitionEntity
-            {
-                Id = defId,
-                CreatedBy = "user1",
-                Name = "Doctor Appointment",
-                Category = TrackerCategory.Appointment,
-                Icon = "calendar",
-                Mode = TrackerMode.Event,
-            };
+            var definition = TrackerDefinition.Restore(defId, "Doctor Appointment", createdBy: "user1", category: TrackerCategory.Appointment, icon: "calendar", mode: TrackerMode.Event);
 
             var startTime = TestMills;
             var endTime = TestMills + (24L * 60 * 60 * 1000);
@@ -935,10 +916,9 @@ public class ChartDataServiceTests
             var scheduledTime = DateTimeOffset
                 .FromUnixTimeMilliseconds(TestMills + (12L * 60 * 60 * 1000))
                 .UtcDateTime;
-            var instance = new TrackerInstanceEntity
+            var instance = new TrackerInstance
             {
                 Id = Guid.NewGuid(),
-                DefinitionId = defId,
                 CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow.AddDays(-7),
                 ScheduledAt = scheduledTime,
@@ -965,12 +945,7 @@ public class ChartDataServiceTests
             var otherDefId = Guid.NewGuid();
 
             // Definition for a different ID
-            var otherDef = new TrackerDefinitionEntity
-            {
-                Id = otherDefId,
-                Name = "Other",
-                Category = TrackerCategory.Battery,
-            };
+            var otherDef = TrackerDefinition.Restore(otherDefId, "Other", category: TrackerCategory.Battery);
 
             // Instance referencing a definition not in the list
             // Use event mode with ScheduledAt for simpler setup
@@ -978,19 +953,13 @@ public class ChartDataServiceTests
                 .FromUnixTimeMilliseconds(TestMills + (6L * 60 * 60 * 1000))
                 .UtcDateTime;
 
-            var instance = new TrackerInstanceEntity
+            var instance = new TrackerInstance
             {
                 Id = Guid.NewGuid(),
-                DefinitionId = defId,
                 CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = scheduledTime,
-                Definition = new TrackerDefinitionEntity
-                {
-                    Id = defId,
-                    Mode = TrackerMode.Event,
-                    // Minimal definition just to make ExpectedEndAt work
-                },
+                Definition = TrackerDefinition.Restore(defId, string.Empty, mode: TrackerMode.Event),
             };
 
             var startTime = TestMills;
@@ -1015,19 +984,11 @@ public class ChartDataServiceTests
         public void InstanceWithoutExpectedEndAt_Excluded()
         {
             var defId = Guid.NewGuid();
-            var definition = new TrackerDefinitionEntity
-            {
-                Id = defId,
-                Name = "No Lifespan",
-                Category = TrackerCategory.Custom,
-                Mode = TrackerMode.Duration,
-                LifespanHours = null, // no lifespan => ExpectedEndAt = null
-            };
+            var definition = TrackerDefinition.Restore(defId, "No Lifespan", category: TrackerCategory.Custom, mode: TrackerMode.Duration, lifespanHours: null);
 
-            var instance = new TrackerInstanceEntity
+            var instance = new TrackerInstance
             {
                 Id = Guid.NewGuid(),
-                DefinitionId = defId,
                 CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 Definition = definition,
@@ -1047,21 +1008,14 @@ public class ChartDataServiceTests
         public void Results_OrderedByTime()
         {
             var defId = Guid.NewGuid();
-            var definition = new TrackerDefinitionEntity
-            {
-                Id = defId,
-                Name = "Sensor",
-                Category = TrackerCategory.Sensor,
-                Mode = TrackerMode.Event,
-            };
+            var definition = TrackerDefinition.Restore(defId, "Sensor", category: TrackerCategory.Sensor, mode: TrackerMode.Event);
 
             var startTime = TestMills;
             var endTime = TestMills + (24L * 60 * 60 * 1000);
 
-            var instance1 = new TrackerInstanceEntity
+            var instance1 = new TrackerInstance
             {
                 Id = Guid.NewGuid(),
-                DefinitionId = defId,
                 CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = DateTimeOffset
@@ -1069,10 +1023,9 @@ public class ChartDataServiceTests
                     .UtcDateTime,
                 Definition = definition,
             };
-            var instance2 = new TrackerInstanceEntity
+            var instance2 = new TrackerInstance
             {
                 Id = Guid.NewGuid(),
-                DefinitionId = defId,
                 CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = DateTimeOffset
@@ -1724,7 +1677,7 @@ public class ChartDataServiceTests
 
             var series = await Service(repository.Object, TimeProvider.System).GetBasalSeriesAsync(Start, End);
 
-            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - DailyProfileCalculator.ActingMs).UtcDateTime);
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - 32 * 60 * Minute).UtcDateTime);
             series.Should().ContainSingle();
             series[0].Timestamp.Should().Be(Start);
             series[0].Rate.Should().BeApproximately(0.4, 0.001);
@@ -1893,7 +1846,7 @@ public class ChartDataServiceTests
 
             var spans = await service.GetBasalDeliverySpansAsync(Start, End);
 
-            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - DailyProfileCalculator.ActingMs).UtcDateTime);
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - 32 * 60 * Minute).UtcDateTime);
             spans.Select(s => (s.Origin, s.Rate)).Should().Equal(
                 (BasalDeliveryOrigin.Manual, 0.4),
                 (BasalDeliveryOrigin.Suspended, 0.0),

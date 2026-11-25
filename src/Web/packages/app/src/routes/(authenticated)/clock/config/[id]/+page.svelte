@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
+  import { useModifierKey } from "@nocturne/ui/modifier-key";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -55,6 +56,7 @@
   let config = $state<InternalConfig>({ rows: [], settings: {} });
   let clockName = $state("My clock face");
   const save = useToastSubmission("Failed to save clock face");
+  const modifierKey = useModifierKey();
   let loading = $state(true);
   let selectedElementId = $state<string | null>(null);
   let addMenuOpen = $state<"top" | "bottom" | null>(null);
@@ -105,13 +107,12 @@
       return;
     }
 
-    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-    const modifier = isMac ? e.metaKey : e.ctrlKey;
+    const modifierHeld = modifierKey.isMac ? e.metaKey : e.ctrlKey;
 
-    if (modifier && e.key === Key.Z && !e.shiftKey) {
+    if (modifierHeld && e.key === Key.Z && !e.shiftKey) {
       e.preventDefault();
       if (history.canUndo) history.undo();
-    } else if (modifier && e.key === Key.Z && e.shiftKey || modifier && e.key === Key.Y) {
+    } else if (modifierHeld && e.key === Key.Z && e.shiftKey || modifierHeld && e.key === Key.Y) {
       e.preventDefault();
       if (history.canRedo) history.redo();
     }

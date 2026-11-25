@@ -1,3 +1,5 @@
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -43,22 +46,28 @@ public class OidcControllerLinkTests
             _subjectService.Object,
             _auditService.Object,
             _tenantMemberService.Object,
+            new RecoverySession(new Mock<INocturneDbContextFactory>().Object, new Mock<ILoginCodeService>().Object, new Mock<ITenantMemberService>().Object, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcController>.Instance);
 
         _controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext(),
+            HttpContext = new DefaultHttpContext
+            {
+                RequestServices = TestRequestServices.Build(clamped: false, s => s.AddActiveSubjects()),
+            },
         };
     }
 
-    private void SetAuthenticated(Guid subjectId)
+    private void SetAuthenticated(Guid subjectId, string sessionId = LiveSession.Id)
     {
         _controller.HttpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
             SubjectId = subjectId,
+            SessionId = sessionId,
         };
     }
 
@@ -105,7 +114,43 @@ public class OidcControllerLinkTests
         setCookie.Should().Contain("xyz-state");
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Link_FromAnEndedSession_IsChallengedAndStartsNoLink()
+    {
+        SetAuthenticated(Guid.NewGuid(), sessionId: "ended-session");
+
+        var result = await _controller.Link(Guid.NewGuid(), "/settings/account");
+
+        result.Should().BeOfType<ChallengeResult>();
+        _authService.Verify(
+            s => s.GenerateLinkAuthorizationUrlAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.ToString()
+            .Should().NotContain(_options.Cookie.LinkStateCookieName);
+    }
+
     // -- LinkCallback ------------------------------------------------------------
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task LinkCallback_FromAnEndedSession_RedirectsToTheErrorPageToSignInAgainAndLinksNothing()
+    {
+        SetRequestCookie(_options.Cookie.LinkStateCookieName, "expected-state");
+        SetAuthenticated(Guid.NewGuid(), sessionId: "ended-session");
+
+        var result = await _controller.LinkCallback("code", "expected-state", null, null);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be(
+            "/auth/error?error=callback_failed&description=" + Uri.EscapeDataString("Your session has ended. Sign in again."));
+        _controller.HttpContext.Response.Headers.SetCookie.ToString()
+            .Should().Contain(_options.Cookie.LinkStateCookieName, "the link state is cleared");
+        _authService.Verify(
+            s => s.HandleLinkCallbackAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(),
+                It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+    }
 
     [Fact]
     [Trait("Category", "Unit")]

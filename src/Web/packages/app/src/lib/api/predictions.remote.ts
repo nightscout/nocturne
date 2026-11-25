@@ -9,8 +9,8 @@ const getPredictionsSchema = z.object({
   profileId: z.string().optional(),
 });
 
-export type { PredictionPoint, PredictionCurves, PredictionData } from "./prediction-data";
-import type { PredictionData, PredictionPoint } from "./prediction-data";
+export type { PredictionPoint, PredictionCurves, PredictionData } from "@nocturne/charts/core";
+import type { PredictionData, PredictionPoint } from "@nocturne/charts/core";
 
 /**
  * Get glucose predictions based on current data. Returns predicted glucose

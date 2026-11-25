@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Hubs;
 
@@ -44,7 +45,15 @@ public sealed class HubConnectionRevalidator(
     /// <remarks>
     /// Connections are checked one after another: the verifier memoizes per sweep, so connections
     /// sharing a subject, grant or tenant cost one read between them, and its scoped services are
-    /// never used concurrently. A connection whose check throws is kept until the next sweep.
+    /// never used concurrently.
+    /// <para>
+    /// A connection whose check fails in the database (<see cref="StoreFailure"/>) is kept until
+    /// the next sweep. One whose check fails any other way is closed: its credential cannot be
+    /// re-proven, and its client reconnects through the hub's own authorization. That clause is
+    /// broad because each connection's check is the isolation boundary of a revocation sweep: a
+    /// failure that left the loop would leave every connection after it unchecked, each pass, while
+    /// it stays open.
+    /// </para>
     /// </remarks>
     public async Task RevalidateAsync(CancellationToken ct)
     {
@@ -67,17 +76,32 @@ public sealed class HubConnectionRevalidator(
                 logger.LogInformation(
                     "Closing hub connection {ConnectionId}: its credential no longer authorizes it",
                     context.ConnectionId);
-                Forget(context);
-                context.Abort();
+                Close(context);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
+            catch (Exception ex) when (StoreFailure.Is(ex))
             {
                 logger.LogWarning(ex, "Could not re-check hub connection {ConnectionId}", context.ConnectionId);
             }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                logger.LogError(
+                    ex, "Closing hub connection {ConnectionId}: its credential could not be re-checked",
+                    context.ConnectionId);
+                Close(context);
+            }
+        }
+    }
+
+    private void Close(HubCallerContext context)
+    {
+        Forget(context);
+        try
+        {
+            context.Abort();
+        }
+        catch (ObjectDisposedException ex)
+        {
+            logger.LogDebug(ex, "Hub connection {ConnectionId} had already closed", context.ConnectionId);
         }
     }
 

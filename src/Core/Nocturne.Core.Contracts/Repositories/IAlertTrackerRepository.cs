@@ -40,6 +40,11 @@ public interface IAlertTrackerRepository
         Guid alertRuleId,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Opens an excursion, recording on it that the host owes the work its opening calls for until
+    /// <see cref="Nocturne.Core.Contracts.Alerts.IAlertRepository.SettleTransitionAsync"/> clears it
+    /// (docs/alerts/engine-semantics.md §7).
+    /// </summary>
     /// <param name="alertRuleId">The <see cref="AlertRule"/> that triggered the excursion.</param>
     /// <param name="startedAt">UTC time when the excursion began.</param>
     /// <returns>The newly created <see cref="AlertExcursion"/>.</returns>
@@ -55,7 +60,8 @@ public interface IAlertTrackerRepository
         CancellationToken ct = default);
 
     /// <summary>
-    /// Close an excursion by setting its <c>EndedAt</c> timestamp.
+    /// Close an excursion by setting its <c>EndedAt</c> timestamp, recording that the host owes the
+    /// work its close calls for, as <see cref="CreateExcursionAsync"/> does for its opening.
     /// </summary>
     /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/> to close.</param>
     /// <param name="endedAt">UTC time when the excursion ended.</param>

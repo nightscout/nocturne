@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -405,11 +407,21 @@ public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGo
     }
 
     [Fact]
-    public async Task GetEntriesByType_WithCountZero_ReturnsEmptyArray()
+    public async Task GetEntriesByType_WithCountZero_ReturnsTheDefaultPage()
+    {
+        await SeedSensorGlucose(Enumerable.Range(0, 12).Select(i => CreateSgvEntry(i)).ToArray());
+
+        var entries = await GetEntryArrayAsync("/api/v1/entries/sgv.json?count=0");
+
+        entries.Should().HaveCount(10);
+    }
+
+    [Fact]
+    public async Task GetEntriesByType_WithNegativeCount_ReturnsEmptyArray()
     {
         await SeedSensorGlucose(Enumerable.Range(0, 3).Select(i => CreateSgvEntry(i)).ToArray());
 
-        var entries = await GetEntryArrayAsync("/api/v1/entries/sgv.json?count=0");
+        var entries = await GetEntryArrayAsync("/api/v1/entries/sgv.json?count=-1");
 
         entries.Should().BeEmpty();
     }
@@ -543,6 +555,44 @@ public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGo
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         body.ValueKind.Should().Be(JsonValueKind.Array);
         body.GetArrayLength().Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("gzip")]
+    [InlineData("deflate")]
+    public async Task PostEntries_CompressedBody_IsInflatedAndStored(string encoding)
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                type = "sgv",
+                sgv = 142,
+                dateString = "2024-03-26T12:00:00.000Z",
+                date = BaseMillis,
+                device = "xDrip-DexcomG6",
+                direction = "Flat",
+            },
+        });
+        using var packed = new MemoryStream();
+        await using (Stream compressor = encoding == "gzip"
+            ? new GZipStream(packed, CompressionLevel.Fastest, leaveOpen: true)
+            : new ZLibStream(packed, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            await compressor.WriteAsync(Encoding.UTF8.GetBytes(json));
+        }
+        var content = new ByteArrayContent(packed.ToArray());
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        content.Headers.ContentEncoding.Add(encoding);
+
+        var response = await Client.PostAsync("/api/v1/entries", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var stored = await Client.GetAsync("/api/v1/entries.json?count=10");
+        var body = await stored.Content.ReadAsStringAsync();
+        stored.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        var entries = JsonDocument.Parse(body).RootElement;
+        entries.EnumerateArray().Select(e => e.GetProperty("sgv").GetDouble()).Should().Contain(142);
     }
 
     [Fact]

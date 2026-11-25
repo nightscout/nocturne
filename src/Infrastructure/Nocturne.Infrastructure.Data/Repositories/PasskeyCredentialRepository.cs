@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -42,6 +44,24 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var id = Stage(db, credential);
+        await SaveAsync(db, ct);
+        return id;
+    }
+
+    /// <inheritdoc/>
+    public virtual Task<Guid?> CreateForSetupOwnerAsync(Guid tenantId, NewPasskeyCredential credential, CancellationToken ct) =>
+        SetupOwnerClaim.StoreClaimingSetupAsync(
+            _contexts ?? throw new InvalidOperationException(
+                "A repository over a unit of work runs inside the unit's commit and cannot open a transaction of its own."),
+            tenantId,
+            credential.SubjectId,
+            db => Stage(db, credential),
+            (db, id, token) => db.PasskeyCredentials.AnyAsync(c => c.Id == id, token),
+            ct);
+
+    private static Guid Stage(NocturneDbContext db, NewPasskeyCredential credential)
+    {
         var entity = new PasskeyCredentialEntity
         {
             Id = Guid.CreateVersion7(),
@@ -55,7 +75,6 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
             CreatedAt = credential.CreatedAt,
         };
         db.PasskeyCredentials.Add(entity);
-        await SaveAsync(db, ct);
         return entity.Id;
     }
 
@@ -66,7 +85,7 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
         var entity = await lease.Context.PasskeyCredentials.AsNoTracking()
             .Include(c => c.Subject)
             .FirstOrDefaultAsync(c => c.CredentialId == credentialId, ct);
-        return entity?.Subject is null ? null : new StoredPasskey(ToRecord(entity), ToSubject(entity.Subject));
+        return entity?.Subject is null ? null : new StoredPasskey(ToRecord(entity), SubjectMapper.ToRecord(entity.Subject, []));
     }
 
     /// <inheritdoc/>
@@ -114,7 +133,7 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
             .ToListAsync(ct);
         return entities
             .GroupBy(c => c.SubjectId)
-            .Select(group => new PasskeyHolder(ToSubject(group.First().Subject!), group.Select(ToRecord).ToList()))
+            .Select(group => new PasskeyHolder(SubjectMapper.ToRecord(group.First().Subject!, []), group.Select(ToRecord).ToList()))
             .ToList();
     }
 
@@ -159,26 +178,4 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
             credential.CreatedAt,
             credential.LastUsedAt,
             credential.AaGuid);
-
-    /// <summary>The holder as read beside its passkey; its roles are not read here.</summary>
-    private static SubjectRecord ToSubject(SubjectEntity subject) =>
-        new(
-            subject.Id,
-            subject.Name,
-            subject.Username,
-            subject.Email,
-            subject.Notes,
-            subject.IsActive,
-            subject.IsSystemSubject,
-            subject.IsDemoSubject,
-            subject.IsPlatformAdmin,
-            subject.ApprovalStatus,
-            subject.AccessRequestMessage,
-            subject.PreferredLanguage,
-            subject.Preferences,
-            subject.AvatarUrl,
-            subject.CreatedAt,
-            subject.UpdatedAt,
-            subject.LastLoginAt,
-            []);
 }

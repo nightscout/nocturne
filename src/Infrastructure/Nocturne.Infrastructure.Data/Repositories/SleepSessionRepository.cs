@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -11,20 +12,29 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// Repository for managing sleep sessions recorded by wearables or health platforms.
+/// Repository for managing sleep sessions recorded by wearables or health platforms. Each call runs on
+/// its own context, or on the caller's <see cref="DbUnitOfWork"/> when constructed over one.
 /// </summary>
 public class SleepSessionRepository : ISleepSessionRepository
 {
-    private readonly INocturneDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory? _contextFactory;
+    private readonly DbUnitOfWork? _unit;
+    private readonly TimeProvider _time;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SleepSessionRepository"/> class.
-    /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    public SleepSessionRepository(INocturneDbContextFactory contextFactory)
+    public SleepSessionRepository(INocturneDbContextFactory contextFactory, TimeProvider? time = null)
     {
         _contextFactory = contextFactory;
+        _time = time ?? TimeProvider.System;
     }
+
+    internal SleepSessionRepository(DbUnitOfWork unit, TimeProvider? time = null)
+    {
+        _unit = unit ?? throw new ArgumentNullException(nameof(unit));
+        _time = time ?? TimeProvider.System;
+    }
+
+    private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) =>
+        DbContextLease.OpenAsync(_unit, _contextFactory, ct);
 
     /// <inheritdoc />
     public async Task<IEnumerable<SleepSession>> GetSessionsAsync(
@@ -32,7 +42,8 @@ public class SleepSessionRepository : ISleepSessionRepository
         int limit = 100, int offset = 0, bool descending = true, bool includeStages = false,
         CancellationToken cancellationToken = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
         var query = BuildFilteredQuery(ctx, from, to, type, source);
         if (includeStages)
             query = query.Include(e => e.Stages);
@@ -48,9 +59,54 @@ public class SleepSessionRepository : ISleepSessionRepository
         DateTime? from = null, DateTime? to = null, SleepSessionType? type = null, SleepSource? source = null,
         CancellationToken cancellationToken = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
         var query = BuildFilteredQuery(ctx, from, to, type, source);
         return await query.CountAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnySessionOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepSessions.AsNoTracking()
+            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnyStageOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepStages.AsNoTracking()
+            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnyBiometricSampleInAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepBiometricSamples.AsNoTracking()
+            .AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SleepBiometricSample>> GetBiometricSamplesAsync(
+        DateTime from, DateTime to, int limit, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepBiometricSamples.AsNoTracking()
+            .Where(s => s.Timestamp >= from && s.Timestamp < to)
+            .OrderBy(s => s.Timestamp).Take(limit)
+            .Select(s => new SleepBiometricSample
+            {
+                Timestamp = s.Timestamp,
+                HeartRate = s.HeartRate,
+                Hrv = s.Hrv,
+                Spo2 = s.Spo2,
+                RespirationRate = s.RespirationRate,
+                Movement = s.Movement,
+            })
+            .ToListAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -73,7 +129,8 @@ public class SleepSessionRepository : ISleepSessionRepository
         Expression<Func<SleepSessionEntity, bool>> predicate,
         CancellationToken cancellationToken)
     {
-        await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
         var entity = await ctx.SleepSessions
             .Include(s => s.Stages)
             .Include(s => s.BiometricSamples)
@@ -86,10 +143,13 @@ public class SleepSessionRepository : ISleepSessionRepository
     /// <inheritdoc />
     public async Task<SleepSession> UpsertSessionAsync(SleepSession session, CancellationToken cancellationToken = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
         return await ctx.ExecuteInTransactionAsync(async token =>
         {
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
+            var sentCreatedAt = entity.CreatedAt;
+            var hidden = false;
 
             // Dedup by Source + OriginalId first: a re-sync of the same source record replaces
             // that row and keeps its primary key, so the session id (and any reference to it)
@@ -103,35 +163,56 @@ public class SleepSessionRepository : ISleepSessionRepository
             if (!string.IsNullOrEmpty(entity.OriginalId))
             {
                 await LockSourceRecordAsync(ctx, entity, token);
-                var bySourceRecord = await WithSoftDeleted(ctx)
-                    .AsNoTracking()
-                    .Where(s => s.Source == entity.Source && s.OriginalId == entity.OriginalId)
-                    .Select(s => (Guid?)s.Id)
-                    .FirstOrDefaultAsync(token);
+                var bySourceRecord = await ctx.WriteWithHistoryClampLiftedAsync(
+                    async lifted => await WithSoftDeleted(ctx)
+                        .AsNoTracking()
+                        .Where(s => s.Source == entity.Source && s.OriginalId == entity.OriginalId)
+                        .Select(s => (Guid?)s.Id)
+                        .FirstOrDefaultAsync(lifted),
+                    token);
                 entity.Id = bySourceRecord ?? entity.Id;
             }
 
             await LockIdAsync(ctx, entity.Id, token);
             var existing = await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, token);
+            if (existing is null && ctx.HistoryClamped)
+            {
+                existing = await ctx.WriteWithHistoryClampLiftedAsync(
+                    async lifted => await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, lifted),
+                    token);
+                hidden = existing is not null;
+            }
 
-            if (existing is { DeletedAt: not null } && ctx.Entry(existing).Property<bool>("DeletedByUser").CurrentValue)
+            if (existing is { DeletedAt: not null } && ctx.BlocksRecreation(existing))
             {
                 throw new RecreationBlockedException(
-                    "sleep session", $"original id '{existing.OriginalId}' from '{existing.Source}', which the user deleted");
+                    "sleep session", $"original id '{entity.OriginalId}' from '{entity.Source}', which the user deleted");
             }
 
             if (existing is not null)
             {
                 entity.CreatedAt = existing.CreatedAt;
                 ctx.SleepSessions.Remove(existing);
-                await ctx.SaveChangesAsync(token);
+                await SaveAsync(ctx, hidden, token);
             }
 
             ctx.SleepSessions.Add(entity);
             await ctx.SaveChangesAsync(token);
-            return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
+            var answer = SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
+            if (hidden)
+                answer.CreatedAt = sentCreatedAt;
+            return answer;
         }, ct: cancellationToken);
     }
+
+    /// <summary>
+    /// A save that removes a row a history-clamped writer cannot see runs with the clamp lifted: the
+    /// <c>DELETE … WHERE</c> of that row is checked against the SELECT policies, which must show it.
+    /// </summary>
+    private static Task<int> SaveAsync(NocturneDbContext ctx, bool hidden, CancellationToken ct) =>
+        hidden
+            ? ctx.WriteWithHistoryClampLiftedAsync(async token => await ctx.SaveChangesAsync(token), ct)
+            : ctx.SaveChangesAsync(ct);
 
     /// <summary>
     /// First key of the two-key advisory lock form for the source-record key. Each key kind has its
@@ -159,7 +240,8 @@ public class SleepSessionRepository : ISleepSessionRepository
     /// <inheritdoc />
     public async Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
         return await ctx.ExecuteInTransactionAsync<SleepSession?>(async token =>
         {
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
@@ -182,7 +264,7 @@ public class SleepSessionRepository : ISleepSessionRepository
                         s => s.Id != id && s.Source == entity.Source && s.OriginalId == entity.OriginalId, token);
                 if (holder is not null)
                 {
-                    if (holder.DeletedAt is null || ctx.Entry(holder).Property<bool>("DeletedByUser").CurrentValue)
+                    if (ctx.BlocksRecreation(holder))
                     {
                         throw new RecreationBlockedException(
                             "sleep session",
@@ -211,7 +293,8 @@ public class SleepSessionRepository : ISleepSessionRepository
     /// </remarks>
     public async Task<bool> DeleteSessionAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
         return await ctx.ExecuteInTransactionAsync(async token =>
         {
             await LockIdAsync(ctx, id, token);
@@ -220,10 +303,99 @@ public class SleepSessionRepository : ISleepSessionRepository
             if (existing is null)
                 return false;
 
-            existing.DeletedAt = DateTime.UtcNow;
+            existing.DeletedAt = _time.GetUtcNow().UtcDateTime;
             await ctx.SaveChangesAsync(token);
             return true;
         }, ct: cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> PurgeSourceAppAsync(
+        SleepSource source, string sourceApp, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        var storedSource = source.ToString();
+        return await lease.Context.SleepSessions.PurgeAsync(
+            s => s.Source == storedSource && s.SourceApp == sourceApp, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SourceRecordKey>> GetSourceAppKeysAsync(
+        SleepSource source, string sourceApp, DateTime from, DateTime to, int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        var storedSource = source.ToString();
+        return await lease.Context.SleepSessions.AsNoTracking()
+            .Where(s => s.Source == storedSource && s.SourceApp == sourceApp
+                        && s.EndTime >= from && s.EndTime < to && s.OriginalId != null)
+            .Select(s => new SourceRecordKey(s.Id, s.OriginalId!))
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RetireAsync(
+        SleepSource source, string sourceApp, IReadOnlyCollection<Guid> ids, DateTime deletedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        var storedSource = source.ToString();
+        return await lease.Context.SleepSessions
+            .Where(s => s.Source == storedSource && s.SourceApp == sourceApp
+                        && s.DeletedAt == null && ids.Contains(s.Id))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(s => s.DeletedAt, deletedAt)
+                .SetProperty(s => EF.Property<bool>(s, NocturneDbContext.DeletedByUserProperty), false),
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<SleepSessionStats?> DescribeSourceAppAsync(
+        SleepSource source, string sourceApp, DateTime? since, DateTime last24Hours,
+        CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        var sessions = FromSourceApp(lease.Context, source, sourceApp).AsNoTracking();
+        if (since is { } from)
+            sessions = sessions.Where(s => s.StartTime >= from);
+        return await sessions
+            .GroupBy(_ => 1)
+            .Select(g => new SleepSessionStats(
+                g.LongCount(),
+                g.Count(s => s.StartTime >= last24Hours),
+                g.Max(s => s.StartTime),
+                g.Min(s => s.StartTime)))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteSourceAppAsync(
+        SleepSource source, string sourceApp, IAuditContext auditContext, string scope,
+        CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
+        return await ctx.AuditedSoftDeleteAsync(
+            FromSourceApp(ctx, source, sourceApp), auditContext, scope, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> AllowSourceAppReimportAsync(
+        SleepSource source, string sourceApp, IAuditContext auditContext, string scope,
+        CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        var ctx = lease.Context;
+        return await ctx.AuditedAllowReimportAsync(
+            FromSourceApp(ctx, source, sourceApp), auditContext, scope, cancellationToken);
+    }
+
+    private static IQueryable<SleepSessionEntity> FromSourceApp(
+        NocturneDbContext ctx, SleepSource source, string sourceApp)
+    {
+        var storedSource = source.ToString();
+        return ctx.SleepSessions.Where(s => s.Source == storedSource && s.SourceApp == sourceApp);
     }
 
     /// <summary>
@@ -232,9 +404,7 @@ public class SleepSessionRepository : ISleepSessionRepository
     /// rather than loading and tracking every child only to delete it.
     /// </summary>
     private static IQueryable<SleepSessionEntity> WithSoftDeleted(NocturneDbContext ctx) =>
-        ctx.SleepSessions
-            .IgnoreQueryFilters()
-            .Where(s => s.TenantId == ctx.TenantId);
+        ctx.SleepSessions.IncludingDeleted();
 
     private static IQueryable<Entities.SleepSessionEntity> BuildFilteredQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to,

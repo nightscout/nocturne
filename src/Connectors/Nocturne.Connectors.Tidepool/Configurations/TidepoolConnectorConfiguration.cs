@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.Tidepool.Configurations;
     ServiceNames.TidepoolConnector,
     "TIDEPOOL",
     "ConnectSource.Tidepool",
-    "tidepool-connector",
+    DataSources.TidepoolConnector,
     "tidepool",
     ConnectorCategory.Sync,
     "Sync glucose, treatment, and profile data from Tidepool",
@@ -23,7 +23,8 @@ namespace Nocturne.Connectors.Tidepool.Configurations;
         SyncDataType.Glucose,
         SyncDataType.Boluses,
         SyncDataType.CarbIntake
-    ]
+    ],
+    LegacyIdPrefix = "tidepool"
 )]
 public class TidepoolConnectorConfiguration : BaseConnectorConfiguration
 {

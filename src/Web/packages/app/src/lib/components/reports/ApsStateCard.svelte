@@ -168,6 +168,12 @@
           </div>
         {/if}
       </div>
+      {#if snapshot.reason}
+        <div class="mt-3 border-t pt-3 text-sm">
+          <div class="text-muted-foreground">Reason</div>
+          <p class="wrap-anywhere">{snapshot.reason}</p>
+        </div>
+      {/if}
     </Card.Content>
   </Card.Root>
 {/if}

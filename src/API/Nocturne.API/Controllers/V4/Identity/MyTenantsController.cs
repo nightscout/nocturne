@@ -13,15 +13,16 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Returns the list of tenants the authenticated user belongs to and allows switching the active tenant context.
+/// The tenants the signed-in account belongs to. A caller can list them, read an overview of each,
+/// and check whether a slug is available. A caller can create a tenant when the operator allows
+/// self-service creation.
 /// </summary>
 /// <remarks>
 /// All tenants for which the authenticated subject has an active membership are returned.
-/// Tenant switching writes a new <c>X-Tenant-Slug</c> cookie that is read by subsequent
-/// requests' tenant-resolution middleware.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/me/tenants")]
 [Produces("application/json")]
 [Authorize]
@@ -70,6 +71,7 @@ public class MyTenantsController : ControllerBase
     /// those they can go to.
     /// </summary>
     /// <param name="reachableOnly">Leaves out inactive tenants.</param>
+    /// <param name="ct">Cancels the operation.</param>
     /// <seealso cref="ITenantService.GetTenantsForSubjectAsync"/>
     /// <seealso cref="ITenantService.GetReachableTenantsForSubjectAsync"/>
     [HttpGet]
@@ -97,20 +99,81 @@ public class MyTenantsController : ControllerBase
             is { } answer)
             return answer;
 
-        // This endpoint is tenantless, so MemberScopeMiddleware has not applied the membership
-        // restriction — the service resolves it per tenant through MemberScopeResolver, which needs
-        // the credential type to know whether the token's scopes are a ceiling at all.
-        // PlatformAccess is a superuser auth type, matching MemberScopeMiddleware's handling: it
-        // never reaches membership resolution there, so stand in a full-access grant.
-        IReadOnlySet<string> tokenScopes =
-            caller.AuthType is AuthType.PlatformAccess
-                ? new HashSet<string> { Scope.FullAccess }
-                : HttpContext.GetGrantedScopes();
-
         var overview = await _overviewService.GetOverviewAsync(
-            subjectId, tokenScopes, caller.AuthType, caller.LimitTo24Hours, ct);
+            subjectId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
         return Ok(overview);
     }
+
+    /// <inheritdoc cref="ITenantOverviewService.GetReviewAsync"/>
+    /// <param name="days">The length of the period: 14, 30 or 90.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    [HttpGet("overview/review")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantReviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<TenantReviewResponse>> GetReview(
+        [FromQuery] int days = 14, CancellationToken ct = default)
+    {
+        // A caller without a subject is answered by the service, which states the periods: see
+        // ResolveOwnSubject for why it is not refused.
+        var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
+        if (!caller.IsAuthenticated)
+            return Unauthorized();
+
+        if (!TenantReviewPeriods.IsSupported(days))
+            return Problem(
+                detail: $"The period must be one of {string.Join(", ", TenantReviewPeriods.Days)} days.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request");
+
+        var review = await _overviewService.GetReviewAsync(
+            caller.SubjectId, TokenScopesOf(caller), caller.AuthType, days, caller.LimitTo24Hours, ct);
+        return Ok(review);
+    }
+
+    /// <inheritdoc cref="ITenantOverviewService.GetPersonAsync"/>
+    /// <param name="tenantId">The person's tenant.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    [HttpGet("overview/person")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantPersonDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TenantPersonDetail>> GetPerson(
+        [FromQuery] Guid tenantId, CancellationToken ct = default)
+    {
+        var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
+        if (!caller.IsAuthenticated)
+            return Unauthorized();
+
+        if (tenantId == Guid.Empty)
+            return Problem(
+                detail: "A tenant id is required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request");
+
+        var person = await _overviewService.GetPersonAsync(
+            caller.SubjectId, tenantId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
+        return person is null
+            ? Problem(
+                detail: "No such person.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found")
+            : Ok(person);
+    }
+
+    /// <summary>
+    /// The scopes the credential's grant allows. These endpoints are tenantless, so
+    /// MemberScopeMiddleware has not applied the membership restriction: the service resolves it
+    /// per tenant through MemberScopeResolver, which needs the credential type to know whether the
+    /// token's scopes are a ceiling at all. PlatformAccess is a superuser auth type, matching
+    /// MemberScopeMiddleware's handling: it never reaches membership resolution there, so stand in
+    /// a full-access grant.
+    /// </summary>
+    private IReadOnlySet<string> TokenScopesOf(AuthContext caller) =>
+        caller.AuthType is AuthType.PlatformAccess
+            ? new HashSet<string> { Scope.FullAccess }
+            : HttpContext.GetGrantedScopes();
 
     /// <inheritdoc cref="ITenantService.CreateAsync"/>
     [HttpPost]
@@ -138,7 +201,7 @@ public class MyTenantsController : ControllerBase
         return Created($"/api/v4/me/tenants", tenant);
     }
 
-    /// <inheritdoc cref="ITenantService.ValidateSlugAsync"/>
+    /// <inheritdoc cref="ITenantService.ValidateSlugAsync(string, CancellationToken)"/>
     [HttpGet("validate-slug")]
     [AllowAnonymous]
     [AnonymousUntilSetupComplete]

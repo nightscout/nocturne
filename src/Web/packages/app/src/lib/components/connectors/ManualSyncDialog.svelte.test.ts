@@ -1,22 +1,50 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+import type { SyncResult } from "@nocturne/api-client";
 
 import ManualSyncDialog from "./ManualSyncDialog.svelte";
 
-function renderDialog(manualSyncResults: Record<string, SyncResult> | null) {
+function renderDialog(
+  manualSyncResults: Record<string, SyncResult> | null,
+  isManualSyncing = false
+) {
   render(ManualSyncDialog, {
     props: {
       open: true,
-      isManualSyncing: false,
+      isManualSyncing,
       manualSyncResults,
       syncProgress: null,
+      connectorNames: { dexcom: "Dexcom Share" },
     },
   });
 }
 
 describe("ManualSyncDialog", () => {
+  it("names each connector, and falls back to the id it has no name for", async () => {
+    renderDialog({
+      dexcom: { success: true },
+      libre: { success: true },
+    });
+
+    await expect
+      .element(page.getByRole("heading", { name: "Sync results" }))
+      .toBeVisible();
+    await expect.element(page.getByText("Dexcom Share")).toBeVisible();
+    await expect.element(page.getByText("libre", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("dexcom", { exact: true }))
+      .not.toBeInTheDocument();
+  });
+
+  it("titles a running sync as running", async () => {
+    renderDialog(null, true);
+
+    await expect
+      .element(page.getByRole("heading", { name: "Syncing connectors" }))
+      .toBeVisible();
+  });
+
   it("shows each connector's server-measured duration", async () => {
     renderDialog({
       dexcom: { success: true, durationMs: 1250 },

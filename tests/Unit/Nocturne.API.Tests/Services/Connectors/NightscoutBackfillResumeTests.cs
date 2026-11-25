@@ -9,8 +9,11 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
+using System.Text.Json.Nodes;
+using Nocturne.Core.Contracts.Connectors;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -28,29 +31,44 @@ public class NightscoutBackfillResumeTests
     private static readonly DateTimeOffset BaseTime =
         new(2025, 6, 15, 12, 0, 0, TimeSpan.Zero);
 
-    /// <summary>In-memory stand-in for the persisted marks on connector_configurations.</summary>
-    private sealed class FakeMarkStore
+    /// <summary>
+    /// In-memory stand-in for the persisted resume state on connector_configurations. Bound to the
+    /// exact connector source: a wrong source string must read as no state in these tests, not
+    /// silently work.
+    /// </summary>
+    private sealed class FakeMarkStore : IConnectorStateStore
     {
+        private const string Source = "nightscout-connector";
+
         public readonly Dictionary<string, DateTime> Marks = [];
 
-        public Mock<IMetadataPublisher> BuildMetadataMock()
+        public Task<IReadOnlyDictionary<string, DateTime>> ResumeAsync(
+            string source, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, DateTime>>(
+                source == Source ? new Dictionary<string, DateTime>(Marks) : new Dictionary<string, DateTime>());
+
+        public Task SetResumeAsync(
+            string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken cancellationToken = default)
         {
-            // Bound to the exact connector source: a wrong source string must read as "no
-            // mark store" in these tests, not silently work.
-            var mock = new Mock<IMetadataPublisher>();
-            mock.Setup(m => m.GetBackfillLowWaterMarkAsync(
-                    "nightscout-connector", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((string _, string collection, CancellationToken _) =>
-                    Marks.TryGetValue(collection, out var mark) ? mark : null);
-            mock.Setup(m => m.SetBackfillLowWaterMarkAsync(
-                    "nightscout-connector", It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-                .Returns((string _, string collection, DateTime? mark, CancellationToken _) =>
-                {
+            if (source == Source)
+                foreach (var (collection, mark) in changes)
                     if (mark is null) Marks.Remove(collection);
                     else Marks[collection] = mark.Value;
-                    return Task.CompletedTask;
-                });
-            return mock;
+            return Task.CompletedTask;
+        }
+
+        public Task<JsonNode?> VendorAsync(string source, string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<JsonNode?>(null);
+
+        public Task SetVendorAsync(
+            string source, string key, JsonNode? value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ClearAsync(string source, ConnectorStateSlots slots, CancellationToken cancellationToken = default)
+        {
+            if (source == Source && slots.HasFlag(ConnectorStateSlots.Resume))
+                Marks.Clear();
+            return Task.CompletedTask;
         }
     }
 
@@ -93,15 +111,17 @@ public class NightscoutBackfillResumeTests
         var publisherMock = new Mock<IConnectorPublisher>();
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
         publisherMock.Setup(p => p.Glucose).Returns(glucoseMock.Object);
-        publisherMock.Setup(p => p.Metadata).Returns(marks.BuildMetadataMock().Object);
+        publisherMock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+        publisherMock.Setup(p => p.State).Returns(marks);
 
         var service = new NightscoutConnectorService(
             new HttpClient(handler) { BaseAddress = new Uri(config.Url) },
             new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisherMock.Object);
 
         return (service, handler, marks, glucoseMock);

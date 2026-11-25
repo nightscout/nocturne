@@ -64,7 +64,7 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
 
         _service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
@@ -72,6 +72,7 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 
@@ -102,7 +103,7 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
 
         var act = async () => await _service.SaveSecretsAsync(
             ConnectorName, new Dictionary<string, string> { ["RefreshToken"] = "their-token" },
-            "carelink-connect");
+            "carelink-connect", saver: null);
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
@@ -140,8 +141,8 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
     [Fact]
     public async Task EveryWriteMethodOnTheServiceIsGuarded()
     {
-        // Pins the completeness claim itself. The four write methods on the interface must all
-        // refuse the demo subject; if a fifth is added, this fails rather than the claim quietly
+        // Pins the completeness claim itself. Every write method on the interface must
+        // refuse the demo subject; if another is added, this fails rather than the claim quietly
         // becoming false.
         SetCaller(isDemoSubject: true);
 
@@ -150,7 +151,9 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             (nameof(IConnectorConfigurationService.SaveConfigurationAsync),
                 () => _service.SaveConfigurationAsync(ConnectorName, CareLinkAccount("a@b.c", "AU"))),
             (nameof(IConnectorConfigurationService.SaveSecretsAsync),
-                () => _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" })),
+                async () => await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" }, modifiedBy: null, saver: null)),
+            (nameof(IConnectorConfigurationService.SaveRuntimeSecretsAsync),
+                () => _service.SaveRuntimeSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" })),
             (nameof(IConnectorConfigurationService.SetActiveAsync),
                 () => _service.SetActiveAsync(ConnectorName, true)),
             (nameof(IConnectorConfigurationService.DeleteConfigurationAsync),

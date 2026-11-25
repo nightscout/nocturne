@@ -25,6 +25,7 @@ public class OidcProviderService : IOidcProviderService
     /// <summary>
     /// Initialises a new <see cref="OidcProviderService"/>.
     /// </summary>
+    /// <param name="providers">Repository for the stored provider configurations and their cached discovery documents.</param>
     /// <param name="httpClientFactory">Factory for the HTTP client used to fetch discovery documents.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="dataProtectionProvider">
@@ -123,13 +124,6 @@ public class OidcProviderService : IOidcProviderService
                 .FirstOrDefault(p => p.Id == providerId);
 
         var record = await _providers.GetAsync(providerId, CancellationToken.None);
-        return record != null ? MapToModel(record) : null;
-    }
-
-    /// <inheritdoc />
-    public async Task<OidcProvider?> GetProviderByIssuerAsync(string issuerUrl)
-    {
-        var record = await _providers.FindByIssuerAsync(issuerUrl, CancellationToken.None);
         return record != null ? MapToModel(record) : null;
     }
 

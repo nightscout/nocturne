@@ -2,6 +2,8 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,7 +15,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Tests.Services.Monitoring;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Devices;
@@ -24,26 +26,27 @@ public class DeviceTrackerProvisionerTests
     private const string UserId = "user-1";
 
     private readonly Mock<ITrackerRepository> _trackers = new();
+    private readonly Mock<ITrackerConsumableLock> _lock = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly Mock<ITrackerAlertRuleSyncService> _ruleSync = new();
     private readonly Mock<IDeviceEventRepository> _deviceEvents = new();
-    private readonly List<TrackerDefinitionEntity> _created = [];
-    private readonly List<TrackerInstanceEntity> _started = [];
-    private readonly List<TrackerDefinitionEntity> _existing = [];
+    private readonly List<TrackerDefinition> _created = [];
+    private readonly List<TrackerInstance> _started = [];
+    private readonly List<TrackerDefinition> _existing = [];
     private readonly DeviceTrackerProvisioner _provisioner;
 
     public DeviceTrackerProvisionerTests()
     {
         _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [.. _existing]);
-        _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .Callback<TrackerDefinitionEntity, CancellationToken>((d, _) => _created.Add(d))
-            .ReturnsAsync((TrackerDefinitionEntity d, CancellationToken _) =>
+        _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerDefinition d, CancellationToken _) =>
             {
-                d.Id = Guid.NewGuid();
-                return d;
+                var stored = d.Stored();
+                _created.Add(stored);
+                return stored;
             });
-        _trackers.Setup(t => t.ExecuteUnderConsumableLockAsync(
+        _lock.Setup(t => t.ExecuteAsync(
                 It.IsAny<Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<List<CreatedConsumableTracker>>>>(),
                 It.IsAny<Func<ITrackerRepository, List<CreatedConsumableTracker>, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))
@@ -66,10 +69,9 @@ public class DeviceTrackerProvisionerTests
             .ReturnsAsync((Guid definitionId, string createdBy, string? _, string? startTreatmentId,
                 DateTime? startedAt, DateTime? _, CancellationToken _) =>
             {
-                var instance = new TrackerInstanceEntity
+                var instance = new TrackerInstance
                 {
                     Id = Guid.NewGuid(),
-                    DefinitionId = definitionId,
                     CreatedBy = createdBy,
                     StartTreatmentId = startTreatmentId,
                     StartedAt = startedAt!.Value,
@@ -80,10 +82,10 @@ public class DeviceTrackerProvisionerTests
             });
 
         var writer = new ConsumableTrackerWriter(
-            _deviceEvents.Object, _ruleSync.Object, Mock.Of<IDeviceEventReactor>(), _broadcast.Object,
+            _deviceEvents.Object, _ruleSync.Object, Rearms.Unannounced(), Mock.Of<IDeviceEventReactor>(), _broadcast.Object,
             TimeProvider.System, NullLogger<ConsumableTrackerWriter>.Instance);
         _provisioner = new DeviceTrackerProvisioner(
-            _trackers.Object, writer, NullLogger<DeviceTrackerProvisioner>.Instance);
+            _trackers.Object, _lock.Object, writer, NullLogger<DeviceTrackerProvisioner>.Instance);
     }
 
     private static PatientDevice Device(string catalogId, DeviceCategory category) =>
@@ -135,7 +137,7 @@ public class DeviceTrackerProvisionerTests
     public async Task ATrackerTheTenantAlreadyHasIsNotCreatedAgain()
     {
         _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TrackerDefinitionEntity { CreatedBy = UserId, Name = "omnipod dash POD" }]);
+            .ReturnsAsync([TrackerDefinition.Restore(Guid.NewGuid(), "omnipod dash POD", createdBy: UserId)]);
 
         var created = await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
 
@@ -147,7 +149,7 @@ public class DeviceTrackerProvisionerTests
     public async Task ATrackerAnotherMemberCreatedIsNotDuplicatedForASecondMember()
     {
         _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TrackerDefinitionEntity { CreatedBy = "another-member", Name = "Omnipod DASH pod" }]);
+            .ReturnsAsync([TrackerDefinition.Restore(Guid.NewGuid(), "Omnipod DASH pod", createdBy: "another-member")]);
 
         var created = await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
 
@@ -169,7 +171,7 @@ public class DeviceTrackerProvisionerTests
     public async Task NothingIsAnnouncedWhenNothingIsCreated()
     {
         _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TrackerDefinitionEntity { Name = "Omnipod DASH pod" }]);
+            .ReturnsAsync([TrackerDefinition.Restore(Guid.NewGuid(), "Omnipod DASH pod")]);
 
         await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
 
@@ -194,7 +196,7 @@ public class DeviceTrackerProvisionerTests
             new PatientDevice { CatalogId = catalogId, DeviceCategory = DeviceCategory.InsulinPump }, UserId);
 
         created.Should().Be(0);
-        _trackers.Verify(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+        _trackers.Verify(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -207,10 +209,9 @@ public class DeviceTrackerProvisionerTests
     }
 
 
-    private TrackerDefinitionEntity Existing(ConsumableTrackerSpec spec)
+    private TrackerDefinition Existing(ConsumableTrackerSpec spec)
     {
-        var definition = ConsumableTrackerSpecs.ToDefinition(spec, "another-member", withThresholds: false);
-        definition.Id = Guid.NewGuid();
+        var definition = ConsumableTrackerSpecs.ToDefinition(spec, "another-member", DateTime.UtcNow, withThresholds: false).Stored();
         _existing.Add(definition);
         return definition;
     }
@@ -223,7 +224,7 @@ public class DeviceTrackerProvisionerTests
         changed.Should().Be(0);
         _created.Should().BeEmpty();
         _trackers.Verify(t => t.UpdateDefinitionAsync(
-            It.IsAny<Guid>(), It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
         _trackers.Verify(t => t.StartInstanceAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -255,13 +256,7 @@ public class DeviceTrackerProvisionerTests
     [Fact]
     public async Task AMembersHandRunSensorTracker_IsLeftAloneAndNothingIsAdded()
     {
-        _existing.Add(new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(),
-            Name = "My sensor",
-            Category = TrackerCategory.Sensor,
-            Mode = TrackerMode.Duration,
-        });
+        _existing.Add(TrackerDefinition.Restore(Guid.NewGuid(), "My sensor", TrackerCategory.Sensor, TrackerMode.Duration));
 
         var changed = await _provisioner.ProvisionAsync(Device("dexcom-g7", DeviceCategory.CGM), UserId);
 
@@ -303,7 +298,7 @@ public class DeviceTrackerProvisionerTests
     public async Task ACommitThatReportedFailure_LandedWhenItsDefinitionAndRunExist()
     {
         Func<ITrackerRepository, List<CreatedConsumableTracker>, CancellationToken, Task<bool>>? verify = null;
-        _trackers.Setup(t => t.ExecuteUnderConsumableLockAsync(
+        _lock.Setup(t => t.ExecuteAsync(
                 It.IsAny<Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<List<CreatedConsumableTracker>>>>(),
                 It.IsAny<Func<ITrackerRepository, List<CreatedConsumableTracker>, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))
@@ -313,8 +308,8 @@ public class DeviceTrackerProvisionerTests
             .ReturnsAsync([]);
         await _provisioner.ProvisionAsync(Device("dexcom-g7", DeviceCategory.CGM), UserId);
 
-        var definition = new TrackerDefinitionEntity { Id = Guid.NewGuid() };
-        var run = new TrackerInstanceEntity { Id = Guid.NewGuid() };
+        var definition = TrackerDefinition.Restore(Guid.NewGuid(), string.Empty);
+        var run = new TrackerInstance { Id = Guid.NewGuid(), Definition = definition };
         var spec = SpecOf("dexcom-g7", TrackerCategory.Sensor);
         var stored = new Mock<ITrackerRepository>();
         stored.Setup(t => t.GetDefinitionByIdAsync(definition.Id, It.IsAny<CancellationToken>())).ReturnsAsync(definition);
@@ -340,7 +335,7 @@ public class DeviceTrackerProvisionerTests
     [Fact]
     public async Task AStoreFailure_IsLoggedAndCreatesNothing()
     {
-        _trackers.Setup(t => t.ExecuteUnderConsumableLockAsync(
+        _lock.Setup(t => t.ExecuteAsync(
                 It.IsAny<Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<List<CreatedConsumableTracker>>>>(),
                 It.IsAny<Func<ITrackerRepository, List<CreatedConsumableTracker>, CancellationToken, Task<bool>>?>(),
                 It.IsAny<CancellationToken>()))

@@ -1,9 +1,11 @@
+using System.Globalization;
 using Nocturne.API.Multitenancy;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Glucose;
@@ -19,7 +21,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -97,7 +98,7 @@ public class SampleDataSeeder
     private readonly ILogger<SampleDataSeeder> _logger;
 
     private const int BatchSize = 500;
-    private const int MaxDays = 90;
+    private const int MaxDays = 365;
 
     /// <summary>A fixed seed, so seeding the same range again writes the same history.</summary>
     private const int RandomSeed = 1;
@@ -193,7 +194,7 @@ public class SampleDataSeeder
     /// false, entries/treatments/device status are assumed already present and
     /// alarm history derives from the stored glucose instead of the generated
     /// stream. Re-seeding is idempotent for every type except
-    /// entries/treatments, which append.
+    /// treatments, which append.
     /// </summary>
     public async Task<SampleDataSeedResult> SeedAsync(
         TenantContext tenant,
@@ -202,6 +203,26 @@ public class SampleDataSeeder
         string dataSource = DevSampleDataSource,
         bool includeGlucose = true,
         CancellationToken ct = default)
+    {
+        var gate = SampleDataTimeline.GateFor(tenant.TenantId);
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await SeedUngatedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<SampleDataSeedResult> SeedUngatedAsync(
+        TenantContext tenant,
+        int days,
+        Guid? ownerSubjectId,
+        string dataSource,
+        bool includeGlucose,
+        CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
         days = Math.Clamp(days, 1, MaxDays);
@@ -287,35 +308,21 @@ public class SampleDataSeeder
             {
                 ct.ThrowIfCancellationRequested();
 
-                var readings = DemoCoverageSeeds.CgmReadings(step);
-                foreach (var reading in readings)
-                {
-                    reading.DataSource = dataSource;
-                    entryBatch.Add(reading);
-                }
-                if (readings.Count > 0)
+                var records = RecordsOf(step, clock, config, dataSource);
+                entryBatch.AddRange(records.Entries);
+                if (records.HasCgmReading)
                     episodeTracker.Observe(
-                        DateTimeOffset.FromUnixTimeMilliseconds(step.Entry.Mills).UtcDateTime, step.Entry.Sgv);
-                foreach (var extra in step.ExtraEntries)
-                {
-                    extra.DataSource = dataSource;
-                    entryBatch.Add(extra);
-                }
+                        step.Entry.Mills.ToUtcDateTime(), step.Entry.Sgv);
 
-                foreach (var treatment in step.Treatments)
+                foreach (var treatment in records.Treatments)
                 {
-                    treatment.DataSource = dataSource;
                     treatmentBatch.Add(treatment);
-                    if (treatment.EventType == "Carbs" && treatment.FoodType is { Length: > 0 })
-                        mealCarbLinks.Add((DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime, treatment.FoodType));
+                    if (treatment.EventType == TreatmentTypes.Carbs && treatment.FoodType is { Length: > 0 })
+                        mealCarbLinks.Add((treatment.Mills.ToUtcDateTime(), treatment.FoodType));
                 }
 
-                if (DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate) is { } status)
-                {
-                    // Deterministic legacy id, so a re-seed skips the statuses it already wrote.
-                    status.Id = status.Mills.ToString("x24");
+                if (records.Status is { } status)
                     statusBatch.Add(status);
-                }
 
                 if (entryBatch.Count >= BatchSize) await FlushEntriesAsync();
                 if (treatmentBatch.Count >= BatchSize) await FlushTreatmentsAsync();
@@ -385,6 +392,18 @@ public class SampleDataSeeder
             ownerSubjectId, tenant.TenantId, episodeTracker.Episodes, ct);
         await SeedLabHbA1cAsync(db, clock, dataSource, ct);
 
+        // Last, so the live feed never continues a seed still being written. The demo tenant's own
+        // service streams its realtime data.
+        if (includeGlucose && dataSource != Nocturne.Core.Constants.DataSources.DemoService)
+        {
+            var firstDay = clock.Demo.ToLocal(seedEnd).AddDays(-config.BackfillDays).Date;
+            await SampleDataTimeline.WriteAsync(
+                db,
+                new SampleDataTimeline(firstDay, seedEnd, seedEnd, clock.ZoneId, dataSource),
+                _time.GetUtcNow(),
+                ct);
+        }
+
         _logger.LogInformation(
             "Seeded tenant {Slug} ({Days} days): {Entries} entries, {Treatments} treatments, "
             + "{DeviceStatuses} device statuses, {Profiles} profiles, {DeviceChanges} device changes, "
@@ -403,6 +422,42 @@ public class SampleDataSeeder
             alertRules, alertExcursions, deviceStatusCount, profilesCreated,
             foodCount, stateSpanCount, notificationCount);
     }
+
+    /// <summary>What one timeline step stores, stamped with <paramref name="dataSource"/>.</summary>
+    internal static StepRecords RecordsOf(
+        DemoTimeStep step, SeedingClock clock, DemoModeConfiguration config, string dataSource)
+    {
+        var readings = DemoCoverageSeeds.CgmReadings(step);
+        List<Entry> entries = [.. readings, .. step.ExtraEntries];
+        foreach (var entry in entries)
+        {
+            entry.DataSource = dataSource;
+            // Deterministic legacy id, so writing a step again updates its readings in place.
+            entry.Id = $"{entry.Mills:x16}{EntryKindCode(entry.Type):x8}";
+        }
+        foreach (var treatment in step.Treatments)
+            treatment.DataSource = dataSource;
+
+        var status = DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate);
+        // Deterministic legacy id, so a re-seed skips the statuses it already wrote.
+        status?.Id = status.Mills.ToString("x24");
+
+        return new StepRecords(entries, step.Treatments, status, readings.Count > 0);
+    }
+
+    private static int EntryKindCode(string? type) => type switch
+    {
+        "sgv" => 1,
+        "mbg" => 2,
+        "cal" => 3,
+        _ => 4,
+    };
+
+    internal sealed record StepRecords(
+        IReadOnlyList<Entry> Entries,
+        IReadOnlyList<Treatment> Treatments,
+        DeviceStatus? Status,
+        bool HasCgmReading);
 
     /// <summary>The simulation every seed of <paramref name="days"/> days runs.</summary>
     internal static DemoModeConfiguration ConfigurationFor(int days) =>
@@ -510,24 +565,28 @@ public class SampleDataSeeder
 
             if (definition is null)
             {
-                definition = await _trackerRepository.CreateDefinitionAsync(new TrackerDefinitionEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = db.TenantId,
-                    CreatedBy = userId,
-                    Name = spec.Name,
-                    Category = spec.Category,
-                    Icon = spec.Icon,
-                    LifespanHours = spec.LifespanHours,
-                    TriggerEventTypes = JsonSerializer.Serialize(new[] { spec.TriggerEventType }),
-                    StartEventType = spec.TriggerEventType,
-                    Mode = TrackerMode.Duration,
-                }, ct);
+                var seeded = TrackerDefinition.Create(
+                    new TrackerDefinitionDraft
+                    {
+                        Name = spec.Name,
+                        Category = spec.Category,
+                        Icon = spec.Icon,
+                        LifespanHours = spec.LifespanHours,
+                        TriggerEventTypes = [spec.TriggerEventType],
+                        StartEventType = spec.TriggerEventType,
+                        Mode = TrackerMode.Duration,
+                    },
+                    userId,
+                    _time.GetUtcNow().UtcDateTime);
+                definition = await _trackerRepository.CreateDefinitionAsync(
+                    seeded.Definition
+                        ?? throw new InvalidOperationException($"The sample {spec.Name} tracker is not a valid definition: {seeded.Error!.Message}"),
+                    ct);
                 definitionsCreated++;
             }
 
             // Rebuild instances from the schedule (idempotent re-seed).
-            await db.TrackerInstances.PurgeAsync(i => i.DefinitionId == definition.Id, ct);
+            await _trackerRepository.PurgeInstancesAsync(definition.Id, ct);
 
             var changes = schedule
                 .Where(e => e.EventType == spec.TriggerEventType)
@@ -571,7 +630,7 @@ public class SampleDataSeeder
         CancellationToken ct)
     {
         IReadOnlyList<AlertRuleChannelWrite> channels = ownerSubjectId is { } owner
-            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString())]
+            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString(), AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null)]
             : [];
         var seeded = await _alertRules.CreateMissingByNameAsync(
             DemoAlertSeeds.Defaults
@@ -747,8 +806,8 @@ public class SampleDataSeeder
                         Id = Guid.CreateVersion7(),
                         CarbIntakeId = intake.Id,
                         FoodId = food.Id,
-                        Portions = seed.Carbs > 0 ? Math.Round((decimal)(intake.Carbs / seed.Carbs), 2) : 1,
-                        Carbs = (decimal)intake.Carbs,
+                        Portions = seed.Carbs > 0 ? Math.Round((intake.Carbs / seed.Carbs).ToDecimal(), 2) : 1,
+                        Carbs = intake.Carbs.ToDecimal(),
                     });
                 }
             }
@@ -1014,7 +1073,7 @@ public class SampleDataSeeder
             if (day.DayOfWeek != DayOfWeek.Sunday)
                 continue;
 
-            var syncId = $"demo-weight-{day:yyyy-MM-dd}";
+            var syncId = $"demo-weight-{day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
             if (existing.Contains(syncId))
                 continue;
 
@@ -1027,7 +1086,7 @@ public class SampleDataSeeder
                 Id = Guid.CreateVersion7(),
                 TenantId = db.TenantId,
                 Mills = new DateTimeOffset(clock.ToUtc(weighIn)).ToUnixTimeMilliseconds(),
-                WeightKg = (decimal)DemoLifestyleSeeds.WeightKgOn(day),
+                WeightKg = DemoLifestyleSeeds.WeightKgOn(day).ToDecimal(),
                 Device = "Demo Scale",
                 DataSource = dataSource,
                 SyncIdentifier = syncId,
@@ -1162,7 +1221,7 @@ public class SampleDataSeeder
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
                 UserId = userId,
-                Type = "alert.firing",
+                Type = InAppProvider.NotificationType,
                 Category = NotificationCategory.Alert,
                 Urgency = episode.RuleName.Contains("Urgent", StringComparison.OrdinalIgnoreCase)
                     ? NotificationUrgency.Urgent

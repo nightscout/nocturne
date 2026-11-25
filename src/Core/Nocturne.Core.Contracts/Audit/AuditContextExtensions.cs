@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Contracts.Audit;
 
 /// <summary>
@@ -17,4 +19,24 @@ public static class AuditContextExtensions
     /// </summary>
     public static bool IsSystemMutation(this IAuditContext? auditContext)
         => auditContext is null || auditContext.IsSystem;
+
+    /// <summary>
+    /// The credential types whose <see cref="IAuditContext.TokenId"/> is an <c>oauth_grants</c> id.
+    /// A session or platform cookie carries a JWT id there instead.
+    /// </summary>
+    private static readonly HashSet<string> GrantBacked =
+    [
+        nameof(AuthType.OAuthAccessToken),
+        nameof(AuthType.ApiKey),
+        nameof(AuthType.DirectGrant),
+        nameof(AuthType.LegacyJwt),
+        nameof(AuthType.Guest),
+    ];
+
+    /// <summary>The grant the actor's credential authenticates under, or null when it has none.</summary>
+    public static Guid? GrantId(this IAuditContext? auditContext) =>
+        auditContext is { IsSystem: false, TokenId: { } tokenId, AuthType: { } authType }
+        && GrantBacked.Contains(authType)
+            ? tokenId
+            : null;
 }

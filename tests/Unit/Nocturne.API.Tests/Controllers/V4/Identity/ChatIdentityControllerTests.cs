@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Middleware;
 using Nocturne.API.Services.Chat;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -39,7 +40,7 @@ public class ChatIdentityControllerTests : IDisposable
         _db = TestDbContextFactory.CreateSqlite();
         _service = new ChatIdentityService(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
                 _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             _db.ContextFactory.AsNocturneFactory(),
@@ -85,12 +86,18 @@ public class ChatIdentityControllerTests : IDisposable
         return id;
     }
 
+    /// <summary>
+    /// Inserts a link with the membership it stands for: the directory resolves a link only while
+    /// its subject holds a live membership of its tenant.
+    /// </summary>
     private Guid InsertLink(
         Guid tenantId, Guid subjectId, string label, bool isDefault,
         string platformUserId = CallerChatUser)
     {
         var id = Guid.CreateVersion7();
         using var db = _db.CreateContext();
+        if (!db.TenantMembers.Any(m => m.TenantId == tenantId && m.SubjectId == subjectId))
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId });
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = id,
@@ -197,6 +204,22 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetLinks_still_lists_a_link_whose_subject_is_deactivated()
+    {
+        InsertLink(_tenantId, _coMemberSubjectId, "lily", isDefault: true, platformUserId: CoMemberChatUser);
+        await using (var db = _db.CreateContext())
+        {
+            await db.Subjects.Where(s => s.Id == _coMemberSubjectId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        }
+
+        var link = SingleLink(await CreateController().GetLinks(CancellationToken.None));
+
+        link.NocturneUserId.Should().Be(_coMemberSubjectId, "the row still holds the chat account, which explains a 409 on a claim of it");
+        link.Label.Should().Be("lily");
+        link.IsOwnedByCaller.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task GetLinks_leaves_the_default_label_off_a_link_belonging_to_another_subject()
     {
         InsertLink(_tenantId, _coMemberSubjectId, "lily", isDefault: false, platformUserId: CoMemberChatUser);
@@ -287,6 +310,23 @@ public class ChatIdentityControllerTests : IDisposable
             .Which.Value.Should().BeOfType<PendingLinkViewResponse>().Subject;
         pending.PlatformUserName.Should().Be("sam_t");
         pending.PlatformUserId.Should().Be(CallerChatUser);
+    }
+
+    [Fact]
+    public async Task ClaimLink_refuses_an_inactive_caller_and_links_nothing()
+    {
+        var token = InsertPendingToken(CallerChatUser);
+        var controller = CreateController();
+        new RequestMembership(_callerSubjectId, _tenantId, null) { SubjectIsInactive = true }
+            .StoreOn(controller.HttpContext);
+
+        var result = await controller.ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        (await LinksFor(CallerChatUser)).Should().BeEmpty();
+        await using var db = _db.CreateContext();
+        (await db.ChatIdentityPendingLinks.AnyAsync(p => p.Token == token)).Should().BeTrue("the token is not consumed");
     }
 
     [Fact]

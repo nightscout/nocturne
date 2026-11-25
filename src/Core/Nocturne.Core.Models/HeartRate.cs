@@ -22,8 +22,7 @@ public class HeartRate : ProcessableDocumentBase
     /// ISO 8601 formatted creation timestamp
     /// </summary>
     [JsonPropertyName("created_at")]
-    public override string? CreatedAt { get; set; } =
-        DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+    public override string? CreatedAt { get; set; }
 
     /// <summary>
     /// Timestamp in milliseconds since Unix epoch.
@@ -33,7 +32,7 @@ public class HeartRate : ProcessableDocumentBase
     public override long Mills
     {
         get => Timestamp.ToMills();
-        set => Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(value).UtcDateTime;
+        set => Timestamp = value.ToUtcDateTime();
     }
 
     /// <summary>

@@ -69,7 +69,7 @@ describe("buildAppNavigation", () => {
   it("withholds every owner surface from a public share", () => {
     const visible = titles(REPORTING_SHARE);
 
-    for (const owned of [...OWNER_ONLY, "Tenants"]) {
+    for (const owned of [...OWNER_ONLY, "People"]) {
       expect(visible).not.toContain(owned);
     }
   });
@@ -80,11 +80,36 @@ describe("buildAppNavigation", () => {
     ]);
   });
 
+  it("groups the timeline with the profile and patient record pages for a member", () => {
+    const nav = buildAppNavigation(MEMBER);
+    const therapy = nav.find((item) => item.id === "time-spans");
+
+    expect(therapy?.title).toBe("Therapy");
+    expect(therapy?.children?.map((c) => c.href)).toEqual([
+      "/time-spans",
+      "/settings/profile",
+      "/settings/patient",
+    ]);
+
+    const site = nav.find((item) => item.id === "site-settings");
+    expect(site?.children?.map((c) => c.href)).not.toContain("/settings/profile");
+    expect(site?.children?.map((c) => c.href)).not.toContain("/settings/patient");
+  });
+
+  it("gives a member who cannot read therapy settings the timeline alone", () => {
+    const therapy = buildAppNavigation({ ...MEMBER, grantedScopes: ["glucose.read"] }).find(
+      (item) => item.id === "time-spans"
+    );
+
+    expect(therapy?.href).toBe("/time-spans");
+    expect(therapy?.children).toBeUndefined();
+  });
+
   it("keeps the guest link's read-only navigation", () => {
     expect(titles(GUEST)).toEqual([
       "Dashboard",
       "Calendar",
-      "Time spans",
+      "Therapy timeline",
       "Reports",
     ]);
   });
@@ -132,7 +157,7 @@ describe("buildAppNavigation", () => {
     expect(site?.children?.map((child) => child.href)).toEqual(["/settings/connectors"]);
   });
 
-  it("keeps only Account and Appearance on a tenantless host", () => {
+  it("keeps only the pages of the person on a tenantless host", () => {
     const settings = buildAppNavigation({ ...MEMBER, isPlatformAdmin: true, tenantless: true })
       .filter((item) => item.children?.some((child) => child.href.startsWith("/settings")));
 
@@ -140,13 +165,23 @@ describe("buildAppNavigation", () => {
     expect(settings[0]!.children!.map((child) => child.href)).toEqual([
       "/settings/account",
       "/settings/appearance",
+      "/settings/teams",
     ]);
   });
 
+  it("leaves Teams out of the settings for the demo visitor", () => {
+    const hrefs = buildAppNavigation({ ...MEMBER, refusedAsDemoSubject: true })
+      .flatMap((item) => item.children ?? [])
+      .map((child) => child.href);
+
+    expect(hrefs).toContain("/settings/account");
+    expect(hrefs).not.toContain("/settings/teams");
+  });
+
   it("offers the tenant switcher only to a member holding more than one", () => {
-    expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("Tenants");
+    expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("People");
     expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
-      "Tenants"
+      "People"
     );
   });
 });

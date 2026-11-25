@@ -7,35 +7,36 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Admin controller for managing data deduplication.
-/// Provides endpoints to run deduplication jobs and check their status.
+/// Data deduplication. Run a deduplication job, check or cancel it, and list the linked records in a
+/// duplicate group.
 /// </summary>
-/// <seealso cref="IDeduplicationService"/>
+/// <seealso cref="IDeduplicationAdmin"/>
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/admin/deduplication")]
 [Produces("application/json")]
 [AllowDuringSetup]
 [RequireSuperuser]
+[ErrorEnvelope]
 public class DeduplicationController : ControllerBase
 {
-    private readonly IDeduplicationService _deduplicationService;
+    private readonly IDeduplicationAdmin _deduplication;
     private readonly ILogger<DeduplicationController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="DeduplicationController"/>.
     /// </summary>
-    /// <param name="deduplicationService">Service for running and querying deduplication jobs.</param>
+    /// <param name="deduplication">Runs and follows full deduplication runs.</param>
     /// <param name="logger">Logger instance.</param>
     public DeduplicationController(
-        IDeduplicationService deduplicationService,
+        IDeduplicationAdmin deduplication,
         ILogger<DeduplicationController> logger)
     {
-        _deduplicationService = deduplicationService;
+        _deduplication = deduplication;
         _logger = logger;
     }
 
-    /// <inheritdoc cref="IDeduplicationService.StartDeduplicationJobAsync"/>
+    /// <inheritdoc cref="IDeduplicationAdmin.StartRunAsync"/>
     [HttpPost("run")]
     [RemoteCommand]
     [ProducesResponseType(typeof(DeduplicationJobResponse), 202)]
@@ -47,7 +48,7 @@ public class DeduplicationController : ControllerBase
 
         try
         {
-            var jobId = await _deduplicationService.StartDeduplicationJobAsync(cancellationToken);
+            var jobId = await _deduplication.StartRunAsync(cancellationToken);
 
             return Accepted(new DeduplicationJobResponse
             {
@@ -56,14 +57,13 @@ public class DeduplicationController : ControllerBase
                 StatusUrl = $"/api/v4/admin/deduplication/status/{jobId}"
             });
         }
-        catch (Exception ex)
+        catch (UnauthorizedAccessException ex)
         {
-            _logger.LogError(ex, "Failed to start deduplication job");
-            return Problem(detail: "Failed to start deduplication job", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: ex.Message, statusCode: 403, title: "Forbidden");
         }
     }
 
-    /// <inheritdoc cref="IDeduplicationService.GetJobStatusAsync"/>
+    /// <inheritdoc cref="IDeduplicationAdmin.GetRunStatusAsync"/>
     [HttpGet("status/{jobId:guid}")]
     [RemoteQuery]
     [ProducesResponseType(typeof(DeduplicationJobStatus), 200)]
@@ -75,25 +75,17 @@ public class DeduplicationController : ControllerBase
     {
         _logger.LogDebug("Getting status for deduplication job {JobId}", jobId);
 
-        try
-        {
-            var status = await _deduplicationService.GetJobStatusAsync(jobId, cancellationToken);
+        var status = await _deduplication.GetRunStatusAsync(jobId, cancellationToken);
 
-            if (status == null)
-            {
-                return Problem(detail: "Job not found", statusCode: 404, title: "Not Found");
-            }
-
-            return Ok(status);
-        }
-        catch (Exception ex)
+        if (status == null)
         {
-            _logger.LogError(ex, "Failed to get status for job {JobId}", jobId);
-            return Problem(detail: "Failed to get job status", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Job not found", statusCode: 404, title: "Not Found");
         }
+
+        return Ok(status);
     }
 
-    /// <inheritdoc cref="IDeduplicationService.CancelJobAsync"/>
+    /// <inheritdoc cref="IDeduplicationAdmin.CancelRunAsync"/>
     [HttpPost("cancel/{jobId:guid}")]
     [RemoteCommand(Invalidates = ["GetJobStatus"])]
     [ProducesResponseType(typeof(CancelJobResponse), 200)]
@@ -105,30 +97,22 @@ public class DeduplicationController : ControllerBase
     {
         _logger.LogInformation("Cancelling deduplication job {JobId}", jobId);
 
-        try
-        {
-            var cancelled = await _deduplicationService.CancelJobAsync(jobId, cancellationToken);
+        var cancelled = await _deduplication.CancelRunAsync(jobId, cancellationToken);
 
-            if (!cancelled)
-            {
-                return Problem(detail: "Job not found or already completed", statusCode: 404, title: "Not Found");
-            }
-
-            return Ok(new CancelJobResponse
-            {
-                JobId = jobId,
-                Cancelled = true,
-                Message = "Job cancellation requested"
-            });
-        }
-        catch (Exception ex)
+        if (!cancelled)
         {
-            _logger.LogError(ex, "Failed to cancel job {JobId}", jobId);
-            return Problem(detail: "Failed to cancel job", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Job not found or already completed", statusCode: 404, title: "Not Found");
         }
+
+        return Ok(new CancelJobResponse
+        {
+            JobId = jobId,
+            Cancelled = true,
+            Message = "Job cancellation requested"
+        });
     }
 
-    /// <inheritdoc cref="IDeduplicationService.GetLinkedRecordsAsync"/>
+    /// <inheritdoc cref="IDeduplicationAdmin.GetLinkedRecordsAsync"/>
     [HttpGet("records/{recordType}/{recordId}/sources")]
     [RemoteQuery]
     [ProducesResponseType(typeof(LinkedRecordsResponse), 200)]
@@ -139,36 +123,28 @@ public class DeduplicationController : ControllerBase
         string recordId,
         CancellationToken cancellationToken = default)
     {
-        try
+        if (!Guid.TryParse(recordId, out var recordGuid))
         {
-            if (!Guid.TryParse(recordId, out var recordGuid))
-            {
-                return Problem(detail: "Invalid record ID format", statusCode: 400, title: "Bad Request");
-            }
-
-            var linkedRecord = await _deduplicationService.GetLinkedRecordAsync(
-                recordType, recordGuid, cancellationToken);
-
-            if (linkedRecord == null)
-            {
-                return Problem(detail: "Record not found or not linked", statusCode: 404, title: "Not Found");
-            }
-
-            var allLinked = await _deduplicationService.GetLinkedRecordsAsync(
-                linkedRecord.CanonicalId, cancellationToken);
-
-            return Ok(new LinkedRecordsResponse
-            {
-                CanonicalId = linkedRecord.CanonicalId,
-                RecordType = recordType,
-                LinkedRecords = allLinked.ToList()
-            });
+            return Problem(detail: "Invalid record ID format", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
+
+        var linkedRecord = await _deduplication.GetLinkedRecordAsync(
+            recordType, recordGuid, cancellationToken);
+
+        if (linkedRecord == null)
         {
-            _logger.LogError(ex, "Failed to get linked records for {RecordType} {RecordId}", recordType, recordId);
-            return Problem(detail: "Failed to get linked records", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Record not found or not linked", statusCode: 404, title: "Not Found");
         }
+
+        var allLinked = await _deduplication.GetLinkedRecordsAsync(
+            linkedRecord.CanonicalId, cancellationToken);
+
+        return Ok(new LinkedRecordsResponse
+        {
+            CanonicalId = linkedRecord.CanonicalId,
+            RecordType = recordType,
+            LinkedRecords = allLinked.ToList()
+        });
     }
 }
 

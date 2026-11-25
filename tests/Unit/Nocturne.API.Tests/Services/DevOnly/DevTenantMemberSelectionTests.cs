@@ -49,6 +49,7 @@ public sealed class DevTenantMemberSelectionTests
         IsSystemSubject: isSystemSubject,
         IsDemoSubject: false,
         IsPlatformAdmin: false,
+        HasConfirmedEmail: false,
         Roles: isOwner
             ? [new TenantMemberRoleRecord(OwnerRoleId, "Owner", RoleSeeds.Owner, [Scope.FullAccess])]
             : [],
@@ -56,7 +57,9 @@ public sealed class DevTenantMemberSelectionTests
         Label: null,
         Username: null,
         LimitTo24Hours: false,
+        AccessEndsAt: null,
         LastUsedAt: null,
         CreatedFromInviteId: null,
-        SysCreatedAt: createdAt ?? DateTime.UtcNow);
+        SysCreatedAt: createdAt ?? DateTime.UtcNow,
+        Reasons: []);
 }

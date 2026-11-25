@@ -178,12 +178,13 @@ internal sealed class LegacyTreatmentStore(
     /// every legacy id. Each table is read once for all of them, the meal halves of what they name once
     /// per meal table, and the state spans once for those no record holds.
     /// </summary>
-    internal async Task KeyToServedAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    /// <returns>The treatments it keyed.</returns>
+    internal async Task<IReadOnlyList<Treatment>> KeyToServedAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
     {
         var ids = treatments.Select(t => t.Id).Where(MongoObjectId.IsGuidPrefixShaped).OfType<string>()
             .Distinct(StringComparer.Ordinal).ToList();
         if (ids.Count == 0)
-            return;
+            return [];
 
         var found = new Dictionary<ILegacyKeyedTreatmentTable, IReadOnlyList<IV4Record>>();
         foreach (var table in LegacyTreatmentTables.ByServedPrecedence)
@@ -208,45 +209,102 @@ internal sealed class LegacyTreatmentStore(
             keys[stored.Id] = await UpsertKeyAsync(halves.GetValueOrDefault(stored) ?? [stored], ct);
 
         var spanKeys = await _projection.GetStateSpanTreatmentIdsAsync([.. ids.Where(id => !named.ContainsKey(id))], ct);
+        List<Treatment> keyed = [];
         foreach (var treatment in treatments)
         {
             if (treatment.Id is not { } id)
                 continue;
             if (keys.TryGetValue(id, out var key) || (!named.ContainsKey(id) && spanKeys.TryGetValue(id, out key)))
+            {
                 treatment.Id = key;
+                keyed.Add(treatment);
+            }
         }
+
+        return keyed;
     }
 
     /// <summary>
-    /// The create response for a decomposed treatment. It carries the id every read serves for the
-    /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
-    /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
-    /// A treatment stored in none of the projected tables keeps the id it was sent with.
+    /// The create response for each decomposed treatment, in order, with the same reads however many
+    /// there are: the state spans once for all of them, and the meal halves once per meal table. It
+    /// carries the id every read serves for the treatment, so a client that keeps the response id
+    /// (Loop's objectIdCache, AAPS's nightscoutId) can edit and delete by it later; the client's own id
+    /// stays stored as the records' LegacyId. A treatment stored in none of the projected tables keeps
+    /// the id it was sent with.
     /// </summary>
-    internal async Task<StoredTreatment> ToCreatedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
+    internal async Task<IReadOnlyList<StoredTreatment>> ToCreatedAsync(
+        IReadOnlyList<(Treatment Treatment, DecompositionResult Result)> created, CancellationToken ct)
     {
-        var records = result.StoredRecords.ToList();
+        var named = created.Select(c => NamedBy(c.Result.StoredRecords.ToList())).ToList();
+
+        List<string> spanKeys = [.. named.Select(n => n.SpanKey).OfType<string>().Distinct(StringComparer.Ordinal)];
+        var spans = spanKeys.Count == 0
+            ? new Dictionary<string, Treatment>()
+            : await _projection.GetProjectedStateSpanTreatmentsAsync(spanKeys, ct);
+        var servedAs = await ServedAsAsync([.. named.Select(n => n.Served).OfType<IV4Record>()], ct);
+
+        var results = new List<StoredTreatment>(created.Count);
+        var served = 0;
+        for (var i = 0; i < created.Count; i++)
+        {
+            var treatment = created[i].Treatment;
+            var (tempBasal, spanKey, record) = named[i];
+            if (tempBasal is not null)
+            {
+                results.Add(new StoredTreatment.Served(TempBasalToTreatmentMapper.ToTreatment(tempBasal), tempBasal.Id));
+            }
+            else if (spanKey is not null)
+            {
+                if (spans.GetValueOrDefault(spanKey) is not { Id: { } spanId } span)
+                {
+                    results.Add(new StoredTreatment.Unnamed(treatment));
+                    continue;
+                }
+
+                treatment.Id = spanId;
+                results.Add(new StoredTreatment.Named(treatment, span.Mills));
+            }
+            else if (record is null)
+            {
+                results.Add(new StoredTreatment.Unnamed(treatment));
+            }
+            else
+            {
+                var servedRecord = servedAs[served++];
+                treatment.Id = servedRecord.Id.ToString();
+                results.Add(new StoredTreatment.Named(treatment, servedRecord.Mills));
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Whether <see cref="ToCreatedAsync"/> reads the database to name a treatment decomposed as
+    /// <paramref name="result"/>: for its state span, or for the meal halves of its carb intake.
+    /// </summary>
+    internal static bool NeedsRead(DecompositionResult result)
+    {
+        var (_, spanKey, served) = NamedBy(result.StoredRecords.ToList());
+        return spanKey is not null || (served is not null && MealKey(served) is not null);
+    }
+
+    /// <summary>
+    /// What names a created treatment, by precedence: its temp basal, else the state span it is served
+    /// as, else the first of its records in <see cref="LegacyTreatmentTables.ByServedPrecedence"/>.
+    /// </summary>
+    private static (TempBasal? TempBasal, string? SpanKey, IV4Record? Served) NamedBy(IReadOnlyList<object> records)
+    {
         if (records.OfType<TempBasal>().FirstOrDefault() is { } tempBasal)
-            return new StoredTreatment.Served(TempBasalToTreatmentMapper.ToTreatment(tempBasal), tempBasal.Id);
+            return (tempBasal, null, null);
 
         if (records.OfType<StateSpan>().FirstOrDefault(LegacyTreatmentTables.ServesStateSpan) is { OriginalId: { } spanKey })
-        {
-            if (await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is not { Id: { } spanId } span)
-                return new StoredTreatment.Unnamed(treatment);
-
-            treatment.Id = spanId;
-            return new StoredTreatment.Named(treatment, span.Mills);
-        }
+            return (null, spanKey, null);
 
         var served = LegacyTreatmentTables.ByServedPrecedence
             .Select(table => records.OfType<IV4Record>().FirstOrDefault(table.Model.IsInstanceOfType))
             .FirstOrDefault(record => record is not null);
-        if (served is null)
-            return new StoredTreatment.Unnamed(treatment);
-
-        var servedAs = await ServedAsAsync(served, ct);
-        treatment.Id = servedAs.Id.ToString();
-        return new StoredTreatment.Named(treatment, servedAs.Mills);
+        return (null, null, served);
     }
 
     /// <inheritdoc cref="ITreatmentStore.ReadBackAsync"/>
@@ -404,6 +462,7 @@ internal sealed class LegacyTreatmentStore(
 
     /// <inheritdoc cref="UpsertKeyAsync(StoredRecord, CancellationToken)"/>
     /// <param name="records">A stored record and those served beside it, as <see cref="ServedTogetherAsync"/> finds them.</param>
+    /// <param name="ct">Cancels the operation.</param>
     private async Task<string> UpsertKeyAsync(IReadOnlyList<StoredRecord> records, CancellationToken ct)
     {
         var key = records.Select(r => r.Record.LegacyId).FirstOrDefault(id => !string.IsNullOrEmpty(id))
@@ -428,14 +487,30 @@ internal sealed class LegacyTreatmentStore(
     }
 
     /// <summary>
-    /// The record whose id names the treatment <paramref name="record"/> is served as: a carb intake
-    /// that is half of a Meal Bolus is served under the bolus's id, any other record under its own.
+    /// The record whose id names the treatment each of <paramref name="records"/> is served as: a carb
+    /// intake that is half of a Meal Bolus is served under the bolus's id, any other record under its
+    /// own. One read per meal table serves all of them.
     /// </summary>
+    private async Task<IReadOnlyList<IV4Record>> ServedAsAsync(IReadOnlyList<IV4Record> records, CancellationToken ct)
+    {
+        var correlationIds = records.Select(MealKey).OfType<Guid>().Distinct().ToList();
+        if (correlationIds.Count == 0)
+            return records;
+
+        var byTable = await MealHalvesByTableAsync(correlationIds, ct);
+        return
+        [
+            .. records.Select(record =>
+                MealKey(record) is { } correlationId && HalvesOf(byTable, correlationId, record) is { } halves
+                    ? halves[0].Record
+                    : record),
+        ];
+    }
+
+    private static Guid? MealKey(IV4Record record) => record is CarbIntake { CorrelationId: { } correlationId } ? correlationId : null;
+
     private async Task<IV4Record> ServedAsAsync(IV4Record record, CancellationToken ct) =>
-        record is CarbIntake
-            && await MealHalvesAsync(LegacyTreatmentTables.KeyedTableOf<CarbIntake>(), record, ct) is { } halves
-                ? halves[0].Record
-                : record;
+        (await ServedAsAsync([record], ct))[0];
 
     private async Task<Treatment?> FindProjectedAsync(long mills, string treatmentId, CancellationToken ct) =>
         (await _projection.GetProjectedTreatmentsAtAsync([mills], ct)).FirstOrDefault(t => t.Id == treatmentId);
@@ -458,6 +533,17 @@ internal sealed class LegacyTreatmentStore(
 
     private static InvalidOperationException ReadBackFailed(string id) =>
         new($"Treatment {id} did not read back after the update");
+
+    /// <summary>
+    /// Deletes the treatment an update sent with <c>isValid: false</c> names, as Nightscout stores the
+    /// document it replaces deleted, and answers it as served before, marked deleted.
+    /// </summary>
+    private async Task<Treatment> InvalidateAsync(string upsertKey, Treatment served, CancellationToken ct)
+    {
+        await _decomposer.InvalidateAsync([upsertKey], WriteOrigin.Live, ct);
+        served.IsValid = false;
+        return served;
+    }
 
     /// <summary>A record of a keyed table, resolved from the client-sent id <paramref name="Id"/>.</summary>
     private sealed record StoredRecord(LegacyTreatmentStore Store, ILegacyKeyedTreatmentTable Table, IV4Record Record, string Id)
@@ -484,6 +570,9 @@ internal sealed class LegacyTreatmentStore(
             TreatmentClientId.KeepStored(treatment, existing);
 
             var upsertKey = await Store.UpsertKeyAsync(this, ct);
+            if (treatment.IsValid == false)
+                return await Store.InvalidateAsync(upsertKey, existing, ct);
+
             treatment.Id = upsertKey;
             (await Store._decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live, ct)).ThrowIfRejected(0);
             return await Store.ReadAsync(upsertKey, ct) ?? throw ReadBackFailed(Id);
@@ -544,6 +633,9 @@ internal sealed class LegacyTreatmentStore(
             if (Served.Id is not { } servedId
                 || await Store._projection.GetStateSpanTreatmentIdAsync(SpanId, ct) is not { } upsertKey)
                 return null;
+
+            if (treatment.IsValid == false)
+                return await Store.InvalidateAsync(upsertKey, Served, ct);
 
             treatment.Id = upsertKey;
             (await Store._decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live, ct)).ThrowIfRejected(0);

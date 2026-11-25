@@ -8,7 +8,7 @@
     CarbRatioSchedule,
     SensitivitySchedule,
     TargetRangeSchedule,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import ScheduleView from "./ScheduleView.svelte";
   import TargetRangeCard from "./TargetRangeCard.svelte";
 

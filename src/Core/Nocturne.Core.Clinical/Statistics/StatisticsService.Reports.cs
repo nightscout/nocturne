@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
@@ -17,17 +18,17 @@ public partial class StatisticsService
 
     /// <inheritdoc />
     public IEnumerable<ContributingDevice> CalculateContributingDevices(
-        IReadOnlyCollection<SensorGlucose> readings,
+        IReadOnlyCollection<(Guid? PatientDeviceId, int Count)> readingCounts,
         IEnumerable<PatientDevice> devices)
     {
         var countByDevice = new Dictionary<Guid, int>();
         var unattributedCount = 0;
-        foreach (var r in readings)
+        foreach (var (deviceId, count) in readingCounts)
         {
-            if (r.PatientDeviceId is { } id)
-                countByDevice[id] = countByDevice.GetValueOrDefault(id) + 1;
+            if (deviceId is { } id)
+                countByDevice[id] = countByDevice.GetValueOrDefault(id) + count;
             else
-                unattributedCount++;
+                unattributedCount += count;
         }
 
         foreach (var d in devices.Where(d => d.DeviceCategory == DeviceCategory.CGM))
@@ -125,8 +126,8 @@ public partial class StatisticsService
     public static (DateTime StartUtc, DateTime EndUtc) PunchCardRange(
         DateOnly startDate, DateOnly endDate, TimeZoneInfo timeZone) =>
         (
-            TimeZoneInfo.ConvertTimeToUtc(startDate.ToDateTime(TimeOnly.MinValue), timeZone),
-            TimeZoneInfo.ConvertTimeToUtc(endDate.ToDateTime(TimeOnly.MinValue).AddDays(1).AddTicks(-1), timeZone)
+            TimeZoneHelper.ConvertTimeToUtc(startDate.ToDateTime(TimeOnly.MinValue), timeZone),
+            TimeZoneHelper.ConvertTimeToUtc(endDate.ToDateTime(TimeOnly.MinValue).AddDays(1).AddTicks(-1), timeZone)
         );
 
     /// <inheritdoc />
@@ -204,7 +205,7 @@ public partial class StatisticsService
             monthBucket.TotalReadings += dayStats.TotalReadings;
         }
 
-        var today = TimeZoneInfo.ConvertTime(now, timeZone).ToString("yyyy-MM-dd");
+        var today = TimeZoneInfo.ConvertTime(now, timeZone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         foreach (var month in monthsMap.Values)
             month.Summary = SummariseMonth(month, today, coveredMinutesByDate);
 
@@ -217,8 +218,8 @@ public partial class StatisticsService
             Months = months,
             DateRange = new PunchCardDateRange
             {
-                From = startUtc.ToString("o"),
-                To = endUtc.ToString("o"),
+                From = startUtc.ToString("o", CultureInfo.InvariantCulture),
+                To = endUtc.ToString("o", CultureInfo.InvariantCulture),
             },
             GlobalMaxCarbs = months.Count > 0 ? months.Max(m => m.MaxCarbs) : 0,
             GlobalMaxInsulin = months.Count > 0 ? months.Max(m => m.MaxInsulin) : 0,
@@ -250,7 +251,7 @@ public partial class StatisticsService
         var highPct = pct?.High ?? 0;
         var veryHighPct = pct?.VeryHigh ?? 0;
 
-        var dateStr = day.ToString("yyyy-MM-dd");
+        var dateStr = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var totals = treatment?.Totals;
         var totalBolus = (totals?.Insulin?.Bolus ?? 0)
             + CountedBoluses(dayAlgorithmBoluses).Sum(b => b.Insulin);

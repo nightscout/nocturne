@@ -86,8 +86,8 @@ public class DevAdminSnapshotCreationStampTests : IDisposable
     private DevAdminController NewController(NocturneDbContext context) =>
         new(
             context.AsFactory(),
-            new TenantMembershipRepository(context.AsFactory()),
-            new SubjectRepository(context.AsFactory()),
+            new TenantMembershipRepository(context.AsFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(context.AsFactory(), AccountLinkRoutes.Off),
             new PasskeyCredentialRepository(context.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),

@@ -3,7 +3,7 @@ import {
   CHART_TEXTURES,
   patternClass,
   type GlucoseRange,
-} from "#lib/components/charts/print/chart-print-patterns.js";
+} from "@nocturne/charts/core";
 import type { ExtendedTimeInRangePercentages, GlycemicThresholds } from "#lib/api/index.js";
 
 export type HourlyBandKey = keyof ExtendedTimeInRangePercentages;

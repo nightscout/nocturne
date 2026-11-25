@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric, TREND_BUCKETS } from "./types";
+import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric, TREND_BUCKETS } from "./types";
 import {
 	ALERT_STATES,
 	alertStateLabel,
@@ -8,6 +8,7 @@ import {
 	rateDirectionLabel,
 	stateSpanCategoryLabel,
 	tempBasalMetricLabel,
+	transmitterBatteryMetricLabel,
 	trendBucketLabel,
 } from "./alert-labels.svelte";
 
@@ -61,6 +62,11 @@ describe("alert labels", () => {
 	it("labels every temp basal metric", () => {
 		expectStandaloneLabels(Object.values(TempBasalMetric), tempBasalMetricLabel);
 		expect(tempBasalMetricLabel(TempBasalMetric.PercentOfScheduled)).toBe("Percent of scheduled");
+	});
+
+	it("labels every transmitter battery metric", () => {
+		expectStandaloneLabels(Object.values(TransmitterBatteryMetric), transmitterBatteryMetricLabel);
+		expect(transmitterBatteryMetricLabel(TransmitterBatteryMetric.Days)).toBe("Age (days)");
 	});
 
 	it("returns a value the enum does not hold as it came", () => {

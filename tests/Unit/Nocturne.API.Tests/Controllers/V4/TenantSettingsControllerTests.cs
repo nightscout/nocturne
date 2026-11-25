@@ -1,7 +1,12 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Multitenancy;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Models.Identity;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -23,18 +28,33 @@ public class TenantSettingsControllerTests
     private static readonly Guid TenantId = Guid.CreateVersion7();
     private static readonly Guid OwnerId = Guid.CreateVersion7();
 
-    [Fact]
-    public async Task SetPublicDocs_RefusesAMemberWithoutTenantSettings()
+    [Theory]
+    [InlineData(nameof(TenantSettingsController.GetTenantSettings))]
+    [InlineData(nameof(TenantSettingsController.SetPublicDocs))]
+    [InlineData(nameof(TenantSettingsController.SetDisplayName))]
+    [InlineData(nameof(TenantSettingsController.GetSubdomain))]
+    public void TenantAdministration_RefusesAMemberWithoutTenantSettings(string action)
     {
-        var (controller, tenants) = Build(Scope.IdentityRead);
-
-        var result = await controller.SetPublicDocs(new SetPublicDocsRequest(true), CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        tenants.Verify(
-            t => t.SetAllowPublicDocsAsync(It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        Gate(action, Scope.IdentityRead).ShouldBeScopeRefusal(Scope.TenantSettings);
     }
+
+    [Theory]
+    [InlineData(nameof(TenantSettingsController.ChangeSubdomain))]
+    [InlineData(nameof(TenantSettingsController.GetPatientRelationship))]
+    [InlineData(nameof(TenantSettingsController.SetPatientRelationship))]
+    [InlineData(nameof(TenantSettingsController.GetUnitsAndTimezone))]
+    [InlineData(nameof(TenantSettingsController.SetUnitsAndTimezone))]
+    public void OwnerSettings_AreRefusedToAnAdministratorWhoIsNotTheOwner(string action)
+    {
+        Gate(action, Scope.TenantSettings, Scope.TherapyReadWrite).ShouldBeScopeRefusal(Scope.FullAccess);
+    }
+
+    private static IActionResult? Gate(string action, params string[] grantedScopes) =>
+        ActionGate.Evaluate(
+            typeof(TenantSettingsController),
+            action,
+            new HashSet<string>(grantedScopes),
+            new AuthContext { IsAuthenticated = true, SubjectId = OwnerId });
 
     [Fact]
     public async Task SetPublicDocs_WritesTheTenantsOwnFlag()
@@ -63,18 +83,6 @@ public class TenantSettingsControllerTests
     }
 
     [Fact]
-    public async Task GetTenantSettings_RefusesAMemberWithoutTenantSettings()
-    {
-        var (controller, tenants) = Build(Scope.IdentityRead);
-
-        var result = await controller.GetTenantSettings(CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        tenants.Verify(
-            t => t.GetSettingsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
     public async Task GetTenantSettings_ReadsTheResolvedTenant()
     {
         var (controller, tenants) = Build(Scope.TenantSettings);
@@ -85,18 +93,6 @@ public class TenantSettingsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeEquivalentTo(Settings(true));
-    }
-
-    [Fact]
-    public async Task SetDisplayName_RefusesAMemberWithoutTenantSettings()
-    {
-        var (controller, tenants) = Build(Scope.IdentityRead);
-
-        var result = await controller.SetDisplayName(
-            new SetDisplayNameRequest { DisplayName = "Sam's site" }, CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        tenants.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -127,30 +123,6 @@ public class TenantSettingsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(renamed);
         tenants.Verify(t => t.SetDisplayNameAsync(TenantId, "Sam's site", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetPatientRelationship_RefusesAnAdministratorWhoIsNotTheOwner()
-    {
-        var (controller, tenants) = Build(Scope.TenantSettings);
-
-        var result = await controller.GetPatientRelationship(CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        tenants.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task SetPatientRelationship_RefusesAnAdministratorWhoIsNotTheOwner()
-    {
-        var (controller, tenants, records, _) = BuildWithRecords(Scope.TenantSettings, Scope.TherapyReadWrite);
-
-        var result = await controller.SetPatientRelationship(
-            new SetPatientRelationshipRequest { Relationship = PatientRelationship.Caregiver, PatientName = "Sam" }, CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        tenants.VerifyNoOtherCalls();
-        records.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -225,19 +197,6 @@ public class TenantSettingsControllerTests
     }
 
     [Fact]
-    public async Task UnitsAndTimezone_AreRefusedToAnAdministratorWhoIsNotTheOwner()
-    {
-        var (controller, units) = BuildForUnits(Scope.TenantSettings, Scope.TherapyReadWrite);
-
-        (await controller.GetUnitsAndTimezone("en-AU", false, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
-        (await controller.SetUnitsAndTimezone(
-                new SetUnitsAndTimezoneRequest { GlucoseUnits = "mmol", Timezone = "Australia/Sydney" }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
-        units.VerifyNoOtherCalls();
-    }
-
-    [Fact]
     public async Task GetUnitsAndTimezone_ReadsForTheSignedInOwner()
     {
         var (controller, units) = BuildForUnits(Scope.FullAccess);
@@ -305,11 +264,106 @@ public class TenantSettingsControllerTests
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
-        var controller = new TenantSettingsController(tenants.Object, accessor.Object, records.Object, units.Object)
+        var controller = new TenantSettingsController(
+            tenants.Object, accessor.Object, records.Object, units.Object, PolicyAllowing(false).Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
 
         return (controller, tenants, records, units);
+    }
+
+    private static Mock<IPlatformPolicyRepository> PolicyAllowing(bool allowOwnerSlugChange)
+    {
+        var policy = new Mock<IPlatformPolicyRepository>();
+        policy.Setup(p => p.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlatformPolicy(allowOwnerSlugChange));
+        return policy;
+    }
+
+    private static (TenantSettingsController Controller, Mock<ITenantService> Tenants) BuildForSubdomain(
+        bool policyAllows, bool isPlatformAdmin, params string[] grantedScopes)
+    {
+        var tenants = new Mock<ITenantService>();
+        tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantSettingsDto(false, "old", "Old", DateTime.UtcNow));
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.SetupGet(a => a.TenantId).Returns(TenantId);
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
+        httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, IsPlatformAdmin = isPlatformAdmin };
+
+        var controller = new TenantSettingsController(
+            tenants.Object, accessor.Object, Mock.Of<IPatientRecordRepository>(), Mock.Of<IUnitsAndTimezoneService>(),
+            PolicyAllowing(policyAllows).Object, Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }))
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+        return (controller, tenants);
+    }
+
+    [Fact]
+    public async Task An_owner_cannot_change_the_subdomain_while_the_platform_policy_forbids_it()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: false, isPlatformAdmin: false, Scope.FullAccess);
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
+        tenants.Verify(t => t.ChangeSlugAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        var read = await controller.GetSubdomain(CancellationToken.None);
+        ((TenantSubdomainDto)((OkObjectResult)read.Result!).Value!).CanChange.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_owner_changes_the_subdomain_when_the_platform_policy_allows_it()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: false, Scope.FullAccess);
+        tenants.Setup(t => t.ChangeSlugAsync(TenantId, "new", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+        tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantSettingsDto(false, "new", "Old", DateTime.UtcNow));
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        var dto = (TenantSubdomainDto)((OkObjectResult)result.Result!).Value!;
+        dto.Address.Should().Be("https://new.nocturne.example");
+    }
+
+    [Fact]
+    public async Task A_platform_admin_owner_changes_the_subdomain_whatever_the_policy()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: false, isPlatformAdmin: true, Scope.FullAccess);
+        tenants.Setup(t => t.ChangeSlugAsync(TenantId, "new", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task The_subdomain_reports_when_it_may_next_change()
+    {
+        var (controller, tenants) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: false, Scope.FullAccess);
+        var next = new DateTime(2026, 11, 14, 10, 0, 0, DateTimeKind.Utc);
+        tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantSettingsDto(false, "sam", "Sam", DateTime.UtcNow, next));
+
+        var read = await controller.GetSubdomain(CancellationToken.None);
+
+        ((TenantSubdomainDto)((OkObjectResult)read.Result!).Value!).NextChangeAt.Should().Be(next);
+    }
+
+    [Fact]
+    public async Task A_member_who_is_not_an_owner_cannot_change_the_subdomain()
+    {
+        var (controller, _) = BuildForSubdomain(policyAllows: true, isPlatformAdmin: true, Scope.TenantSettings);
+
+        var result = await controller.ChangeSubdomain(new ChangeSubdomainRequest("new"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
     }
 }

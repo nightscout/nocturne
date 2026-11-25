@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import { page as pageState } from "$app/state";
-import { AlertConditionType, AlertReceiptActorKind, type ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertConditionType, AlertReceiptActorKind, type ActiveExcursionResponse } from "@nocturne/api-client";
 import { formatDateTimeCompact } from "#lib/utils/formatting.js";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
@@ -55,6 +55,34 @@ describe("AlertBanner", () => {
 			.element(page.getByText("Seen by Public link, Grandma (guest link)"))
 			.toBeVisible();
 		await expect.element(page.getByRole("button", { name: "Acknowledge" })).toBeVisible();
+	});
+
+	it("says an alert is held open while its data is missing, and why", async () => {
+		pageState.data = { hasAccount: true, effectivePermissions: ["alerts.readwrite"] };
+		const since = new Date(Date.now() - 2 * 60 * 60_000);
+		activeAlerts = [{
+			...firing,
+			hold: { since: since.toISOString(), facts: [{ fact: "glucose", reason: "absent" }] },
+		}];
+
+		render(AlertBanner);
+
+		await expect
+			.element(page.getByText(
+				`Waiting for usable data since ${formatDateTimeCompact(since)}. This alert stays open while it has no usable data. It closes after 24 hours with no usable data.`,
+			))
+			.toBeVisible();
+		await expect.element(page.getByText("Glucose readings: missing")).toBeVisible();
+	});
+
+	it("says nothing of a hold on an alert that is not held", async () => {
+		pageState.data = { hasAccount: true, effectivePermissions: ["alerts.readwrite"] };
+		activeAlerts = [firing];
+
+		render(AlertBanner);
+
+		await expect.element(page.getByText("Low")).toBeVisible();
+		expect(page.getByTestId("alert-hold").elements()).toHaveLength(0);
 	});
 
 	it("shows the age in one unit and the start time as its title", async () => {

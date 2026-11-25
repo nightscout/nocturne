@@ -29,7 +29,8 @@ public static class ReplayScenarioRunner
             .Select(t => new AlertReplayTick(
                 DateTime.SpecifyKind(t.At, DateTimeKind.Utc),
                 ScenarioConversions.ToSensorContext(t.Context),
-                (t.SuppressedRuleIds ?? []).ToHashSet()))
+                (t.SuppressedRuleIds ?? []).ToHashSet(),
+                t.Reading))
             .ToList();
 
         var run = await engine.ReplayAsync(new AlertReplayInput(rules, ticks, IncludeTicks: true), ct);
@@ -44,14 +45,17 @@ public static class ReplayScenarioRunner
                     log.RuleId,
                     log.Leaves.Select(leaf => new ReplayExpectedLeaf(
                         leaf.LeafId,
-                        leaf.Points.Select(p => new ReplayExpectedPoint(p.AtMs, p.Value)).ToList())).ToList()))
+                        leaf.Points.Select(p => new ReplayExpectedPoint(p.AtMs, p.Value, p.Unknown ? true : null)).ToList())).ToList()))
                 .ToList(),
             Ticks = run.Ticks!
                 .Select(t => new ReplayExpectedTick(
                     Utc(t.At),
                     t.Rules.Select(r => r.Skipped
                         ? new ReplayExpectedRuleTick { RuleId = r.RuleId, Skipped = true }
-                        : new ReplayExpectedRuleTick { RuleId = r.RuleId, Met = r.Met, Firing = r.Firing }).ToList()))
+                        : new ReplayExpectedRuleTick
+                        {
+                            RuleId = r.RuleId, Met = r.Met, Unknown = r.Unknown ? true : null, Firing = r.Firing,
+                        }).ToList()))
                 .ToList(),
         };
     }
@@ -61,15 +65,18 @@ public static class ReplayScenarioRunner
         var alertRule = ScenarioConversions.ToAlertRule(rule);
         return new AlertRuleSnapshot(
             alertRule.Id, Guid.Empty, alertRule.Name, alertRule.ConditionType, alertRule.ConditionParams,
-            AlertRuleSeverity.Warning, "{}", 0, alertRule.AutoResolveEnabled, alertRule.AutoResolveParams);
+            AlertRuleSeverity.Warning, "{}", 0, alertRule.AutoResolveEnabled, alertRule.AutoResolveParams,
+            OnUnknown: alertRule.OnUnknown, GlucoseFreshnessMinutes: alertRule.GlucoseFreshnessMinutes);
     }
 
     private static string KindWire(AlertReplayTransition kind) => kind switch
     {
         AlertReplayTransition.Fired => "fired",
         AlertReplayTransition.SuppressedByDnd => "suppressed_by_dnd",
+        AlertReplayTransition.HysteresisStarted => "hysteresis_started",
+        AlertReplayTransition.HysteresisResumed => "hysteresis_resumed",
+        AlertReplayTransition.Closed => "closed",
         AlertReplayTransition.AutoResolved => "auto_resolved",
-        AlertReplayTransition.Cleared => "cleared",
         _ => throw new InvalidOperationException($"Unknown replay transition {kind}"),
     };
 

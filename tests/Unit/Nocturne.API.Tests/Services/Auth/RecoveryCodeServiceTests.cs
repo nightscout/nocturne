@@ -128,6 +128,53 @@ public class RecoveryCodeServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task GenerateFirstCodesAsync_ForASubjectThatHasNeverHeldCodes_StoresAndReturnsAWorkingSet()
+    {
+        var codes = await _service.GenerateFirstCodesAsync(_subjectId);
+
+        codes.Should().HaveCount(8);
+        (await _service.GetRemainingCountAsync(_subjectId)).Should().Be(8);
+        (await _service.VerifyAndConsumeAsync(_subjectId, codes![0])).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GenerateFirstCodesAsync_WithLiveCodes_ReturnsNullAndKeepsThem()
+    {
+        var issued = await _service.GenerateCodesAsync(_subjectId);
+
+        (await _service.GenerateFirstCodesAsync(_subjectId)).Should().BeNull();
+
+        (await _service.VerifyAndConsumeAsync(_subjectId, issued[0])).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GenerateFirstCodesAsync_WithEveryCodeUsed_ReturnsNullAndMakesNone()
+    {
+        var issued = await _service.GenerateCodesAsync(_subjectId);
+        foreach (var code in issued)
+            await _service.VerifyAndConsumeAsync(_subjectId, code);
+
+        (await _service.GenerateFirstCodesAsync(_subjectId)).Should().BeNull();
+
+        (await _service.GetRemainingCountAsync(_subjectId)).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GenerateFirstCodesAsync_AfterTheCodesWereReset_ReturnsNullAndLeavesThemReset()
+    {
+        await _service.GenerateCodesAsync(_subjectId);
+        await _service.InvalidateAllAsync(_subjectId);
+
+        (await _service.GenerateFirstCodesAsync(_subjectId)).Should().BeNull();
+
+        (await _service.WereCodesResetAsync(_subjectId)).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task VerifyAndConsumeAsync_ValidCode_ReturnsTrue()
     {
         var codes = await _service.GenerateCodesAsync(_subjectId);

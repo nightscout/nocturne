@@ -13,7 +13,7 @@ import type {
 } from "#lib/api/index.js";
 import type { EntryRecord } from "#lib/constants/entry-categories.js";
 
-// `entry-summary.ts` reaches `formatting.ts`, which imports the appearance store
+// `entry-summary.svelte.ts` reaches `formatting.ts`, which imports the appearance store
 // and the Svelte runtime behind it. Stub the store so Vite never resolves it;
 // none of the amount formatters read a preference.
 vi.mock("$app/env", () => ({ browser: false }));
@@ -27,7 +27,7 @@ vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
 
 // Dynamic import so the mocks are established first
 const { entryDetails, entryLabel, entrySummary } =
-  await import("./entry-summary");
+  await import("./entry-summary.svelte");
 
 const bolus = (data: Bolus): EntryRecord => ({ kind: "bolus", data });
 const carbs = (data: CarbIntake): EntryRecord => ({ kind: "carbs", data });

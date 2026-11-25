@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -15,7 +14,13 @@ using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Health;
 
+/// <summary>
+/// The tenant's connection to Google Health. Callers can read the connection status, save its
+/// options, start and complete the sign-in, sync, preview a sync and disconnect. Purging deletes
+/// the readings that were imported, and cannot be undone.
+/// </summary>
 [ApiController, Authorize, DenyDemoSubject, RequireScope(Scope.TenantSettings)]
+[Tags("Connectors")]
 [Route("api/v4/google-health")]
 [ProducesResponseType(typeof(ProblemDetails), 400)]
 [ProducesResponseType(typeof(ProblemDetails), 429)]
@@ -79,7 +84,7 @@ public class GoogleHealthController(
         catch (GoogleHealthException ex)
         {
             if (ex.Message == "rate_limited" && ex.RetryAfter is { TotalSeconds: > 0 } retryAfter)
-                Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+                Response.SetRetryAfter(retryAfter);
             return Problem(
                 statusCode: ex.Message switch
                 {

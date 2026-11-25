@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -16,7 +17,7 @@ public static class StateSpanMapper
     {
         return new StateSpanEntity
         {
-            Id = MapperHelpers.ParseIdToGuid(stateSpan.Id),
+            Id = RecordIdKey.ParseIdToGuid(stateSpan.Id),
             Category = stateSpan.Category.ToString(),
             State = stateSpan.State ?? string.Empty,
             StartTimestamp = stateSpan.StartTimestamp,
@@ -25,9 +26,9 @@ public static class StateSpanMapper
             MetadataJson = stateSpan.Metadata != null
                 ? JsonSerializer.Serialize(stateSpan.Metadata)
                 : null,
-            OriginalId = stateSpan.OriginalId,
+            LegacyId = stateSpan.OriginalId,
             SupersededById = !string.IsNullOrEmpty(stateSpan.SupersededById)
-                ? MapperHelpers.ParseIdToGuid(stateSpan.SupersededById)
+                ? RecordIdKey.ParseIdToGuid(stateSpan.SupersededById)
                 : null,
         };
     }
@@ -65,7 +66,11 @@ public static class StateSpanMapper
     /// Narrows <paramref name="spans"/> to the rows whose category is one of <see cref="CategoryNames"/>.
     /// </summary>
     public static IQueryable<StateSpanEntity> WhereCategoryIsCurrent(this IQueryable<StateSpanEntity> spans) =>
-        spans.Where(s => CategoryNames.Contains(s.Category));
+        spans.Where(IsCurrentCategory);
+
+    /// <summary>The predicate <see cref="WhereCategoryIsCurrent"/> applies.</summary>
+    public static readonly Expression<Func<StateSpanEntity, bool>> IsCurrentCategory =
+        s => CategoryNames.Contains(s.Category);
 
     /// <summary>
     /// Convert database entity to domain model
@@ -74,14 +79,14 @@ public static class StateSpanMapper
     {
         return new StateSpan
         {
-            Id = entity.OriginalId ?? entity.Id.ToString(),
+            Id = entity.LegacyId ?? entity.Id.ToString(),
             Category = ParseCategory(entity.Category),
             State = entity.State,
             StartTimestamp = entity.StartTimestamp,
             EndTimestamp = entity.EndTimestamp,
             Source = entity.Source,
             Metadata = MapperHelpers.DeserializeJson<Dictionary<string, object>>(entity.MetadataJson),
-            OriginalId = entity.OriginalId,
+            OriginalId = entity.LegacyId,
             SupersededById = entity.SupersededById?.ToString(),
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
@@ -89,23 +94,19 @@ public static class StateSpanMapper
     }
 
     /// <summary>
-    /// Update existing entity with data from domain model. A new end from the upload replaces the one
-    /// supersession set, so it clears <see cref="StateSpanEntity.SupersededById"/>. An upload with no
-    /// end leaves a superseded row closed, since supersession runs only on insert.
+    /// Maps every field of <paramref name="stateSpan"/> onto <paramref name="entity"/> but the end and
+    /// <see cref="StateSpanEntity.SupersededById"/>, which each caller sets by what its write means: an
+    /// upload by <see cref="Extensions.StateSpanSupersessionExtensions.UploadedEnd"/>.
     /// </summary>
     public static void UpdateEntity(StateSpanEntity entity, StateSpan stateSpan)
     {
         entity.Category = stateSpan.Category.ToString();
         entity.State = stateSpan.State ?? string.Empty;
         entity.StartTimestamp = stateSpan.StartTimestamp;
-        if (stateSpan.EndTimestamp is { } end && end != entity.EndTimestamp)
-            entity.SupersededById = null;
-        if (entity.SupersededById == null)
-            entity.EndTimestamp = stateSpan.EndTimestamp;
         entity.Source = stateSpan.Source;
         entity.MetadataJson = stateSpan.Metadata != null
             ? JsonSerializer.Serialize(stateSpan.Metadata)
             : null;
-        entity.OriginalId = stateSpan.OriginalId;
+        entity.LegacyId = stateSpan.OriginalId;
     }
 }

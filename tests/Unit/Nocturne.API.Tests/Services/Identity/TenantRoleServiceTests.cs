@@ -1,8 +1,11 @@
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Npgsql;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -32,19 +35,32 @@ public class TenantRoleServiceTests : IDisposable
     {
         public List<NocturneDbContext> Handed { get; } = [];
 
+        public IAuditContext? Actor { get; set; }
+
+        public IInterceptor[] Interceptors { get; init; } = [];
+
         public NocturneDbContext CreateDbContext()
         {
-            var context = TestDbContextFactory.CreateInMemoryContext(dbName);
+            var context = TestDbContextFactory.CreateInMemoryContext(dbName, Interceptors).ActingAs(Actor);
             Handed.Add(context);
             return context;
         }
     }
 
     private readonly SharedInMemoryFactory _factory;
+    private readonly string _dbName;
+
+    private sealed class UniqueViolationOnSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            throw UniqueViolation();
+    }
 
     public TenantRoleServiceTests()
     {
         var dbName = Guid.NewGuid().ToString();
+        _dbName = dbName;
         var factory = new SharedInMemoryFactory(dbName);
         _factory = factory;
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
@@ -55,7 +71,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory()), TimeProvider.System);
+        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(factory.AsNocturneFactory()), factory.AsNocturneFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
     }
 
     [Fact]
@@ -217,11 +233,11 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task CreateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
     {
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory(), AccountLinkRoutes.Off) { CallBase = true };
         repository
             .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(UniqueViolation());
-        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>(), Moq.Mock.Of<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var result = await service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
@@ -232,17 +248,46 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task CreateRoleAsync_FailingOnSomethingOtherThanTheSlugIndex_Throws()
     {
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
+        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory(), AccountLinkRoutes.Off) { CallBase = true };
         repository
             .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DbUpdateException(
                 "foreign key",
                 new PostgresException("foreign key", "ERROR", "ERROR", PostgresErrorCodes.ForeignKeyViolation)));
-        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>(), Moq.Mock.Of<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var act = () => service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
         await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_ChangingThePermissions_AuditsTheGainedAndLostAgainstTheCaller()
+    {
+        var caller = Guid.CreateVersion7();
+        _factory.Actor = new TestAuditActor { SubjectId = caller };
+        var role = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read", "reports.read"], [Scope.FullAccess])).Role!;
+
+        await _service.UpdateRoleAsync(
+            _tenantId, role.Id, "Night Shift", null, ["reports.read", "devices.read"], [Scope.FullAccess], null);
+
+        var row = await _context.AuthAuditLog.AsNoTracking().SingleAsync();
+        row.EventType.Should().Be(AuthAuditEventType.RolePermissionsChanged);
+        row.ActorSubjectId.Should().Be(caller);
+        row.TenantId.Should().Be(_tenantId);
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{role.Id}}","role":"night-shift","gained":["devices.read"],"lost":["glucose.read"],"kind":"tenant"}""");
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_RenamingWithTheSamePermissions_AuditsNothing()
+    {
+        var role = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read", "reports.read"], [Scope.FullAccess])).Role!;
+
+        await _service.UpdateRoleAsync(
+            _tenantId, role.Id, "Late Shift", "described", ["reports.read", "glucose.read"], [Scope.FullAccess], null);
+
+        (await _context.AuthAuditLog.AsNoTracking().ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]
@@ -252,7 +297,7 @@ public class TenantRoleServiceTests : IDisposable
         await _service.CreateRoleAsync(_tenantId, "Day Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
         var result = await _service.UpdateRoleAsync(
-            _tenantId, first.Id, "day  SHIFT", "changed", ["reports.read"], [Scope.FullAccess]);
+            _tenantId, first.Id, "day  SHIFT", "changed", ["reports.read"], [Scope.FullAccess], null);
 
         result!.Role.Should().BeNull();
         result.ErrorCode.Should().Be(SaveRoleResult.NameTaken);
@@ -269,7 +314,7 @@ public class TenantRoleServiceTests : IDisposable
         var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
 
         var result = await _service.UpdateRoleAsync(
-            _tenantId, custom.Id, "Owner", null, ["glucose.read"], [Scope.FullAccess]);
+            _tenantId, custom.Id, "Owner", null, ["glucose.read"], [Scope.FullAccess], null);
 
         result!.ErrorCode.Should().Be(SaveRoleResult.NameReserved);
     }
@@ -280,7 +325,7 @@ public class TenantRoleServiceTests : IDisposable
         var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
 
         var result = await _service.UpdateRoleAsync(
-            _tenantId, custom.Id, "NIGHT shift", null, ["glucose.read"], [Scope.FullAccess]);
+            _tenantId, custom.Id, "NIGHT shift", null, ["glucose.read"], [Scope.FullAccess], null);
 
         result!.Role!.Name.Should().Be("NIGHT shift");
         result.Role.Slug.Should().Be("night-shift");
@@ -293,7 +338,7 @@ public class TenantRoleServiceTests : IDisposable
         var viewer = await _context.TenantRoles.FirstAsync(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Viewer);
 
         var result = await _service.UpdateRoleAsync(
-            _tenantId, viewer.Id, "Viewer", "edited", ["glucose.read"], [Scope.FullAccess]);
+            _tenantId, viewer.Id, "Viewer", "edited", ["glucose.read"], [Scope.FullAccess], null);
 
         result!.Role!.Description.Should().Be("edited");
     }
@@ -305,9 +350,9 @@ public class TenantRoleServiceTests : IDisposable
         var viewer = await _context.TenantRoles.FirstAsync(r => r.TenantId == _tenantId && r.Slug == RoleSeeds.Viewer);
 
         var away = await _service.UpdateRoleAsync(
-            _tenantId, viewer.Id, "Readers", null, ["glucose.read"], [Scope.FullAccess]);
+            _tenantId, viewer.Id, "Readers", null, ["glucose.read"], [Scope.FullAccess], null);
         var back = await _service.UpdateRoleAsync(
-            _tenantId, viewer.Id, "Viewer", null, ["glucose.read"], [Scope.FullAccess]);
+            _tenantId, viewer.Id, "Viewer", null, ["glucose.read"], [Scope.FullAccess], null);
 
         away!.Role!.Slug.Should().Be(RoleSeeds.Viewer);
         back!.Role!.Name.Should().Be("Viewer");
@@ -318,15 +363,14 @@ public class TenantRoleServiceTests : IDisposable
     public async Task UpdateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
     {
         var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory()) { CallBase = true };
-        repository
-            .Setup(r => r.UpdateRoleAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<TenantRoleEdit>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(UniqueViolation());
-        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+        var racing = new SharedInMemoryFactory(_dbName) { Interceptors = [new UniqueViolationOnSave()] }.AsNocturneFactory();
+        var service = new TenantRoleService(
+            new TenantMembershipRepository(racing, AccountLinkRoutes.Off), TimeProvider.System,
+            Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(racing),
+            racing, new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var result = await service.UpdateRoleAsync(
-            _tenantId, custom.Id, "Day Shift", null, ["glucose.read"], [Scope.FullAccess]);
+            _tenantId, custom.Id, "Day Shift", null, ["glucose.read"], [Scope.FullAccess], null);
 
         result!.ErrorCode.Should().Be(SaveRoleResult.NameTaken);
     }
@@ -417,7 +461,7 @@ public class TenantRoleServiceTests : IDisposable
         var otherRoleId = await SeedOtherTenantViewerRoleAsync();
 
         var result = await _service.UpdateRoleAsync(
-            _tenantId, otherRoleId, "Pwned", null, [Scope.FullAccess], [Scope.FullAccess]);
+            _tenantId, otherRoleId, "Pwned", null, [Scope.FullAccess], [Scope.FullAccess], null);
 
         result.Should().BeNull("a role ID from another tenant must not resolve");
 

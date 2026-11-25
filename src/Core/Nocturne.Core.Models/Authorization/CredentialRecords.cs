@@ -49,5 +49,23 @@ public sealed record TotpCredentialSecret(Guid Id, byte[] SecretKey, long? LastU
 /// <summary>A TOTP credential as listed to its holder; the secret stays in the store.</summary>
 public sealed record TotpCredentialSummary(Guid Id, string? Label, DateTime CreatedAt, DateTime? LastUsedAt);
 
+/// <summary>A device to trust. <see cref="TokenHash"/> is the hash of the token its cookie carries.</summary>
+public sealed record NewTrustedDevice(
+    Guid SubjectId,
+    string TokenHash,
+    string? DeviceDescription,
+    DateTime CreatedAt,
+    DateTime ExpiresAt);
+
+/// <summary>A trusted device as stored; the token itself is held only by the device.</summary>
+public sealed record TrustedDeviceRecord(
+    Guid Id,
+    Guid SubjectId,
+    string TokenHash,
+    string? DeviceDescription,
+    DateTime CreatedAt,
+    DateTime? LastUsedAt,
+    DateTime ExpiresAt);
+
 /// <summary>A live recovery code's row and the self-describing hash it is verified against.</summary>
 public sealed record RecoveryCodeHash(Guid Id, string CodeHash);

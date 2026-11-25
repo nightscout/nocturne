@@ -14,12 +14,14 @@ vi.mock("../oauth.remote", async () => {
 });
 
 import ConsentPage from "./+page.svelte";
+import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
 const approve = () => browserPage.getByRole("button", { name: "Approve" });
 
 describe("consent approval", () => {
   beforeEach(() => {
     page.data.isAuthenticated = true;
+    page.data.isHandedOffSession = false;
     page.url = new URL(
       "http://localhost/oauth/consent?client_id=trio&redirect_uri=trio%3A%2F%2Fcb&scope=treatments.readwrite&code_challenge=abc"
     ) as typeof page.url;
@@ -60,6 +62,21 @@ describe("consent approval", () => {
       .element(browserPage.getByText("Could not load the details of this app."))
       .toBeVisible();
     await expect.element(approve()).not.toBeInTheDocument();
+  });
+
+  it("offers a session opened from a sign-in link the sign-in, in place of Approve and Deny", async () => {
+    page.data.isHandedOffSession = true;
+    clientInfo.current = { clientId: "trio", displayName: "Trio", isKnown: true, deletionAccess: "ReadWrite" };
+    const prompt = vi.spyOn(confirmIdentity, "request").mockResolvedValue(false);
+    render(ConsentPage);
+
+    await expect.element(browserPage.getByText("Sign in again to approve or deny this app.")).toBeVisible();
+    await expect.element(approve()).not.toBeInTheDocument();
+    await expect.element(browserPage.getByRole("button", { name: "Deny" })).not.toBeInTheDocument();
+
+    await browserPage.getByRole("button", { name: "Sign in" }).click();
+    expect(prompt).toHaveBeenCalledOnce();
+    prompt.mockRestore();
   });
 
   it("shows why the server refused, and keeps Approve usable", async () => {

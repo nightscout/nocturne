@@ -397,11 +397,11 @@
                 </TimeZoneNote>
               </p>
             {/if}
-            <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
-              <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
+            <div class="flex-1 flex flex-col">
+              <div class="grid grid-cols-7 gap-0.5 @md:gap-1 mb-2">
                 {#each DAY_NAMES as dayName, i (i)}
                   <div
-                    class="text-center text-sm font-medium text-muted-foreground py-2"
+                    class="text-center text-xs @md:text-sm font-medium text-muted-foreground py-2"
                   >
                     {dayName}
                   </div>
@@ -409,13 +409,13 @@
               </div>
 
               <div
-                class="flex-1 grid grid-rows-6 gap-1 min-w-[28rem] @md:min-w-0"
+                class="flex-1 grid grid-rows-6 gap-0.5 @md:gap-1"
                 {@attach coachmark({
                   ...coachFor("feature-intro.calendar-trackers"),
                 })}
               >
                 {#each calendarGrid as week, idx (idx)}
-                  <div class="grid grid-cols-7 gap-1">
+                  <div class="grid grid-cols-7 gap-0.5 @md:gap-1">
                     {#each week as day, i (i)}
                       <CalendarDayCell
                         day={day}

@@ -1,12 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -37,21 +37,14 @@ public class TrackerSuccessionTests
             .Returns(Task.CompletedTask);
     }
 
-    private static TrackerDefinitionEntity Definition(TrackerMode mode = TrackerMode.Duration) => new()
-    {
-        Id = Guid.NewGuid(),
-        Name = "Infusion Site",
-        CreatedBy = "owner",
-        Mode = mode,
-        LifespanHours = 72,
-    };
+    private static TrackerDefinition Definition(TrackerMode mode = TrackerMode.Duration) =>
+        TrackerDefinition.Restore(Guid.NewGuid(), "Infusion Site", mode: mode, createdBy: "owner", lifespanHours: 72);
 
-    private TrackerInstanceEntity GivenRunning(TrackerDefinitionEntity definition, DateTime startedAt)
+    private TrackerInstance GivenRunning(TrackerDefinition definition, DateTime startedAt)
     {
-        var instance = new TrackerInstanceEntity
+        var instance = new TrackerInstance
         {
             Id = Guid.NewGuid(),
-            DefinitionId = definition.Id,
             CreatedBy = definition.CreatedBy,
             StartedAt = startedAt,
             Definition = definition,
@@ -67,19 +60,19 @@ public class TrackerSuccessionTests
         return instance;
     }
 
-    private static TrackerInstanceEntity NewRun(TrackerDefinitionEntity definition) => new()
+    private static TrackerInstance NewRun(TrackerDefinition definition) => new()
     {
         Id = Guid.NewGuid(),
-        DefinitionId = definition.Id,
         CreatedBy = definition.CreatedBy,
         StartedAt = T0,
         Definition = definition,
     };
 
-    private Task<TrackerSuccessionResult> StartAsync(TrackerDefinitionEntity definition, TrackerInstanceEntity started) =>
+    private Task<TrackerSuccessionResult> StartAsync(TrackerDefinition definition, TrackerInstance started) =>
         TrackerSuccession.StartAsync(
             _repository.Object,
             _broadcast.Object,
+            TimeProvider.System,
             NullLogger.Instance,
             definition,
             T0,

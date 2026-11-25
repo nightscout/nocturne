@@ -1,22 +1,24 @@
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
 /// <summary>A consumable tracker <see cref="ConsumableTrackerWriter"/> wrote, not yet announced.</summary>
 /// <param name="Definition">The definition as written in the transaction.</param>
+/// <param name="Spec">The spec it was written from, which finds the latest restarting event again on publish.</param>
 /// <param name="Run">Its first run, or null when no event started one.</param>
 /// <param name="StartEvent">The device event <paramref name="Run"/> started at.</param>
 public sealed record CreatedConsumableTracker(
-    TrackerDefinitionEntity Definition,
+    TrackerDefinition Definition,
     ConsumableTrackerSpec Spec,
-    TrackerInstanceEntity? Run,
+    TrackerInstance? Run,
     DeviceEvent? StartEvent);
 
 /// <summary>
@@ -24,12 +26,13 @@ public sealed record CreatedConsumableTracker(
 /// provisioner and the setup hub all do: the definition, its managed alert rules when it has a
 /// ladder, and a first run started at the latest device event that restarts it, in the caller's
 /// transaction under the consumable lock
-/// (<see cref="ITrackerRepository.ExecuteUnderConsumableLockAsync{T}"/>), then announced after the
+/// (<see cref="ITrackerConsumableLock"/>), then announced after the
 /// commit.
 /// </summary>
 public sealed class ConsumableTrackerWriter(
     IDeviceEventRepository deviceEvents,
     ITrackerAlertRuleSyncService ruleSync,
+    AlertRuleRearm rearm,
     IDeviceEventReactor deviceEventReactor,
     ISignalRBroadcastService broadcast,
     TimeProvider timeProvider,
@@ -41,8 +44,13 @@ public sealed class ConsumableTrackerWriter(
     /// whose definition lock is taken inside the consumable lock; an event older than
     /// <see cref="LegacyFallbackRules.StaleAfterLifespans"/> lifespans starts none.
     /// </summary>
+    /// <param name="tx">The tracker repository of the caller's transaction.</param>
+    /// <param name="unit">The caller's unit of work, which the managed rules are created on.</param>
+    /// <param name="spec">The hardware the tracker is defined from.</param>
+    /// <param name="createdBy">The user recorded as creator of the definition and its run.</param>
     /// <param name="withAlerts">Whether the tracker gets its <see cref="ConsumableTrackerSpecs.Thresholds"/>
     /// and their managed rules.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<CreatedConsumableTracker> CreateAsync(
         ITrackerRepository tx,
         DbUnitOfWork unit,
@@ -52,7 +60,7 @@ public sealed class ConsumableTrackerWriter(
         CancellationToken ct)
     {
         var definition = await tx.CreateDefinitionAsync(
-            ConsumableTrackerSpecs.ToDefinition(spec, createdBy, withAlerts), ct);
+            ConsumableTrackerSpecs.ToDefinition(spec, createdBy, timeProvider.GetUtcNow().UtcDateTime, withAlerts), ct);
         if (withAlerts)
             await ruleSync.CreateRulesAsync(unit, definition.Id, ct);
 
@@ -63,6 +71,7 @@ public sealed class ConsumableTrackerWriter(
         var succession = await TrackerSuccession.StartAsync(
             tx,
             broadcast: null,
+            timeProvider,
             logger,
             definition,
             latest.Timestamp,
@@ -90,17 +99,19 @@ public sealed class ConsumableTrackerWriter(
         && (created.Run is null || await tx.GetInstanceByIdAsync(created.Run.Id, ct) is not null);
 
     /// <summary>
-    /// Announces a committed <paramref name="created"/> tracker and its run, then offers the latest
+    /// Announces a committed <paramref name="created"/> tracker and its run, has the managed rules
+    /// created with it evaluated (<see cref="AlertRuleRearm.Committed"/>), then offers the latest
     /// restarting event again when it is newer than the run's start: one that arrived while the
     /// transaction was open found no committed tracker to advance.
     /// </summary>
     /// <returns>The definition and its running instance after the catch-up.</returns>
-    public async Task<(TrackerDefinitionEntity Definition, TrackerInstanceEntity? Run)?> PublishAsync(
+    public async Task<(TrackerDefinition Definition, TrackerInstance? Run)?> PublishAsync(
         ITrackerRepository trackers, CreatedConsumableTracker created, CancellationToken ct)
     {
+        rearm.Committed();
         await broadcast.BroadcastTrackerDefinitionUpdateAsync(created.Definition.Id);
         if (created.Run is not null && await trackers.GetInstanceByIdAsync(created.Run.Id, ct) is { } started)
-            await broadcast.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, TrackerInstanceDto.FromEntity(started));
+            await broadcast.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, TrackerInstanceDto.From(started, timeProvider.GetUtcNow().UtcDateTime));
 
         if (await LatestEventAsync(created.Spec, ct) is { } latest
             && latest.Id != created.StartEvent?.Id

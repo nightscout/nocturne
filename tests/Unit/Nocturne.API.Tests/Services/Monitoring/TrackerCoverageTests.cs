@@ -2,7 +2,6 @@ using FluentAssertions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -50,11 +49,11 @@ public class TrackerCoverageTests
     [Fact]
     public void APodTrackerStatingNothing_CoversWhatAPodProvides()
     {
-        TrackerCoverage.Of(new TrackerDefinitionEntity { Category = TrackerCategory.Pod })
+        TrackerCoverage.Of(Definition(TrackerCategory.Pod, "[]"))
             .Should().BeEquivalentTo(TrackerCoverage.PodCapabilities);
-        TrackerCoverage.Of(new TrackerDefinitionEntity { Category = TrackerCategory.Pod, Covers = """["Site"]""" })
+        TrackerCoverage.Of(Definition(TrackerCategory.Pod, """["Site"]"""))
             .Should().BeEquivalentTo([PumpCapability.Site]);
-        TrackerCoverage.Of(new TrackerDefinitionEntity { Category = TrackerCategory.Cannula }).Should().BeEmpty();
+        TrackerCoverage.Of(Definition(TrackerCategory.Cannula, "[]")).Should().BeEmpty();
     }
 
     [Theory]
@@ -65,7 +64,10 @@ public class TrackerCoverageTests
     [InlineData(TrackerCategory.Cannula, "[]", false)]
     public void HoldsInsulin_FollowsTheReservoirCapability(TrackerCategory category, string covers, bool holds)
     {
-        TrackerCoverage.HoldsInsulin(new TrackerDefinitionEntity { Category = category, Covers = covers })
+        TrackerCoverage.HoldsInsulin(Definition(category, covers))
             .Should().Be(holds);
     }
+
+    private static TrackerDefinition Definition(TrackerCategory category, string covers) =>
+        TrackerDefinition.Restore(Guid.NewGuid(), "Tracker", category, covers: TrackerCoverage.Parse(covers));
 }

@@ -9,10 +9,10 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Dexcom.Tests.Services;
 
@@ -138,6 +138,111 @@ public class DexcomConnectorServiceSyncTests
             sg.CreatedAt == Instant.UtcDateTime && sg.ModifiedAt == Instant.UtcDateTime);
     }
 
+    /// <summary>
+    /// The store skips a reading whose legacy id a stored row carries, so a second sync of the same
+    /// readings stores nothing new only while each keeps its legacy id.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameReadings_PublishesUnderTheSameLegacyIds()
+    {
+        var clock = new FakeTimeProvider(Instant);
+        var publisher = new Mock<IConnectorPublisher>();
+        var glucose = new Mock<IGlucosePublisher>();
+        var published = new List<List<SensorGlucose>>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => published.Add(records.ToList()))
+            .ReturnsAsync(true);
+        var service = Service(
+            (_, _) => Task.FromResult(Json(
+                """[{"WT":"Date(1781956800000)","ST":"Date(1781956800000)","DT":"Date(1781956800000+0000)","Value":120,"Trend":"Flat"}]""")),
+            publisher.Object,
+            clock);
+
+        await service.SyncDataAsync(Request(), Config(), CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await service.SyncDataAsync(Request(), Config(), CancellationToken.None);
+
+        published.Should().HaveCount(2);
+        published[0].Single().LegacyId.Should().Be("dexcom_Date(1781956800000)");
+        published[1].Single().LegacyId.Should().Be(published[0].Single().LegacyId);
+        published[1].Single().Id.Should().NotBe(published[0].Single().Id);
+    }
+
+    /// <summary>
+    /// A second scheduled run asks Share only for what came after the first run's newest reading,
+    /// less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksOnlyFromTheFirstRunsNewestReading()
+    {
+        var clock = new FakeTimeProvider(Instant);
+        var publisher = new Mock<IConnectorPublisher>();
+        var glucose = new Mock<IGlucosePublisher>();
+        DateTime? newest = null;
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        glucose.Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => newest);
+        glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => newest = DateTimeOffset.FromUnixTimeMilliseconds(records.Max(r => r.Mills)).UtcDateTime)
+            .ReturnsAsync(true);
+        var readingAt = Instant.AddMinutes(-10).ToUnixTimeMilliseconds();
+        var queries = new List<string>();
+        var service = Service((request, _) =>
+        {
+            queries.Add(request.RequestUri!.Query);
+            return Task.FromResult(Json(
+                $$"""[{"WT":"Date({{readingAt}})","ST":"Date({{readingAt}})","DT":"Date({{readingAt}}+0000)","Value":120,"Trend":"Flat"}]"""));
+        }, publisher.Object, clock);
+
+        await service.SyncDataAsync(Config(), CancellationToken.None);
+        await service.SyncDataAsync(Config(), CancellationToken.None);
+
+        queries.Should().HaveCount(2);
+        queries[1].Should().Contain("minutes=15").And.Contain("maxCount=3");
+    }
+
+    /// <summary>
+    /// A scheduled run with glucose switched off has nothing to fetch, so it succeeds, calls nothing at
+    /// Share and reads no resume point.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_GlucoseOff_SucceedsWithoutAVendorCallOrAResumePoint()
+    {
+        var glucose = new Mock<IGlucosePublisher>();
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        var calls = 0;
+        var service = Service(
+            (_, _) =>
+            {
+                calls++;
+                return Task.FromResult(Json("[]"));
+            },
+            publisher.Object);
+        var config = Config();
+        config.SyncGlucose = false;
+
+        var result = await service.SyncDataAsync(config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        calls.Should().Be(0);
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static readonly DateTimeOffset Instant = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static SyncRequest Request() => new() { DataTypes = [SyncDataType.Glucose] };
@@ -160,7 +265,6 @@ public class DexcomConnectorServiceSyncTests
             resolver,
             NullLogger<DexcomConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             new SignedInTokenProvider(resolver),
             publisher,
             clock);
@@ -187,7 +291,7 @@ public class DexcomConnectorServiceSyncTests
             new HttpClient(),
             new ConnectorTokenCache(),
             resolver,
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<DexcomAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>())
     {
@@ -196,12 +300,5 @@ public class DexcomConnectorServiceSyncTests
             Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 ("session-1", DateTime.UtcNow.AddHours(1), null));
 
-        private static ITenantAccessor ResolvedTenant()
-        {
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.Setup(t => t.IsResolved).Returns(true);
-            tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-            return tenant.Object;
-        }
     }
 }

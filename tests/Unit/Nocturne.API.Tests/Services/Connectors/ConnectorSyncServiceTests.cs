@@ -21,6 +21,9 @@ namespace Nocturne.API.Tests.Services.Connectors;
 
 public class ConnectorSyncServiceTests
 {
+    // Unrelated connectors must not block each other; this is how long both have to enter, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustEnterWithin = TimeSpan.FromSeconds(5);
+
     private static ConnectorSyncService CreateService(
         IServiceProvider serviceProvider,
         ITenantAccessor? tenantAccessor = null,
@@ -394,7 +397,7 @@ public class ConnectorSyncServiceTests
         var second = sut.TriggerSyncAsync("libre", new SyncRequest(), CancellationToken.None);
 
         var bothEntered = Task.WhenAll(enteredA.Task, enteredB.Task);
-        (await Task.WhenAny(bothEntered, Task.Delay(TimeSpan.FromSeconds(5))))
+        (await Task.WhenAny(bothEntered, Task.Delay(MustEnterWithin)))
             .Should().Be(bothEntered, "unrelated connectors must not block each other");
 
         release.SetResult();

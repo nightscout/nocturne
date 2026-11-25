@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -441,6 +442,53 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task ApexDomain_MultipleTenants_AdmitsTheBotHeartbeatWithTheInstanceKey()
+    {
+        using var client = ApexBotClient(withInstanceKey: true);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v4/system/heartbeat", new { platforms = new[] { "discord" }, service = "bot" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            "the bot posts its heartbeat to the apex, which resolves no tenant on a multi-tenant install");
+    }
+
+    [Fact]
+    public async Task ApexDomain_MultipleTenants_RefusesTheHeartbeatWithoutTheInstanceKey()
+    {
+        using var client = ApexBotClient(withInstanceKey: false);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v4/system/heartbeat", new { platforms = new[] { "discord" }, service = "bot" });
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ApexDomain_MultipleTenants_StillNeedsATenantForTheChannelStatuses()
+    {
+        using var client = ApexBotClient(withInstanceKey: true);
+
+        var response = await client.GetAsync("/api/v4/system/channels");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "the channel statuses are read per tenant, so the apex of a multi-tenant install cannot answer");
+    }
+
+    private HttpClient ApexBotClient(bool withInstanceKey)
+    {
+        var client = Fixture.CreateHttpClient("nocturne-api", "http");
+        client.DefaultRequestHeaders.Host = _baseDomain;
+        if (withInstanceKey)
+        {
+            client.DefaultRequestHeaders.Add("X-Instance-Key", HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey));
+            client.DefaultRequestHeaders.Add("X-Instance-Service", "nocturne-web");
+        }
+
+        return client;
+    }
+
+    [Fact]
     public async Task ApexDomain_SingleTenant_AutoResolves()
     {
         await DeactivateTenantBAsync();
@@ -465,10 +513,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE tenants SET is_active = false WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", _tenantBId);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("UPDATE tenants SET is_active = false WHERE id = @id;", ("id", _tenantBId));
 
         TenantResolutionMiddleware.EvictTenant(Fixture.Services.GetRequiredService<IMemoryCache>(), _slugB);
     }
@@ -585,6 +630,22 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a tenant member without the platform_admin role must not access the platform-admin API");
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/v4/admin/platform-settings")]
+    [InlineData("GET", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("PUT", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("DELETE", "/api/v4/admin/platform-settings/google-health")]
+    [InlineData("GET", "/api/v4/admin/platform-settings/decrypted")]
+    public async Task Tenant_admin_cannot_read_or_change_instance_google_health_settings(string method, string path)
+    {
+        using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        if (method == "PUT")
+            request.Content = new StringContent("{\"enabled\":true,\"fields\":{}}", System.Text.Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

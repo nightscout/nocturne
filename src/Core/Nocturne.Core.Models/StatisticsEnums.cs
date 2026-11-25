@@ -88,22 +88,6 @@ public enum GlucoseManagementIndicatorLevel
     PoorControl,
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum DataSufficiencyStatus
-{
-    /// <summary>Sufficient data for reliable analysis</summary>
-    [JsonPropertyName("sufficient")]
-    Sufficient,
-
-    /// <summary>Insufficient data - may need to extend date range or check connectivity</summary>
-    [JsonPropertyName("insufficientCoverage")]
-    InsufficientCoverage,
-
-    /// <summary>Large data gaps detected - analysis reliability affected</summary>
-    [JsonPropertyName("largeGaps")]
-    LargeGaps,
-}
-
 /// <summary>
 /// Unified insight key for all clinical insight types (strengths, priority areas, actionable).
 /// No <c>JsonPropertyName</c> attributes — values serialize as PascalCase to match NSwag-generated TypeScript enums.

@@ -11,11 +11,13 @@ using Nocturne.Core.Contracts.V4.Repositories;
 namespace Nocturne.API.Controllers.V4.Devices;
 
 /// <summary>
-/// Controller for APS (Artificial Pancreas System) loop algorithm snapshot data.
-/// Exposes standard V4 read operations via <see cref="V4ReadOnlyControllerBase{TModel,TRepository}"/>
-/// plus a bulk create-or-update endpoint for native uploaders (e.g. Trio).
+/// Loop algorithm snapshots from closed-loop systems. Each snapshot records the output of one closed-loop
+/// decision. List and read snapshots, and create or update them in bulk.
 /// </summary>
 /// <remarks>
+/// Standard V4 read operations via <see cref="V4ReadOnlyControllerBase{TModel,TRepository}"/> plus a bulk
+/// create-or-update endpoint for native uploaders (e.g. Trio).
+///
 /// APS snapshots capture the real-time output of loop algorithm calculations (e.g., AAPS oref0/oref1
 /// output) recorded at the time of each closed-loop decision. Records are written by connector
 /// ingest pipelines or uploaded directly via the bulk endpoint.
@@ -24,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="UpsertApsSnapshotRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("APS Snapshots")]
 [Tags("Devices")]
 [Route("api/v4/device-status/aps")]
 [RequireScope(Scope.DevicesRead)]
@@ -33,6 +36,9 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
 {
     /// <summary>
     /// Create or update APS snapshots in bulk (max 1000).
+    /// A snapshot with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other snapshot is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
+    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
+    /// A curve in a command's `predBGs` fills the matching `predicted*Json` field when that field is empty; a Loop status's `predicted.values` fills `predictedDefaultJson`.
     /// </summary>
     /// <remarks>
     /// Array semantics are per-item upsert, not all-or-nothing: each snapshot carrying both
@@ -55,7 +61,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         [FromBody] UpsertApsSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (await this.ValidateBulkAsync(requests, "APS snapshot", "snapshot", "snapshots", ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "APS snapshot", "snapshots", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();
@@ -65,13 +71,8 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         return StatusCode(201, persisted);
     }
 
-    private static ApsSnapshot MapToModel(UpsertApsSnapshotRequest request) => new()
+    private static ApsSnapshot MapToModel(UpsertApsSnapshotRequest request) => new ApsSnapshot
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId,
         AidAlgorithm = request.AidAlgorithm,
@@ -98,6 +99,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         PredictedUamJson = request.PredictedUamJson,
         PredictedStartTimestamp = request.PredictedStartTimestamp?.UtcDateTime,
         LoopJson = request.LoopJson,
+        OverrideJson = request.OverrideJson,
         AdditionalProperties = request.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

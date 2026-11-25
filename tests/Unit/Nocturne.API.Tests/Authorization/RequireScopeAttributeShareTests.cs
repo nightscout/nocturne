@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models.Authorization;
@@ -93,7 +94,7 @@ public class RequireScopeAttributeShareTests
 
         new RequireScopeAttribute(requiredScope).OnAuthorization(context);
 
-        context.Result.Should().BeOfType<ForbidResult>();
+        context.Result.Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -114,7 +115,7 @@ public class RequireScopeAttributeShareTests
 
         new RequireScopeAttribute(Scope.GlucoseRead).OnAuthorization(context);
 
-        context.Result.Should().BeOfType<ForbidResult>(
+        context.Result.Should().BeOfType<ScopeForbiddenResult>(
             "the identity is known, so the failure is authorization, not authentication");
     }
 
@@ -204,7 +205,7 @@ public class RequireScopeAttributeShareTests
         new RequireScopeAttribute(Scope.TherapyRead).OnAuthorization(denied);
 
         granted.Result.Should().BeNull();
-        denied.Result.Should().BeOfType<ForbidResult>(
+        denied.Result.Should().BeOfType<ScopeForbiddenResult>(
             "an entries-scoped token must not read therapy settings");
     }
 }

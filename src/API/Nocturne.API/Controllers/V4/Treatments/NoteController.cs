@@ -10,10 +10,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for managing note observations.
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+/// Notes about diabetes care. List, read, create (one or in bulk), update and delete notes. List
+/// deleted notes and restore them. Delete a note by its data source and sync identifier.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
+///
 /// Create and update use the same <see cref="UpsertNoteRequest"/> shape.
 /// On update, immutable fields (<see cref="V4RecordBase.CorrelationId"/>, <see cref="V4RecordBase.LegacyId"/>,
 /// <see cref="V4RecordBase.CreatedAt"/>, <see cref="Note.SyncIdentifier"/>, and
@@ -23,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="Note"/>
 /// <seealso cref="UpsertNoteRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Notes")]
 [Tags("Treatments")]
 [Route("api/v4/observations/notes")]
 [RequireScope(Scope.TreatmentsRead)]
@@ -35,29 +38,19 @@ public class NoteController(INoteRepository repo)
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Note", "note", "notes");
+    protected override V4BulkNaming BulkNaming => new("Note", "notes");
 
-    protected override Note MapCreateToModel(UpsertNoteRequest request) => new()
+    protected override Note MapCreateToModel(UpsertNoteRequest request) => new Note
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Text = request.Text ?? string.Empty,
         EventType = request.EventType,
         IsAnnouncement = request.IsAnnouncement,
         SyncIdentifier = request.SyncIdentifier,
-    };
+    }.WithHeaderFrom(request);
 
-    protected override Note MapUpdateToModel(Guid id, UpsertNoteRequest request, Note existing) => new()
+    protected override Note MapUpdateToModel(Guid id, UpsertNoteRequest request, Note existing) => new Note
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Text = request.Text ?? string.Empty,
         EventType = request.EventType,
         IsAnnouncement = request.IsAnnouncement,
@@ -66,7 +59,7 @@ public class NoteController(INoteRepository repo)
         CreatedAt = existing.CreatedAt,
         SyncIdentifier = existing.SyncIdentifier,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>
     /// Delete a note by its external sync identifier (dataSource + syncIdentifier pair).

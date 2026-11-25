@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
-using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Models.Responses;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.SetupHub;
@@ -30,15 +31,28 @@ public enum AlertThresholdSource
     Nightscout,
 }
 
+/// <param name="Kind">Which starter alert the rule is.</param>
 /// <param name="RuleId">Null until the starter rules are first saved.</param>
-/// <param name="Threshold">In <see cref="AlertSetupStatus.GlucoseUnits"/>; null for <see cref="StarterAlertKind.NoReadings"/>.</param>
-public record StarterAlertRule(StarterAlertKind Kind, Guid? RuleId, bool IsEnabled, decimal? Threshold);
+/// <param name="IsEnabled">Whether the rule is on; before the rules are saved, whether it starts on.</param>
+/// <param name="Threshold">
+/// In <see cref="AlertSetupStatus.GlucoseUnits"/>; null for <see cref="StarterAlertKind.NoReadings"/> and when
+/// <paramref name="SetInRuleEditor"/>.
+/// </param>
+/// <param name="SetInRuleEditor">
+/// The rule editor made the saved rule into more than a glucose threshold with a number, such as a limit read from
+/// a target or a condition held for a time. The setup step has no level to offer for it, a level sent for it is
+/// ignored, and a save leaves its conditions and resolve condition as they are.
+/// </param>
+public record StarterAlertRule(
+    StarterAlertKind Kind, Guid? RuleId, bool IsEnabled, decimal? Threshold, bool SetInRuleEditor = false);
 
 /// <summary>A member of the tenant other than the caller, who can also be sent urgent low alerts.</summary>
 public record AlertSetupMember(Guid SubjectId, string Name, bool AlertedToUrgentLows);
 
+/// <param name="Routing">Who the alerts are set up for.</param>
 /// <param name="GlucoseUnits">"mg/dl" or "mmol": the caller's units, which thresholds are read and written in.</param>
 /// <param name="Saved">Whether the starter rules exist yet. Until they do, <paramref name="Rules"/> holds the starting points.</param>
+/// <param name="Rules">One rule per starter alert kind: the saved rule, or its starting point.</param>
 /// <param name="ThresholdsFrom"><see cref="AlertThresholdSource.Nightscout"/> only while <paramref name="Rules"/> holds starting points read from a migration.</param>
 /// <param name="ToThisDevice">
 /// Whether alerts come to the caller's own account in Nocturne rather than to <paramref name="Channels"/>.
@@ -101,7 +115,9 @@ public record SetUrgentLowRecipientRequest
     public bool Alerted { get; init; }
 }
 
+/// <param name="ChannelType">The channel the delivery went to.</param>
 /// <param name="Status">The delivery row's status: <c>pending</c>, <c>delivered</c> or <c>failed</c>.</param>
+/// <param name="LastError">The delivery row's last error, if it recorded one.</param>
 public record AlertSetupDelivery(ChannelType ChannelType, string Status, string? LastError);
 
 /// <summary>A test alert sent from the Alerts item, and how far each of its deliveries got.</summary>

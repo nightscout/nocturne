@@ -20,6 +20,30 @@ public static class ApplicationConstants
     }
 
     /// <summary>
+    /// How long the API host and the container that runs it wait on a stop.
+    /// </summary>
+    public static class Shutdown
+    {
+        /// <summary>
+        /// The API host's <c>HostOptions.ShutdownTimeout</c>, in seconds: the one budget that Kestrel's
+        /// request drain and the alert evaluation drain share.
+        /// </summary>
+        public const int HostTimeoutSeconds = 30;
+
+        /// <summary>
+        /// Seconds the container's stop grace period exceeds <see cref="HostTimeoutSeconds"/>, so
+        /// the host's own timeout fires before Docker sends SIGKILL.
+        /// </summary>
+        public const int ContainerMarginSeconds = 5;
+
+        /// <summary>
+        /// The <c>stop_grace_period</c> of the API container, in Docker's duration format.
+        /// </summary>
+        public static readonly string ContainerStopGracePeriod =
+            $"{HostTimeoutSeconds + ContainerMarginSeconds}s";
+    }
+
+    /// <summary>
     /// YARP reverse proxy configuration defaults.
     /// </summary>
     /// <remarks>
@@ -292,10 +316,26 @@ public static class ApplicationConstants
     public static class NightscoutApi
     {
         /// <summary>
+        /// The v1 API level reported by <c>/api/versions</c>, matching upstream Nightscout.
+        /// </summary>
+        public const string V1Version = "1.0.0";
+
+        /// <summary>
+        /// The v2 API level reported by <c>/api/versions</c>, matching upstream Nightscout.
+        /// </summary>
+        public const string V2Version = "2.0.0";
+
+        /// <summary>
         /// The v3 API level reported as <c>apiVersion</c> by <c>/api/v3/status</c> and <c>/api/v3/version</c>,
         /// matching upstream Nightscout.
         /// </summary>
         public const string V3Version = "3.0.5";
+
+        /// <summary>
+        /// The Nightscout release Nocturne matches, reported as <c>version</c> by the v1 and v3 status
+        /// and <c>/api/v3/version</c>. Clients compare it against the Nightscout releases they support.
+        /// </summary>
+        public const string CompatibleVersion = "15.0.3";
     }
 
     /// <summary>

@@ -72,6 +72,16 @@ Run("dotnet", ["build", "-c", "Release", "src/API/Nocturne.API/Nocturne.API.cspr
 Console.WriteLine("==> Verifying generated API client files");
 var generatedDir = Path.Combine(repoRoot, "src", "Web", "packages", "app", "src", "lib", "api", "generated");
 var requiredFiles = new[] { "passkeys", "patientRecords", "chartDatas", "profiles", "alerts" };
+var clientDir = Path.Combine(repoRoot, "src", "Web", "packages", "api-client", "src");
+var missingClient = new[] { "nocturne-api-client.ts", "schemas.ts", "openapi.json" }
+    .Where(f => !File.Exists(Path.Combine(clientDir, f))).ToList();
+
+if (missingClient.Count > 0)
+{
+    Console.Error.WriteLine($"ERROR: Missing generated client files: {string.Join(", ", missingClient)}");
+    return 1;
+}
+
 var missing = requiredFiles.Where(f => !File.Exists(Path.Combine(generatedDir, $"{f}.generated.remote.ts"))).ToList();
 
 if (missing.Count > 0)

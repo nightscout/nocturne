@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Profiles;
@@ -178,14 +179,14 @@ public class ProfileProjectionService : IProfileProjectionService
         }
     }
 
-    /// <summary>
-    /// The earliest last millisecond among the <paramref name="pages"/> that came back full, or
-    /// <c>null</c> when every table was read to its end.
-    /// </summary>
     private static IReadOnlyList<IV4Record> Records<T>(IReadOnlyList<HistoryRecord<T>> page)
         where T : IV4Record =>
         page.Select(r => (IV4Record)r.Record).ToList();
 
+    /// <summary>
+    /// The earliest last millisecond among the <paramref name="pages"/> that came back full, or
+    /// <c>null</c> when every table was read to its end.
+    /// </summary>
     private static long? Horizon(int limit, params IReadOnlyList<IV4Record>[] pages) =>
         pages
             .Where(page => page.Count >= limit)
@@ -287,9 +288,9 @@ public class ProfileProjectionService : IProfileProjectionService
             DefaultProfile = defaultProfile,
             StartDate = UploaderTimestamp.ParseUtcDateTime(head.StartDate) == head.Timestamp
                 ? head.StartDate
-                : head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                : head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = head.Mills,
-            CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             SrvModified = srvModified,
             Units = head.Units ?? "mg/dL",
             EnteredBy = head.EnteredBy,
@@ -408,6 +409,9 @@ public class ProfileProjectionService : IProfileProjectionService
         return found;
     }
 
+    /// <param name="entries">
+    /// The V4 schedule's entries; <c>null</c> or empty maps to an empty schedule.
+    /// </param>
     /// <param name="glucoseUnits">
     /// The profile's glucose units, for the one schedule (ISF) whose values are mg/dL per unit in V4 but
     /// display units in the legacy document. Left <c>null</c> for basal and carb ratio, which are not

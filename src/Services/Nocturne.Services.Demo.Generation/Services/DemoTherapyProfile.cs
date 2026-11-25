@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models;
 using Nocturne.Services.Demo.Configuration;
 
@@ -43,7 +44,7 @@ public static class DemoTherapyProfile
                 multiplier = m;
         }
 
-        return Math.Round(baseRate * multiplier, 2);
+        return ScaledRounding.Round(baseRate * multiplier, 2);
     }
 
     /// <summary>
@@ -58,7 +59,7 @@ public static class DemoTherapyProfile
             .Select(b => new TimeValue
             {
                 Time = $"{b.Start.Hours:00}:{b.Start.Minutes:00}",
-                Value = Math.Round(config.BasalRate * b.Multiplier, 2),
+                Value = ScaledRounding.Round(config.BasalRate * b.Multiplier, 2),
                 TimeAsSeconds = (int)b.Start.TotalSeconds,
             })
             .ToList();
@@ -102,9 +103,9 @@ public static class DemoTherapyProfile
         return new Profile
         {
             DefaultProfile = ProfileName,
-            StartDate = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = nowUtc.ToMills(),
-            CreatedAt = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Units = "mg/dL",
             EnteredBy = DemoDeviceStatusGenerator.DeviceName,
             Store = new Dictionary<string, ProfileData> { [ProfileName] = profileData },

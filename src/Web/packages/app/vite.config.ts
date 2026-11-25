@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { setupBridge } from "@nocturne/bridge";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { KIT_CSP } from "./src/lib/server/content-security-policy";
 import manifest from "./package.json" with { type: "json" };
 
 // @resend/chat-sdk-adapter (via @nocturne/bot) renders email cards with React
@@ -37,6 +38,7 @@ const reactAliases = {
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
 import { wuchale } from 'wuchale/vite'
+import { privateDevCatalogue, WUCHALE_CONFIG_PATH } from './wuchale.dev.js'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -53,7 +55,9 @@ export default defineConfig(({ mode }) => {
       // RangeCalendar throw "Unknown date type" (reports filter, date pickers).
       // tailwind-variants is installed once per tailwindcss peer; tailwind-merge
       // is listed so a workspace pin drifting again still bundles one copy.
-      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants"],
+      // layerchart keys its chart context per copy, so a track from @nocturne/charts inside the
+      // app's <Chart> (or the reverse) would read a fallback context from a second copy.
+      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants", "layerchart"],
     },
     ssr: {
       // Bundle the Resend adapter (and its React deps) into the SSR output so
@@ -89,6 +93,10 @@ export default defineConfig(({ mode }) => {
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
         adapter: adapter({ out: "build", precompress: true }),
+        // Turns off SvelteKit's form origin check; csrfHandle in hooks.server.ts runs it instead.
+        csrf: { trustedOrigins: ["*"] },
+        // The dev server's HMR client needs inline scripts, eval and its own socket.
+        ...(mode === "development" ? {} : { csp: KIT_CSP }),
         experimental: { remoteFunctions: true },
         tracing: { server: true },
       }),
@@ -97,7 +105,8 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
-      wuchale(),
+      privateDevCatalogue('app'),
+      wuchale({ configPath: WUCHALE_CONFIG_PATH }),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {
         name: "websocket-bridge",
@@ -181,7 +190,16 @@ export default defineConfig(({ mode }) => {
         ],
       },
       watch: {
-        ignored: ["**/node_modules/**", "**/.git/**"],
+        // Wuchale rewrites its proxies and loaders, unchanged, on every extraction; seen by the
+        // watcher, each rewrite is another SSR page reload. The compiled catalogues stay watched:
+        // a new string reaches the page only through their change events.
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/locales/.wuchale/*.proxy*.js",
+          "**/locales/data.js",
+          "**/locales/*.loader*.js",
+        ],
         usePolling: false,
       },
       fs: {

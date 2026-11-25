@@ -27,16 +27,16 @@ const reason = (err: string, body: string) =>
   `${body}?.detail ?? ${body}?.title ?? ${body}?.message ?? ${err}?.message`;
 
 export default {
-  openApiPath: './packages/app/src/lib/api/generated/openapi.json',
+  openApiPath: './packages/api-client/src/openapi.json',
   outputDir: './packages/app/src/lib',
   remoteFunctionsOutput: 'api/generated',
   apiClientOutput: 'api/api-client.generated.ts',
   imports: {
-    schemas: '#lib/api/generated/schemas.js',
+    schemas: '@nocturne/api-client/schemas',
     apiTypes: '#lib/api/index.js',
     server: '#lib/api/remote-server.js',
   },
-  nswagClientPath: './generated/nocturne-api-client',
+  nswagClientPath: '@nocturne/api-client',
   // Matches nswag.json: the client has no date reviver, so a date-time is the ISO
   // text the API sent, and is typed that way.
   dateTimeType: 'string',
@@ -45,9 +45,10 @@ export default {
   errorHandling: {
     // `parseErrorBody` recovers the reason from an error body NSwag left unparsed;
     // both the 403 and 500 arms read it. `parseIssues` validates the structured
-    // issues the 400/409 arm forwards. See `#lib/api/error-body`.
+    // issues the 400/409 arm forwards, and `parseCode` the problem code the
+    // 400, 404, 409 and 429 arms forward. See `#lib/api/error-body`.
     imports: [
-      `import { parseErrorBody, parseIssues } from '#lib/api/error-body.js';`,
+      `import { parseCode, parseErrorBody, parseIssues } from '#lib/api/error-body.js';`,
     ],
 
     // The default redirects queries to /auth/login on 401. For a public share
@@ -56,8 +57,9 @@ export default {
     // may not have shared, each 401ing — so the default bounces them to login
     // ("flash of dashboard, then redirect"). On a share host, surface 401 as a
     // normal error instead so unshared categories just fail their widget rather
-    // than navigating away. Commands/forms already throw error(401) and never
-    // redirected.
+    // than navigating away. A command or form throws error(401), since a command
+    // may not redirect; the browser sends the person to sign in from there
+    // (`createRemoteSignInFetch` in `#lib/api/auth-interceptor`).
     //
     // The redirect carries no return address: a query cannot read `event.url`.
     // The (authenticated) layout already sends an anonymous page load to login
@@ -73,12 +75,18 @@ export default {
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
     //
+    // The refusal's `code` is forwarded beside the reason, so a page words a
+    // `missing_scope` refusal itself instead of showing the server's English.
+    // A `sign_in_required` code opens nothing here: a refused write opens the
+    // sign-in prompt from its call site (`confirmIdentity.askAfterRefusal`).
+    //
     // The generator emits this arm inside a block of its own, so it may declare
     // the locals the read order needs.
     on403:
       `const e403 = err as any;\n` +
       `      const b403 = parseErrorBody(e403);\n` +
-      `      throw error(403, ${reason('e403', 'b403')} ?? 'Forbidden')`,
+      `      const c403 = parseCode(e403?.code) ?? b403?.code;\n` +
+      `      throw error(403, ${reason('e403', 'b403')} ?? 'Forbidden', c403 ? { code: c403 } : {})`,
 
     // The default `on500` swallows every non-401/403 status as a 500 with a
     // generic message. Forward 400 (validation, e.g. cyclic alert_state
@@ -92,14 +100,20 @@ export default {
     // 500 no matter what the response said.
     //
     // 429 and 404 are forwarded too, and with a fixed reason rather than the
-    // extracted message: the rate limiter's body declares no typed schema, so
-    // NSwag supplies its own "status code was not expected" text, and a missing
-    // resource is answered with either an empty body (`NotFound()`) or a `detail`
-    // that echoes back the id it was handed ("Body weight record with ID … not
-    // found") — neither is copy to put in front of a user, while the status is
+    // extracted message: an operation that declares no 429 gets NSwag's
+    // own "status code was not expected" text, and a
+    // missing resource is answered with either an empty body (`NotFound()`) or a
+    // `detail` that echoes back the id it was handed ("Body weight record with
+    // ID … not found") — neither is copy to put in front of a user, while the status is
     // what tells a caller "already gone"/"you were throttled" from "this failed".
     // `describeSubmitError` and `remoteErrorMessage` resolve the wording from
     // the status.
+    //
+    // Each of those four statuses also forwards a well-formed `code`, the stable
+    // machine code a ProblemDetails carries as an extension, as `body.code`, so
+    // the page can pick its own translated sentence for a status that has
+    // several causes. On 404 and 429 it is the only thing taken from the body:
+    // the `detail` beside it still never reaches the page.
     //
     // A forwarded 404 reaches a query and a command differently, and both are
     // wanted: a query awaited by a page load renders the not-found page, while a
@@ -113,9 +127,11 @@ export default {
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? ${reason('e', 'b')};\n` +
       `    const issues = parseIssues(e?.issues) ?? b?.issues;\n` +
-      `    if (status === 429) throw error(429, 'Too many requests');\n` +
-      `    if (status === 404) throw error(404, 'Not found');\n` +
-      `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected', issues ? { issues } : {});\n` +
+      `    const code = parseCode(e?.code) ?? b?.code;\n` +
+      `    const coded = code ? { code } : {};\n` +
+      `    if (status === 429) throw error(429, 'Too many requests', coded);\n` +
+      `    if (status === 404) throw error(404, 'Not found', coded);\n` +
+      `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected', { ...(issues ? { issues } : {}), ...coded });\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,
   },
 };

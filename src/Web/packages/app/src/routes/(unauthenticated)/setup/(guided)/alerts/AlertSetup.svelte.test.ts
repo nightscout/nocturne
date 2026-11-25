@@ -120,6 +120,24 @@ describe("alerts guided page", () => {
     await expect.element(page.getByRole("switch", { name: "High", exact: true })).not.toBeChecked();
   });
 
+  it("shows a rule set in the rule editor with no level, and sends no level for it", async () => {
+    render(AlertSetup, { status: status({ saved: true, rules: [
+      { kind: StarterAlertKind.UrgentLow, isEnabled: true, threshold: 55 },
+      { kind: StarterAlertKind.Low, isEnabled: true, setInRuleEditor: true },
+      { kind: StarterAlertKind.High, isEnabled: true, threshold: 250 },
+      { kind: StarterAlertKind.NoReadings, isEnabled: true },
+    ] }), voice: self });
+
+    await expect.element(page.getByTestId("starter-rule-Low-from-editor")).toHaveTextContent("Set in the rule editor");
+    await expect.element(page.getByRole("spinbutton", { name: "Low threshold", exact: true })).not.toBeInTheDocument();
+
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    expect(api.save).toHaveBeenCalled();
+    const sent = api.save.mock.calls[0][0].rules.find((r: { kind: string }) => r.kind === StarterAlertKind.Low);
+    expect(sent).toEqual({ kind: StarterAlertKind.Low, isEnabled: true, threshold: undefined });
+  });
+
   it("notes, without blocking, that urgent lows go unalerted once urgent low is off", async () => {
     render(AlertSetup, { status: status(), voice: self });
     await expect.element(note()).not.toBeInTheDocument();

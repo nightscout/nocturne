@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.Gluroo.Configurations;
     ServiceNames.GlurooConnector,
     "GLUROO",
     "ConnectSource.Gluroo",
-    "gluroo-connector",
+    DataSources.GlurooConnector,
     "gluroo",
     ConnectorCategory.Sync,
     "Sync glucose, treatment, and profile data from Gluroo Global Connect",
@@ -33,4 +33,8 @@ public class GlurooConnectorConfiguration : NightscoutConnectorConfiguration
     {
         ConnectSource = ConnectSource.Gluroo;
     }
+
+    /// <summary>Gluroo Global Connect issues every connection a secret, and reads nothing without it.</summary>
+    [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
+    public override string ApiSecret { get; set; } = string.Empty;
 }

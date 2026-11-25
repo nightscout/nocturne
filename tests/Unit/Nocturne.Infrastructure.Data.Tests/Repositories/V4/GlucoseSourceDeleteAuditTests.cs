@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -235,7 +236,7 @@ public class CalibrationRepositorySourceDeleteTests : GlucoseSourceDeleteAuditTe
         };
 
     protected override Task<int> DeleteBySourceAsync(string source, WriteOrigin origin) =>
-        _repository.DeleteBySourceAsync(source, origin);
+        _repository.DeleteAsync(RecordSelector.ForSource(source), origin);
 
     protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin) =>
         _repository.DeleteByTimeRangeAsync(from, to, origin);
@@ -264,7 +265,7 @@ public class MeterGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAuditT
         };
 
     protected override Task<int> DeleteBySourceAsync(string source, WriteOrigin origin) =>
-        _repository.DeleteBySourceAsync(source, origin);
+        _repository.DeleteAsync(RecordSelector.ForSource(source), origin);
 
     protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin) =>
         _repository.DeleteByTimeRangeAsync(from, to, origin);
@@ -282,7 +283,7 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new SensorGlucoseRepository(
             contextFactory,
-            new Mock<IDeduplicationService>().Object,
+            new Mock<IDuplicateLinker>().Object,
             auditContext,
             Logger<SensorGlucoseRepository>(),
             entrySink: EntrySink.Object);
@@ -299,7 +300,7 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
         };
 
     protected override Task<int> DeleteBySourceAsync(string source, WriteOrigin origin) =>
-        _repository.DeleteBySourceAsync(source, origin);
+        _repository.DeleteAsync(RecordSelector.ForSource(source), origin);
 
     protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin) =>
         _repository.DeleteByTimeRangeAsync(from, to, origin);

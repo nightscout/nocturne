@@ -1,9 +1,6 @@
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Moq;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -32,7 +29,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
     }
 
     private EntryDecomposer CreateDecomposer() =>
-        new(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _logger.Object);
+        EntryDecomposerDoubles.Build(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, logger: _logger.Object);
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -111,7 +108,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         count.Should().Be(0);
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().Contain(m => m!.Contains("has no conditions"));
     }
 
@@ -130,7 +127,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         _calRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Never);
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotContain(m => m!.Contains("forged-line") || m.Contains('\r') || m.Contains('\n') || m.Contains("other"));
     }
 
@@ -146,7 +143,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
 
         _logger.Invocations
             .Where(i => i.Method.Name == nameof(ILogger.Log))
-            .Select(i => i.Arguments[2].ToString())
+            .Select(i => i.Arguments[2]!.ToString())
             .Should().NotContain(m => m!.Contains("secret-value"));
     }
 

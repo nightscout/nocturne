@@ -20,7 +20,6 @@
           null
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

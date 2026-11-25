@@ -24,14 +24,14 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    /// <param name="changes">Optional; null tells no one of a write.</param>
     // logger is unused but retained for DI + direct test construction.
     public UploaderSnapshotRepository(
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<UploaderSnapshotRepository> logger,
-        IV4RecordBroadcaster<UploaderSnapshot>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 
@@ -45,27 +45,6 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
     protected override void ApplyUpdate(UploaderSnapshotEntity target, UploaderSnapshot source) =>
         UploaderSnapshotMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Gets uploader snapshots by correlation IDs.
-    /// </summary>
-    /// <param name="correlationIds">The correlation IDs to match.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Matching uploader snapshots.</returns>
-    public async Task<IEnumerable<UploaderSnapshot>> GetByCorrelationIdsAsync(
-        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
-    {
-        var ids = correlationIds.ToList();
-        if (ids.Count == 0) return [];
-
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.UploaderSnapshots
-            .AsNoTracking()
-            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
-            .ToListAsync(ct);
-
-        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
-    }
-
     /// <inheritdoc />
     public async Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
     {
@@ -77,6 +56,16 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
             .ThenBy(e => e.Battery)                 // lowest battery first
             .ThenByDescending(e => e.Timestamp)     // tie-break: most recent
             .FirstOrDefaultAsync(ct);
+        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<UploaderSnapshot?> GetLatestOfTypeAsync(string type, DateTime? asOf, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.UploaderSnapshots.AsNoTracking().Where(e => e.Type == type);
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        var entity = await query.OrderByDescending(e => e.Timestamp).FirstOrDefaultAsync(ct);
         return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
     }
 }

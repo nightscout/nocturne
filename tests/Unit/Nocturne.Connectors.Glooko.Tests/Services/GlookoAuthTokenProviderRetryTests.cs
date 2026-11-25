@@ -2,12 +2,13 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -45,6 +46,24 @@ public class GlookoAuthTokenProviderRetryTests
 
         token.Should().BeNull();
         handler.CallCount.Should().Be(1, "retrying a rejected credential cannot help and risks lockout");
+    }
+
+    /// <summary>
+    ///     A sign-in changes nothing at Glooko, so the resilience handler may send it again.
+    /// </summary>
+    [Fact]
+    public async Task GetValidTokenAsync_MarksTheSignInPostRepeatable()
+    {
+        var repeatable = new List<bool>();
+        var handler = new ScriptedHandler(request =>
+        {
+            repeatable.Add(request.Method == HttpMethod.Post && RepeatableRequest.IsRepeatable(request));
+            return SignInSuccess();
+        });
+
+        await AuthenticateAsync(handler);
+
+        repeatable.Should().Equal(true);
     }
 
     /// <summary>
@@ -93,9 +112,7 @@ public class GlookoAuthTokenProviderRetryTests
     {
         using var httpClient = new HttpClient(handler);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -104,7 +121,7 @@ public class GlookoAuthTokenProviderRetryTests
             httpClient,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<GlookoAuthTokenProvider>.Instance,
             retryDelay.Object);
 

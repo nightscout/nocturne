@@ -2,7 +2,7 @@
   import type {
     AvailableConnector,
     ServicesOverview,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { Card, CardContent } from "#lib/components/ui/card/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";

@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.Core.Models.Configuration;
 
 /// <summary>
@@ -40,22 +42,16 @@ public static class GlucoseUnitDefaults
     }
 
     /// <summary>
-    /// Maps the spellings Nightscout and its uploaders use ("mmol/L", "mmol", "mg/dL", "mgdl") to
-    /// "mmol" or "mg/dl". Null for anything else, including null.
+    /// Maps a spelling <see cref="GlucoseUnits.Parse"/> reads to "mmol" or "mg/dl". Null for
+    /// anything else, including null.
     /// </summary>
-    public static string? Normalize(string? units)
-    {
-        if (string.IsNullOrWhiteSpace(units))
-            return null;
-
-        var letters = new string(units.Where(char.IsLetter).ToArray()).ToLowerInvariant();
-        return letters switch
+    public static string? Normalize(string? units) =>
+        GlucoseUnits.Parse(units) switch
         {
-            "mmol" or "mmoll" => Mmol,
-            "mgdl" => MgDl,
+            GlucoseUnit.Mmol => Mmol,
+            GlucoseUnit.MgDl => MgDl,
             _ => null,
         };
-    }
 
     /// <summary>
     /// The specific culture a language-only tag stands for ("sv" is "sv-SE"), or null where the

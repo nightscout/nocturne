@@ -48,6 +48,43 @@ public static class AdvisoryLockExtensions
     }
 
     /// <summary>
+    /// The lock on a pair of ids, folded together to the second int key, for a row keyed by both that
+    /// may not exist yet.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public static Task LockForTransactionAsync(
+        this DbContext context,
+        int lockClass,
+        Guid first,
+        Guid second,
+        CancellationToken ct) =>
+        LockKeysAsync(context, lockClass, [LockKey(first, second)], ct);
+
+    /// <summary>
+    /// The locks on several pairs of ids, as <see cref="LockForTransactionAsync(DbContext, int, Guid, Guid, CancellationToken)"/>
+    /// takes one, in ascending key order, so two transactions that each take several cannot each hold
+    /// what the other waits for.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public static Task LockAllForTransactionAsync(
+        this DbContext context,
+        int lockClass,
+        IEnumerable<(Guid First, Guid Second)> pairs,
+        CancellationToken ct) =>
+        LockKeysAsync(context, lockClass, pairs.Select(p => LockKey(p.First, p.Second)).Distinct().Order().ToList(), ct);
+
+    private static async Task LockKeysAsync(DbContext context, int lockClass, IReadOnlyList<int> keys, CancellationToken ct)
+    {
+        if (!context.Database.IsNpgsql())
+            return;
+        if (context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("An advisory lock is taken inside a transaction");
+
+        foreach (var key in keys)
+            await context.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({lockClass}, {key})", ct);
+    }
+
+    /// <summary>
     /// Takes the lock only when no other transaction holds it. Other providers always get it.
     /// </summary>
     /// <returns>Whether this transaction now holds the lock.</returns>
@@ -67,6 +104,8 @@ public static class AdvisoryLockExtensions
             .SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({lockClass}, {LockKey(id)}) AS \"Value\"")
             .SingleAsync(ct);
     }
+
+    private static int LockKey(Guid first, Guid second) => LockKey(first) ^ int.RotateLeft(LockKey(second), 16);
 
     private static int LockKey(Guid id)
     {

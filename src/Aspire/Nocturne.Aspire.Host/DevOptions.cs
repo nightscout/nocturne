@@ -20,6 +20,12 @@ internal sealed record DevOptions
 
     public DevAutoSeedOptions AutoSeed { get; set; } = new();
 
+    /// <summary>
+    /// The API carries seeded sample data on to the present every minute, so a seeded tenant stays
+    /// live (<c>SampleData:Live</c> on the API).
+    /// </summary>
+    public bool LiveSampleData { get; set; } = true;
+
     public static DevOptions From(IConfiguration configuration) =>
         configuration.GetSection(SectionName).Get<DevOptions>() ?? new DevOptions();
 }

@@ -15,14 +15,13 @@ public class AuthenticationFailureReasonTests
         public TestConnectorService()
             : base(new HttpClient(),
                 new ConnectorServerResolver<TestConfig>(null, null, null),
-                NullLogger<TestConnectorService>.Instance)
+                NullLogger<TestConnectorService>.Instance,
+                new RecordingRetryDelayStrategy())
         {
         }
 
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
-
-        public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
         protected override Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request,

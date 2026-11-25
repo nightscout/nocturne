@@ -12,7 +12,9 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Controller for managing sleep sessions recorded by wearables or health platforms.
+/// Sleep sessions recorded by wearables or health platforms. A session is a time-bounded sleep period
+/// with optional stage intervals and biometric samples. Callers can list, read, add (singly or in bulk),
+/// update and delete sessions.
 /// </summary>
 /// <remarks>
 /// Sleep sessions include time-bounded sleep periods with optional stage intervals
@@ -22,7 +24,7 @@ namespace Nocturne.API.Controllers.V4;
 /// <seealso cref="ISleepService"/>
 /// <seealso cref="SleepSession"/>
 [ApiController]
-[Tags("Sleep")]
+[Tags("Health")]
 [Route("api/v4/sleep/sessions")]
 [Authorize]
 public class SleepController : ControllerBase
@@ -51,13 +53,11 @@ public class SleepController : ControllerBase
         [FromQuery] string sort = "timestamp_desc",
         CancellationToken cancellationToken = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
+            return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
-        limit = V4ReadLimits.ClampLimit(limit);
-        offset = V4ReadLimits.ClampOffset(offset);
-
-        var descending = sort == "timestamp_desc";
         var data = await _sleepService.GetSessionsAsync(from, to, type, source, limit, offset, descending, cancellationToken: cancellationToken);
         var total = await _sleepService.CountSessionsAsync(from, to, type, source, cancellationToken);
         return Ok(new PaginatedResponse<SleepSession> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
@@ -103,7 +103,11 @@ public class SleepController : ControllerBase
     }
 
     /// <summary>
-    /// Create or upsert sleep sessions in bulk (max 100)
+    /// Create or upsert sleep sessions in bulk (max 100). Sessions are upserted one by one, so a
+    /// retried batch is idempotent. A session matching one the user deleted is left out of the
+    /// write and of the response, where the single create answers `409 Conflict`. On a concurrent
+    /// insert conflict the request fails with `409 Conflict`; sessions upserted before it stay saved,
+    /// and retrying the whole batch is safe.
     /// </summary>
     /// <remarks>
     /// Sessions are upserted one by one with the same dedup semantics as the single create, so a

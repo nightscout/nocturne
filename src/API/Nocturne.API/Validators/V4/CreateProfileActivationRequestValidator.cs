@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -18,7 +19,7 @@ public class CreateProfileActivationRequestValidator : AbstractValidator<CreateP
 
     public CreateProfileActivationRequestValidator()
     {
-        RuleFor(x => x.BaseProfileName).NotEmpty().MaximumLength(256);
+        RuleFor(x => x.BaseProfileName).NotEmpty().MaximumLength(RecordColumnLengths.ProfileName);
         RuleFor(x => x.Percentage).InclusiveBetween(MinPercentage, MaxPercentage);
         RuleFor(x => x.TimeshiftHours).InclusiveBetween(-MaxTimeshiftHours, MaxTimeshiftHours);
         RuleFor(x => x.DurationMinutes).InclusiveBetween(0, MaxDurationMinutes).When(x => x.DurationMinutes is not null);

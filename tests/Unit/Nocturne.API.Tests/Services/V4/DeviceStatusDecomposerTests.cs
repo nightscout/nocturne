@@ -1,7 +1,9 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.V4;
@@ -12,10 +14,10 @@ using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
@@ -27,11 +29,14 @@ namespace Nocturne.API.Tests.Services.V4;
 
 public class DeviceStatusDecomposerTests : IDisposable
 {
+    private static readonly DateTimeOffset ReceivedAt = new(2026, 10, 29, 3, 4, 5, 678, TimeSpan.Zero);
+
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanService> _stateSpanServiceMock;
     private readonly List<StateSpan> _spans;
     private readonly Mock<IDeviceService> _deviceServiceMock;
     private readonly DeviceStatusExtrasRepository _extrasRepo;
+    private readonly SensorStateReportRepository _sensorStateRepo;
     private readonly DeviceStatusDecomposer _decomposer;
 
     public DeviceStatusDecomposerTests()
@@ -43,18 +48,18 @@ public class DeviceStatusDecomposerTests : IDisposable
         var pumpRepo = new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
         var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
         _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
+        _sensorStateRepo = new SensorStateReportRepository(ctxFactory, new SystemAuditContext(), NullLogger<SensorStateReportRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _spans = _stateSpanServiceMock.BacksWith([]);
         _deviceServiceMock = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
 
-        _decomposer = new DeviceStatusDecomposer(
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
             apsRepo, pumpRepo, uploaderRepo,
             _extrasRepo,
+            _sensorStateRepo,
             _stateSpanServiceMock.Object,
             _deviceServiceMock.Object,
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            time: new FakeTimeProvider(ReceivedAt));
     }
 
     public void Dispose()
@@ -337,6 +342,84 @@ public class DeviceStatusDecomposerTests : IDisposable
         var uploader = result.CreatedRecords[0].Should().BeOfType<V4Models.UploaderSnapshot>().Subject;
         uploader.Battery.Should().Be(75);
         uploader.IsCharging.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The document xDrip+ posts with "Upload Dexcom battery" on: <c>battery</c> is a sentence,
+    /// and the readings are keys the uploader model does not type.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_XdripTransmitterStatus_KeepsItsReadings()
+    {
+        var json = """
+            {
+                "device": "G6 Transmitter",
+                "uploader": {
+                    "days": 52,
+                    "daysEstimate": "52 / 100",
+                    "status": "OK",
+                    "voltagea": 296,
+                    "voltageb": 281,
+                    "resistance": 710,
+                    "resistance_status": "GOOD",
+                    "temperature": 31,
+                    "battery": "52 days (voltage: 296/281)",
+                    "lastQueried": 1700000000000,
+                    "type": "DEXCOM_TRANSMITTER"
+                }
+            }
+            """;
+        var ds = NightscoutJsonBody.ReadObjects<DeviceStatus>(JsonDocument.Parse(json).RootElement)!.Single();
+        ds.Mills = 1700000000000;
+
+        await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var uploaderRepo = new UploaderSnapshotRepository(
+            new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
+            NullLogger<UploaderSnapshotRepository>.Instance);
+        var stored = await uploaderRepo.GetLatestOfTypeAsync(V4Models.TransmitterStatus.UploaderType, asOf: null);
+
+        stored!.Battery.Should().BeNull();
+        V4Models.TransmitterStatus.From(stored).Should().BeEquivalentTo(new V4Models.TransmitterStatus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Device = "G6 Transmitter",
+            VoltageA = 296,
+            VoltageB = 281,
+            Resistance = 710,
+            Days = 52,
+            Status = "OK",
+            Temperature = 31,
+        });
+    }
+
+    [Fact]
+    public async Task GetLatestOfTypeAsync_SkipsNewerUploadersOfAnotherType()
+    {
+        var transmitter = new DeviceStatus
+        {
+            Mills = 1700000000000,
+            Device = "G6 Transmitter",
+            Uploader = new UploaderStatus
+            {
+                Type = V4Models.TransmitterStatus.UploaderType,
+                ExtensionData = new() { ["voltagea"] = JsonSerializer.SerializeToElement(288) },
+            },
+        };
+        var phone = new DeviceStatus
+        {
+            Mills = 1700000600000,
+            Device = "Google Pixel 8",
+            Uploader = new UploaderStatus { Battery = 64, Type = "PHONE" },
+        };
+        await _decomposer.DecomposeBatchAsync([transmitter, phone], null, WriteOrigin.Live);
+
+        var uploaderRepo = new UploaderSnapshotRepository(
+            new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
+            NullLogger<UploaderSnapshotRepository>.Instance);
+        var stored = await uploaderRepo.GetLatestOfTypeAsync(V4Models.TransmitterStatus.UploaderType, asOf: null);
+
+        V4Models.TransmitterStatus.From(stored)!.VoltageA.Should().Be(288);
     }
 
     #endregion
@@ -956,6 +1039,47 @@ public class DeviceStatusDecomposerTests : IDisposable
         _decomposer.ResolveTimestamp(withIobTime)
             .Should().Be(new DateTime(2026, 10, 4, 23, 19, 0, DateTimeKind.Utc));
     }
+
+    [Fact]
+    public async Task DecomposeAsync_UploadWithoutCreatedAt_IsDatedByReceiptAheadOfThePredictionStart()
+    {
+        var ds = JsonSerializer.Deserialize<DeviceStatus>("""
+            {"_id":"loop-no-created-at","device":"Loop/3.0",
+             "loop":{"iob":{"iob":1.8},"predicted":{"values":[130,125],"startDate":"2026-10-04T22:00:00Z"}}}
+            """)!;
+
+        var aps = await DecomposeApsAsync(ds);
+
+        ds.CreatedAt.Should().Be("2026-10-29T03:04:05.678Z");
+        aps.Timestamp.Should().Be(ReceivedAt.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CreatedAtSent_KeepsIt()
+    {
+        var ds = LoopStatusWithOnlyAPredictionStart("loop-with-created-at");
+        ds.CreatedAt = "2026-10-04T23:18:55.000Z";
+
+        var aps = await DecomposeApsAsync(ds);
+
+        ds.CreatedAt.Should().Be("2026-10-04T23:18:55.000Z");
+        aps.Timestamp.Should().Be(new DateTime(2026, 10, 4, 23, 18, 55, DateTimeKind.Utc));
+    }
+
+    private static DeviceStatus LoopStatusWithOnlyAPredictionStart(string id) => new()
+    {
+        Id = id,
+        Device = "Loop/3.0",
+        Loop = new LoopStatus
+        {
+            Iob = new LoopIob { Iob = 1.8 },
+            Predicted = new LoopPredicted
+            {
+                Values = [130, 125],
+                StartDate = "2026-10-04T22:00:00Z",
+            },
+        },
+    };
 
     #endregion
 
@@ -1725,6 +1849,35 @@ public class DeviceStatusDecomposerTests : IDisposable
         result.Should().Be(V4Models.AidAlgorithm.OpenAps);
     }
 
+    [Fact]
+    public void DetectOpenApsVariant_AapsAppWithEmptyUploader_IsAndroidAps()
+    {
+        // NSClientV3 (AAPS 4.0) names itself only in the top-level "app" field.
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(
+            """
+            {"device":"openaps://Pixel","app":"AAPS","uploader":{},"openaps":{"suggested":{"bg":115}}}
+            """
+        )!;
+
+        var result = DeviceStatusDecomposer.DetectOpenApsVariant(ds);
+
+        result.Should().Be(V4Models.AidAlgorithm.AndroidAps);
+    }
+
+    [Fact]
+    public void DetectOpenApsVariant_OtherApp_DoesNotMatchAndroidAps()
+    {
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(
+            """
+            {"device":"openaps://rig","app":"oref0","openaps":{"suggested":{"bg":115}}}
+            """
+        )!;
+
+        var result = DeviceStatusDecomposer.DetectOpenApsVariant(ds);
+
+        result.Should().Be(V4Models.AidAlgorithm.OpenAps);
+    }
+
     #endregion
 
     #region Trio Prediction Mapping
@@ -1998,16 +2151,14 @@ public class DeviceStatusDecomposerTests : IDisposable
                 [.. ids.Select(id => { patientDevice.DeviceId = id; return patientDevice; })]);
 
         var ctxFactory = new TestNocturneDbContextFactory(_context);
-        return new DeviceStatusDecomposer(
+        return DeviceStatusDecomposerDoubles.Build(
             new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance),
             new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance),
             new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance),
             _extrasRepo,
+            _sensorStateRepo,
             _stateSpanServiceMock.Object,
-            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()),
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()));
     }
 
     private static V4Models.PatientDevice MakeDatedPatientDevice() => new()
@@ -2229,9 +2380,9 @@ public class DeviceStatusDecomposerTests : IDisposable
     [InlineData("2026-04-12T09:35:00Z", "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 35)]
     [InlineData(null, "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 33)]
     [InlineData(null, null, "2026-04-12T09:36:00.000Z", 36)]
-    [InlineData(null, null, null, 30)]
+    [InlineData(null, null, null, null)]
     public async Task DecomposeAsync_LoopWithMillsZero_PrefersTheLoopCycleTimeToThePredictionStart(
-        string? loopTimestamp, string? pumpClock, string? createdAt, int expectedMinute)
+        string? loopTimestamp, string? pumpClock, string? createdAt, int? expectedMinute)
     {
         var ds = new DeviceStatus
         {
@@ -2247,7 +2398,9 @@ public class DeviceStatusDecomposerTests : IDisposable
             Pump = new PumpStatus { Clock = pumpClock },
             Override = new OverrideStatus { Active = true, Duration = 30.0 },
         };
-        var expected = new DateTime(2026, 4, 12, 9, expectedMinute, 0, DateTimeKind.Utc);
+        var expected = expectedMinute is { } minute
+            ? new DateTime(2026, 4, 12, 9, minute, 0, DateTimeKind.Utc)
+            : ReceivedAt.UtcDateTime;
 
         var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
 
@@ -2260,6 +2413,240 @@ public class DeviceStatusDecomposerTests : IDisposable
     #endregion
 
     #region LoopJson and AidVersion
+
+    [Fact]
+    public async Task DecomposeAsync_OpenApsKeysTheModelDoesNotName_SurviveTheStoreAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "suggested": {
+                "timestamp": "2023-11-14T12:00:00Z",
+                "reason": "COB: 0",
+                "someNewField": { "nested": [1, 2] },
+                "predBGs": { "IOB": [100, 99], "aCOB": [100, 101] },
+                "requested": { "rate": 1.2, "requestedExtra": "x" }
+              },
+              "enacted": {
+                "timestamp": "2023-11-14T12:00:00Z",
+                "received": true,
+                "rate": 1.5,
+                "enactedExtra": 4,
+                "requested": { "rate": 1.5, "requestedExtra": "y" }
+              },
+              "iob": { "iob": 1.8, "basaliob": 0.4, "iobExtra": 7 },
+              "version": "0.7.0",
+              "openapsExtra": { "a": true }
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "openaps-unknown-keys",
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            OpenAps = JsonSerializer.Deserialize<OpenApsStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(aps.AdditionalProperties));
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(projected.OpenAps)).RootElement;
+
+        var suggested = read.GetProperty("suggested");
+        suggested.GetProperty("someNewField").GetProperty("nested").GetArrayLength().Should().Be(2);
+        suggested.GetProperty("predBGs").GetProperty("aCOB").GetArrayLength().Should().Be(2);
+        suggested.GetProperty("predBGs").GetProperty("IOB").GetArrayLength().Should().Be(2);
+        suggested.GetProperty("requested").GetProperty("requestedExtra").GetString().Should().Be("x");
+        var enacted = read.GetProperty("enacted");
+        enacted.GetProperty("enactedExtra").GetInt32().Should().Be(4);
+        enacted.GetProperty("requested").GetProperty("requestedExtra").GetString().Should().Be("y");
+        var iob = read.GetProperty("iob");
+        iob.GetProperty("iobExtra").GetInt32().Should().Be(7);
+        iob.GetProperty("iob").GetDouble().Should().Be(1.8);
+        read.GetProperty("openapsExtra").GetProperty("a").GetBoolean().Should().BeTrue();
+        read.GetProperty("version").GetString().Should().Be("0.7.0");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpKeysTheModelDoesNotName_SurviveTheStoreAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "clock": "2023-11-14T12:00:00Z",
+              "reservoir": 80,
+              "battery": { "percent": 70, "batteryExtra": 1 },
+              "status": { "status": "normal", "suspended": false, "statusExtra": "s" },
+              "iob": { "iob": 1.2, "bolusiob": 0.5, "iobExtra": 2 },
+              "extended": { "Version": "1.0", "ActiveProfile": "Default" },
+              "pumpExtra": { "a": [1] }
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "pump-unknown-keys",
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            Pump = JsonSerializer.Deserialize<PumpStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var pump = result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single();
+        pump.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(pump.AdditionalProperties));
+        var projected = ProjectPump(pump);
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(projected.Pump)).RootElement;
+
+        read.GetProperty("pumpExtra").GetProperty("a").GetArrayLength().Should().Be(1);
+        read.GetProperty("battery").GetProperty("batteryExtra").GetInt32().Should().Be(1);
+        read.GetProperty("battery").GetProperty("percent").GetInt32().Should().Be(70);
+        read.GetProperty("status").GetProperty("statusExtra").GetString().Should().Be("s");
+        read.GetProperty("iob").GetProperty("iobExtra").GetInt32().Should().Be(2);
+        var extended = read.GetProperty("extended");
+        extended.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("Version", "ActiveProfile");
+    }
+
+    [Theory]
+    [InlineData("activity", "0.021", JsonValueKind.Number)]
+    [InlineData("time", "\"2023-11-14T12:00:00Z\"", JsonValueKind.String)]
+    [InlineData("timestamp", "\"2023-11-14T12:00:00.000Z\"", JsonValueKind.String)]
+    [InlineData("mills", "1700000000000", JsonValueKind.Number)]
+    [InlineData("basaliob", "0.4", JsonValueKind.Number)]
+    public async Task DecomposeAsync_OpenApsIobField_SurvivesTheStoreAndTheV1Read(
+        string name, string json, JsonValueKind kind)
+    {
+        var uploaded = $$"""{ "iob": { "iob": 1.8, "{{name}}": {{json}} } }""";
+        var ds = new DeviceStatus
+        {
+            Id = "openaps-iob-" + name,
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            OpenAps = JsonSerializer.Deserialize<OpenApsStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(aps.AdditionalProperties));
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        var iob = JsonDocument.Parse(JsonSerializer.Serialize(projected.OpenAps)).RootElement.GetProperty("iob");
+
+        iob.GetProperty(name).ValueKind.Should().Be(kind);
+        iob.GetProperty(name).GetRawText().Should().Be(json);
+        iob.GetProperty("iob").GetDouble().Should().Be(1.8);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpFieldsTheSnapshotHasNoColumnFor_SurviveTheStoreAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "serial": "SN-0042",
+              "pumpMode": "Automatic",
+              "iob": { "iob": 1.2, "bolusiob": 0.5, "basaliob": 0.7, "timestamp": "2023-11-14T12:00:00Z" }
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "pump-modelled",
+            Mills = 1700000000000,
+            Device = "openaps://rig",
+            Pump = JsonSerializer.Deserialize<PumpStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var pump = result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single();
+        pump.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            JsonSerializer.Serialize(pump.AdditionalProperties));
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(ProjectPump(pump).Pump)).RootElement;
+
+        read.GetProperty("serial").GetString().Should().Be("SN-0042");
+        read.GetProperty("pumpMode").GetString().Should().Be("Automatic");
+        var iob = read.GetProperty("iob");
+        iob.GetProperty("basaliob").GetDouble().Should().Be(0.7);
+        iob.GetProperty("timestamp").GetString().Should().Be("2023-11-14T12:00:00Z");
+        iob.GetProperty("iob").GetDouble().Should().Be(1.2);
+        iob.GetProperty("bolusiob").GetDouble().Should().Be(0.5);
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_StoredModelledFieldsOfTheWrongKind_ComeBackAsStoredWithoutFailingTheRead()
+    {
+        var aps = new V4Models.ApsSnapshot
+        {
+            AidAlgorithm = V4Models.AidAlgorithm.OpenAps,
+            Iob = 1.8,
+            AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+                """{ "uploaded:openaps": { "iob": { "mills": "1700000000000", "activity": "x", "time": 5, "timestamp": true } } }"""),
+        };
+        var pump = new V4Models.PumpSnapshot
+        {
+            Iob = 1.2,
+            AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+                """{ "uploaded:pump": { "serial": 42, "iob": { "basaliob": "0.7", "timestamp": 9 } } }"""),
+        };
+
+        var read = DeviceStatusProjectionService.ProjectFromSnapshots(aps, pump, null, null, null);
+
+        var openApsIob = JsonDocument.Parse(JsonSerializer.Serialize(read.OpenAps)).RootElement.GetProperty("iob");
+        openApsIob.GetProperty("mills").GetString().Should().Be("1700000000000");
+        openApsIob.GetProperty("activity").GetString().Should().Be("x");
+        openApsIob.GetProperty("time").GetInt32().Should().Be(5);
+        openApsIob.GetProperty("timestamp").GetBoolean().Should().BeTrue();
+        var pumpRead = JsonDocument.Parse(JsonSerializer.Serialize(read.Pump)).RootElement;
+        pumpRead.GetProperty("serial").GetInt32().Should().Be(42);
+        pumpRead.GetProperty("iob").GetProperty("basaliob").GetString().Should().Be("0.7");
+        pumpRead.GetProperty("iob").GetProperty("timestamp").GetInt32().Should().Be(9);
+    }
+
+    private static DeviceStatus ProjectPump(V4Models.PumpSnapshot pump) =>
+        DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, null, null, null);
+
+    [Fact]
+    public async Task DecomposeAsync_LoopKeysTheModelDoesNotName_SurviveIntoLoopJsonAndTheV1Read()
+    {
+        const string uploaded = """
+            {
+              "iob": { "iob": 1.8, "timestamp": "2023-11-14T12:00:00Z", "futureIobKey": 7 },
+              "automaticDoseRecommendation": {
+                "timestamp": "2023-11-14T12:00:00Z",
+                "bolusVolume": 0.25,
+                "tempBasalAdjustment": { "rate": 1.5, "duration": 1800 }
+              },
+              "testingDetails": { "remoteCommands": ["carbs-delete", "carbs-edit"] },
+              "version": "3.4"
+            }
+            """;
+        var ds = new DeviceStatus
+        {
+            Id = "loop-json-unknown-keys",
+            Mills = 1700000000000,
+            Device = "loop://iPhone",
+            Loop = JsonSerializer.Deserialize<LoopStatus>(uploaded),
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync([ds], null, WriteOrigin.Live);
+
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        var stored = JsonDocument.Parse(aps.LoopJson!).RootElement;
+        stored.GetProperty("testingDetails").GetProperty("remoteCommands").EnumerateArray()
+            .Select(e => e.GetString()).Should().Equal("carbs-delete", "carbs-edit");
+        var dose = stored.GetProperty("automaticDoseRecommendation");
+        dose.GetProperty("bolusVolume").GetDouble().Should().Be(0.25);
+        dose.GetProperty("tempBasalAdjustment").GetProperty("duration").GetInt32().Should().Be(1800);
+        stored.GetProperty("iob").GetProperty("futureIobKey").GetInt32().Should().Be(7);
+
+        var projected = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        var read = JsonDocument.Parse(JsonSerializer.Serialize(projected.Loop)).RootElement;
+        read.GetProperty("testingDetails").GetProperty("remoteCommands").GetArrayLength().Should().Be(2);
+        read.GetProperty("automaticDoseRecommendation").GetProperty("bolusVolume").GetDouble().Should().Be(0.25);
+        read.GetProperty("automaticDoseRecommendation").GetProperty("tempBasalAdjustment")
+            .GetProperty("rate").GetDouble().Should().Be(1.5);
+    }
 
     [Fact]
     public async Task DecomposeAsync_WithLoopData_StoresLoopJson()
@@ -2436,7 +2823,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             "_id": "aaps-stamps-1",
             "mills": 1700000000000,
             "device": "openaps://samsung",
-            "isValid": false,
+            "isValid": true,
             "srvModified": 1,
             "srvCreated": 1,
             "configuration": { "sensitivityType": "oref1" },
@@ -2507,6 +2894,163 @@ public class DeviceStatusDecomposerTests : IDisposable
         extrasEntities.Should().HaveCount(1);
         extrasEntities[0].ExtrasJson.Should().Contain("xdripjs");
     }
+
+    #region Sensor state → SensorStateReport
+
+    [Theory]
+    [InlineData("NO_ERROR_MESSAGE", SensorState.Ok)]
+    [InlineData("WARM_UP", SensorState.WarmingUp)]
+    [InlineData("CALIBRATION_REQUIRED", SensorState.CalibrationNeeded)]
+    [InlineData("SENSOR_ERROR", SensorState.Error)]
+    [InlineData("CHANGE_SENSOR", SensorState.Error)]
+    [InlineData("SENSOR_END_OF_LIFE", SensorState.Expired)]
+    public async Task ACareLinkSensorStateWritesItsMappedReport(string reported, SensorState expected)
+    {
+        await _decomposer.DecomposeBatchAsync([CareLinkStatus("carelink-1", reported)], "carelink-connector", WriteOrigin.Live);
+
+        var report = SensorStateReports().Single();
+        report.State.Should().Be(expected);
+        report.ReportedField.Should().Be(V4Models.SensorStateReport.CareLinkField);
+        report.ReportedValue.Should().Be(reported);
+        report.Device.Should().Be("CareLink MiniMed 780G");
+        report.DataSource.Should().Be("carelink-connector");
+        report.Timestamp.Should().Be(1700000000000L.ToUtcDateTime());
+        report.CorrelationId.Should().Be(_context.DeviceStatusExtras.Single().CorrelationId);
+    }
+
+    [Theory]
+    [InlineData(0x02, SensorState.WarmingUp)]
+    [InlineData(0x04, SensorState.CalibrationNeeded)]
+    [InlineData(0x05, SensorState.CalibrationNeeded)]
+    [InlineData(0x06, SensorState.Ok)]
+    [InlineData(0x08, SensorState.CalibrationNeeded)]
+    [InlineData(0x09, SensorState.CalibrationNeeded)]
+    [InlineData(0x0a, SensorState.CalibrationNeeded)]
+    [InlineData(0x0b, SensorState.Error)]
+    [InlineData(0x0c, SensorState.Error)]
+    [InlineData(0x0d, SensorState.CalibrationNeeded)]
+    [InlineData(0x0f, SensorState.Expired)]
+    [InlineData(0x10, SensorState.Error)]
+    [InlineData(0x11, SensorState.Error)]
+    [InlineData(0x12, SensorState.Error)]
+    public async Task AnXDripJsSessionCodeWritesItsMappedReport(int code, SensorState expected)
+    {
+        await _decomposer.DecomposeBatchAsync([XDripJsStatus("xdripjs-1", code)], "nightscout", WriteOrigin.Live);
+
+        var report = SensorStateReports().Single();
+        report.State.Should().Be(expected);
+        report.ReportedField.Should().Be(V4Models.SensorStateReport.XDripJsField);
+        report.ReportedValue.Should().Be(code.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        report.Device.Should().Be("xdripjs://rig");
+        report.DataSource.Should().Be("nightscout");
+    }
+
+    [Theory]
+    [InlineData(0x07)]
+    [InlineData(0x0e)]
+    [InlineData(0x01)]
+    [InlineData(0x03)]
+    [InlineData(0x13)]
+    public async Task AnXDripJsCodeOutsideTheAllowlistWritesNoReport(int code)
+    {
+        await _decomposer.DecomposeBatchAsync([XDripJsStatus("xdripjs-1", code)], "nightscout", WriteOrigin.Live);
+
+        SensorStateReports().Should().BeEmpty();
+        _context.DeviceStatusExtras.Should().ContainSingle("the extras row is written as before");
+    }
+
+    [Theory]
+    [InlineData("SENSOR_SIGNAL_LOST")]
+    [InlineData("SG_BELOW_40_MGDL")]
+    [InlineData("warm_up")]
+    [InlineData("")]
+    public async Task ACareLinkValueOutsideTheAllowlistWritesNoReport(string reported)
+    {
+        await _decomposer.DecomposeBatchAsync([CareLinkStatus("carelink-1", reported)], "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AStatusStatingNoSensorStateWritesNoReport()
+    {
+        await _decomposer.DecomposeBatchAsync(
+            [new DeviceStatus
+            {
+                Id = "carelink-1", Mills = 1700000000000, Device = "CareLink MiniMed 780G",
+                Cgm = new CgmStatus { Manufacturer = "Medtronic" },
+                XDripJs = new XDripJsStatus { StateString = "OK" },
+                Uploader = new UploaderStatus { Battery = 80 },
+            }],
+            "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CareLinksValueIsReadBeforeAnXDripJsCode()
+    {
+        var ds = CareLinkStatus("carelink-1", "SENSOR_ERROR");
+        ds.XDripJs = new XDripJsStatus { State = 0x06 };
+
+        await _decomposer.DecomposeBatchAsync([ds], "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Single().State.Should().Be(SensorState.Error);
+    }
+
+    [Fact]
+    public async Task AnUnrecognisedCareLinkValueFallsThroughToTheXDripJsCode()
+    {
+        var ds = CareLinkStatus("carelink-1", "SENSOR_SIGNAL_LOST");
+        ds.XDripJs = new XDripJsStatus { State = 0x0b };
+
+        await _decomposer.DecomposeBatchAsync([ds], "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Single().ReportedField.Should().Be(V4Models.SensorStateReport.XDripJsField);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AReUploadOfAStoredStatusWritesNoSecondReport(bool withSnapshot)
+    {
+        DeviceStatus Status()
+        {
+            var ds = CareLinkStatus("carelink-1", "WARM_UP");
+            if (!withSnapshot)
+                ds.Uploader = null;
+            return ds;
+        }
+
+        await _decomposer.DecomposeBatchAsync([Status()], "carelink-connector", WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([Status()], "carelink-connector", WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync([Status(), Status()], "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Should().ContainSingle();
+    }
+
+    private List<V4Models.SensorStateReport> SensorStateReports() =>
+        [.. _context.SensorStateReports.AsEnumerable().Select(Nocturne.Infrastructure.Data.Mappers.V4.SensorStateReportMapper.ToDomainModel)];
+
+    private static DeviceStatus CareLinkStatus(string id, string sensorState) => new()
+    {
+        Id = id,
+        Mills = 1700000000000,
+        Device = "CareLink MiniMed 780G",
+        Cgm = new CgmStatus { Manufacturer = "Medtronic", SensorState = sensorState },
+        Uploader = new UploaderStatus { Battery = 80 },
+    };
+
+    private static DeviceStatus XDripJsStatus(string id, int code) => new()
+    {
+        Id = id,
+        Mills = 1700000000000,
+        Device = "xdripjs://rig",
+        XDripJs = new XDripJsStatus { State = code, StateString = "x" },
+        Uploader = new UploaderStatus { Battery = 80 },
+    };
+
+    #endregion
 
     [Fact]
     public async Task DecomposeAsync_WithNoExtras_SkipsExtrasCreation()

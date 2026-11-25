@@ -1,0 +1,349 @@
+{
+  "schema_version": 1,
+  "name": "clock-skew-elapsed-leaves",
+  "description": "every leaf measuring now - anchor, anchor at 12:00: 3 minutes ahead and exactly 5 minutes ahead read the elapsed time as zero (staleness == 0, for_minutes 0 and the < bounds hold); 6 minutes ahead every leaf is unknown, the rule holds, clock_anomaly names the anchor, and next_change_at is 11:55, where it comes within the tolerance; behind the clock they measure as before",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "signal_loss",
+      "condition_params": {
+        "timeout_minutes": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": "==",
+        "value": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "loop_stale",
+      "condition_params": {
+        "operator": "<",
+        "minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "loop_enaction_stale",
+      "condition_params": {
+        "operator": "<",
+        "minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "site_age",
+      "condition_params": {
+        "operator": "<",
+        "value": 1
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "sensor_age",
+      "condition_params": {
+        "operator": "<",
+        "value": 1
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "time_since_last_carb",
+      "condition_params": {
+        "operator": "<",
+        "minutes": 30
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "rule-8",
+      "condition_type": "time_since_last_bolus",
+      "condition_params": {
+        "operator": "<",
+        "minutes": 30
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000009",
+      "name": "rule-9",
+      "condition_type": "alert_state",
+      "condition_params": {
+        "alert_id": "00000000-0000-0000-0000-000000000900",
+        "state": "firing",
+        "for_minutes": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "rule-10",
+      "condition_type": "pump_suspended",
+      "condition_params": {
+        "is_active": true,
+        "for_minutes": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "rule-11",
+      "condition_type": "override_active",
+      "condition_params": {
+        "is_active": true,
+        "for_minutes": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "rule-12",
+      "condition_type": "do_not_disturb",
+      "condition_params": {
+        "is_active": true,
+        "for_minutes": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "rule-13",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "Automatic",
+        "is_active": true,
+        "for_minutes": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000014",
+      "name": "rule-14",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": "Illness",
+        "is_active": true,
+        "for_minutes": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-04-01T11:57:00Z",
+      "context": {
+        "has_ever_aps_cycled": true,
+        "has_ever_pump_snapshot": true,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "last_reading_at": "2026-04-01T12:00:00Z",
+        "last_aps_cycle_at": "2026-04-01T12:00:00Z",
+        "last_aps_enacted_at": "2026-04-01T12:00:00Z",
+        "last_site_change_at": "2026-04-01T12:00:00Z",
+        "last_sensor_start_at": "2026-04-01T12:00:00Z",
+        "last_carb_at": "2026-04-01T12:00:00Z",
+        "last_bolus_at": "2026-04-01T12:00:00Z",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_pump_suspension": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_override": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_do_not_disturb": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "state": null,
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-04-01T11:55:00Z",
+      "context": {
+        "has_ever_aps_cycled": true,
+        "has_ever_pump_snapshot": true,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "last_reading_at": "2026-04-01T12:00:00Z",
+        "last_aps_cycle_at": "2026-04-01T12:00:00Z",
+        "last_aps_enacted_at": "2026-04-01T12:00:00Z",
+        "last_site_change_at": "2026-04-01T12:00:00Z",
+        "last_sensor_start_at": "2026-04-01T12:00:00Z",
+        "last_carb_at": "2026-04-01T12:00:00Z",
+        "last_bolus_at": "2026-04-01T12:00:00Z",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_pump_suspension": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_override": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_do_not_disturb": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "state": null,
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-04-01T11:54:00Z",
+      "context": {
+        "has_ever_aps_cycled": true,
+        "has_ever_pump_snapshot": true,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "last_reading_at": "2026-04-01T12:00:00Z",
+        "last_aps_cycle_at": "2026-04-01T12:00:00Z",
+        "last_aps_enacted_at": "2026-04-01T12:00:00Z",
+        "last_site_change_at": "2026-04-01T12:00:00Z",
+        "last_sensor_start_at": "2026-04-01T12:00:00Z",
+        "last_carb_at": "2026-04-01T12:00:00Z",
+        "last_bolus_at": "2026-04-01T12:00:00Z",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_pump_suspension": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_override": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_do_not_disturb": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "state": null,
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-04-01T12:40:00Z",
+      "context": {
+        "has_ever_aps_cycled": true,
+        "has_ever_pump_snapshot": true,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "last_reading_at": "2026-04-01T12:00:00Z",
+        "last_aps_cycle_at": "2026-04-01T12:00:00Z",
+        "last_aps_enacted_at": "2026-04-01T12:00:00Z",
+        "last_site_change_at": "2026-04-01T12:00:00Z",
+        "last_sensor_start_at": "2026-04-01T12:00:00Z",
+        "last_carb_at": "2026-04-01T12:00:00Z",
+        "last_bolus_at": "2026-04-01T12:00:00Z",
+        "active_alerts": [
+          {
+            "alert_id": "00000000-0000-0000-0000-000000000900",
+            "state": "firing",
+            "triggered_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_pump_suspension": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_override": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_do_not_disturb": {
+          "started_at": "2026-04-01T12:00:00Z"
+        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "state": null,
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

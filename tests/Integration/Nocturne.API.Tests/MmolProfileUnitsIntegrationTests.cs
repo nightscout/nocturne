@@ -167,6 +167,7 @@ public class MmolProfileUnitsIntegrationTests : ApiIntegrationTestBase
         var v3 = (await GetAsync(client, "/api/v3/profile?limit=10")).AsArray().Single()!;
         ShouldBeAsUploaded(v3, "v3 search");
         ShouldBeAsUploaded(await GetAsync(client, $"/api/v3/profile/{v3["identifier"]!.GetValue<string>()}"), "v3 by id");
+        await SettleHistoryAsync();
         ShouldBeAsUploaded((await GetAsync(client, "/api/v3/profile/history/0?limit=10")).AsArray().Single()!, "v3 history");
 
         ShouldBeAsUploaded((await GetAsync(client, "/api/v2/ddata"))["profiles"]!.AsArray().Single()!, "v2 ddata");

@@ -17,7 +17,7 @@ internal static class FlexibleNumberReader
     /// fractional values into them (<c>29.999999966</c>), so a fractional value is rounded rather than
     /// rejected. Rounding rather than truncating is what keeps these fields comparable to the
     /// <c>double?</c> fields AAPS checks them against: <c>duration</c> goes out through
-    /// <see cref="RoundedNullableDoubleConverter"/>, so a truncated <c>originalDuration</c> alongside a
+    /// <see cref="Treatment.DurationOnWire"/>, so a truncated <c>originalDuration</c> alongside a
     /// rounded <c>duration</c> would read to AAPS as a temp basal that was cut a minute short.
     /// </summary>
     public static int? ReadInt(ref Utf8JsonReader reader)
@@ -328,10 +328,10 @@ public class FlexibleNullableDoubleConverter : JsonConverter<double?>
 
 /// <summary>
 /// Reads a nullable double flexibly (number or string, like <see cref="FlexibleNullableDoubleConverter"/>)
-/// but writes it rounded to a whole number. Nightscout's <c>duration</c> is integer minutes on the wire;
-/// AAPS parses it as a Long and throws <c>NumberFormatException</c> on a fractional value. Rounding lives
-/// here — at serialization — rather than in the model getter, so in-memory calculations that rely on
-/// sub-minute precision (e.g. temp-basal duration cutting) keep the exact value.
+/// but writes it rounded to a whole number. AAPS types fields such as <c>protein</c> and <c>fat</c> as
+/// integers and throws on a fractional value. Rounding lives here, at serialization, rather than in the
+/// model getter, so in-memory calculations keep the exact value. <c>duration</c> does not use it: see
+/// <see cref="Treatment.DurationIsUploaded"/>.
 /// </summary>
 /// <seealso cref="FlexibleNullableDoubleConverter"/>
 public class RoundedNullableDoubleConverter : JsonConverter<double?>

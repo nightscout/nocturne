@@ -91,4 +91,21 @@ internal static class LegacyTreatmentRepositoryMockExtensions
             });
         return mock;
     }
+
+    /// <summary><see cref="IV4ToLegacyProjectionService.GetProjectedStateSpanTreatmentsAsync"/> through the per-id form.</summary>
+    public static Mock<IV4ToLegacyProjectionService> AnswersProjectedSpansPerId(this Mock<IV4ToLegacyProjectionService> mock)
+    {
+        mock.Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IReadOnlyCollection<string> ids, CancellationToken ct) =>
+            {
+                var spans = new Dictionary<string, Treatment>();
+                foreach (var id in ids)
+                {
+                    if (await mock.Object.GetProjectedStateSpanTreatmentAsync(id, ct) is { } span)
+                        spans[id] = span;
+                }
+                return (IReadOnlyDictionary<string, Treatment>)spans;
+            });
+        return mock;
+    }
 }

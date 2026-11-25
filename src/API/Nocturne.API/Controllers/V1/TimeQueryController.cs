@@ -3,6 +3,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Legacy;
@@ -13,11 +14,13 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Time query controller that provides 1:1 compatibility with Nightscout time-based endpoints.
-/// Supports bash-style brace expansion for complex time pattern matching.
+/// Nightscout time queries: find documents by time pattern, with bash-style brace expansion. A client can query
+/// by time pattern and slice documents by field.
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
 /// <remarks>
+/// Provides 1:1 compatibility with Nightscout time-based endpoints.
+///
 /// The <c>slice</c> and <c>echo</c> actions take the collection as a route or query value, so
 /// their governing scope is resolved per request through <see cref="LegacyStorageReadScopes"/>; a
 /// class-level OR would let a caller holding one category read another's records. The <c>times</c>
@@ -26,6 +29,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
+[ErrorEnvelope]
 public class TimeQueryController : ControllerBase
 {
     /// <summary>
@@ -87,7 +91,7 @@ public class TimeQueryController : ControllerBase
     [ProducesResponseType(500)]
     public async Task<ActionResult> GetTimeBasedEntriesWithPrefix(
         string prefix,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -113,7 +117,7 @@ public class TimeQueryController : ControllerBase
     public async Task<ActionResult> GetTimeBasedEntriesWithPrefixAndRegex(
         string prefix,
         string regex,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -124,7 +128,7 @@ public class TimeQueryController : ControllerBase
     private async Task<ActionResult> GetTimeBasedEntriesInternal(
         string? prefix = null,
         string? regex = null,
-        int count = 10,
+        int? count = null,
         string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -134,13 +138,15 @@ public class TimeQueryController : ControllerBase
             prefix,
             regex,
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
         {
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+
             // Validate parameters
-            if (count < 0)
+            if (pageSize < 0)
             {
                 _logger.LogWarning("Invalid count parameter: {Count}", count);
                 return BadRequest($"Count must be non-negative, got {count}");
@@ -156,7 +162,7 @@ public class TimeQueryController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            var entriesArray = entries.Take(count).ToArray();
+            var entriesArray = entries.Take(pageSize).ToArray();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries for time query",
@@ -169,25 +175,6 @@ public class TimeQueryController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error executing time-based query with prefix: {Prefix}, regex: {Regex}",
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
     }
 
     /// <summary>
@@ -198,6 +185,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="field">Field name to match patterns against</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     [HttpGet("times/echo")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/times/echo")]
     [ProducesResponseType(typeof(TimeQueryEcho), 200)]
     [ProducesResponseType(400)]
@@ -222,6 +210,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="field">Field name to match patterns against</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     [HttpGet("times/echo/{prefix}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/times/echo/{prefix}")]
     [ProducesResponseType(typeof(TimeQueryEcho), 200)]
     [ProducesResponseType(400)]
@@ -248,6 +237,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="field">Field name to match patterns against</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     [HttpGet("times/echo/{prefix}/{regex}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/times/echo/{prefix}/{regex}")]
     [ProducesResponseType(typeof(TimeQueryEcho), 200)]
     [ProducesResponseType(400)]
@@ -278,7 +268,7 @@ public class TimeQueryController : ControllerBase
             regex,
             storage,
             field,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -303,25 +293,6 @@ public class TimeQueryController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error generating time query echo with prefix: {Prefix}, regex: {Regex}",
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
     }
 
     /// <summary>
@@ -340,6 +311,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -347,7 +319,7 @@ public class TimeQueryController : ControllerBase
     public async Task<ActionResult> GetSlicedData(
         string storage,
         string field,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -378,6 +350,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}/{type}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}/{type}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -386,7 +359,7 @@ public class TimeQueryController : ControllerBase
         string storage,
         string field,
         string type,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -418,6 +391,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}/{type}/{prefix}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}/{type}/{prefix}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -427,7 +401,7 @@ public class TimeQueryController : ControllerBase
         string field,
         string type,
         string prefix,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -460,6 +434,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}/{type}/{prefix}/{regex}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}/{type}/{prefix}/{regex}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -470,7 +445,7 @@ public class TimeQueryController : ControllerBase
         string type,
         string prefix,
         string regex,
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -496,7 +471,7 @@ public class TimeQueryController : ControllerBase
         string? type = null,
         string? prefix = null,
         string? regex = null,
-        int count = 10,
+        int? count = null,
         string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -509,13 +484,15 @@ public class TimeQueryController : ControllerBase
             prefix,
             regex,
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
         {
+            var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
+
             // Validate parameters
-            if (count < 0)
+            if (pageSize < 0)
             {
                 _logger.LogWarning("Invalid count parameter: {Count}", count);
                 return BadRequest($"Count must be non-negative, got {count}");
@@ -544,7 +521,7 @@ public class TimeQueryController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            var entriesArray = entries.Take(count).ToArray();
+            var entriesArray = entries.Take(pageSize).ToArray();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries for slice query",
@@ -556,28 +533,6 @@ public class TimeQueryController : ControllerBase
         catch (TimePatternRejectedException ex)
         {
             return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error executing slice query - storage: {Storage}, field: {Field}, type: {Type}, prefix: {Prefix}, regex: {Regex}",
-                storage,
-                field,
-                type,
-                prefix,
-                regex
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
         }
     }
 

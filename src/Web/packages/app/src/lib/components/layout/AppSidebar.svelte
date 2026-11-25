@@ -16,6 +16,9 @@
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
   import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { coachmark } from "@nocturne/coach";
+  import { whileShown } from "#lib/coach-marks/attach.js";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
   import { buildAppNavigation, type NavItem, type NavLink } from "#lib/navigation/app-navigation.svelte.js";
   import {
     goToTenant,
@@ -118,6 +121,7 @@
       user,
       isGuestSession,
       isPlatformAdmin,
+      refusedAsDemoSubject: page.data.refusedAsDemoSubject ?? false,
       grantedScopes: page.data.effectivePermissions ?? [],
       tenantCount: tenantTargets.length,
       tenantless,
@@ -273,7 +277,12 @@
                 open={openMenus[item.id]}
                 onOpenChange={() => toggleMenu(item.id)}
               >
-                <Sidebar.MenuItem>
+                <!-- On a phone the navigation is a sheet, and a tip raised as it opens covers it. -->
+                <Sidebar.MenuItem
+                  {@attach isGuestSession && item.id === "reports" && !sidebar.isMobile
+                    ? whileShown(coachmark(coachFor("guest-tour.reports")))
+                    : undefined}
+                >
                   <Sidebar.MenuButton
                     isActive={isActive(item)}
                     onclick={() => toggleMenu(item.id)}

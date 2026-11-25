@@ -49,21 +49,23 @@ public class AlertReplayReadScopeTests
     [Theory]
     [InlineData(nameof(AlertReplayController.Replay))]
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
+    [InlineData(nameof(AlertReplayController.FindFirings))]
     public void ViewerRole_IsRefused(string action)
     {
         ViewerScopes().Should().NotContain(Scope.AlertsRead);
 
         Evaluate(action, authenticated: true, ViewerScopes())
-            .Should().BeOfType<ForbidResult>("a Viewer holds no alerts scope");
+            .Should().BeOfType<ScopeForbiddenResult>("a Viewer holds no alerts scope");
     }
 
     [Theory]
     [InlineData(nameof(AlertReplayController.Replay))]
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
+    [InlineData(nameof(AlertReplayController.FindFirings))]
     public void GuestSessionWithoutTheAlertsCategory_IsRefused(string action)
     {
         Evaluate(action, authenticated: true, GuestScopesWithoutAlerts())
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
     }
 
     /// <summary>
@@ -74,6 +76,7 @@ public class AlertReplayReadScopeTests
     [Theory]
     [InlineData(nameof(AlertReplayController.Replay))]
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
+    [InlineData(nameof(AlertReplayController.FindFirings))]
     public void AnonymousShareLink_IsRefused(string action)
     {
         Scope.PublicShareScopes.Should().Contain(Scope.AlertsRead);
@@ -85,6 +88,7 @@ public class AlertReplayReadScopeTests
     [Theory]
     [InlineData(nameof(AlertReplayController.Replay))]
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
+    [InlineData(nameof(AlertReplayController.FindFirings))]
     public void AlertsGrant_IsAdmitted(string action)
     {
         Evaluate(action, authenticated: true, [Scope.AlertsRead]).Should().BeNull();

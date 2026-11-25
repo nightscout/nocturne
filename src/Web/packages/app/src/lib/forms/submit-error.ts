@@ -1,11 +1,31 @@
-import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
-import { parseIssues } from "#lib/api/error-body.js";
+import type { RustValidationIssue } from "@nocturne/api-client";
+import { parseCode, parseIssues } from "#lib/api/error-body.js";
 import { recordApiFailure } from "#lib/support/api-failure-log.js";
 import {
   genericSubmitError,
   missingItemError,
+  missingScopeError,
   rateLimitedError,
+  signInRequiredError,
 } from "./submit-messages.svelte";
+
+/**
+ * The code of the API's scope refusal. Its detail names the scope, so it is never
+ * shown. A writer answers it with {@link missingScopeError} unless its policy
+ * sets `ownRefusalSentence`.
+ */
+const MISSING_SCOPE_CODE = "missing_scope";
+
+/**
+ * The code of the API's refusal of an action only the person's own sign-in may do, sent to a
+ * session that started from a sign-in link someone else issued.
+ */
+export const SIGN_IN_REQUIRED_CODE = "sign_in_required";
+
+/** Whether a rejection is the API's {@link SIGN_IN_REQUIRED_CODE} refusal. */
+export function isSignInRequired(err: unknown): boolean {
+  return errorStatus(err) === 403 && errorCode(err) === SIGN_IN_REQUIRED_CODE;
+}
 
 /** The HTTP status carried by a thrown value, if it has one. */
 export function errorStatus(err: unknown): number | undefined {
@@ -61,10 +81,27 @@ export function errorIssues(
 }
 
 /**
+ * The stable problem code a rejection carries, when the server sent one in the
+ * shape the API writes its codes in.
+ */
+export function errorCode(err: unknown): string | undefined {
+  const body = errorBody(err);
+  if (body === undefined || !("code" in body)) return undefined;
+
+  return parseCode(body.code);
+}
+
+/**
+ * The sentences a call site has for the problem codes it knows, keyed by code.
+ * A code outside the map, or none, leaves the answer to {@link RemoteErrorPolicy}.
+ */
+export type ProblemCodeMessages = Readonly<Record<string, string>>;
+
+/**
  * The bodies the client wrote itself rather than carried from the server.
  *
- * A scope refusal is usually a bare `ForbidResult`, which NSwag reports with one
- * of its own two `ApiException` messages, and an RFC-7807 refusal carrying no
+ * A refusal by the demo-subject guard is a bare `ForbidResult`, which NSwag
+ * reports with one of its own two `ApiException` messages, and an RFC-7807 refusal carrying no
  * `detail` reaches the 403 arm as its `title` — the status phrase. A query
  * refused on a share host carries the codegen's own 401 phrase. Only a
  * `Problem(detail: …)` refusal — the per-record scope guards — puts a sentence
@@ -145,9 +182,11 @@ function serverWrittenReason(err: unknown): string | undefined {
  *   server worded, so the writer takes a server-written body when there is one
  *   — see {@link CLIENT_WRITTEN_REASONS}. A reader's fallback names the exact
  *   permission and beats any body the server could send, so the reader always
- *   takes the fallback. A bare `ForbidResult` — what `[RequireScope]` produces,
- *   and so the common refusal — is client-written either way, so both halves
- *   answer it with the caller's sentence.
+ *   takes the fallback. A bare `ForbidResult` (the demo-subject guard) is
+ *   client-written either way, so both halves answer it with the caller's
+ *   sentence. A `missing_scope` refusal is coded rather than server-worded: a
+ *   writer answers it with {@link missingScopeError} ahead of its fallback,
+ *   unless `ownRefusalSentence` is set.
  * - `serverError` (5xx, a network failure, a thrown `Error` — anything that is
  *   not a 4xx). A person mid-task must not be shown a server's internal text,
  *   so the writer suppresses it; for a reader the body is the only clue why a
@@ -164,6 +203,13 @@ function serverWrittenReason(err: unknown): string | undefined {
  * than the operation decides, and the two {@link PERMISSION_GATED_MUTATION}
  * sets.
  *
+ * A `sign_in_required` 403 answers with {@link signInRequiredError} ahead of all of them except
+ * 429: the session started from a sign-in link someone else issued, and the person's own sign-in
+ * is what the action needs, so no caller's sentence fits. Describing it opens nothing: callers
+ * format inside `$derived`, where a state write throws. The write that was refused opens the
+ * prompt (`confirmIdentity.askAfterRefusal`), and a surface that knows the session is handed off
+ * offers it up front.
+ *
  * A 429 answers with {@link rateLimitedError} ahead of all of them, because
  * the rate limiter's body carries no `message` and a caller's fallback
  * describes what it asked for — "this invite link is invalid" for a request the
@@ -174,6 +220,11 @@ export interface RemoteErrorPolicy {
   readonly missing?: () => string;
   /** Whether a 403 the server worded itself outranks the caller's fallback. */
   readonly forbiddenReason: boolean;
+  /**
+   * Whether the caller's fallback is a refusal sentence of its own, which a
+   * `missing_scope` 403 leaves in place of {@link missingScopeError}.
+   */
+  readonly ownRefusalSentence?: boolean;
   /**
    * Whether a server-written body that did not come with a 4xx outranks the
    * caller's fallback.
@@ -204,6 +255,7 @@ const WRITE_SURFACE: RemoteErrorPolicy = {
 export const PERMISSION_GATED_MUTATION: RemoteErrorPolicy = {
   missing: missingItemError,
   forbiddenReason: true,
+  ownRefusalSentence: true,
   serverError: false,
   fault: genericSubmitError,
 };
@@ -228,10 +280,11 @@ export const READ_SURFACE: RemoteErrorPolicy = {
 export function describeRemoteError(
   err: unknown,
   fallback: string,
-  policy: RemoteErrorPolicy
+  policy: RemoteErrorPolicy,
+  codes?: ProblemCodeMessages
 ): string {
   const status = errorStatus(err);
-  const described = describe(err, fallback, policy, status);
+  const described = describe(err, fallback, policy, status, codes);
 
   // Every rejected API call the user is told about passes through here, and the
   // transport carries no path or correlation id, so this is the only place the
@@ -245,11 +298,23 @@ function describe(
   err: unknown,
   fallback: string,
   policy: RemoteErrorPolicy,
-  status: number | undefined
+  status: number | undefined,
+  codes: ProblemCodeMessages | undefined
 ): string {
   if (status === 429) return rateLimitedError();
+
+  const code = errorCode(err);
+  if (status === 403 && code === SIGN_IN_REQUIRED_CODE) return signInRequiredError();
+
+  if (code !== undefined && codes !== undefined && Object.hasOwn(codes, code)) {
+    return codes[code];
+  }
+
   if (status === 404) return policy.missing?.() ?? fallback;
   if (status === 403) {
+    if (policy.forbiddenReason && code === MISSING_SCOPE_CODE) {
+      return policy.ownRefusalSentence ? fallback : missingScopeError();
+    }
     return (
       (policy.forbiddenReason ? serverWrittenReason(err) : undefined) ??
       fallback
@@ -264,11 +329,13 @@ function describe(
 
 /**
  * Turns a rejected form submission into a message for the user, on the writing
- * half of {@link RemoteErrorPolicy}.
+ * half of {@link RemoteErrorPolicy}. `codes` holds the sentences the caller has
+ * for the problem codes it expects.
  */
 export function describeSubmitError(
   err: unknown,
-  fallback = genericSubmitError()
+  fallback = genericSubmitError(),
+  codes?: ProblemCodeMessages
 ): string {
-  return describeRemoteError(err, fallback, WRITE_SURFACE);
+  return describeRemoteError(err, fallback, WRITE_SURFACE, codes);
 }

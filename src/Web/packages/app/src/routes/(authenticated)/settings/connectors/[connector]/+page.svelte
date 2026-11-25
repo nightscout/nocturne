@@ -12,12 +12,32 @@
   } from "#lib/components/ui/card/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
+  import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
+  import OuraImportCard from "#lib/components/connectors/OuraImportCard.svelte";
+  import ReadOnlyNotice from "#lib/components/settings/ReadOnlyNotice.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
-  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AvailableConnector } from "@nocturne/api-client";
 
   const connectorName = $derived(page.params.connector);
   const isHomeAssistant = $derived(
     connectorName?.toLowerCase() === "homeassistant"
+  );
+  // Oura has no sync to enable, configure or repeat: its data arrives as an uploaded export.
+  const isOura = $derived(connectorName?.toLowerCase() === "oura");
+  const permissionsQuery = getMyPermissions();
+  const canManage = $derived(
+    canChangeTenantSettings(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
   );
 </script>
 
@@ -40,15 +60,22 @@
 
   <ConnectorSetup
     connectorId={connectorName}
-    showToggle
+    showToggle={!isOura}
+    showConfiguration={!isOura}
     showDangerZone
-    showCapabilities
+    showCapabilities={!isOura}
     primaryAction="save-only"
     showEnvVarHints={page.data.isPlatformAdmin === true}
     onCancel={() => goto(resolve('settings/connectors'))}
   >
     {#snippet extras({ connector }: { connector: AvailableConnector })}
-      {#if connector.id}
+      {#if isOura && canManage && connectorName}
+        <OuraImportCard connectorId={connectorName} />
+      {:else if isOura && canSetUp && !canManage}
+        <ReadOnlyNotice data-testid="oura-import-read-only">
+          Only members who can manage this site's settings can import Oura data.
+        </ReadOnlyNotice>
+      {:else if connector.id && !isOura}
         <RepullHistoryCard connectorId={connector.id} />
       {/if}
 

@@ -201,7 +201,7 @@ describe("PredictionAccuracyBody", () => {
   it("says a clamped viewer sees only the last 24 hours", async () => {
     render(PredictionAccuracyBody, { props: { response: predictionResponse({ historyClamped: true }) } });
 
-    await expect.element(page.getByText(/This page uses only the last 24 hours/)).toBeVisible();
+    await expect.element(page.getByText(/This page uses only the data from the last 24 hours/)).toBeVisible();
     await expect.element(page.getByText(/adds the most recent predictions when their readings arrive/)).toBeVisible();
   });
 

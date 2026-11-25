@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Connectors;
@@ -32,21 +33,22 @@ public class SourceOwnedDataRepositoryTests : IDisposable
     private readonly Guid _tenant = Guid.CreateVersion7();
     private readonly SqliteTestDatabase _db;
     private readonly List<IReadOnlyCollection<Type>> _reports = [];
-    private readonly Mock<ILegacyReadCacheInvalidation> _legacyReads = new();
+    private readonly Mock<IRecordChangePublisher> _changes = new();
 
     public SourceOwnedDataRepositoryTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, SqliteNpgsqlJson.Translate);
-        _legacyReads
-            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
-            .Callback((IReadOnlyCollection<Type> models) => _reports.Add(models))
+        _changes
+            .Setup(r => r.PublishAsync(It.IsAny<RecordsChanged>(), It.IsAny<CancellationToken>()))
+            .Callback((RecordsChanged batch, CancellationToken _) =>
+                _reports.Add([.. batch.Changes.Select(c => c.RecordType)]))
             .Returns(Task.CompletedTask);
     }
 
     public void Dispose() => _db.Dispose();
 
     private SourceOwnedDataRepository Repository() =>
-        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), new UserAuditContext(), _legacyReads.Object);
+        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), new UserAuditContext(), _changes.Object);
 
     private NocturneDbContext Context() => _db.CreateContext(_tenant);
 
@@ -192,7 +194,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task ThePurgeSoftDeletesTheSourcesRowsCountsThemByTypeAndNamesTheProfiles()
+    public async Task ThePurgeSoftDeletesTheSourcesRowsAndCountsThemByType()
     {
         SeedBolus(Source, null, Now, "mine");
         SeedBolus(Other, null, Now, "theirs");
@@ -200,7 +202,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
         SeedProfile(Source, "Day");
         SeedProfile(Other, "Night");
 
-        var result = await Repository().SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository().SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         result.DeletedCounts.Should().BeEquivalentTo(new Dictionary<string, long>
         {
@@ -208,7 +210,6 @@ public class SourceOwnedDataRepositoryTests : IDisposable
             [SourceDataTypes.StateSpans] = 1,
             [SourceDataTypes.Profiles] = 2,
         });
-        result.ProfileNames.Should().Equal("Day");
 
         await using var db = Context();
         var mine = await db.Boluses.IgnoreQueryFilters().Where(b => b.LegacyId == "mine")
@@ -228,10 +229,10 @@ public class SourceOwnedDataRepositoryTests : IDisposable
         SeedBolus(Source, null, Now, "mine");
         SeedBolus(Other, null, Now, "theirs");
         var repository = Repository();
-        await repository.SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
-        await repository.SoftDeleteBySourceAsync(Other, $"data_source={Other}", CancellationToken.None);
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(Other), CancellationToken.None);
 
-        await repository.AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await repository.AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         await using var db = Context();
         var rows = await db.Boluses.IgnoreQueryFilters()
@@ -251,7 +252,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
         SeedProfile(Source, "Day");
         SeedBolus(Other, null, Now, "theirs");
 
-        await Repository().SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository().SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().ContainSingle().Which.Should()
             .BeEquivalentTo([typeof(Bolus), typeof(StateSpan), typeof(TherapySettings), typeof(BasalSchedule)]);
@@ -262,7 +263,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
     {
         SeedBolus(Other, null, Now, "theirs");
 
-        await Repository().SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository().SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().BeEmpty();
     }
@@ -273,10 +274,10 @@ public class SourceOwnedDataRepositoryTests : IDisposable
         SeedBolus(Source, null, Now, "mine");
         SeedSpan(Source, Now);
         var repository = Repository();
-        await repository.SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
         _reports.Clear();
 
-        await repository.AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await repository.AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().ContainSingle().Which.Should().BeEquivalentTo([typeof(Bolus), typeof(StateSpan)]);
     }
@@ -286,7 +287,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
     {
         SeedGlucoseTombstones(Source);
 
-        await Repository().AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository().AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().ContainSingle().Which.Should()
             .BeEquivalentTo([typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration)]);
@@ -297,7 +298,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
     {
         SeedBolus(Source, null, Now, "mine");
 
-        await Repository().AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository().AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().BeEmpty();
     }

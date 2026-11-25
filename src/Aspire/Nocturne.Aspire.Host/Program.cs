@@ -322,13 +322,6 @@ class Program
         var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
         var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
 
-        // The instance's Google OAuth client for the Google Health connector. Optional: empty
-        // leaves the connector unavailable to every tenant. The redirect URI defaults to the apex
-        // callback derived from BASE_DOMAIN.
-        var googleHealthClientId = builder.AddParameter("google-health-client-id", "", secret: false);
-        var googleHealthClientSecret = builder.AddParameter("google-health-client-secret", "", secret: true);
-        var googleHealthRedirectUri = builder.AddParameter("google-health-redirect-uri", "", secret: false);
-
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
         // an empty default means telemetry is collected in-process and dropped
@@ -403,7 +396,8 @@ class Program
                 // serving more of that overload, for ~10 ms more at the median under steady load.
                 .WithEnvironment("DOTNET_gcServer", "0")
                 .WithEnvironment("DOTNET_GCConserveMemory", "5")
-                .PublishAsDockerComposeService((_, _) => { })
+                .PublishAsDockerComposeService((_, service) =>
+                    service.StopGracePeriod = ApplicationConstants.Shutdown.ContainerStopGracePeriod)
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
                 .WithRemoteImageTag("latest")
                 .WithPublishImageMetadata(
@@ -412,10 +406,7 @@ class Program
         }
 
         var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
-        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey)
-            .WithEnvironment("GOOGLE_HEALTH_CLIENT_ID", googleHealthClientId)
-            .WithEnvironment("GOOGLE_HEALTH_CLIENT_SECRET", googleHealthClientSecret)
-            .WithEnvironment("GOOGLE_HEALTH_REDIRECT_URI", googleHealthRedirectUri);
+        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
@@ -536,6 +527,9 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            if (devOptions.LiveSampleData)
+                apiEnvironment.WithEnvironment("SampleData__Live", "true");
+
             var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
             var bridge = builder.AddPnpmApp(
                 "nocturne-bridge-build",
@@ -998,6 +992,7 @@ class Program
             builder.AddPortainerComposePublisher();
             builder.AddByoProxyComposePublisher();
             builder.AddPostgresDataComposePublisher();
+            builder.AddInstallScriptPublisher();
         }
 
         var app = builder.Build();

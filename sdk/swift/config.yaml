@@ -11,3 +11,4 @@ additionalProperties:
   library: urlsession
   swiftPackagePath: Sources/NocturneSDK
   useSPMFileStructure: true
+  enumUnknownDefaultCase: true

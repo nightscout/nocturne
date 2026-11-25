@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatDayTime } from "#lib/utils/formatting.js";
-  import type { AlertHistoryResponse } from "#lib/api/generated/nocturne-api-client.js";
-  import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AlertHistoryResponse } from "@nocturne/api-client";
+  import { AlertConditionType } from "@nocturne/api-client";
   import {
     Card,
     CardContent,
@@ -12,7 +12,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import Clock from "@lucide/svelte/icons/clock";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
   import { conditionLabel } from "./conditionLabel.svelte";
+  import { resolutionReasonText } from "./holdText.svelte";
   import { EmptyState } from "#lib/components/shared/index.js";
   import { formatElapsedDuration } from "#lib/utils/duration.js";
 
@@ -92,6 +94,12 @@
                 </td>
                 <td class="py-2 pr-4 text-muted-foreground">
                   {formatElapsedDuration(item.startedAt, item.endedAt, "-")}
+                  {#if resolutionReasonText(item.resolutionReason)}
+                    <span class="mt-0.5 flex items-start gap-1 text-xs" data-testid="history-hold-close">
+                      <Hourglass class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                      {resolutionReasonText(item.resolutionReason)}
+                    </span>
+                  {/if}
                 </td>
                 <td class="py-2 text-muted-foreground">
                   {#if item.acknowledgedAt}

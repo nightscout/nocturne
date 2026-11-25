@@ -3,7 +3,7 @@
   import { scaleLinear } from "d3-scale";
   import { carbAxisMax as niceCarbAxisMax, carbsOnInsulinScale } from "./carb-axis";
   import { EmptyState } from "#lib/components/shared/index.js";
-  import { dashClass, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { dashClass, patternClass } from "@nocturne/charts/core";
   import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import type { DailyBasalBolusRatioData, DailyBasalBolusRatioResponse } from "#lib/api/index.js";
 

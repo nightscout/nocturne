@@ -18,7 +18,7 @@ public class GlookoProfileMapperActivationTests
         _mapper = new GlookoProfileMapper(ConnectorSource, Mock.Of<ILogger>());
     }
 
-    private static GlookoV3DeviceSettingsResponse Build(
+    internal static GlookoV3DeviceSettingsResponse Build(
         params (string DeviceGuid, (string Timestamp, string? ActiveBasalProgram)[] Snapshots)[] devices)
     {
         var pumps = new Dictionary<string, Dictionary<string, GlookoV3PumpSettings>>();
@@ -58,7 +58,6 @@ public class GlookoProfileMapperActivationTests
         var span = spans[0];
         span.Phase.Should().Be(ProfileActivationPhase.Effective);
         span.Origin.Should().Be(ProfileActivationOrigin.Connector);
-        span.DataSource.Should().Be(ConnectorSource);
         span.StartTimestamp.Should().Be(new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc));
         span.EndTimestamp.Should().BeNull();
         span.BaseProfileName.Should().Be("A");

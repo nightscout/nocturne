@@ -1,11 +1,9 @@
-using System.Data.Common;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
-using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;
@@ -14,6 +12,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -40,6 +39,7 @@ public partial class DeviceSetupService(
     IPatientInsulinRepository insulins,
     IDeviceReattributionService reattribution,
     ITrackerRepository trackers,
+    ITrackerConsumableLock consumableLock,
     ITrackerAlertRuleSyncService trackerRuleSync,
     ITherapySettingsResolver therapySettings,
     ConsumableTrackerWriter trackerWriter,
@@ -249,16 +249,16 @@ public partial class DeviceSetupService(
     /// <remarks>
     /// The check, the create and this item's record of it run in one transaction under the
     /// consumable lock the legacy conversion and the device provisioner take
-    /// (<see cref="ITrackerRepository.ExecuteUnderConsumableLockAsync{T}"/>), so none of them adds a
+    /// (<see cref="ITrackerConsumableLock"/>), so none of them adds a
     /// second tracker for a consumable another has just added.
     /// </remarks>
     /// <exception cref="ArgumentException">No tracker of that kind is offered for the recorded devices.</exception>
     public async Task AddTrackerAsync(TrackerOfferKind kind, string name, string createdBy, CancellationToken ct)
     {
-        var created = await trackers.ExecuteUnderConsumableLockAsync(
+        var created = await consumableLock.ExecuteAsync(
             async (tx, unit, token) =>
             {
-                var (offer, spec) = await OfferAsync(kind, token, unit.Context);
+                var (offer, spec) = await OfferAsync(kind, token, tx, unit.Context);
                 if (offer.State != TrackerOfferState.Off)
                     return null;
 
@@ -283,15 +283,7 @@ public partial class DeviceSetupService(
         {
             await trackerWriter.PublishAsync(trackers, created, CancellationToken.None);
         }
-        catch (DbUpdateException ex)
-        {
-            logger.LogError(ex, "Announcing tracker {DefinitionId} failed", created.Definition.Id);
-        }
-        catch (DbException ex)
-        {
-            logger.LogError(ex, "Announcing tracker {DefinitionId} failed", created.Definition.Id);
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogError(ex, "Announcing tracker {DefinitionId} failed", created.Definition.Id);
         }
@@ -305,10 +297,10 @@ public partial class DeviceSetupService(
     /// <exception cref="DeviceSetupConflictException">The tracker was not created here.</exception>
     public async Task RemoveTrackerAsync(TrackerOfferKind kind, CancellationToken ct)
     {
-        var removed = await trackers.ExecuteUnderConsumableLockAsync(
+        var removed = await consumableLock.ExecuteAsync(
             async (tx, unit, token) =>
             {
-                var (offer, _) = await OfferAsync(kind, token, unit.Context);
+                var (offer, _) = await OfferAsync(kind, token, tx, unit.Context);
                 if (offer.State == TrackerOfferState.Off)
                     return (Guid?)null;
                 if (offer.State != TrackerOfferState.AddedHere)
@@ -331,12 +323,15 @@ public partial class DeviceSetupService(
     }
 
     /// <summary>The offer of <paramref name="kind"/> and the tracker it stands for.</summary>
+    /// <param name="kind">The offer to find among those of the recorded devices.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    /// <param name="tx">The tracker repository of the caller's transaction.</param>
     /// <param name="db">The caller's transaction context, so the offer reads what it holds.</param>
     private async Task<(TrackerOffer Offer, ConsumableTrackerSpec Spec)> OfferAsync(
-        TrackerOfferKind kind, CancellationToken ct, NocturneDbContext? db = null)
+        TrackerOfferKind kind, CancellationToken ct, ITrackerRepository tx, NocturneDbContext db)
     {
         var current = (await devices.GetCurrentAsync(ct)).ToList();
-        var offered = (await TrackerOffersAsync(current, ct, db)).FirstOrDefault(o => o.Offer.Kind == kind);
+        var offered = (await TrackerOffersAsync(current, ct, tx, db)).FirstOrDefault(o => o.Offer.Kind == kind);
         if (offered.Offer is null)
             throw new ArgumentException($"No {kind} tracker is offered for the recorded devices.", nameof(kind));
         return offered;
@@ -413,7 +408,7 @@ public partial class DeviceSetupService(
     /// with no catalog entry gets the typical sensor, or infusion set and reservoir.
     /// </summary>
     private async Task<IReadOnlyList<(TrackerOffer Offer, ConsumableTrackerSpec Spec)>> TrackerOffersAsync(
-        IReadOnlyList<PatientDevice> current, CancellationToken ct, NocturneDbContext? within = null)
+        IReadOnlyList<PatientDevice> current, CancellationToken ct, ITrackerRepository? tx = null, NocturneDbContext? within = null)
     {
         var offers = new List<(TrackerOfferKind Kind, string Device, bool Typical, ConsumableTrackerSpec Spec)>();
 
@@ -449,8 +444,7 @@ public partial class DeviceSetupService(
             return [];
 
         var added = await AdditionsAsync(SetupHubRecordKind.Tracker, ct, within);
-        await using var owned = within is null ? await contexts.CreateAsync(ct) : null;
-        var existing = await (within ?? owned!).TrackerDefinitions.AsNoTracking().ToListAsync(ct);
+        var existing = await (tx ?? trackers).GetAllDefinitionsAsync(ct);
 
         return offers.Select(o =>
         {

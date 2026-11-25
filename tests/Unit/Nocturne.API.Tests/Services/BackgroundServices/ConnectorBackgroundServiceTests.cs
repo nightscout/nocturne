@@ -31,6 +31,9 @@ namespace Nocturne.API.Tests.Services.BackgroundServices;
 /// </summary>
 public class ConnectorBackgroundServiceTests
 {
+    // A poller that must stay queued is watched this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan StaysQueuedFor = TimeSpan.FromMilliseconds(500);
+
     private const string JobName = "connector:testconnector";
 
     /// <summary>On the minute, so <c>Start + phase</c> is a point of the tenant's phase.</summary>
@@ -215,6 +218,23 @@ public class ConnectorBackgroundServiceTests
             Times.Once,
             because);
     }
+
+    /// <summary>
+    /// The unhealthy write a thrown sync leaves, made once and with <paramref name="token"/>: a
+    /// stopping token is already cancelled by the time a timeout is recorded.
+    /// </summary>
+    private static void VerifyUnhealthyWrite(
+        Mock<IConnectorConfigurationService> mock, string message, CancellationToken token = default)
+    {
+        mock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector", null, null, message,
+                It.Is<DateTime?>(at => at.HasValue && at.Value != DateTime.MinValue), false, token),
+            Times.Once);
+    }
+
+    private static int HealthWrites(Mock<IConnectorConfigurationService> mock) =>
+        mock.Invocations.Count(i => i.Method.Name == nameof(IConnectorConfigurationService.UpdateHealthStateAsync));
 
     [Fact]
     public void TheJob_IsNamedAfterTheConnector_EnrolsEveryTenant_AndBacksOffNoLongerThanFifteenMinutes()
@@ -534,7 +554,7 @@ public class ConnectorBackgroundServiceTests
         var firstRun = RunAsync(first, BuildServiceProvider(db, configServiceMock, Enabled()), tenant, firstCts.Token);
         try
         {
-            (await Task.WhenAny(firstStarted.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(firstStarted.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(firstStarted.Task, "the first poller must take the only slot");
 
             var secondRun = RunAsync(
@@ -542,14 +562,14 @@ public class ConnectorBackgroundServiceTests
                 BuildServiceProvider(db, configServiceMock, Enabled(), onConfigLoad: () => Interlocked.Increment(ref secondConfigLoads)),
                 tenant);
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromMilliseconds(500))))
+            (await Task.WhenAny(secondDone.Task, Task.Delay(StaysQueuedFor)))
                 .Should().NotBe(secondDone.Task, "the second poller's tenant must wait while the first poller holds the slot");
             secondConfigLoads.Should().Be(0, "the slot must be held before the tenant's config is loaded");
             budget.InFlight.Should().Be(1);
 
             await firstCts.CancelAsync();
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(secondDone.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(secondDone.Task, "the slot the first poller released must go to the second");
             await secondRun;
             secondConfigLoads.Should().Be(1);
@@ -596,7 +616,7 @@ public class ConnectorBackgroundServiceTests
         var firstRun = RunAsync(first, root, tenant, firstCts.Token);
         try
         {
-            (await Task.WhenAny(firstStarted.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(firstStarted.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(firstStarted.Task, "the first poller must take the only slot");
 
             var secondRun = RunAsync(second, root, tenant);
@@ -605,7 +625,7 @@ public class ConnectorBackgroundServiceTests
             await Task.Delay(TimeSpan.FromMilliseconds(800));
             await firstCts.CancelAsync();
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(secondDone.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(secondDone.Task, "a tenant that queued longer than its timeout must still run once it holds a slot");
             await secondRun;
         }
@@ -628,6 +648,8 @@ public class ConnectorBackgroundServiceTests
         var logger = new MessageRecordingLogger();
         var budget = new ConnectorSyncBudget();
         var clock = new FakeTimeProvider(Start);
+        var configServiceMock = BuildEnabledConfigMock();
+        using var shutdown = new CancellationTokenSource();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var sut = new TestConnectorBackgroundService(
             new SyncResult { Success = true },
@@ -638,23 +660,57 @@ public class ConnectorBackgroundServiceTests
             budget: budget,
             timeProvider: clock);
 
-        var run = RunAsync(sut, BuildServiceProvider(db, BuildEnabledConfigMock(), Enabled()), tenant);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var run = RunAsync(sut, BuildServiceProvider(db, configServiceMock, Enabled()), tenant, shutdown.Token);
+        await started.Task.WaitAsync(Eventually.DefaultPatience);
 
         clock.Advance(TimeSpan.FromMinutes(3) - TimeSpan.FromSeconds(1));
         await Task.Delay(100);
         run.IsCompleted.Should().BeFalse("the timeout has not passed on the injected clock");
 
         clock.Advance(TimeSpan.FromSeconds(1));
-        (await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(10)))).Should().Be(run, "the timeout ends the run");
-        await FluentActions.Awaiting(() => run).Should().ThrowAsync<TimeoutException>();
+        (await Task.WhenAny(run, Task.Delay(Eventually.DefaultPatience))).Should().Be(run, "the timeout ends the run");
+        var thrown = await FluentActions.Awaiting(() => run).Should().ThrowAsync<TimeoutException>();
         logger.Messages.Should().Contain(m => m.Contains("exceeded"));
         budget.InFlight.Should().Be(0);
+
+        thrown.Which.Message.Should().Be("The TestConnector sync exceeded 00:03:00.");
+        VerifyUnhealthyWrite(configServiceMock, "The TestConnector sync exceeded 00:03:00.", shutdown.Token);
+    }
+
+    /// <summary>
+    /// A host stopping cancels the run and says nothing about the connector: the row keeps only the
+    /// attempt written when the sync began.
+    /// </summary>
+    [Fact]
+    public async Task AShutdownDuringASync_LeavesTheHealthRowWithOnlyTheAttempt()
+    {
+        var (tenant, db) = Tenant();
+        using var _ = db;
+        var configServiceMock = BuildEnabledConfigMock();
+        using var shutdown = new CancellationTokenSource();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sut = new TestConnectorBackgroundService(
+            new SyncResult { Success = true },
+            NullLogger.Instance,
+            onSync: () => started.TrySetResult(),
+            hangFirstNCalls: 1);
+
+        var run = RunAsync(sut, BuildServiceProvider(db, configServiceMock, Enabled()), tenant, shutdown.Token);
+        await started.Task.WaitAsync(Eventually.DefaultPatience);
+        await shutdown.CancelAsync();
+
+        await FluentActions.Awaiting(() => run).Should().ThrowAsync<OperationCanceledException>();
+
+        HealthWrites(configServiceMock).Should().Be(1);
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector", It.Is<DateTime?>(at => at.HasValue), null, null, null, null, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>
     /// A cancellation of neither the run's token nor the timeout's is not the per-tenant timeout, so
-    /// it fails the run as itself rather than being reported as one.
+    /// it fails the run as itself rather than being reported as one, and marks the connector unhealthy.
     /// </summary>
     [Fact]
     public async Task ASyncThrowingACancellationNobodyAskedFor_FailsTheRunWithoutCallingItATimeout()
@@ -662,30 +718,39 @@ public class ConnectorBackgroundServiceTests
         var (tenant, db) = Tenant();
         using var _ = db;
         var logger = new MessageRecordingLogger();
+        var configServiceMock = BuildEnabledConfigMock();
         var sut = new TestConnectorBackgroundService(
             new SyncResult { Success = true },
             logger,
-            onSync: () => throw new OperationCanceledException());
+            onSync: () => throw new OperationCanceledException("The request was canceled due to the configured HttpClient.Timeout."));
 
-        var run = () => RunAsync(sut, BuildServiceProvider(db, BuildEnabledConfigMock(), Enabled()), tenant);
+        var run = () => RunAsync(sut, BuildServiceProvider(db, configServiceMock, Enabled()), tenant);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
         logger.Messages.Should().NotContain(m => m.Contains("exceeded"));
+        VerifyUnhealthyWrite(
+            configServiceMock,
+            "OperationCanceledException: The request was canceled due to the configured HttpClient.Timeout.");
     }
 
     [Fact]
-    public async Task ASyncThatThrows_FailsTheRun()
+    public async Task ASyncThatThrows_FailsTheRunAndRecordsTheErrorOnTheHealthRow()
     {
         var (tenant, db) = Tenant();
         using var _ = db;
+        var configServiceMock = BuildEnabledConfigMock();
+        var failure = new HttpRequestException("Response status code does not indicate success: 401 (Unauthorized).");
         var sut = new TestConnectorBackgroundService(
             new SyncResult { Success = true },
             NullLogger.Instance,
-            onSync: () => throw new HttpRequestException("upstream down"));
+            onSync: () => throw failure);
 
-        var run = () => RunAsync(sut, BuildServiceProvider(db, BuildEnabledConfigMock(), Enabled()), tenant);
+        var run = () => RunAsync(sut, BuildServiceProvider(db, configServiceMock, Enabled()), tenant);
 
-        await run.Should().ThrowAsync<HttpRequestException>();
+        (await run.Should().ThrowAsync<HttpRequestException>()).Which.Should().BeSameAs(failure);
+        VerifyUnhealthyWrite(
+            configServiceMock,
+            "HttpRequestException: Response status code does not indicate success: 401 (Unauthorized).");
     }
 
     /// <summary>A configuration that cannot be read fails the run, which the ledger retries after its backoff.</summary>

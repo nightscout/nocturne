@@ -9,8 +9,10 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -29,7 +31,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenTheSiteCannotBeReached_SaysSoRatherThanBlamingTheSecret()
     {
-        var service = NewService(new StubHandler(
+        var service = NewService(new FakeHttpHandler(
             _ => throw new HttpRequestException("No such host is known", new SocketException(11001))));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
@@ -46,7 +48,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenTheProbeTimesOut_SaysTheSiteCouldNotBeReached()
     {
-        var service = NewService(new StubHandler(_ => throw new TaskCanceledException(
+        var service = NewService(new FakeHttpHandler(_ => throw new TaskCanceledException(
             "The request was canceled due to the configured HttpClient.Timeout")));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
@@ -63,7 +65,7 @@ public class NightscoutAuthFailureTests
     public async Task BackgroundSync_WhenTheRequestIsRefusedBeforeItLeaves_PassesThatWordingOn()
     {
         const string refusal = "The host in your Nightscout URL could not be found.";
-        var service = NewService(new StubHandler(_ => throw new OutboundRefusedException(refusal)));
+        var service = NewService(new FakeHttpHandler(_ => throw new OutboundRefusedException(refusal)));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
 
@@ -74,7 +76,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task RequestedSync_WhenTheSiteCannotBeReached_SaysSoOnThatEntryPointToo()
     {
-        var service = NewService(new StubHandler(_ => throw new HttpRequestException("Connection refused")));
+        var service = NewService(new FakeHttpHandler(_ => throw new HttpRequestException("Connection refused")));
 
         var result = await service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.Glucose] },
@@ -92,7 +94,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task RequestedSync_WhenTheCallerCancels_PropagatesTheCancellation()
     {
-        var service = NewService(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
 
@@ -105,14 +107,15 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenTheSiteRejectsTheSecret_SaysTheSecretWasRejected()
     {
-        var service = NewService(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)));
+        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be(NightscoutMessages.ApiSecretRejected);
         result.Errors.Should().ContainSingle().Which.Should().Be(NightscoutMessages.ApiSecretRejected);
-        result.Message.Should().NotContain("blank", "this connector will not sync without a secret");
+        result.Message.Should().NotContain("blank",
+            "the connector form reads a blank secret as keeping the stored one, so the advice cannot be followed");
     }
 
     /// <summary>
@@ -122,7 +125,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenTheSiteRefuses_NamesWhatMayBeBlockingItInstead()
     {
-        var service = NewService(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)));
+        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
 
@@ -140,7 +143,7 @@ public class NightscoutAuthFailureTests
     public async Task BackgroundSync_WhenTheSiteIsUnwell_SaysToTryAgainAndKeepsTheNumber()
     {
         var service = NewService(
-            new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+            new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
 
@@ -157,7 +160,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenNothingAtTheAddressIsNightscout_SendsThemToTheAddress()
     {
-        var service = NewService(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
+        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
 
@@ -167,13 +170,13 @@ public class NightscoutAuthFailureTests
     }
 
     /// <summary>
-    ///     A manual sync reaches the connector whatever its configuration says: the loader's
-    ///     incomplete-configuration gate stands in front of the scheduled poll only.
+    ///     With no secret configured, only Nightscout's refusal says one is needed, and then a
+    ///     rejected secret would be the wrong thing to name.
     /// </summary>
     [Fact]
-    public async Task RequestedSync_WithNoSecretConfigured_AsksForTheSecret()
+    public async Task RequestedSync_WithNoSecretConfigured_AsksForTheSecretOnlyWhenRefused()
     {
-        var service = NewService(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)));
 
         var result = await service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.Glucose] },
@@ -182,6 +185,7 @@ public class NightscoutAuthFailureTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be(NightscoutMessages.ApiSecretMissing);
+        result.Message.Should().NotContain("rejected");
     }
 
     /// <summary>
@@ -191,7 +195,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenAFirewallAnswers_SaysTheFirewallIsBlockingTheSync()
     {
-        var service = NewService(new StubHandler(_ =>
+        var service = NewService(new FakeHttpHandler(_ =>
         {
             var response = new HttpResponseMessage(HttpStatusCode.Forbidden)
             {
@@ -215,7 +219,7 @@ public class NightscoutAuthFailureTests
     [Fact]
     public async Task BackgroundSync_WhenTheProbeFailsUnexpectedly_KeepsTheExceptionOutOfWhatTheTenantReads()
     {
-        var service = NewService(new StubHandler(
+        var service = NewService(new FakeHttpHandler(
             _ => throw new InvalidOperationException("Collection was modified")));
 
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
@@ -230,7 +234,7 @@ public class NightscoutAuthFailureTests
         ApiSecret = "secret",
     };
 
-    private static NightscoutConnectorService NewService(StubHandler handler)
+    private static NightscoutConnectorService NewService(FakeHttpHandler handler)
     {
         var registration = new Mock<IConnectorRegistration<NightscoutConnectorConfiguration>>();
         registration.Setup(r => r.Defaults).Returns(new NightscoutConnectorConfiguration());
@@ -240,18 +244,10 @@ public class NightscoutAuthFailureTests
             Mock.Of<IConnectorServerResolver<NightscoutConnectorConfiguration>>(),
             NullLogger<NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
-            Mock.Of<IRateLimitingStrategy>(),
             registration.Object,
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             Mock.Of<IConnectorPublisher>());
     }
 
-    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(answer(request));
-        }
-    }
 }

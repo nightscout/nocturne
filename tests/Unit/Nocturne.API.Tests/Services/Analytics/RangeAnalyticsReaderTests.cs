@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
@@ -33,6 +34,10 @@ public class RangeAnalyticsReaderTests
             .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync("UTC");
         var statistics = new StatisticsService(TimeProvider.System);
+        _glucose
+            .Setup(r => r.CountByPatientDeviceAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         _insulinDelivery = new InsulinDeliveryReader(
             _boluses.Object,
@@ -49,9 +54,8 @@ public class RangeAnalyticsReaderTests
             _boluses.Object,
             _carbs.Object,
             Mock.Of<IPatientDeviceRepository>(),
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
             statistics,
-            new TenantClockResolver(therapy.Object, new CategoryReadContext(), Mock.Of<ILogger<TenantClockResolver>>()),
+            new TenantClockResolver(therapy.Object, new CategoryReadContext(), new ShareClockDouble(therapy.Object), Mock.Of<ILogger<TenantClockResolver>>()),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             _insulinDelivery,

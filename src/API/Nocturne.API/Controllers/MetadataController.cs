@@ -6,6 +6,7 @@ using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
@@ -71,6 +72,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
+            TransmitterBatteryMetrics = Enum.GetValues<TransmitterBatteryMetric>(),
             ValidationIssue = new RustValidationIssue("condition", "composite", "list_empty", "conditions"),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
@@ -115,6 +117,19 @@ public class MetadataController : ControllerBase
                 Description = "Actions a trackerUpdate realtime event can carry",
             }
         );
+    }
+
+    /// <summary>
+    /// The ceilings the V4 API puts on a read, so a client can keep its requests inside them.
+    /// </summary>
+    /// <returns>The V4 read limits</returns>
+    [HttpGet("v4-api-limits")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(V4ApiLimitsMetadata), 200)]
+    public ActionResult<V4ApiLimitsMetadata> GetV4ApiLimits()
+    {
+        return Ok(new V4ApiLimitsMetadata { MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays });
     }
 
     /// <summary>
@@ -244,6 +259,9 @@ public class AlertConditionTypesMetadata
     /// <summary>All <see cref="TempBasalMetric"/> values.</summary>
     public TempBasalMetric[] TempBasalMetrics { get; set; } = [];
 
+    /// <summary>All <see cref="TransmitterBatteryMetric"/> values.</summary>
+    public TransmitterBatteryMetric[] TransmitterBatteryMetrics { get; set; } = [];
+
     /// <summary>A sample <see cref="RustValidationIssue"/>; pulls the type into the generated client.</summary>
     public RustValidationIssue? ValidationIssue { get; set; }
 
@@ -347,6 +365,15 @@ public class TrackerRealtimeActionsMetadata
     /// Description of the tracker realtime actions
     /// </summary>
     public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The ceilings the V4 API puts on a read
+/// </summary>
+public class V4ApiLimitsMetadata
+{
+    /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
+    public int MaxDateSpanDays { get; set; }
 }
 
 /// <summary>

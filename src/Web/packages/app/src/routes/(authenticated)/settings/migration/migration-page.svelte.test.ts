@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode } from "#lib/api/index.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { MigrationJobState, MigrationMode, MigrationPhase } from "#lib/api/index.js";
 import type { MigrationJobInfo } from "#lib/api/index.js";
 
 let history: MigrationJobInfo[] = [];
@@ -16,6 +16,8 @@ const remote = vi.hoisted(() => ({
   status: {} as Record<string, unknown>,
   startResult: undefined as { id: string } | undefined,
   enhanceCallback: undefined as undefined | ((args: { submit: () => Promise<void> }) => Promise<void>),
+  onCancel: undefined as undefined | (() => void),
+  pending: { hasPendingConfig: false } as Record<string, unknown>,
 }));
 
 // The factory is hoisted above every declaration in this file, so anything it evaluates eagerly
@@ -25,7 +27,7 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", async () => {
   const inertForm = { enhance: () => ({}), pending: 0, result: undefined, fields: remoteFormFields() };
 
   return {
-    getPendingConfig: () => createQueryResource(() => Promise.resolve({ hasPendingConfig: false })),
+    getPendingConfig: () => createQueryResource(() => Promise.resolve(remote.pending)),
     getSources: () => createQueryResource(() => Promise.resolve([])),
     getHistory: () =>
       createQueryResource(() => {
@@ -52,7 +54,10 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", async () => {
         return {};
       },
     },
-    cancelMigration: () => Promise.resolve(),
+    cancelMigration: () => {
+      remote.onCancel?.();
+      return Promise.resolve();
+    },
   };
 });
 
@@ -78,7 +83,7 @@ const entry = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo =>
     id: "11111111-1111-1111-1111-111111111111",
     mode: MigrationMode.Api,
     createdAt: "2026-09-01T00:00:00Z",
-    sourceDescription: "https://mynightscout.example",
+    sourceDescription: "mynightscout.example",
     state: MigrationJobState.Completed,
     startedAt: "2026-09-01T00:00:00Z",
     completedAt: "2026-09-01T00:00:10Z",
@@ -178,7 +183,7 @@ describe("settings/migration completion moment", () => {
     render(MigrationPage, {});
     await openHistory();
 
-    await expect.element(page.getByText("https://mynightscout.example")).toBeVisible();
+    await expect.element(page.getByText("mynightscout.example")).toBeVisible();
     await expect.element(moment()).not.toBeInTheDocument();
   });
 });
@@ -193,11 +198,16 @@ describe("settings/migration running job", () => {
     remote.status = {
       jobId: "22222222-2222-2222-2222-222222222222",
       state: MigrationJobState.Running,
-      progressPercentage: 42,
-      currentOperation: "Copying entries",
+      progressPercentage: 42.4242,
+      phase: MigrationPhase.Importing,
+      currentCollection: "entries",
+      collectionProgress: {
+        entries: { collectionName: "entries", totalDocuments: 1000, documentsMigrated: 424, progressPercentage: 42.4 },
+      },
     };
     remote.startResult = undefined;
     remote.enhanceCallback = undefined;
+    remote.onCancel = undefined;
   });
 
   it("renders the page with progress while the job is still running", async () => {
@@ -212,8 +222,55 @@ describe("settings/migration running job", () => {
 
     await expect.element(page.getByRole("tab", { name: /History/ })).toBeVisible();
     await page.getByRole("tab", { name: /Progress/ }).click();
-    await expect.element(page.getByText("Copying entries")).toBeVisible();
-    await expect.element(page.getByText("42%")).toBeVisible();
+    await expect.element(page.getByText("424 / 1,000 records")).toBeVisible();
+    await expect.element(page.getByText("42%").first()).toBeVisible();
+  });
+
+  // The server ends the run; the page has to stop showing it as running, or its Start button
+  // stays disabled until a reload.
+  it("shows a canceled run as ended", async () => {
+    history = [
+      entry({
+        id: "22222222-2222-2222-2222-222222222222",
+        state: MigrationJobState.Running,
+      }),
+    ];
+    remote.onCancel = () => {
+      remote.status = { ...remote.status, state: MigrationJobState.Cancelled, phase: undefined };
+    };
+
+    render(MigrationPage, {});
+    await page.getByRole("tab", { name: /Progress/ }).click();
+    await page.getByRole("button", { name: "Cancel migration" }).click();
+
+    await expect.element(page.getByText("Last migration")).toBeVisible();
+    await expect.element(page.getByText("Canceled")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Cancel migration" })).not.toBeInTheDocument();
+    await expect.element(page.getByText("Active", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("keeps a run that failed on the Progress tab with what went wrong", async () => {
+    history = [
+      entry({
+        id: "22222222-2222-2222-2222-222222222222",
+        state: MigrationJobState.Running,
+      }),
+    ];
+    remote.status = {
+      jobId: "22222222-2222-2222-2222-222222222222",
+      state: MigrationJobState.Completed,
+      hasFailures: true,
+      errorMessage: "1 of 2 collections imported, 1 failed.",
+      collectionProgress: {
+        treatments: { collectionName: "treatments", isComplete: true, failureReason: "Could not reach your Nightscout server." },
+      },
+    };
+
+    render(MigrationPage, {});
+    await page.getByRole("tab", { name: /Progress/ }).click();
+
+    await expect.element(page.getByText("1 of 2 collections imported, 1 failed.")).toHaveClass("text-destructive");
+    await expect.element(page.getByText("Could not reach your Nightscout server.")).toBeVisible();
   });
 
   it("switches to Progress as soon as a started job has an id", async () => {
@@ -228,7 +285,7 @@ describe("settings/migration running job", () => {
     await expect
       .element(page.getByRole("tab", { name: /Progress/ }))
       .toHaveAttribute("data-state", "active");
-    await expect.element(page.getByText("Copying entries")).toBeVisible();
+    await expect.element(page.getByText("424 / 1,000 records")).toBeVisible();
   });
 
   it("shows why the server refused to start the import", async () => {
@@ -293,7 +350,58 @@ describe("settings/migration running job", () => {
 
     render(MigrationPage, {});
 
-    await expect.element(page.getByText("Failed to read migration status")).toBeVisible();
+    await expect
+      .element(page.getByText("Failed to read migration status"), { timeout: 15000 })
+      .toBeVisible();
+    expect(remote.statusCalls).toBeGreaterThan(1);
+  }, 20000);
+});
+
+describe("settings/migration source the server gives", () => {
+  const sentUrls = () =>
+    Array.from(document.querySelectorAll<HTMLInputElement>('input[name="nightscoutUrl"]'), (input) => input.value);
+
+  beforeEach(() => {
+    history = [];
+    polled = null;
+    remote.pending = { hasPendingConfig: true, mode: MigrationMode.Api, nightscoutUrl: "mine.example/AGYL…" };
+  });
+
+  afterEach(() => {
+    remote.pending = { hasPendingConfig: false };
+  });
+
+  it("shows the server's address masked and sends no URL, so the API reads its own", async () => {
+    render(MigrationPage, {});
+
+    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/AGYL…");
+    await expect.element(page.getByRole("button", { name: "Change address" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
+    expect(page.getByRole("textbox", { name: "Nightscout URL" }).elements()).toHaveLength(0);
+    expect(sentUrls()).toEqual([]);
+  });
+
+  it("sends the typed URL once the viewer presses Change address", async () => {
+    render(MigrationPage, {});
+
+    await page.getByRole("button", { name: "Change address" }).click();
+    const input = page.getByRole("textbox", { name: "Nightscout URL" });
+    await expect.element(input).toHaveValue("");
+    await expect.element(page.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await input.fill("https://other.example/ns");
+
+    await expect.poll(sentUrls).toEqual(["https://other.example/ns", "https://other.example/ns"]);
+  });
+
+  it("goes back to the server's address when the viewer keeps it", async () => {
+    render(MigrationPage, {});
+
+    await page.getByRole("button", { name: "Change address" }).click();
+    await page.getByRole("textbox", { name: "Nightscout URL" }).fill("https://other.example/ns");
+    await page.getByRole("button", { name: "Keep current address" }).click();
+
+    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/AGYL…");
+    expect(sentUrls()).toEqual([]);
   });
 });
 

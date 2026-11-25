@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { cn } from "#lib/utils/index.js";
@@ -7,9 +8,10 @@
   import {
     type InAppNotificationDto,
     NotificationUrgency,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { resolveNotificationIcon } from "#lib/utils/notification-icons.js";
   import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
+  import { channelNoticeSubtitle } from "#lib/components/alerts/channelState.svelte.js";
   import InstallTiming from "#lib/components/notifications/InstallTiming.svelte";
   import InstanceKeyChanged from "#lib/components/notifications/InstanceKeyChanged.svelte";
 
@@ -63,7 +65,20 @@
   const Icon = $derived(resolveNotificationIcon(notification.icon, notification.category));
   const urgencyClasses = $derived(getUrgencyClasses(notification.urgency));
   const isRead = $derived(notification.readAt != null);
+  const channelNotice = $derived(notification.type === "alerts.channelNotSending");
+  const noticeRuleId = $derived(notification.metadata?.["alertRuleId"]?.toString());
+  const subtitle = $derived(
+    (channelNotice ? channelNoticeSubtitle(notification.metadata) : null) ??
+      resolveNotificationLabel(notification.subtitle)
+  );
   const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
+  const renamedFrom = $derived(notification.metadata?.["oldName"]?.toString());
+  const renamedTo = $derived(notification.metadata?.["newName"]?.toString());
+  const staffWaiting = $derived(notification.type === "team.staff_waiting");
+  const staffJoined = $derived(notification.type === "team.staff_joined");
+  const staffTeam = $derived(notification.metadata?.["team"]?.toString());
+  const staffTeamId = $derived(notification.metadata?.["teamId"]?.toString());
+  const staffCount = $derived(Number(notification.metadata?.["count"]) || 0);
 </script>
 
 <div
@@ -89,6 +104,8 @@
           Nocturne {releaseVersion} is available
         {:else if notification.type === "system.release_installed" && releaseVersion}
           Nocturne is now on version {releaseVersion}
+        {:else if notification.type === "team.renamed" && renamedFrom && renamedTo}
+          The team {renamedFrom} is now named {renamedTo}.
         {:else}
           {resolveNotificationLabel(notification.title) || "Notification"}
         {/if}
@@ -114,10 +131,44 @@
           platform={notification.type === "system.instance_key_changed_platform"}
         />
       </div>
+    {:else if staffWaiting && staffTeam && staffCount === 1}
+      <p class="text-xs mt-0.5 opacity-75">
+        1 staff member of the team {staffTeam} is waiting for your approval. They cannot see this site's data until an owner approves them.
+      </p>
+    {:else if staffWaiting && staffTeam && staffCount > 1}
+      <p class="text-xs mt-0.5 opacity-75">
+        {staffCount} staff members of the team {staffTeam} are waiting for your approval. They cannot see this site's data until an owner approves them.
+      </p>
+    {:else if staffJoined && staffTeam}
+      <p class="text-xs mt-0.5 opacity-75">
+        The team {staffTeam} has new staff who can now see this site's data.
+      </p>
     {:else if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
-        {resolveNotificationLabel(notification.subtitle)}
+        {subtitle}
       </p>
+    {/if}
+    {#if (staffWaiting || staffJoined) && staffTeamId}
+      <Button
+        variant="outline"
+        size="sm"
+        class="mt-2"
+        href={resolve(`settings/members?team=${staffTeamId}`)}
+        onclick={() => onAction?.("open_team")}
+      >
+        Open the team
+      </Button>
+    {/if}
+    {#if channelNotice && noticeRuleId}
+      <Button
+        variant="outline"
+        size="sm"
+        class="mt-2"
+        href={resolve(`alerts/${noticeRuleId}`)}
+        onclick={() => onAction?.("open_rule")}
+      >
+        Edit this alert
+      </Button>
     {/if}
     {#if notification.actions && notification.actions.length > 0}
       <div class="flex items-center gap-2 mt-2 flex-wrap">

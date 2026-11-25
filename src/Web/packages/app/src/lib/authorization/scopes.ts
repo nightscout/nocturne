@@ -4,9 +4,10 @@
  *
  * A mirror of the server's `Scope.Satisfies`, which is the predicate
  * `RequireScopeAttribute` evaluates: full access satisfies everything, an atom
- * satisfies itself, a readwrite atom satisfies its read counterpart, and
- * `audit.manage` satisfies `audit.read`. A check here only decides what to
- * offer; the endpoint still answers on the server's own terms.
+ * satisfies itself, a readwrite atom satisfies its read counterpart,
+ * `audit.manage` satisfies `audit.read`, and `tenant.settings` satisfies both
+ * connector atoms. A check here only decides what to offer; the endpoint still
+ * answers on the server's own terms.
  */
 
 const FULL_ACCESS = "*";
@@ -19,6 +20,8 @@ const FULL_ACCESS = "*";
 const EXTRA_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   "audit.read": ["audit.manage"],
   "alerts.acknowledge": ["alerts.readwrite"],
+  "connectors.read": ["tenant.settings"],
+  "connectors.readwrite": ["tenant.settings"],
 };
 
 /** Whether `granted` covers `required`. */

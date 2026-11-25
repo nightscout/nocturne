@@ -1,0 +1,130 @@
+[package]
+name = "nocturne-alerts-fuzz"
+version = "0.0.0"
+edition = "2024"
+description = "cargo-fuzz targets for the alert engine's parsers and C ABI; built on nightly, outside the stable workspace"
+license = "AGPL-3.0-only"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[lib]
+name = "nocturne_alerts_fuzz"
+path = "src/lib.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+chrono = { version = "0.4", default-features = false }
+uuid = "1"
+nocturne-alerts-core = { path = "../../nocturne-alerts-core" }
+nocturne-alerts-ffi = { path = ".." }
+serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
+
+# Its own workspace root: the stable workspace one level up never compiles it.
+[workspace]
+
+[[bin]]
+name = "node_parse"
+path = "fuzz_targets/node_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_payload"
+path = "fuzz_targets/parse_payload.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_evaluate"
+path = "fuzz_targets/ffi_evaluate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_evaluate_node"
+path = "fuzz_targets/ffi_evaluate_node.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_validate"
+path = "fuzz_targets/ffi_validate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_classify"
+path = "fuzz_targets/ffi_classify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_leaf_paths"
+path = "fuzz_targets/ffi_leaf_paths.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_describe"
+path = "fuzz_targets/ffi_describe.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_rule_reads"
+path = "fuzz_targets/ffi_rule_reads.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_references_any"
+path = "fuzz_targets/ffi_references_any.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_references_wall_clock"
+path = "fuzz_targets/ffi_references_wall_clock.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_replay"
+path = "fuzz_targets/ffi_replay.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_tracker_process"
+path = "fuzz_targets/ffi_tracker_process.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_tracker_force_close"
+path = "fuzz_targets/ffi_tracker_force_close.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_tracker_close_elapsed_hysteresis"
+path = "fuzz_targets/ffi_tracker_close_elapsed_hysteresis.rs"
+test = false
+doc = false
+bench = false

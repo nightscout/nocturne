@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -64,6 +67,7 @@ public sealed class TrackerAlertRuleBackfillJobTests : IDisposable
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(new Contexts(_options));
         services.AddSingleton(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(_tenantId));
         services.AddSingleton(sync);
+        services.AddSingleton<ITrackerRepository>(sp => new TrackerRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
         await using var provider = services.BuildServiceProvider();
 
         var job = new TrackerAlertRuleBackfillJob(NullLogger<TrackerAlertRuleBackfillJob>.Instance);

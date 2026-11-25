@@ -12,12 +12,18 @@ using Nocturne.Core.Models.ClientDevices;
 namespace Nocturne.API.Controllers.V4.ClientDevices;
 
 /// <summary>
-/// Manages registered client app installs (Prelude, the desktop Companion) that can be alert-engine
-/// actuation targets. Distinct from <c>api/v4/devices</c> (the telemetry device catalog).
+/// The client apps installed on a caller's devices, such as Prelude and the desktop Companion. A
+/// caller can register a device, list its devices, rename a device, revoke a device and list a
+/// device's active intents. The capabilities operation returns the fixed list of actions a device
+/// can offer.
 /// </summary>
+/// <remarks>
+/// Registered installs can be alert-engine actuation targets. Distinct from <c>api/v4/devices</c>,
+/// the telemetry device catalog.
+/// </remarks>
 /// <seealso cref="IClientDeviceService"/>
 [ApiController]
-[Tags("Client Devices")]
+[Tags("Identity")]
 [Route("api/v4/client-devices")]
 public class ClientDevicesController : ControllerBase
 {
@@ -118,7 +124,7 @@ public class ClientDevicesController : ControllerBase
 
     /// <summary>Rename a device you own.</summary>
     [HttpPatch("{id:guid}")]
-    [RemoteCommand(Invalidates = ["GetDevices"])]
+    [RemoteCommand(Invalidates = ["GetDevices", "Services_GetConnections"])]
     [Authorize]
     [RequireScope(Scope.DeviceNotify, Scope.DeviceActuate)]
     [ProducesResponseType(typeof(ClientDeviceDto), StatusCodes.Status200OK)]
@@ -141,7 +147,7 @@ public class ClientDevicesController : ControllerBase
 
     /// <summary>Revoke (remove) a device you own. Its future registrations start fresh.</summary>
     [HttpDelete("{id:guid}")]
-    [RemoteCommand(Invalidates = ["GetDevices"])]
+    [RemoteCommand(Invalidates = ["GetDevices", "Services_GetConnections"])]
     [Authorize]
     [RequireScope(Scope.DeviceNotify, Scope.DeviceActuate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

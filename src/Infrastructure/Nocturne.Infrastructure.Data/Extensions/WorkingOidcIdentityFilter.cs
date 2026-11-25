@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <remarks>
 /// A disabled or de-configured provider cannot sign in, so an identity pointing at one is not a
 /// credential. Every check that asks whether a subject or tenant has a sign-in method must agree
-/// with this, or a locked-out account goes unnoticed and its tenant never reaches recovery mode.
+/// with this, or a locked-out account goes unnoticed (<see cref="OrphanedSubjectFilter"/>).
 /// </remarks>
 public static class WorkingOidcIdentityFilter
 {

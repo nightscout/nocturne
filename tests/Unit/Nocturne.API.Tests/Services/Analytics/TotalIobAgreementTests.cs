@@ -23,6 +23,7 @@ using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
@@ -72,6 +73,9 @@ public class TotalIobAgreementTests
 {
     private const long Minute = 60 * 1000;
     private const double Total = -0.022;
+    // A literal, not (decimal)Total: the compiler folds that cast to the exact binary value
+    // (-0.02199999...), where the alerts reader converts with DecimalConversion.ToDecimal.
+    private const decimal TotalAsDecimal = -0.022m;
     private const double BolusPart = 0.461;
     private const double BasalPart = -0.483;
 
@@ -156,8 +160,13 @@ public class TotalIobAgreementTests
 
     private bool _noTreatments;
 
-    private IIobCobReader Reader(long at) =>
-        new IobCobReader(_calculator, _cob.Object, Boluses(at), TempBasals(at), _carbs.Object, TestTenantCache.Create(), NullLogger<IobCobReader>.Instance);
+    private IobCobReader Reader(long at, IBolusRepository? boluses = null, ITempBasalRepository? temps = null) =>
+        new IobCobReader(
+            _calculator, _cob.Object, boluses ?? Boluses(at), temps ?? TempBasals(at), _carbs.Object, _timelines.Object,
+            MockStateSpans.Empty().Object, _aps.Object, _pump.Object, TestTenantCache.Create(), NullLogger<IobCobReader>.Instance);
+
+    private IobController V1(IobCobReader reader) =>
+        new(_calculator, reader, reader, new FakeTimeProvider(Reading));
 
     private IBolusRepository Boluses(long reading)
     {
@@ -189,7 +198,7 @@ public class TotalIobAgreementTests
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().BeApproximately(Total, 1e-9);
-        (await AlertsAsync()).Should().Be((decimal)Total);
+        (await AlertsAsync()).Should().Be(TotalAsDecimal);
         (await WidgetAsync()).Should().Be(-0.02);
         (await PropertiesAsync()).Should().Be(Total);
         (await PebbleAsync()).Should().Be("-0.02");
@@ -243,13 +252,13 @@ public class TotalIobAgreementTests
             });
     }
 
-    private async Task EveryReaderReports(double total, double twoDecimals, string display)
+    private async Task EveryReaderReports(double total, decimal totalAsDecimal, double twoDecimals, string display)
     {
         var (v1, v1Hourly) = await V1Async();
         var (retrospective, retrospectiveTimeline) = await RetrospectiveAsync();
 
         (await ChartAsync()).Should().Be(total);
-        (await AlertsAsync()).Should().Be((decimal)total);
+        (await AlertsAsync()).Should().Be(totalAsDecimal);
         (await WidgetAsync()).Should().Be(twoDecimals);
         (await PropertiesAsync()).Should().Be(total);
         (await PebbleAsync()).Should().Be(display);
@@ -265,7 +274,7 @@ public class TotalIobAgreementTests
         ApsReports(iob: 1.234, cob: 12, minutesBefore: 2);
         PumpReports(iob: 9.876, minutesBefore: 1);
 
-        await EveryReaderReports(1.234, 1.23, "1.23");
+        await EveryReaderReports(1.234, 1.234m, 1.23, "1.23");
     }
 
     [Fact]
@@ -274,7 +283,7 @@ public class TotalIobAgreementTests
         _noTreatments = true;
         ApsReports(iob: 1.234, cob: 12, minutesBefore: 2);
 
-        await EveryReaderReports(1.234, 1.23, "1.23");
+        await EveryReaderReports(1.234, 1.234m, 1.23, "1.23");
     }
 
     [Fact]
@@ -282,7 +291,7 @@ public class TotalIobAgreementTests
     {
         PumpReports(iob: 0.777, minutesBefore: 3);
 
-        await EveryReaderReports(0.777, 0.78, "0.78");
+        await EveryReaderReports(0.777, 0.777m, 0.78, "0.78");
     }
 
     private async Task<double> ChartAsync()
@@ -300,7 +309,6 @@ public class TotalIobAgreementTests
         {
             StartTime = ReadingMills,
             EndTime = ReadingMills,
-            BufferStartTime = ReadingMills - 8 * 60 * Minute,
             IntervalMinutes = 5,
             DefaultBasalRate = 1.0,
             BolusList = [BolusBefore(ReadingMills)],
@@ -326,6 +334,8 @@ public class TotalIobAgreementTests
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanService>(),
             Mock.Of<IAlertRepository>(),
+            Mock.Of<ITenantAlertSettingsRepository>(),
+            Mock.Of<IDndWindowRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IProfileActivationResolver>(),
@@ -333,6 +343,7 @@ public class TotalIobAgreementTests
             Mock.Of<ISleepService>(),
             Mock.Of<ITrackerRepository>(),
             Mock.Of<IReservoirEstimationService>(),
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             deps, new ServiceCollection().BuildServiceProvider(), new FakeTimeProvider(Reading),
@@ -359,7 +370,7 @@ public class TotalIobAgreementTests
         var trackers = new Mock<ITrackerRepository>();
         trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var service = new WidgetSummaryService(
-            entries.Object, Reader(now),
+            entries.Object, Reader(now), InsulinDeliveryReaders.Over(),
             _aps.Object, trackers.Object, Mock.Of<INotificationV1Service>(),
             Mock.Of<IGlucoseStatusClassifier>(), Mock.Of<IAlertRepository>(),
             Mock.Of<ICategoryReadContext>(),
@@ -478,9 +489,7 @@ public class TotalIobAgreementTests
             Iob = 1.5,
             AidAlgorithm = AidAlgorithm.OpenAps,
         });
-        var controller = new IobController(
-            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, Boluses(ReadingMills), TempBasals(ReadingMills),
-            MockStateSpans.Empty().Object, Reader(ReadingMills), new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        var controller = V1(Reader(ReadingMills));
 
         var atTime = (await controller.GetCurrentIob(time: ReadingMills)).Result
             .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<IobResult>().Subject;
@@ -494,9 +503,7 @@ public class TotalIobAgreementTests
     [Fact]
     public async Task V1Treatments_IsTheCalculatedTotal()
     {
-        var controller = new IobController(
-            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, Boluses(ReadingMills), TempBasals(ReadingMills),
-            MockStateSpans.Empty().Object, Reader(ReadingMills), new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        var controller = V1(Reader(ReadingMills));
 
         var result = (await controller.GetIobFromTreatments(time: ReadingMills)).Result
             .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<IobResult>().Subject;
@@ -515,9 +522,7 @@ public class TotalIobAgreementTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var controller = new IobController(
-            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, Boluses(ReadingMills), temps.Object, MockStateSpans.Empty().Object,
-            Reader(ReadingMills), new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        var controller = V1(Reader(ReadingMills, temps: temps.Object));
 
         await controller.GetHourlyIob(intervalMinutes: 5, hours: 168, startTime: ReadingMills - 168 * 60 * Minute);
 
@@ -545,9 +550,7 @@ public class TotalIobAgreementTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback((DateTime? _, DateTime? to, string? _, string? _, int _, int _, bool _, CancellationToken _) => tempTo = to)
             .ReturnsAsync([]);
-        var controller = new IobController(
-            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, boluses.Object, temps.Object,
-            MockStateSpans.Empty().Object, Reader(ReadingMills), new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        var controller = V1(Reader(ReadingMills, boluses: boluses.Object, temps: temps.Object));
 
         await controller.GetHourlyIob(intervalMinutes: 5, hours: 1, startTime: ReadingMills - 55 * Minute);
 
@@ -556,11 +559,52 @@ public class TotalIobAgreementTests
         tempTo.Should().Be(lastSlot);
     }
 
+    [Fact]
+    public async Task V1Hourly_AsksTheReaderForItsSlotsWithoutCarbs()
+    {
+        var series = new Mock<IIobCobSeriesReader>();
+        series
+            .Setup(r => r.ReadSeriesAsync(It.IsAny<IobCobSeriesWindow>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobCobSeriesReading([], [], [], [], await _timelines.Object.BuildAsync(0, 1), new ScheduledBasal([], [])));
+        var controller = new IobController(
+            _calculator, Reader(ReadingMills), series.Object, new FakeTimeProvider(Reading));
+        using var cts = new CancellationTokenSource();
+
+        await controller.GetHourlyIob(intervalMinutes: 5, hours: 1, startTime: ReadingMills - 55 * Minute, cts.Token);
+
+        series.Verify(r => r.ReadSeriesAsync(
+            new IobCobSeriesWindow(ReadingMills - 55 * Minute, ReadingMills, 5 * Minute), ReadingMills, false, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task V1Hourly_CountsAnOpenSuspendThatBeganTenHoursBeforeTheFirstSlot()
+    {
+        var firstSlot = ReadingMills - 55 * Minute;
+        var suspend = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(firstSlot - 10 * 60 * Minute).UtcDateTime,
+            Rate = 0,
+            Origin = TempBasalOrigin.Suspended,
+        };
+        var temps = new Mock<ITempBasalRepository>();
+        temps
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                new[] { suspend }.Where(t => t.StartTimestamp >= from && t.StartTimestamp <= to).ToList());
+        _noTreatments = true;
+
+        var hourly = (await V1(Reader(ReadingMills, temps: temps.Object))
+                .GetHourlyIob(intervalMinutes: 5, hours: 1, startTime: firstSlot)).Result
+            .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<HourlyIobResponse>().Subject;
+
+        hourly.Data[0].BasalIOB.Should().BeLessThan(0);
+    }
+
     private async Task<(IobResult Current, HourlyIobData Reading)> V1Async()
     {
-        var controller = new IobController(
-            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, Boluses(ReadingMills), TempBasals(ReadingMills),
-            MockStateSpans.Empty().Object, Reader(ReadingMills), new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        var controller = V1(Reader(ReadingMills));
 
         var current = (await controller.GetCurrentIob(time: ReadingMills)).Result
             .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<IobResult>().Subject;
@@ -574,14 +618,10 @@ public class TotalIobAgreementTests
     {
         var entries = new Mock<IEntryService>();
         entries.Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var deviceStatuses = Mock.Of<IDeviceStatusService>(s => s.GetDeviceStatusesAsync(
-                It.IsAny<FindQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(),
-                It.IsAny<bool>(), It.IsAny<ReadSortField>())
-            == Task.FromResult<IReadOnlyList<DeviceStatus>>(Array.Empty<DeviceStatus>()));
+        var reader = Reader(ReadingMills);
         var controller = new RetrospectiveController(
-            _calculator, _cob.Object, entries.Object, Boluses(ReadingMills), _carbs.Object, TempBasals(ReadingMills),
-            deviceStatuses, _timelines.Object, MockStateSpans.Empty().Object, _aps.Object, _pump.Object, Reader(ReadingMills),
-            NullLogger<RetrospectiveController>.Instance);
+            entries.Object, TempBasals(ReadingMills), _timelines.Object, MockStateSpans.Empty().Object, reader, reader,
+            TimeProvider.System, NullLogger<RetrospectiveController>.Instance);
         var http = new DefaultHttpContext();
         http.Items["GrantedScopes"] = new HashSet<string> { Scope.GlucoseRead, Scope.TreatmentsRead };
         controller.ControllerContext = new ControllerContext { HttpContext = http };

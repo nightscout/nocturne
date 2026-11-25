@@ -30,7 +30,7 @@ public class LegacyReadReportingTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TestNocturneDbContextFactory _factory;
     private readonly RecordingLegacyReads _written = new();
-    private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
+    private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly IAuditContext _audit = new SystemAuditContext();
 
     public LegacyReadReportingTests()
@@ -48,22 +48,22 @@ public class LegacyReadReportingTests : IDisposable
     }
 
     private TempBasalRepository TempBasals() =>
-        new(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance, legacyReads: _written);
+        new(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance, changes: _written.AsRecordChanges());
 
     private BolusRepository Boluses() =>
-        new(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance, legacyReads: _written);
+        new(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance, changes: _written.AsRecordChanges());
 
     private BolusCalculationRepository Calculations() =>
-        new(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance, legacyReads: _written);
+        new(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance, changes: _written.AsRecordChanges());
 
     private MeterGlucoseRepository MeterGlucose() =>
-        new(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance, legacyReads: _written);
+        new(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance, changes: _written.AsRecordChanges());
 
     private StateSpanRepository StateSpans() =>
         new(_factory, _dedup, _audit, NullLogger<StateSpanRepository>.Instance, _written);
 
     private ProfileActivationRepository ProfileActivations() =>
-        new(_factory, _audit, NullLogger<ProfileActivationRepository>.Instance, legacyReads: _written);
+        new(_factory, _audit, NullLogger<ProfileActivationRepository>.Instance, changes: _written.AsRecordChanges());
 
     private TreatmentFoodRepository TreatmentFoods() => new(_factory, _written);
 

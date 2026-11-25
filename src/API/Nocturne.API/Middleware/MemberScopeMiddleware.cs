@@ -124,10 +124,27 @@ public class MemberScopeMiddleware
         }
 
         var effectivePermissions = membership.Access.EffectivePermissions;
+        var credentialScopes = context.GetGrantedScopes();
 
         var resolvedScopes = MemberScopeResolver.Resolve(
-            effectivePermissions, authContext.AuthType, context.GetGrantedScopes());
+            effectivePermissions, authContext.AuthType, credentialScopes);
         context.SetGrantedScopes(resolvedScopes);
+        var sumClamped = MemberScopeResolver.IsHistoryClamped(
+            authContext.CredentialLimitTo24Hours, membership.Access.LimitTo24Hours, effectivePermissions);
+        // Never wider than the sum: a row an older build narrowed can hold less than its direct reason.
+        context.SetGrantCeiling(membership.Direct switch
+        {
+            null => null,
+            var direct when ReferenceEquals(direct, membership.Access) =>
+                new GrantCeiling(resolvedScopes, membership.Access.AccessEndsAt, sumClamped),
+            var direct => new GrantCeiling(
+                Scope.Common(
+                    MemberScopeResolver.Resolve(direct.EffectivePermissions, authContext.AuthType, credentialScopes),
+                    resolvedScopes),
+                HttpContextExtensions.Earlier(direct.AccessEndsAt, membership.Access.AccessEndsAt),
+                sumClamped || MemberScopeResolver.IsHistoryClamped(
+                    authContext.CredentialLimitTo24Hours, direct.LimitTo24Hours, direct.EffectivePermissions)),
+        });
 
         // Rebuild the permission trie from the resolved scopes. Both must be set: GrantedScopes
         // drives RequireScope checks, while the trie drives the HasPermissions policy (the legacy
@@ -139,8 +156,8 @@ public class MemberScopeMiddleware
         memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
         context.SetPermissionTrie(memberTrie);
 
-        authContext.LimitTo24Hours = MemberScopeResolver.IsHistoryClamped(
-            authContext.LimitTo24Hours, membership.Access.LimitTo24Hours, effectivePermissions);
+        authContext.FoldMembershipLimit(MemberScopeResolver.IsHistoryClamped(
+            authContext.LimitTo24Hours, membership.Access.LimitTo24Hours, effectivePermissions));
 
         _logger.LogDebug(
             "Member {SubjectId} on tenant {TenantId} resolved with {PermCount} effective permissions (LimitTo24Hours={LimitTo24Hours})",
@@ -156,7 +173,7 @@ public class MemberScopeMiddleware
             && _lastUsedClaims.TryClaim(membership.Id, membership.LastUsedAt))
         {
             var membershipId = membership.Id;
-            var ip = context.Connection.RemoteIpAddress?.ToString();
+            var ip = context.GetClientAddress();
             var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
 
             _ = Task.Run(async () =>

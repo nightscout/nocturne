@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -179,6 +180,29 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
             $"{status.CollectionProgress.Count} collections");
     }
 
+    /// <summary>
+    /// The fixture's 20 entries straddle 1746153849903: ten are dated at or after it. MongoDB mode
+    /// streams the whole collection, so the range is applied to each document and the total is
+    /// what the range holds.
+    /// </summary>
+    [Fact]
+    public async Task MigrateEntries_WithAStartDate_ImportsOnlyTheEntriesFromThatDate()
+    {
+        var from = DateTimeOffset.FromUnixTimeMilliseconds(1746153849903).UtcDateTime;
+
+        var status = await RunMigrationToCompletionAsync(
+            MigrationMode.MongoDb, collections: ["entries"], startDate: from);
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        var entries = status.CollectionProgress["entries"];
+        entries.DocumentsMigrated.Should().Be(10);
+        entries.TotalDocuments.Should().Be(10);
+        entries.DocumentsFailed.Should().Be(0);
+
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.SensorGlucose.CountAsync()).Should().Be(10);
+    }
+
     #region Helpers
 
     private async Task<List<JsonElement>> GetV3EntriesAsync()
@@ -191,37 +215,35 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
 
     private async Task<MigrationJobStatus> RunMigrationToCompletionAsync(
         MigrationMode mode,
-        List<string>? collections = null)
+        List<string>? collections = null,
+        DateTime? startDate = null)
     {
         var request = new StartMigrationRequest
         {
             Mode = mode,
             MongoConnectionString = _migration.MongoConnectionString,
             MongoDatabaseName = MigrationTestFixture.DatabaseName,
-            Collections = collections ?? []
+            Collections = collections ?? [],
+            StartDate = startDate,
         };
 
         var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
         startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
         jobInfo.Should().NotBeNull();
+        await MigrationJobPump.RunAsync(Fixture);
 
-        // Poll until complete
-        MigrationJobStatus? status = null;
-        for (var i = 0; i < 120; i++)
-        {
-            var statusResponse = await AuthenticatedClient.GetAsync(
-                $"/api/v4/migration/{jobInfo!.Id}/status");
-            status = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
-
-            if (status!.State is MigrationJobState.Completed or MigrationJobState.Failed)
-                break;
-
-            await Task.Delay(500);
-        }
-
-        status.Should().NotBeNull();
-        if (status!.State == MigrationJobState.Failed)
+        var status = await Eventually.ValueAsync(
+            "the migration job to complete or fail",
+            async () =>
+            {
+                var statusResponse = await AuthenticatedClient.GetAsync(
+                    $"/api/v4/migration/{jobInfo!.Id}/status");
+                var current = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
+                return current!.State is MigrationJobState.Completed or MigrationJobState.Failed ? current : null;
+            },
+            step: TimeSpan.FromMilliseconds(250));
+        if (status.State == MigrationJobState.Failed)
         {
             Log($"Migration failed: {status.ErrorMessage}");
         }

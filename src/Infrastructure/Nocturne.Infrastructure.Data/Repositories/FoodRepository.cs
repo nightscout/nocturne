@@ -23,7 +23,9 @@ public class FoodRepository : IFoodRepository
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
+    /// <param name="contexts">Opens the context each operation runs on</param>
     /// <param name="logger">The logger</param>
+    /// <param name="legacyReads">Told of each committed food write, when registered</param>
     public FoodRepository(
         INocturneDbContextFactory contexts,
         ILogger<FoodRepository> logger,
@@ -68,6 +70,31 @@ public class FoodRepository : IFoodRepository
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, Food>> GetFoodsByIdsAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (ids.Count == 0)
+            return new Dictionary<Guid, Food>();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.Foods.AsNoTracking().Where(f => ids.Contains(f.Id)).ToListAsync(cancellationToken);
+        return entities.ToDictionary(e => e.Id, FoodMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<Guid?> ResolveFoodKeyAsync(
+        string id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await FindEntityAsync(db.Foods.AsNoTracking(), id, cancellationToken);
+
+        return entity?.Id;
+    }
+
     /// <summary>
     /// The food <paramref name="id"/> names: its legacy ObjectId, its own UUID, or the id v3 serves
     /// for it (<see cref="MongoObjectId.Coerce"/>), which is the UUID's 24-hex prefix, or a hash of a
@@ -79,10 +106,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken
     )
     {
-        var entity = await foods.FirstOrDefaultAsync(f => f.OriginalId == id, cancellationToken);
-
-        if (entity == null && Guid.TryParse(id, out var guid))
-            entity = await foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+        var entity = await foods.FirstOrDefaultAsync(RecordIdKey.Matching<FoodEntity>(id), cancellationToken);
 
         if (entity != null || !MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
             return entity;
@@ -416,10 +440,11 @@ public class FoodRepository : IFoodRepository
 
         if (!string.IsNullOrEmpty(text))
         {
+            var lower = text.ToLowerInvariant();
             query = query.Where(f =>
-                f.Name.Contains(text)
-                || f.Category.Contains(text)
-                || f.Subcategory.Contains(text)
+                f.Name.ToLower().Contains(lower)
+                || f.Category.ToLower().Contains(lower)
+                || f.Subcategory.ToLower().Contains(lower)
             );
         }
 
@@ -430,5 +455,36 @@ public class FoodRepository : IFoodRepository
             .ToListAsync(cancellationToken);
 
         return entities.Select(FoodMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        string reference,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (Guid.TryParse(reference, out var id))
+            return await GetCatalogFoodAsync(id, cancellationToken);
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Foods
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.OriginalId == reference, cancellationToken);
+
+        return entity is null ? null : new CatalogFoodPortion(entity.Id, entity.Carbs);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogFoodPortion?> GetCatalogFoodAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db.Foods
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        return entity is null ? null : new CatalogFoodPortion(entity.Id, entity.Carbs);
     }
 }

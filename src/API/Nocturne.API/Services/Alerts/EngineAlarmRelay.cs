@@ -1,6 +1,5 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
@@ -8,9 +7,11 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -65,9 +66,15 @@ internal sealed class EngineAlarmRelay(
     ILogger<EngineAlarmRelay> logger)
     : IEngineAlarmRelay
 {
+    /// <remarks>
+    /// A notice that a rule cannot be evaluated (<see cref="AlertPayloadKind.Unevaluable"/>) is not
+    /// raised: every <c>/alarm</c> client (AAPS, the web overlay) would sound it as a glucose alarm.
+    /// Its excursion has no null end, so it is never alarming, and the all-clear reads only
+    /// excursions of a condition.
+    /// </remarks>
     public async Task RaiseAsync(AlertPayload payload, CancellationToken ct)
     {
-        if (!RaisesAlarm(payload.Severity)) return;
+        if (payload.Kind != AlertPayloadKind.Excursion || !RaisesAlarm(payload.Severity)) return;
 
         try
         {
@@ -75,7 +82,7 @@ internal sealed class EngineAlarmRelay(
             var alarm = Map(payload, useMmol, timeProvider.GetUtcNow())!;
             await broadcastService.BroadcastEngineAlarmAsync(alarm.EventName, alarm.Notify);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Failed to raise the alarm for excursion {ExcursionId}", payload.ExcursionId);
         }
@@ -91,8 +98,8 @@ internal sealed class EngineAlarmRelay(
 
             var raisedAnAlarm = await db.AlertInstances
                 .AsNoTracking()
+                .OfCondition()
                 .AnyAsync(i => changedExcursionIds.Contains(i.AlertExcursionId)
-                               && !i.IsTest
                                && i.AlertExcursion!.AlertRule!.Severity != AlertRuleSeverity.Info, ct);
             if (!raisedAnAlarm) return;
 
@@ -105,7 +112,7 @@ internal sealed class EngineAlarmRelay(
                 Timestamp = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
             });
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Failed to decide the all-clear after excursions {ExcursionIds} changed",
                 string.Join(",", changedExcursionIds));
@@ -132,7 +139,7 @@ internal sealed class EngineAlarmRelay(
         }
         if (top is null) return null;
 
-        var latest = await canonicalGlucose.GetLatestAsync(ct);
+        var latest = (await AlertReadings.SelectAsync(canonicalGlucose, now.UtcDateTime, ct)).Selected;
         var fresh = latest is not null && now.UtcDateTime - latest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
             ? latest
             : null;
@@ -141,9 +148,9 @@ internal sealed class EngineAlarmRelay(
         {
             AlertType = top.ConditionType,
             RuleName = top.RuleName,
-            GlucoseValue = fresh is null ? null : (decimal)fresh.Mgdl,
+            GlucoseValue = fresh?.Mgdl.ToDecimal(),
             Trend = null,
-            TrendRate = (decimal?)fresh?.TrendRate,
+            TrendRate = null,
             ReadingTimestamp = fresh?.Timestamp ?? now.UtcDateTime,
             ExcursionId = top.ExcursionId,
             InstanceId = top.InstanceId,
@@ -169,8 +176,8 @@ internal sealed class EngineAlarmRelay(
     private static IQueryable<AlertInstanceEntity> Alarming(NocturneDbContext db, DateTime now) =>
         db.AlertInstances
             .AsNoTracking()
+            .OfCondition()
             .Where(i => i.ResolvedAt == null
-                        && !i.IsTest
                         && i.SuppressionReason == null
                         && (i.SnoozedUntil == null || i.SnoozedUntil <= now)
                         && i.AlertExcursion!.EndedAt == null
@@ -185,17 +192,17 @@ internal sealed class EngineAlarmRelay(
     /// </summary>
     internal static EngineAlarm? Map(AlertPayload payload, bool useMmol, DateTimeOffset now)
     {
-        if (!RaisesAlarm(payload.Severity)) return null;
+        if (payload.AlertType is not { } type || !RaisesAlarm(payload.Severity)) return null;
 
         var critical = payload.Severity == AlertRuleSeverity.Critical;
-        var condition = AlertConditionTypeNames.ToWireString(payload.AlertType);
+        var condition = AlertConditionTypeNames.ToWireString(type);
 
         // NIGHTSCOUT-COMPAT: Nightscout clients show an alarm's title and message as sent, so the
         // backend renders them, in the tenant's units.
         var message = payload.GlucoseValue is { } mgdl
             ? useMmol
-                ? $"BG Now: {GlucoseUnits.Scale((double)mgdl, useMmol: true).ToString("0.0", CultureInfo.InvariantCulture)} mmol/L"
-                : $"BG Now: {GlucoseUnits.Scale((double)mgdl, useMmol: false).ToString("0", CultureInfo.InvariantCulture)} mg/dL"
+                ? $"BG Now: {GlucoseUnits.FromMgdl((double)mgdl, GlucoseUnit.Mmol).ToString("0.0", CultureInfo.InvariantCulture)} mmol/L"
+                : $"BG Now: {GlucoseUnits.FromMgdl((double)mgdl, GlucoseUnit.MgDl).ToString("0", CultureInfo.InvariantCulture)} mg/dL"
             : payload.RuleName;
 
         return new EngineAlarm(

@@ -7,6 +7,7 @@ import { remarkVars } from '@nocturne/cms/remark/vars';
 import { rehypeInstallSteps } from './src/lib/markdown/rehype-install-steps.js';
 import tailwindcss from '@tailwindcss/vite';
 import { wuchale } from 'wuchale/vite';
+import { privateDevCatalogue, WUCHALE_CONFIG_PATH } from '../app/wuchale.dev.js';
 import lingo from 'vite-plugin-lingo';
 import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve, sep } from 'node:path';
@@ -119,6 +120,14 @@ function releaseAssets(): Plugin {
         }
       }
 
+      const installer = resolve(deployRoot, 'install/install.sh');
+      if (existsSync(installer)) {
+        mkdirSync(resolve(dest, 'install'), { recursive: true });
+        cpSync(installer, resolve(dest, 'install/install.sh'));
+      } else {
+        this.warn(`release-assets: install.sh not found at ${installer}; skipping`);
+      }
+
       const oracleInstaller = resolve(deployRoot, 'oracle-cloud/oracle-cloud-install.sh');
       if (existsSync(oracleInstaller)) {
         mkdirSync(resolve(dest, 'oracle-cloud'), { recursive: true });
@@ -148,7 +157,8 @@ export default defineConfig({
     // The shared catalogue records references relative to packages/app, where translations:sync
     // runs, and wuchale reads references relative to its config's directory. Loaded from here,
     // no portal reference matched, so every portal string compiled to empty.
-    wuchale({ configPath: '../app/wuchale.config.js' }),
+    privateDevCatalogue('portal'),
+    wuchale({ configPath: WUCHALE_CONFIG_PATH }),
     lingo({
       route: '/_translations',
       localesDir: '../../locales',
@@ -192,6 +202,6 @@ export default defineConfig({
   ssr: {
     // layerchart and @layerstack/*, reached through the app's alert replay, emit .svelte sources and
     // bare `svelte` imports Node cannot resolve from pnpm's store, as in the app's config.
-    noExternal: ['@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'layerchart', /^@layerstack\//]
+    noExternal: ['@nocturne/api-client', '@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'layerchart', /^@layerstack\//]
   }
 });

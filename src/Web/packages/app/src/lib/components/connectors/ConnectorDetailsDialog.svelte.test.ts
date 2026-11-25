@@ -3,8 +3,8 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { ApiException, type SyncResult } from "#lib/api/generated/nocturne-api-client.js";
-import { SyncRequestSchema } from "#lib/api/generated/schemas.js";
+import { ApiException, type SyncResult } from "@nocturne/api-client";
+import { SyncRequestSchema } from "@nocturne/api-client/schemas";
 
 let syncImpl: () => Promise<SyncResult>;
 let sentRequest: unknown;
@@ -45,7 +45,7 @@ async function syncing(
     },
   });
 
-  await page.getByRole("button", { name: "Sync now" }).click();
+  await page.getByRole("button", { name: "Sync a date range" }).click();
 }
 
 const syncReturning = (result: SyncResult) => syncing(async () => result);
@@ -56,7 +56,7 @@ describe("ConnectorDetailsDialog", () => {
     pageState.data = { effectivePermissions: ["tenant.settings"] };
   });
 
-  it("hides the manual sync controls from a member without tenant.settings", async () => {
+  it("hides the manual sync controls from a viewer", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
 
     render(ConnectorDetailsDialog, {
@@ -78,7 +78,7 @@ describe("ConnectorDetailsDialog", () => {
 
     await expect.element(page.getByText("Nightscout")).toBeVisible();
     expect(
-      page.getByRole("button", { name: "Sync now" }).elements()
+      page.getByRole("button", { name: "Sync a date range" }).elements()
     ).toHaveLength(0);
   });
 
@@ -101,7 +101,32 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
+      .toBeVisible();
+  });
+
+  it("offers the manual sync controls to a caretaker, who sets up data sources", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read", "treatments.readwrite", "connectors.readwrite"] };
+
+    render(ConnectorDetailsDialog, {
+      props: {
+        open: true,
+        selectedConnector: {
+          id: "nightscout",
+          name: "Nightscout",
+          status: "Active",
+          state: "Configured",
+          isHealthy: true,
+        },
+        selectedConnectorCapabilities: {
+          supportsManualSync: true,
+          supportsHistoricalSync: true,
+        },
+      },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 
@@ -126,7 +151,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync now" }))
+      .element(page.getByRole("button", { name: "Sync a date range" }))
       .toBeVisible();
   });
 

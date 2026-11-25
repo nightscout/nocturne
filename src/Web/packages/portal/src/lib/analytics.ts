@@ -45,6 +45,7 @@ export const VIDEO_IDS = Object.keys(videos);
 
 /** The guides on /docs/installation, by the last segment of their path. */
 export const INSTALL_PLATFORM_IDS = [
+  'install-script',
   'docker-compose',
   'portainer',
   'oracle-cloud',

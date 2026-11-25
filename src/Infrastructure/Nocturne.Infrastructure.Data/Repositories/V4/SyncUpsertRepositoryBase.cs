@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
@@ -30,10 +31,10 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
-        IV4RecordBroadcaster<TModel>? broadcaster = null,
+        IRecordChangePublisher? changes = null,
         IDataEventSink<Entry>? entrySink = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
+        IDuplicateLinker? linker = null)
+        : base(contextFactory, auditContext, logger, changes, entrySink, linker)
     {
     }
 
@@ -72,6 +73,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <inheritdoc cref="ISyncKeyedRepository{T}.UpsertAsync" />
     public virtual async Task<SyncUpsert<TModel>> UpsertAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
         // The domain models carry no sync-key contract, so the key is read off the mapped entity.
         var entity = ToEntity(model);
@@ -79,17 +81,23 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         var syncIdentifier = entity.SyncIdentifier;
         if (!string.IsNullOrEmpty(dataSource) && !string.IsNullOrEmpty(syncIdentifier))
         {
-            var existing = await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct);
+            var existing = await ctx.WriteWithHistoryClampLiftedAsync(
+                token => FindGoverningRowAsync(ctx, dataSource, syncIdentifier, token), ct);
 
             if (existing?.DeletedAt != null)
                 throw RecreationBlockedException.ForSyncKey(typeof(TModel).Name, dataSource, syncIdentifier);
 
             if (existing != null)
             {
+                var hidden = (await HiddenAsync(ctx, [existing], ct)).Count > 0;
                 var before = ToDomain(existing);
-                ApplySyncUpsert(existing, model);
-                await ctx.SaveChangesAsync(ct);
-                var upserted = ToDomain(existing);
+                WriteSyncUpsert(existing, model, hidden);
+                if (hidden)
+                    await ctx.WriteWithHistoryClampLiftedAsync(
+                        token => SaveWriteAsync(ctx, existing, before.Timestamp, token), ct);
+                else
+                    await SaveWriteAsync(ctx, existing, before.Timestamp, ct);
+                var upserted = hidden ? AsSent(entity, existing) : ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
                 await RaiseBroadcastAsync([], [upserted], [], origin, ct, vacated: [before]);
                 return new SyncUpsert<TModel>(upserted, Created: false);
@@ -106,15 +114,42 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// </summary>
     protected virtual void ApplySyncUpsert(TEntity existing, TModel model) => ApplyUpdate(existing, model);
 
+    /// <summary>
+    /// <see cref="ApplySyncUpsert"/>, keeping the row's stored legacy id over the one the create
+    /// carries. That id is the key the row was first answered and written back under; a resend
+    /// that names the row only by its sync key, under another id, would otherwise move it, and
+    /// write-back would look for the row's copy upstream under a key that copy never had. A row the
+    /// history clamp hides also keeps its correlation id (<see cref="V4RepositoryBase{TModel,TEntity}.KeepCorrelationId"/>).
+    /// </summary>
+    private void WriteSyncUpsert(TEntity existing, TModel model, bool hidden)
+    {
+        var storedLegacyId = existing.LegacyId;
+        var storedCorrelationId = existing.CorrelationId;
+        ApplySyncUpsert(existing, model);
+        if (!string.IsNullOrEmpty(storedLegacyId))
+            existing.LegacyId = storedLegacyId;
+        if (hidden)
+            KeepCorrelationId(existing, storedCorrelationId);
+    }
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.ISyncKeyedRepository{T}.IsRecreationBlockedAsync" />
+    /// <remarks>
+    /// Reads with the history clamp lifted, as <see cref="UpsertAsync"/> matches, so it refuses what that
+    /// write would refuse. It tells the caller no more than the write's own refusal does.
+    /// </remarks>
     public async Task<bool> IsRecreationBlockedAsync(
         string dataSource, string syncIdentifier, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await FindGoverningRowAsync(ctx, dataSource, syncIdentifier, ct) is { DeletedAt: not null };
+        return await ctx.WriteWithHistoryClampLiftedAsync(
+            token => FindGoverningRowAsync(ctx, dataSource, syncIdentifier, token), ct) is { DeletedAt: not null };
     }
 
     /// <inheritdoc cref="ISyncKeyedRepository{T}.GetUpsertTargetTimestampsAsync" />
+    /// <remarks>
+    /// Reads with the history clamp lifted, as the write matches, so the footprint holds the stored time of
+    /// a row the clamp hides. The times only key cache clears and never reach the caller.
+    /// </remarks>
     public async Task<IReadOnlyList<DateTime>> GetUpsertTargetTimestampsAsync(
         IReadOnlyCollection<TModel> records, CancellationToken ct = default)
     {
@@ -131,10 +166,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         await using var ctx = await ContextFactory.CreateAsync(ct);
         // Over-fetches by a Cartesian amount, as SplitUpsertsAsync does, on the same index.
-        var rows = await ctx.Set<TEntity>().AsNoTracking()
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .Select(e => new { e.DataSource, e.SyncIdentifier, e.Timestamp })
-            .ToListAsync(ct);
+        var rows = await ctx.WriteWithHistoryClampLiftedAsync(
+            token => ctx.Set<TEntity>().AsNoTracking()
+                .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+                .Select(e => new { e.DataSource, e.SyncIdentifier, e.Timestamp })
+                .ToListAsync(token),
+            ct);
 
         return [.. rows.Where(r => keys.Contains((r.DataSource!, r.SyncIdentifier!))).Select(r => r.Timestamp)];
     }
@@ -142,14 +179,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// <summary>
     /// The row that decides a write on the sync key, tracked so a matched live row can be updated
     /// in place. Reads past the soft-delete query filter, which would hide the tombstone holding
-    /// the key; <c>IgnoreQueryFilters</c> lifts the tenant filter with it, hence the explicit
-    /// predicate.
+    /// the key.
     /// </summary>
     /// <seealso cref="SoftDeleteDedupExtensions.GoverningRow{TEntity}"/>
     private static async Task<TEntity?> FindGoverningRowAsync(
         NocturneDbContext ctx, string dataSource, string syncIdentifier, CancellationToken ct)
-        => (await ctx.Set<TEntity>().IgnoreQueryFilters()
-                .Where(e => e.TenantId == ctx.TenantId)
+        => (await ctx.Set<TEntity>().IncludingDeleted()
                 .WhereBlocksRecreation()
                 .Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
                 .ToListAsync(ct))
@@ -168,43 +203,23 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     {
         // Records without both keys keep a unique grouping key so they're not collapsed.
         entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
+            .GroupBy(e => e.SyncKey() is { } key ? $"sync|{key}" : $"id|{e.Id}")
             .Select(g => g.Last())
             .ToList();
 
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        if (syncKeyed.Count == 0)
+        if (!entities.Any(e => e.SyncKey() is not null))
             return UpsertSplit.Empty(entities);
 
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        // Over-fetches by a Cartesian amount. The live partial unique index and its user-tombstone
-        // companion on (tenant_id, data_source, sync_identifier) answer the WhereBlocksRecreation OR
-        // together: a user delete holds the key, a system sweep does not.
-        var existingRows = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId)
-            .WhereBlocksRecreation()
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.GoverningRow()!);
+        var existingByKey = await ctx.WriteWithHistoryClampLiftedAsync(
+            token => ctx.Set<TEntity>().IncludingDeleted().GoverningRowsBySyncKeyAsync(entities, token), ct);
+        var hidden = await HiddenAsync(ctx, existingByKey.Values, ct);
 
         var toInsert = new List<TEntity>();
         var split = UpsertSplit.Empty(toInsert);
         var skippedDeleted = 0;
         foreach (var entity in entities)
         {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
+            if (entity.SyncKey() is { } key && existingByKey.TryGetValue(key, out var existing))
             {
                 if (existing.DeletedAt != null)
                 {
@@ -213,8 +228,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                 }
 
                 var before = ToDomain(existing);
-                ApplySyncUpsert(existing, ToDomain(entity));
-                split.Classify(ctx, existing, before);
+                var isHidden = hidden.Contains(existing);
+                WriteSyncUpsert(existing, ToDomain(entity), isHidden);
+                split.Classify(ctx, existing, before, isHidden ? entity : null);
             }
             else
             {

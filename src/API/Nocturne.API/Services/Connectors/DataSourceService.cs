@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.ProfileActivations;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -84,13 +85,6 @@ public class DataSourceService : IDataSourceService
     /// when no contributing table could tell.
     /// </remarks>
     private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
-
-    /// <summary>The types a source's treatment totals and first and last treatment times span.</summary>
-    private static readonly string[] TreatmentTypes =
-    [
-        SourceDataTypes.Boluses, SourceDataTypes.CarbIntake, SourceDataTypes.BolusCalculations, SourceDataTypes.Notes,
-        SourceDataTypes.DeviceEvents, SourceDataTypes.BGChecks, SourceDataTypes.TempBasals,
-    ];
 
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
     {
@@ -245,7 +239,7 @@ public class DataSourceService : IDataSourceService
         // parses for name, category and icon, so a connector-imported snapshot still lists its rig.
         // The connector keeps its own entry via GetNonGlucoseStatsAsync, which keys on DataSource.
         var deviceStatusDevices = (await _sourceData.ApsSnapshotDevicesAsync(windowStart, cancellationToken))
-            .Select(d => new { d.Device, d.DataSource, LastMills = d.Latest.ToMills() })
+            .Select(d => new { d.Device, d.DataSource, d.AidAlgorithm, LastMills = d.Latest.ToMills() })
             .ToList();
 
         // Batch-aggregate non-glucose tables
@@ -342,6 +336,8 @@ public class DataSourceService : IDataSourceService
             if (!dataSources.Any(d => d.DeviceId == dsDevice.Device))
             {
                 var info = CreateDataSourceInfo(dsDevice.Device, dsDevice.DataSource, SourceHandle.Device);
+                if (IsAndroidAps(dsDevice.AidAlgorithm))
+                    DescribeAsAndroidAps(info);
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
                 info.FirstSeen = info.LastSeen;
                 info.TotalEntries = 0;
@@ -402,7 +398,7 @@ public class DataSourceService : IDataSourceService
                 Available = true,
                 RequiresServerConfig = true,
                 DataSourceId = connector.DataSourceId,
-                DocumentationUrl = GetConnectorDocumentationUrl(connector.ConnectorName),
+                DocumentationUrl = connector.DocumentationUrl,
                 ConfigFields = null,
             })
             .OrderBy(connector => connector.Name)
@@ -419,17 +415,6 @@ public class DataSourceService : IDataSourceService
         }
 
         return connectors;
-    }
-
-    private static string? GetConnectorDocumentationUrl(string connectorName)
-    {
-        return connectorName.ToLowerInvariant() switch
-        {
-            "dexcom" => UrlConstants.External.DocsDexcom,
-            "librelinkup" => UrlConstants.External.DocsLibre,
-            "glooko" => UrlConstants.External.DocsGlooko,
-            _ => null,
-        };
     }
 
     /// <inheritdoc />
@@ -585,7 +570,7 @@ public class DataSourceService : IDataSourceService
     /// <summary>
     /// Create a DataSourceInfo from a device identifier
     /// </summary>
-    private DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
+    internal static DataSourceInfo CreateDataSourceInfo(string deviceId, string? dataSource, SourceHandle handle)
     {
         var info = new DataSourceInfo
         {
@@ -649,11 +634,7 @@ public class DataSourceService : IDataSourceService
         }
         else if (lowerDevice.Contains("aaps") || lowerDevice.Contains("androidaps"))
         {
-            info.Name = "AndroidAPS";
-            info.SourceType = "aaps";
-            info.Category = "aid-system";
-            info.Icon = "aaps";
-            info.Description = "AndroidAPS AID System";
+            DescribeAsAndroidAps(info);
         }
         else if (lowerDevice.Contains("openaps") || lowerDevice.Contains("oref"))
         {
@@ -754,6 +735,42 @@ public class DataSourceService : IDataSourceService
         return info;
     }
 
+    /// <summary>
+    /// Whether an APS snapshot's stored algorithm is AndroidAPS. AndroidAPS uploads its loop status as
+    /// <c>openaps://&lt;phone model&gt;</c>, the device string an OpenAPS rig uses too, so for those rows
+    /// only the snapshot's attribution tells the two apart.
+    /// </summary>
+    internal static bool IsAndroidAps(string? aidAlgorithm) =>
+        aidAlgorithm == nameof(Core.Models.V4.AidAlgorithm.AndroidAps);
+
+    internal static void DescribeAsAndroidAps(DataSourceInfo info)
+    {
+        info.Name = "AndroidAPS";
+        info.SourceType = "aaps";
+        info.Category = "aid-system";
+        info.Icon = "aaps";
+        info.Description = "AndroidAPS AID System";
+    }
+
+
+    /// <inheritdoc />
+    public async Task<bool> ConnectorHoldsDataAsync(string connectorId, CancellationToken cancellationToken = default)
+    {
+        if (ConnectorMetadataService.GetByConnectorId(connectorId) is not { } metadata)
+            return false;
+
+        if (await _sourceData.HoldsRowsByDataSourceAsync(metadata.DataSourceId, cancellationToken))
+            return true;
+
+        var last24Hours = _time.GetUtcNow().UtcDateTime.AddHours(-24);
+        foreach (var purge in PurgesOf(metadata))
+        {
+            if ((await purge.DescribeAsync(null, last24Hours, cancellationToken)).Count > 0)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <inheritdoc />
     public async Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
@@ -886,13 +903,26 @@ public class DataSourceService : IDataSourceService
         };
     }
 
+    /// <remarks>
+    /// The connector's resume state goes with its data: a resume point it kept would answer the next
+    /// sync's re-import with only what arrived since, and report that as a success. It is cleared
+    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import. A
+    /// purge that allows re-import clears the vendor state too, for the same reason: a vendor cursor
+    /// or a fingerprint of what was published (Glooko's SSV2 positions, Tandem's profiles) would
+    /// answer the re-import with only what changed since. A purge that keeps the data out clears
+    /// what the connector's registration declares
+    /// (<see cref="ConnectorRegistrationAttribute.KeptOutPurgeClears"/>).
+    /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
         bool allowReimport,
         CancellationToken cancellationToken
     )
     {
-        var deletedCounts = await DeleteAllSourceDataAsync(metadata.DataSourceId, allowReimport, cancellationToken);
+        await _configurations.ClearStateAsync(
+            metadata.ConnectorName, PurgeClears(metadata, allowReimport), cancellationToken);
+
+        var deletedCounts = await DeleteAllAsync(RecordSelector.ForSource(metadata.DataSourceId), allowReimport, cancellationToken);
         foreach (var purge in PurgesOf(metadata))
         {
             foreach (var (type, count) in await purge.PurgeAsync(allowReimport, _auditContext, cancellationToken))
@@ -902,29 +932,31 @@ public class DataSourceService : IDataSourceService
         return deletedCounts;
     }
 
+    internal static ConnectorStateSlots PurgeClears(ConnectorMetadataService.ConnectorDisplayInfo metadata, bool allowReimport) =>
+        allowReimport ? ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor : metadata.KeptOutPurgeClears;
+
     private IEnumerable<IConnectorDataPurge> PurgesOf(ConnectorMetadataService.ConnectorDisplayInfo metadata) =>
         _dataPurges.Where(p => p.ConnectorName.Equals(metadata.ConnectorName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Deletes every data type attributable to <paramref name="source"/>: glucose through its V4
-    /// repositories, everything else through <see cref="ISourceOwnedDataPurge"/>, whose remarks give
-    /// the path each table takes. Returns the per-type deleted counts (non-zero only).
+    /// Deletes every data type <paramref name="selector"/> names: glucose through its V4 repositories,
+    /// everything else through <see cref="ISourceOwnedDataPurge"/>, whose remarks give the path each
+    /// table takes. Returns the per-type deleted counts (non-zero only).
     /// </summary>
     /// <remarks>
-    /// With <paramref name="allowReimport"/>, every user tombstone of the source is released after the
-    /// delete, including those of earlier deletes, so the source can send its records again.
+    /// With <paramref name="allowReimport"/>, every user tombstone the selector names is released after
+    /// the delete, including those of earlier deletes, so their sender can send the records again.
     /// </remarks>
-    private async Task<Dictionary<string, long>> DeleteAllSourceDataAsync(
-        string source,
+    private async Task<Dictionary<string, long>> DeleteAllAsync(
+        RecordSelector selector,
         bool allowReimport,
         CancellationToken cancellationToken
     )
     {
-        var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
-        var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
-        var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
+        var sensorGlucoseDeleted = await _sensorGlucose.DeleteAsync(selector, WriteOrigin.Live, cancellationToken);
+        var meterGlucoseDeleted = await _meterGlucose.DeleteAsync(selector, WriteOrigin.Live, cancellationToken);
+        var calibrationsDeleted = await _calibrations.DeleteAsync(selector, WriteOrigin.Live, cancellationToken);
 
-        var scope = $"data_source={source}";
         var deletedCounts = new Dictionary<string, long>();
         void Add(string type, long deleted)
         {
@@ -934,16 +966,25 @@ public class DataSourceService : IDataSourceService
         Add(nameof(SyncDataType.Glucose), sensorGlucoseDeleted);
         Add(nameof(SyncDataType.ManualBG), meterGlucoseDeleted);
         Add(nameof(SyncDataType.Calibrations), calibrationsDeleted);
-        var purged = await _sourcePurge.SoftDeleteBySourceAsync(source, scope, cancellationToken);
+        var purged = await _sourcePurge.SoftDeleteAsync(selector, cancellationToken);
         foreach (var (type, deleted) in purged.DeletedCounts)
             Add(type, deleted);
-        await _profileActivationWriter.AfterBulkRemovalAsync(purged.ProfileNames, cancellationToken);
+        await _profileActivationWriter.AfterBulkRemovalAsync(cancellationToken);
 
         if (allowReimport)
-            await _sourcePurge.AllowReimportBySourceAsync(source, scope, cancellationToken);
+            await _sourcePurge.AllowReimportAsync(selector, cancellationToken);
 
         return deletedCounts;
     }
+
+    /// <summary>
+    /// The source <paramref name="key"/> names under either origin handle, however long ago it last
+    /// wrote: the connections list drops a source after the discovery window but keeps its records.
+    /// </summary>
+    private async Task<DataSourceInfo?> FindStoredSourceAsync(string key, CancellationToken ct) =>
+        (await _sourceData.CountsBySourceAsync(key, ct)).Count > 0
+            ? CreateDataSourceInfo(key, key, SourceHandle.Unknown)
+            : null;
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
@@ -984,6 +1025,8 @@ public class DataSourceService : IDataSourceService
                 s.Id == dataSourceId || s.DeviceId == dataSourceId
             );
 
+            source ??= await FindStoredSourceAsync(dataSourceId, cancellationToken);
+
             if (source == null)
             {
                 _logger.LogWarning("Data source not found: {DataSourceId}", dataSourceId);
@@ -999,7 +1042,7 @@ public class DataSourceService : IDataSourceService
             if (connector is not null)
                 return await PurgeConnectorDataAsync(connector, connector.ConnectorName, allowReimport, cancellationToken);
 
-            var deletedCounts = await DeleteAllSourceDataAsync(deviceId, allowReimport, cancellationToken);
+            var deletedCounts = await DeleteAllAsync(RecordSelector.ForSource(deviceId), allowReimport, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for {DeviceId}: {DeletedCounts}",
@@ -1026,6 +1069,30 @@ public class DataSourceService : IDataSourceService
                 DataSourceDeleteError.DeleteFailed,
                 "Failed to delete data source data");
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<DataSourceDeleteResult> DeleteWrittenDataAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        bool allowReimport = false,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var selector = RecordSelector.ForWriters(grantIds);
+        var deletedCounts = await DeleteAllAsync(selector, allowReimport, cancellationToken);
+
+        _logger.LogInformation(
+            "Deleted data for {Scope}: {DeletedCounts}",
+            selector.Scope,
+            string.Join(", ", deletedCounts.Select(kv => $"{kv.Value} {kv.Key}"))
+        );
+
+        return new DataSourceDeleteResult
+        {
+            Success = true,
+            DataSource = selector.Scope,
+            DeletedCounts = deletedCounts,
+        };
     }
 
     /// <inheritdoc />
@@ -1067,6 +1134,10 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <inheritdoc />
+    public Task<bool> HoldsDemoDataAsync(CancellationToken cancellationToken = default) =>
+        _demoPurge.HoldsDataAsync(cancellationToken);
+
+    /// <inheritdoc />
     public async Task<DataSourceStats> GetDataSourceStatsAsync(
         string dataSource,
         CancellationToken cancellationToken = default
@@ -1088,10 +1159,7 @@ public class DataSourceService : IDataSourceService
 
         var sgStats = Of(SourceDataTypes.Glucose);
         var stateSpanStats = Of(SourceDataTypes.StateSpans);
-        var treatments = TreatmentTypes.Select(Of).ToList();
-
-        // Treatment totals cover exactly the types the first/last treatment timestamps span, so a
-        // source with only one of them cannot report zero treatments alongside a treatment time.
+        var treatments = _sourceData.TreatmentDataTypes.Select(Of).ToList();
         var totalTreatments = treatments.Sum(t => t.Count);
         var treatments24h = treatments.Sum(t => t.CountLast24Hours);
         var lastTreatmentTime = await GetLatestTreatmentTimestampBySourceAsync(dataSource, cancellationToken);

@@ -53,6 +53,10 @@ import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 
+// The navigation stub's `pushState` adds no history entry, so the `back()` that takes a coach
+// overlay's entry off again would leave the test page.
+window.history.back = () => {};
+
 // A tenantless host keeps the tenant-scoped surfaces (alerts, membership
 // requests, the backup sign-in prompt) unmounted, leaving only the shell.
 type LayoutData = ComponentProps<typeof AuthenticatedLayoutHarness>["data"];
@@ -65,11 +69,14 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     isShareHost: false,
     canViewRealtimeData: false,
     showBackupSignInPrompt: false,
+    showRecoveryEmailPrompt: false,
+    recoveryEmailHasAddress: false,
     tenantTargets: [],
     isDemo: false,
     isGuestSession: false,
     isPlatformAdmin: false,
     isPlatformAccessGrant: false,
+    isHandedOffSession: false,
     tenantSlug: null,
     baseDomain: null,
     guestExpiresAt: null,
@@ -81,6 +88,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     refusedAsDemoSubject: false,
     onboardingComplete: true,
     pillRows: { desktop: 1, mobile: 1 },
+    sidebarOpen: true,
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,
@@ -133,6 +141,20 @@ describe("authenticated layout", () => {
     });
 
     await expect.element(page.getByText("Guest access")).toBeVisible();
+  });
+
+  it("opens a guest's visit with the guest tour, on the countdown", async () => {
+    localStorage.clear();
+    render(AuthenticatedLayoutHarness, {
+      props: {
+        data: layoutData({
+          isGuestSession: true,
+          guestExpiresAt: new Date(BASE + 2 * 60 * 1000).toISOString(),
+        }),
+      },
+    });
+
+    await expect.element(page.getByRole("dialog", { name: "Read-only access" })).toBeVisible();
   });
 
   it.each([
@@ -196,6 +218,50 @@ describe("authenticated layout", () => {
 
       expect(stripOf().getBoundingClientRect().top).toBe(0);
       expect(barTop()).toBeCloseTo(stripOf().getBoundingClientRect().height, 0);
+    });
+  });
+
+  describe("sidebar", () => {
+    const original = [window.innerWidth, window.innerHeight] as const;
+    const sidebarState = () =>
+      document.querySelector<HTMLElement>("[data-slot=sidebar]")?.dataset.state;
+
+    afterEach(async () => {
+      await page.viewport(original[0], original[1]);
+    });
+
+    it("starts collapsed when the browser last left it collapsed", async () => {
+      await page.viewport(1024, 768);
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: false }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      expect(sidebarState()).toBe("collapsed");
+    });
+
+    it("starts expanded when the browser last left it open", async () => {
+      await page.viewport(1024, 768);
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: true }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      expect(sidebarState()).toBe("expanded");
+    });
+
+    it("remembers a toggle for a year", async () => {
+      await page.viewport(1024, 768);
+      const written: string[] = [];
+      const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie")!;
+      vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
+        written.push(value);
+        cookie.set!.call(document, value);
+      });
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: true }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true }));
+
+      await vi.waitFor(() => expect(sidebarState()).toBe("collapsed"));
+      expect(written).toContain("sidebar:state=false; path=/; max-age=31536000");
+      document.cookie = "sidebar:state=; path=/; max-age=0";
     });
   });
 

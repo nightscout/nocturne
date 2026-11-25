@@ -17,14 +17,12 @@ public class MyLifeAuthTokenProvider(
     ILogger<MyLifeAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy,
     TimeProvider? timeProvider = null)
-    : AuthTokenProviderBase<MyLifeConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
+    : AuthTokenProviderBase<MyLifeConnectorConfiguration>(
+        httpClient, tokenCache, serverResolver, tenantAccessor, logger, retryDelayStrategy)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly IMyLifeSessionCache _sessionCache = sessionCache;
     private readonly MyLifeSoapClient _soapClient = soapClient;
-
-    private readonly IRetryDelayStrategy _retryDelayStrategy =
-        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     protected override int TokenLifetimeBufferMinutes => 60;
 
@@ -41,7 +39,6 @@ public class MyLifeAuthTokenProvider(
 
                 return await SignInAsync(config, cancellationToken);
             },
-            _retryDelayStrategy,
             maxRetries,
             "MyLife authentication",
             cancellationToken);
@@ -119,6 +116,7 @@ public class MyLifeAuthTokenProvider(
                 _logger.LogWarning(
                     "MyLife auth failed: login returned no auth token (check credentials; appVersion {AppVersion})",
                     config.AppVersion);
+                RecordLoginAnswer(credentialsRefused: true);
                 return (null, false);
             }
 

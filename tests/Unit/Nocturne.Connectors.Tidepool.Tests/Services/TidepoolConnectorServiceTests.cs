@@ -10,10 +10,10 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Services;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Tidepool.Tests.Services;
 
@@ -21,14 +21,11 @@ public class TidepoolConnectorServiceTests
 {
     /// <summary>
     /// When authentication fails, the sync must report failure (so the connector surfaces as
-    /// unhealthy) rather than silently returning a successful, empty result. Previously a missing
-    /// token made the data fetches return null without error, so a bad-credential tenant was
-    /// recorded as healthy and never alerted. The failure takes the shared shape: the summary in
-    /// <c>Message</c> for the tenant's sync card and the source-qualified detail in <c>Errors</c>,
-    /// which is what gets persisted as the connector's last error.
+    /// unhealthy) rather than silently returning a successful, empty result, and say what the
+    /// tenant has to fix: a missing token makes the data fetches return null without error.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_ReportsFailure_WhenAuthenticationFails()
+    public async Task SyncDataAsync_LoginRefused_ReportsTheProvidersSignInReason()
     {
         var fixture = new ServiceFixture(new TidepoolFakeHandler { LoginSucceeds = false });
 
@@ -38,9 +35,34 @@ public class TidepoolConnectorServiceTests
             CancellationToken.None);
 
         result.Success.Should().BeFalse("an authentication failure must mark the sync unhealthy");
-        result.Message.Should().Be("Authentication failed");
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be($"Authentication failed for {DataSources.TidepoolConnector}");
+        fixture.TokenProvider.SignInFailureReason.Should().Contain("did not accept this sign-in");
+        result.Message.Should().Be(fixture.TokenProvider.SignInFailureReason);
+        result.Errors.Should().ContainSingle().Which.Should().Be(fixture.TokenProvider.SignInFailureReason);
+    }
+
+    /// <summary>
+    /// A run withdrawn while a fetch is backing off stops there, rather than spending the rest of
+    /// its attempts against a source nobody is waiting on, and still resolves the tenant's
+    /// in-progress indicator.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CancelledDuringFetchRetry_StopsAndEndsInAFailedPhase()
+    {
+        using var cts = new CancellationTokenSource();
+        var handler = new TidepoolFakeHandler { DataStatus = HttpStatusCode.ServiceUnavailable };
+        var fixture = new ServiceFixture(handler, retryDelayStrategy: new CancellingRetryDelayStrategy(cts));
+        var progress = new RecordingProgressReporter();
+
+        var sync = () => fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            cts.Token,
+            progress);
+
+        await sync.Should().ThrowAsync<OperationCanceledException>();
+        handler.DataCalls.Should().Be(1, "no attempt is made once the run is withdrawn");
+        progress.Events.Should().NotBeEmpty();
+        progress.Events[^1].Phase.Should().Be(SyncPhase.Failed);
     }
 
     /// <summary>
@@ -71,6 +93,37 @@ public class TidepoolConnectorServiceTests
     /// differ, so reporting one type's batch under the other's key cannot pass, and the published
     /// payloads are checked as well so a swap beneath the counting cannot pass either.
     /// </summary>
+    /// <summary>
+    /// A scheduled run for a tenant who switched every data type off has nothing to fetch, so it
+    /// succeeds, calls nothing at Tidepool and reads no resume point.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_EveryDataTypeOff_SucceedsWithoutAVendorCallOrAResumePoint()
+    {
+        var handler = new TidepoolFakeHandler();
+        var glucose = new Mock<IGlucosePublisher>();
+        var fixture = new ServiceFixture(
+            handler,
+            withPublisher: true,
+            config: new TidepoolConnectorConfiguration
+            {
+                Username = "user@example.com",
+                Password = "secret",
+                SyncGlucose = false,
+                SyncBoluses = false,
+                SyncCarbIntake = false,
+            },
+            glucose: glucose.Object);
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        handler.DataCalls.Should().Be(0);
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task SyncDataAsync_RecordsEachTreatmentTypeUnderItsOwnKey()
     {
@@ -129,6 +182,42 @@ public class TidepoolConnectorServiceTests
         var now = clock.GetUtcNow().UtcDateTime;
         fixture.PublishedBoluses.Should().ContainSingle().Which.CreatedAt.Should().Be(now);
         fixture.PublishedCarbIntakes.Should().ContainSingle().Which.CreatedAt.Should().Be(now);
+    }
+
+    /// <summary>
+    /// The store skips a record whose legacy id a stored row carries, so a second sync of the same
+    /// vendor data stores nothing new only while every record keeps its legacy id.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameData_PublishesUnderTheSameLegacyIds()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var handler = new TidepoolFakeHandler
+        {
+            BolusJson = """[{ "id": "b1", "time": "2026-03-01T08:00:00Z", "normal": 1.5 }]""",
+            FoodJson = """
+                [{ "id": "f1", "time": "2026-03-01T09:00:00Z", "nutrition": { "carbohydrate": { "net": 40 } } }]
+                """,
+        };
+        var fixture = new ServiceFixture(handler, withPublisher: true, clock: clock);
+        var request = new SyncRequest { DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        var stored = fixture.PublishedBoluses.Select(b => b.LegacyId)
+            .Concat(fixture.PublishedCarbIntakes.Select(c => c.LegacyId)).ToHashSet();
+        var firstIds = fixture.PublishedBoluses.Select(b => b.Id).ToList();
+        fixture.PublishedBoluses.Clear();
+        fixture.PublishedCarbIntakes.Clear();
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        stored.Should().BeEquivalentTo(["tidepool_b1", "tidepool_f1"]);
+        fixture.PublishedBoluses.Select(b => b.LegacyId)
+            .Concat(fixture.PublishedCarbIntakes.Select(c => c.LegacyId))
+            .Should().OnlyContain(id => stored.Contains(id!));
+        fixture.PublishedBoluses.Select(b => b.Id).Should().NotIntersectWith(firstIds);
+        fixture.PublishedBoluses.Should().OnlyContain(b => b.DataSource == DataSources.TidepoolConnector);
     }
 
     /// <summary>
@@ -260,10 +349,36 @@ public class TidepoolConnectorServiceTests
         });
     }
 
+    /// <summary>
+    /// Tidepool reads every type in one window. A second scheduled run starts it where glucose
+    /// resumes after the first, the newest stored reading less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksOnlyFromTheFirstRunsNewestReading()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var glucose = new Mock<IGlucosePublisher>();
+        glucose.SetupSequence(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null)
+            .ReturnsAsync(new DateTime(2026, 3, 1, 11, 50, 0, DateTimeKind.Utc));
+        var handler = new TidepoolFakeHandler();
+        var fixture = new ServiceFixture(handler, withPublisher: true, clock: clock, glucose: glucose.Object);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+        var firstRun = handler.DataQueries.Count;
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        firstRun.Should().Be(3);
+        handler.DataQueries.Take(firstRun).Should().OnlyContain(q => q.Contains("startDate=2025-09-01T12:00:00.0000000Z"));
+        handler.DataQueries.Skip(firstRun).Should().HaveCount(3)
+            .And.OnlyContain(q => q.Contains("startDate=2026-03-01T11:45:00.0000000Z"));
+    }
+
     /// <summary>Wires the connector service and a real token provider onto one fake handler.</summary>
     private sealed class ServiceFixture
     {
         internal TidepoolConnectorService Service { get; }
+        internal TidepoolAuthTokenProvider TokenProvider { get; }
         internal TidepoolConnectorConfiguration Config { get; }
         internal List<Bolus> PublishedBoluses { get; } = [];
         internal List<CarbIntake> PublishedCarbIntakes { get; } = [];
@@ -272,7 +387,9 @@ public class TidepoolConnectorServiceTests
             TidepoolFakeHandler handler,
             bool withPublisher = false,
             TidepoolConnectorConfiguration? config = null,
-            TimeProvider? clock = null)
+            TimeProvider? clock = null,
+            IRetryDelayStrategy? retryDelayStrategy = null,
+            IGlucosePublisher? glucose = null)
         {
             Config = config ?? new TidepoolConnectorConfiguration
             {
@@ -280,18 +397,16 @@ public class TidepoolConnectorServiceTests
                 Password = "secret",
             };
 
-            var tenantAccessor = new Mock<ITenantAccessor>();
-            tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-            tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var tenantAccessor = ResolvedTenant.Accessor();
 
             var serverResolver = new ConnectorServerResolver<TidepoolConnectorConfiguration>(
                 null, null, TidepoolFakeHandler.Host);
 
-            var tokenProvider = new TidepoolAuthTokenProvider(
+            TokenProvider = new TidepoolAuthTokenProvider(
                 new HttpClient(handler),
                 new ConnectorTokenCache(clock),
                 serverResolver,
-                tenantAccessor.Object,
+                tenantAccessor,
                 NullLogger<TidepoolAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 clock);
@@ -318,7 +433,7 @@ public class TidepoolConnectorServiceTests
                 var mock = new Mock<IConnectorPublisher>();
                 mock.Setup(p => p.IsAvailable).Returns(true);
                 mock.Setup(p => p.Treatments).Returns(treatments.Object);
-                mock.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+                mock.Setup(p => p.Glucose).Returns(glucose ?? Mock.Of<IGlucosePublisher>());
                 mock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
                 publisher = mock.Object;
             }
@@ -327,9 +442,8 @@ public class TidepoolConnectorServiceTests
                 new HttpClient(handler),
                 serverResolver,
                 NullLogger<TidepoolConnectorService>.Instance,
-                Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
-                tokenProvider,
+                retryDelayStrategy ?? Mock.Of<IRetryDelayStrategy>(),
+                TokenProvider,
                 publisher,
                 clock);
         }
@@ -357,6 +471,10 @@ public class TidepoolConnectorServiceTests
         internal string BolusJson { get; init; } = "[]";
         internal string FoodJson { get; init; } = "[]";
 
+        internal int DataCalls { get; private set; }
+
+        internal List<string> DataQueries { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -378,7 +496,9 @@ public class TidepoolConnectorServiceTests
 
             if (path == $"/data/{UserId}")
             {
+                DataCalls++;
                 var query = Uri.UnescapeDataString(request.RequestUri.Query);
+                DataQueries.Add(query);
                 var isBolus = query.Contains($"type={TidepoolConstants.DataTypes.Bolus}", StringComparison.Ordinal);
                 var isFood = query.Contains($"type={TidepoolConstants.DataTypes.Food}", StringComparison.Ordinal);
 
@@ -399,5 +519,27 @@ public class TidepoolConnectorServiceTests
 
         private static HttpResponseMessage Json(string body) =>
             new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+    }
+
+    /// <summary>Withdraws the run partway through a delay, as a stopping host would.</summary>
+    private sealed class CancellingRetryDelayStrategy(CancellationTokenSource cts) : IRetryDelayStrategy
+    {
+        public Task ApplyRetryDelayAsync(int attemptNumber, CancellationToken cancellationToken)
+        {
+            cts.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingProgressReporter : ISyncProgressReporter
+    {
+        public List<SyncProgressEvent> Events { get; } = [];
+
+        public Task ReportProgressAsync(SyncProgressEvent progress, CancellationToken ct = default)
+        {
+            Events.Add(progress);
+            return Task.CompletedTask;
+        }
     }
 }

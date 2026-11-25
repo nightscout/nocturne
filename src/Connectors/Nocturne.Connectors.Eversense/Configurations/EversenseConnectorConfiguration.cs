@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.Eversense.Configurations;
     ServiceNames.EversenseConnector,
     "EVERSENSE",
     "ConnectSource.Eversense",
-    "eversense-connector",
+    DataSources.EversenseConnector,
     "eversense",
     ConnectorCategory.Cgm,
     "Connect to Eversense Now",
@@ -18,7 +18,8 @@ namespace Nocturne.Connectors.Eversense.Configurations;
     MaxHistoricalDays = EversenseConnectorConfiguration.MaxHistoryDays,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
-    SensorReadingIntervalSeconds = 300
+    SensorReadingIntervalSeconds = 300,
+    LegacyIdPrefix = "eversense"
 )]
 public class EversenseConnectorConfiguration : BaseConnectorConfiguration
 {

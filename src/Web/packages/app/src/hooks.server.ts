@@ -1,4 +1,5 @@
 import { isInternalOnlyApiPath } from "#lib/server/internal-only-api-paths.js";
+import { isCrossSiteFormRequest, isProxiedApiPath } from "#lib/server/csrf.js";
 import { randomUUID } from "#lib/utils/index.js";
 import { isRecord, nonEmptyString } from "#lib/utils/type-guards.js";
 import { applySecurityHeaders, parseFrameAncestors } from "#lib/server/security-headers.js";
@@ -16,7 +17,7 @@ import { mintDemoSession } from "#lib/server/demo-session.js";
 import { sequence, type Handle, type HandleServerError } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
-import { buildProxyHeaders } from "#lib/server/api-proxy-headers.js";
+import { buildProxyHeaders, buildProxyResponseHeaders } from "#lib/server/api-proxy-headers.js";
 import { clientAddressHeaders } from "#lib/server/client-address.js";
 
 import {
@@ -41,7 +42,7 @@ import * as main from '../../../locales/main.loader.server.svelte.js'
 import * as js from '../../../locales/js.loader.server.js'
 import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
-import { renderColorScheme } from "#lib/server/color-scheme-html.js";
+import { renderRootClasses } from "#lib/server/root-class-html.js";
 import { dropModulepreloads } from "#lib/server/link-header.js";
 import { LANGUAGE_COOKIE_NAME } from "#lib/stores/appearance-store.svelte.js";
 
@@ -65,6 +66,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   event.locals.isAuthenticated = false;
   event.locals.isPlatformAdmin = false;
   event.locals.isPlatformAccessGrant = false;
+  event.locals.isHandedOffSession = false;
 
   const apiBaseUrl = getApiBaseUrl();
 
@@ -151,6 +153,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.isAuthenticated = true;
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
       event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
+      event.locals.isHandedOffSession = session.isHandedOff ?? false;
 
       // Effective permissions (granted scopes and history window) for the current tenant. Absent
       // where the permissions endpoint would refuse the caller, which leaves them defaulting empty.
@@ -315,12 +318,11 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
 
 // Proxy handler for /api requests
 const proxyHandle: Handle = async ({ event, resolve }) => {
-  // Check if the request is for /api (but not SvelteKit-handled routes like webhooks and bot dispatch)
   const path = event.url.pathname;
   if (isInternalOnlyApiPath(path)) {
     return new Response("Not Found", { status: 404 });
   }
-  if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot") && !path.startsWith("/api/otel")) {
+  if (isProxiedApiPath(path)) {
     const apiBaseUrl = getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error(
@@ -352,7 +354,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     return new Response(proxyResponse.body, {
       status: proxyResponse.status,
       statusText: proxyResponse.statusText,
-      headers: proxyResponse.headers,
+      headers: buildProxyResponseHeaders(proxyResponse.headers),
     });
   }
 
@@ -381,6 +383,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const guestSessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
   const platformAccessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
   const recoverySessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.recoverySession);
+  const trustedDeviceToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.trustedDevice);
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),
@@ -409,6 +412,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     guestSessionToken,
     platformAccessToken,
     recoverySessionToken,
+    trustedDeviceToken,
     extraHeaders,
     responseCookies: event.cookies,
     rawSetCookies: event.locals.rawSetCookies,
@@ -583,9 +587,9 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
 };
 
 // The head keeps its modulepreload tags; only the header is trimmed, so Early Hints carry CSS and fonts.
-const colorSchemeHandle: Handle = async ({ event, resolve }) => {
+const rootClassHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event, {
-    transformPageChunk: ({ html }) => renderColorScheme(html, event.cookies),
+    transformPageChunk: ({ html }) => renderRootClasses(html, event.cookies, event.locals),
   });
   const link = response.headers.get("link");
   if (link === null) return response;
@@ -608,6 +612,17 @@ const healthHandle: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
+// SvelteKit skips its own check in dev too.
+const csrfHandle: Handle = async ({ event, resolve }) => {
+  if (!dev && isCrossSiteFormRequest(event.request)) {
+    const message = `Cross-site ${event.request.method} form submissions are forbidden`;
+    return event.request.headers.get("accept") === "application/json"
+      ? Response.json({ message }, { status: 403 })
+      : new Response(message, { status: 403 });
+  }
+  return resolve(event);
+};
+
 // requestContextHandle comes first of the request-serving handlers: everything after it reads
 // the facts it establishes.
 //
@@ -615,4 +630,4 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 // none of the locals they set and the API authenticates it and answers its setup/recovery state
 // itself, so running them first cost every browser /api call three serial API round-trips, and let
 // a session refresh in authHandle rotate the refresh token the proxy then forwarded stale.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, proxyHandle, resetBitsId, colorSchemeHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, requestContextHandle, securityHeadersHandle, csrfHandle, proxyHandle, resetBitsId, rootClassHandle, statusProbeHandle, authHandle, readinessHandle, apiClientHandle, locale);

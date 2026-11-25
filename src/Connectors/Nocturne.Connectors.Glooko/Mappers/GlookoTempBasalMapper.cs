@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models.V4;
 
@@ -8,26 +9,24 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 
 public class GlookoTempBasalMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource;
     private readonly ILogger _logger;
-    private readonly TimeProvider _clock;
     private readonly GlookoTimeMapper _timeMapper;
 
     public GlookoTempBasalMapper(
         string connectorSource,
         GlookoTimeMapper timeMapper,
-        ILogger logger,
-        TimeProvider clock)
+        ILogger logger)
     {
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public List<TempBasal> TransformV3ToTempBasals(GlookoV3GraphResponse graphData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var tempBasals = new List<TempBasal>();
 
         if (graphData?.Series == null)
@@ -49,7 +48,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = 0.0,
@@ -57,10 +55,7 @@ public class GlookoTempBasalMapper
                         Origin = TempBasalOrigin.Suspended,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_suspend_basal_{suspend.X}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("suspend_basal", suspend.X),
                     }
                 );
             }
@@ -83,7 +78,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = 0.0,
@@ -91,10 +85,7 @@ public class GlookoTempBasalMapper
                         Origin = origin,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_lgsplgs_basal_{lgsEvent.X}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("lgsplgs_basal", lgsEvent.X),
                     }
                 );
             }
@@ -115,7 +106,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = rate,
@@ -123,10 +113,7 @@ public class GlookoTempBasalMapper
                         Origin = TempBasalOrigin.Manual,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_tempbasal_{tempBasal.X}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("tempbasal", tempBasal.X),
                     }
                 );
             }
@@ -153,7 +140,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = rate,
@@ -161,10 +147,7 @@ public class GlookoTempBasalMapper
                         Origin = TempBasalOrigin.Scheduled,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_scheduledbasal_{basal.X}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("scheduledbasal", basal.X),
                     }
                 );
             }
@@ -180,7 +163,6 @@ public class GlookoTempBasalMapper
 
     public List<TempBasal> TransformV2ToTempBasals(GlookoBatchData batchData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var tempBasals = new List<TempBasal>();
 
         if (batchData == null)
@@ -218,7 +200,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = rate,
@@ -226,10 +207,7 @@ public class GlookoTempBasalMapper
                         Origin = TempBasalOrigin.Manual,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_v2_tempbasal_{rawTimestamp.Ticks}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("v2_tempbasal", rawTimestamp.Ticks),
                     }
                 );
             }
@@ -268,7 +246,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = rate,
@@ -276,10 +253,7 @@ public class GlookoTempBasalMapper
                         Origin = TempBasalOrigin.Scheduled,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_v2_scheduledbasal_{rawTimestamp.Ticks}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("v2_scheduledbasal", rawTimestamp.Ticks),
                     }
                 );
             }
@@ -314,7 +288,6 @@ public class GlookoTempBasalMapper
                 tempBasals.Add(
                     new TempBasal
                     {
-                        Id = Guid.CreateVersion7(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
                         Rate = 0.0,
@@ -322,10 +295,7 @@ public class GlookoTempBasalMapper
                         Origin = TempBasalOrigin.Suspended,
                         Device = null,
                         App = null,
-                        DataSource = _connectorSource,
-                        LegacyId = $"glooko_v2_suspend_basal_{rawTimestamp.Ticks}",
-                        CreatedAt = now,
-                        ModifiedAt = now,
+                        LegacyId = LegacyIds.Of("v2_suspend_basal", rawTimestamp.Ticks),
                     }
                 );
             }

@@ -14,6 +14,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Moq;
+using Nocturne.API.Multitenancy;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -221,11 +223,14 @@ public class TenantSettingsControllerRequestValidationTests
                     services.AddSingleton(records.Object);
                     services.AddSingleton(accessor.Object);
                     services.AddSingleton(units.Object);
+                    services.AddSingleton(Mock.Of<IPlatformPolicyRepository>());
+                    services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()));
                     services.AddSingleton(authentication.Object);
                     services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database));
                     services.AddSingleton<INocturneDbContextFactory>(sp =>
                         sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
                     services.AddTransient<ISubjectRepository, SubjectRepository>();
+                    services.AddSingleton(AccountLinkRoutes.Off);
                     services.Configure<RouteOptions>(o => o.SuppressCheckForUnhandledSecurityMetadata = true);
                     services.AddControllers().ConfigureApplicationPartManager(manager =>
                     {

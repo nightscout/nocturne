@@ -8,6 +8,8 @@ on:
       - 'src/Web/packages/ui/**'
       - 'src/Web/packages/cms/**'
       - 'src/Web/packages/screenshots/**'
+      # The clinical colour theme and the alert simulator's chart.
+      - 'src/Web/packages/charts/**'
       # The portal bundles the app's appearance store and OAuth scope constants.
       - 'src/Web/packages/app/src/lib/stores/**'
       - 'src/Web/packages/app/src/lib/constants/**'
@@ -90,7 +92,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "11.0.x"
 
       - name: Build bridge package
         working-directory: src/Web/packages/bridge

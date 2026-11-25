@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "name": "limit-from-fact-clear-margin",
+  "description": "the clear margin moves the effective limit (target_low plus its offset) as it moves a literal: below target_low 80 opens at 78, holds at 83 while open (widened limit 85), and closes at 86; the same rule under not widens toward its false side",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "target_low"
+        },
+        "clear_margin": 5
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "target_low",
+          "offset": -10
+        },
+        "clear_margin": 5
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value_from": {
+              "fact": "target_low"
+            },
+            "clear_margin": 5
+          }
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 78,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 83,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 86,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 69,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 74,
+        "latest_timestamp": "2026-01-05T12:20:00Z",
+        "last_reading_at": "2026-01-05T12:20:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 76,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "last_reading_at": "2026-01-05T12:25:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

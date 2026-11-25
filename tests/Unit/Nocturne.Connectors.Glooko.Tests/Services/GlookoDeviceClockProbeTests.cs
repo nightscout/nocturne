@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -160,19 +161,19 @@ public class GlookoDeviceClockProbeTests
                 UseV3Api = false,
                 SyncGlucose = true,
             };
+            Publisher.SetupGet(p => p.State).Returns(new InMemoryConnectorStateStore());
             var service = new GlookoConnectorService(
                 new HttpClient(Handler),
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
                 NullLogger<GlookoConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
-                Mock.Of<IRateLimitingStrategy>(),
                 new StaticGlookoTokenProvider(),
                 Publisher.Object,
-                mealMatchingService: null,
+                mealMatchLinker: null,
                 timezoneTimelineService: Timeline.Object,
                 deviceClockService: DeviceClock.Object,
-                cursorStore: new FakeCursorStore(),
-                timeProvider: new FakeTimeProvider(Instant));
+                timeProvider: new FakeTimeProvider(Instant),
+                endpointPause: TimeSpan.Zero);
 
             return service.SyncDataAsync(
                 new SyncRequest { DataTypes = [SyncDataType.Glucose] }, config, CancellationToken.None);
@@ -181,7 +182,7 @@ public class GlookoDeviceClockProbeTests
         public IReadOnlyList<DeviceClockObservation> RecordedObservations() =>
             DeviceClock.Invocations
                 .Where(i => i.Method.Name == nameof(IDeviceClockService.RecordObservationsAsync))
-                .SelectMany(i => (IReadOnlyList<DeviceClockObservation>)i.Arguments[1])
+                .SelectMany(i => (IReadOnlyList<DeviceClockObservation>)i.Arguments[1]!)
                 .ToList();
     }
 

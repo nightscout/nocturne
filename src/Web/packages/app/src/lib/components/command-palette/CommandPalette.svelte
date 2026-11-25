@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Command from "#lib/components/ui/command/index.js";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { computeCommandScore } from "bits-ui";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -12,13 +13,14 @@
     getGlucoseUnits,
     setGlucoseUnits,
   } from "#lib/stores/appearance-store.svelte.js";
-  import { userPrefersMode } from "mode-watcher";
   import {
     paletteItemsFor,
+    paletteKeywordWords,
+    paletteStatValues,
     groupMeta,
     type CommandPaletteItem,
     type CommandPaletteGroup,
-  } from "./command-palette-items";
+  } from "./command-palette-items.svelte.js";
   import {
     pinnedItemIds,
     recentItemIds,
@@ -27,9 +29,6 @@
     recordRecent,
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
-  import { consumableAgeHours } from "./consumable-age";
-  import { LegacyConsumableKind } from "#lib/api/index.js";
-  import { formatAge } from "#lib/components/trackers/age.svelte.js";
   import Star from "@lucide/svelte/icons/star";
   import { Button } from "#lib/components/ui/button/index.js";
 
@@ -45,18 +44,46 @@
   let { open = $bindable(false), tenantless = false }: Props = $props();
 
   let searchValue = $state("");
+  let highlighted = $state("");
+  let highlightedId: string | null = null;
+  let restoreHighlightTo: string | null = null;
+
+  // An item whose label changes, a toggled setting or a live stat, registers again under its new
+  // label, and bits-ui then selects the first item, more than once. Until the person moves again,
+  // a selection goes to the item that was highlighted, unless the search no longer renders it: its
+  // new label may stop matching, and bits-ui draws no item whose score is zero.
+  function setHighlighted(next: string) {
+    const keptItem = visibleItems.find((item) => item.id === restoreHighlightTo);
+    const kept =
+      keptItem &&
+      (!searchValue ||
+        computeCommandScore(keptItem.label, searchValue, keptItem.keywords) > 0)
+        ? keptItem.label
+        : undefined;
+    if (!kept) restoreHighlightTo = null;
+    highlighted = kept ?? next;
+    if (restoreHighlightTo === null) {
+      highlightedId = visibleItems.find((item) => item.label === next)?.id ?? null;
+    }
+  }
 
   const realtimeStore = getRealtimeStore();
 
   const visibleItems = $derived(
-    paletteItemsFor(tenantless, {
-      grantedScopes: page.data.effectivePermissions ?? [],
-      anonymous: !page.data.user,
-    }).filter(
+    paletteItemsFor(
+      tenantless,
+      {
+        grantedScopes: page.data.effectivePermissions ?? [],
+        anonymous: !page.data.user,
+      },
+      paletteKeywordWords(),
+      paletteStatValues(realtimeStore)
+    ).filter(
       (item) =>
         (!item.scope ||
           satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
-        (!item.platformAdmin || page.data.isPlatformAdmin)
+        (!item.platformAdmin || page.data.isPlatformAdmin) &&
+        !(item.notForDemoSubject && page.data.refusedAsDemoSubject)
     )
   );
 
@@ -91,81 +118,25 @@
       if (!groups.includes(item.group)) groups.push(item.group);
     }
 
+    const meta = groupMeta();
     return groups
-      .sort((a, b) => groupMeta[a].order - groupMeta[b].order)
+      .sort((a, b) => meta[a].order - meta[b].order)
       .map((group): [CommandPaletteGroup, CommandPaletteItem[]] => [
         group,
         mainGroupItems.filter((item) => item.group === group),
       ]);
   });
 
-  function consumableAge(kind: LegacyConsumableKind): string | undefined {
-    const hours = consumableAgeHours(
-      kind,
-      realtimeStore.legacyFallbacks,
-      realtimeStore.legacyCoverage,
-      realtimeStore.trackerInstances,
-      realtimeStore.now
-    );
-    return hours === undefined ? undefined : formatAge(hours);
-  }
-
-  function getStatValue(itemId: string): string | undefined {
-    const pills = realtimeStore.pillsData;
-    switch (itemId) {
-      case "stat-iob":
-        return pills.iob?.display ?? undefined;
-      case "stat-cob":
-        return pills.cob?.display ?? undefined;
-      case "stat-cage":
-        return consumableAge(LegacyConsumableKind.Site);
-      case "stat-sage":
-        return consumableAge(LegacyConsumableKind.Sensor);
-      case "stat-a1c":
-        return undefined;
-      case "stat-tir":
-        return undefined;
-      default:
-        return undefined;
-    }
-  }
-
-  function getItemLabel(item: CommandPaletteItem): string {
-    if (item.group === "quick-settings") {
-      return getQuickSettingLabel(item.id) || item.label;
-    }
-    if (item.group === "stats") {
-      const value = getStatValue(item.id);
-      return value ? `${item.label}: ${value}` : item.label;
-    }
-    return item.label;
-  }
-
-  function getQuickSettingLabel(itemId: string): string {
-    switch (itemId) {
-      case "qs-dark-mode": {
-        const mode = userPrefersMode.current;
-        return `Dark mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
-      }
-      case "qs-glucose-units":
-        return `Units: ${getGlucoseUnits() === "mg/dl" ? "mg/dL" : "mmol/L"}`;
-      case "qs-chart-lookback":
-        return `Chart lookback: ${glucoseChartLookback.current}h`;
-      default:
-        return "";
-    }
-  }
-
   function handleSelect(item: CommandPaletteItem) {
     recordRecent(item.id);
 
     if (item.href) {
       open = false;
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a literal in-app path from command-palette-items.ts
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a literal in-app path from command-palette-items.svelte.ts
       goto(item.href);
     } else if (item.linkedHref) {
       open = false;
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.linkedHref is a literal in-app path from command-palette-items.ts
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.linkedHref is a literal in-app path from command-palette-items.svelte.ts
       goto(item.linkedHref);
     } else {
       handleAction(item.id);
@@ -206,9 +177,19 @@
     }
   }
 
+  const labelSignature = $derived(visibleItems.map((item) => item.label).join("|"));
+
+  $effect.pre(() => {
+    if (!open) return;
+    void labelSignature;
+    restoreHighlightTo = highlightedId;
+  });
+
   $effect(() => {
     if (!open) {
       searchValue = "";
+      restoreHighlightTo = null;
+      highlightedId = null;
     }
   });
 </script>
@@ -219,7 +200,7 @@
     <Icon class="mr-2 h-4 w-4" />
   {/if}
   <div class="flex flex-1 flex-col">
-    <span>{getItemLabel(item)}</span>
+    <span>{item.label}</span>
     {#if item.description}
       <span class="text-xs text-muted-foreground">{item.description}</span>
     {/if}
@@ -268,7 +249,13 @@
   </div>
 {/snippet}
 
-<Command.Dialog bind:open>
+<svelte:window
+  onkeydowncapture={() => (restoreHighlightTo = null)}
+  onpointermovecapture={() => (restoreHighlightTo = null)}
+  oninputcapture={() => (restoreHighlightTo = null)}
+/>
+
+<Command.Dialog bind:open bind:value={() => highlighted, setHighlighted}>
   <Command.Input placeholder="Search commands..." bind:value={searchValue} />
 
   <!-- The vitals strip reads one tenant's live glucose. -->
@@ -296,7 +283,7 @@
     {/if}
 
     {#each groupedItems as [group, groupItems] (group)}
-      <Command.Group heading={groupMeta[group].label}>
+      <Command.Group heading={groupMeta()[group].label}>
         {#each groupItems as item (item.id)}
           {@render commandItem(item, false)}
         {/each}

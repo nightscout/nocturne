@@ -21,8 +21,8 @@ public class BasalInjectionRepository : SyncUpsertRepositoryBase<BasalInjection,
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<BasalInjectionRepository> logger,
-        IV4RecordBroadcaster<BasalInjection>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

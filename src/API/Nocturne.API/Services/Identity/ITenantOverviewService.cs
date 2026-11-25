@@ -12,8 +12,10 @@ namespace Nocturne.API.Services.Identity;
 public interface ITenantOverviewService
 {
     /// <summary>
-    /// Returns the latest canonical reading, resolved thresholds, status classification,
-    /// and active alert summary for every qualifying tenant of <paramref name="subjectId"/>.
+    /// Returns one item for every qualifying tenant of <paramref name="subjectId"/>, in display
+    /// order: tenants with a reason for attention first, most severe first, then by name.
+    /// The alert summary and the therapy, device and tracker parts of an item are null when the
+    /// caller's access to that tenant does not cover them.
     /// Per-tenant access is resolved by <see cref="MemberScopeResolver"/> from each membership's
     /// effective permissions, <paramref name="authType"/> and <paramref name="tokenScopes"/> — the
     /// same resolution <c>MemberScopeMiddleware</c> applies per request. A tenant whose
@@ -22,6 +24,33 @@ public interface ITenantOverviewService
     /// </summary>
     Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours = false,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the statistics of the last <paramref name="days"/> days, and the change in time in
+    /// range from the period before, for every tenant <see cref="GetGlucoseReadTenantsAsync"/>
+    /// returns. A tenant whose access lacks reports read, or whose membership or
+    /// <paramref name="credentialLimitTo24Hours"/> limits the caller to the last 24 hours, is
+    /// returned unavailable and read not at all. A period is the span ending now, as
+    /// <c>GET /api/v4/statistics/periods</c> reads it. A caller with no subject of its own has no
+    /// memberships, and gets the periods with no people.
+    /// </summary>
+    Task<TenantReviewResponse> GetReviewAsync(
+        Guid? subjectId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        bool credentialLimitTo24Hours = false,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the last 24 hours of one person: the item <see cref="GetOverviewAsync"/> builds for
+    /// <paramref name="tenantId"/>, its readings at one per 5-minute bucket, and its newest manual
+    /// boluses and carb intakes. Null when <paramref name="tenantId"/> is not a tenant
+    /// <see cref="GetGlucoseReadTenantsAsync"/> returns, whether it does not exist or the caller may not
+    /// read it, and then nothing of the tenant is read. A caller with no subject of its own has no
+    /// memberships, so it gets null. The read runs under the same history clamp as the overview's.
+    /// </summary>
+    Task<TenantPersonDetail?> GetPersonAsync(
+        Guid? subjectId, Guid tenantId, IReadOnlySet<string> tokenScopes, AuthType authType,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
 

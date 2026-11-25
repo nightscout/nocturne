@@ -7,49 +7,30 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Glucose;
 
 /// <summary>
-/// Default <see cref="ICanonicalGlucoseService"/>: detects multi-stream inputs, loads the
-/// patient's devices once per scope, and delegates selection to <see cref="CanonicalGlucoseStream"/>.
+/// Default <see cref="ICanonicalGlucoseService"/>: canonical reads of the glucose store, demo data
+/// only in demo mode and none outside it.
 /// </summary>
 internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
 {
     /// <summary>
-    /// Newest rows consulted by <see cref="GetLatestAsync"/> — enough for several concurrent
-    /// streams at 1-minute cadence to still contain the canonical winner's latest bucket.
-    /// </summary>
-    private const int LatestFetchLimit = 60;
-
-    /// <summary>
-    /// Row cap for <see cref="GetRecentAsync"/>: callers ask for windows of minutes, so this only
-    /// bounds a pathological burst of streams, never a normal window.
+    /// Row cap for <see cref="GetRecentAsync"/>, newest first. Most callers ask for minutes. The alert
+    /// look-back behind a reading with no value (<c>AlertReadings.LookBackAsync</c>) asks for 24 hours:
+    /// past 500 readings with no value (over 8 hours of a 1-minute source) it finds no reading with a
+    /// value, so the outage reads from the oldest reading it got, which errs toward signal loss.
     /// </summary>
     private const int RecentFetchLimit = 500;
 
-    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
-    private readonly IPatientDeviceRepository _patientDeviceRepository;
-    private readonly IDemoModeService _demoMode;
+    private const int WindowPageSize = 1000;
 
-    private IReadOnlyList<PatientDevice>? _devices;
+    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
+    private readonly IDemoModeService _demoMode;
 
     public CanonicalGlucoseService(
         ISensorGlucoseRepository sensorGlucoseRepository,
-        IPatientDeviceRepository patientDeviceRepository,
         IDemoModeService demoMode)
     {
         _sensorGlucoseRepository = sensorGlucoseRepository ?? throw new ArgumentNullException(nameof(sensorGlucoseRepository));
-        _patientDeviceRepository = patientDeviceRepository ?? throw new ArgumentNullException(nameof(patientDeviceRepository));
         _demoMode = demoMode ?? throw new ArgumentNullException(nameof(demoMode));
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<SensorGlucose>> SelectAsync(
-        IReadOnlyList<SensorGlucose> readings,
-        CancellationToken ct = default)
-    {
-        if (!CanonicalGlucoseStream.HasMultipleStreams(readings))
-            return readings;
-
-        _devices ??= (await _patientDeviceRepository.GetAllAsync(ct)).ToList();
-        return CanonicalGlucoseStream.Select(readings, _devices);
     }
 
     /// <inheritdoc />
@@ -58,25 +39,49 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
         // No time window: delayed-sync sources (hours-late connector chunks) must still surface
         // a latest value, matching the pre-canonical behaviour of using a write batch's newest
         // reading however old it was.
-        var canonical = await FetchCanonicalAsync(from: null, LatestFetchLimit, ct);
-        return canonical.Count > 0 ? canonical[0] : null;
+        var latest = await ReadAsync(from: null, to: null, limit: 1, after: null, ct);
+        return latest.Count > 0 ? latest[0] : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<SensorGlucose?> GetLatestAsync(DateTime notAfter, CancellationToken ct = default)
+    {
+        var latest = await ReadAsync(from: null, to: notAfter, limit: 1, after: null, ct);
+        return latest.Count > 0 ? latest[0] : null;
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default)
-        => FetchCanonicalAsync(since, RecentFetchLimit, ct);
+        => ReadAsync(since, to: null, RecentFetchLimit, after: null, ct);
 
-    private async Task<IReadOnlyList<SensorGlucose>> FetchCanonicalAsync(
-        DateTime? from, int limit, CancellationToken ct)
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SensorGlucose>> GetWindowAsync(
+        DateTime since, DateTime to, CancellationToken ct = default)
     {
-        var source = _demoMode.IsEnabled ? DataSources.DemoService : null;
-        var recent = (await _sensorGlucoseRepository.GetAsync(
-            from: from, to: null, device: null, source: source,
-            limit: limit, offset: 0, descending: true, ct: ct)).ToList();
+        var window = new List<SensorGlucose>();
+        while (true)
+        {
+            var page = await ReadAsync(since, to, WindowPageSize, window.Count == 0 ? null : window[^1], ct);
+            window.AddRange(page);
+            if (page.Count < WindowPageSize)
+                return window;
+        }
+    }
 
-        if (!_demoMode.IsEnabled)
-            recent = recent.Where(r => !DataSources.IsEphemeral(r.DataSource)).ToList();
+    /// <inheritdoc />
+    public Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default)
+        => _sensorGlucoseRepository.GetStreamPredecessorAsync(reading, since, ct);
 
-        return await SelectAsync(recent, ct);
+    private async Task<IReadOnlyList<SensorGlucose>> ReadAsync(
+        DateTime? from, DateTime? to, int limit, SensorGlucose? after, CancellationToken ct)
+    {
+        var (source, streams) = _demoMode.IsEnabled
+            ? (DataSources.DemoService, GlucoseStreams.Canonical)
+            : ((string?)null, GlucoseStreams.CanonicalExcludingEphemeral);
+        return (await _sensorGlucoseRepository.GetAsync(
+            from: from, to: to, device: null, source: source,
+            limit: limit, offset: 0, descending: true,
+            afterTimestamp: after?.Timestamp, afterId: after?.Id, ct: ct, streams: streams)).ToList();
     }
 }

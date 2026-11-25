@@ -4,6 +4,7 @@ import logger from './logger.js';
 import type { ClientInfo, AlarmData, AlarmEvent, ServerStats } from '../types.js';
 import {
   verifyHandshakeTicket,
+  verifyOverviewTicket,
   isHandshakeTicketShaped,
   normalizeHandshakeHost,
   REALTIME_ADMISSION_PATH,
@@ -12,6 +13,7 @@ import {
   type RealtimeGrant,
 } from './handshake-ticket.js';
 import { isRecord, stringField, type Payload } from './payload.js';
+import { LegacyDeltaBuffer, legacyFamilies, type LegacyFamily } from './legacy-delta.js';
 
 /** What a socket carries from its handshake to its handlers. */
 interface BridgeSocketData {
@@ -38,6 +40,10 @@ interface BridgeSocketData {
   subjectId?: string;
   /** The API broadcast categories whose storage events the socket receives. */
   categories?: string[];
+  /** Whether the socket was admitted through the classic `authorize` exchange. */
+  legacy?: boolean;
+  /** Whether the socket has been sent `connected` (see {@link SocketIOServer.announceConnected}). */
+  connectedAnnounced?: boolean;
   /** Whether an `/alarm` socket's credential may silence the tenant's alarms. */
   mayAck?: boolean;
   /** How the socket proves its admission again; absent until it is admitted. */
@@ -46,6 +52,10 @@ interface BridgeSocketData {
   readmissionTimer?: ReturnType<typeof setTimeout>;
   /** Until when a browser that could not produce a fresh ticket keeps its admission. */
   ticketGraceUntil?: number;
+  /** The tenants whose overview rooms an `/overview` socket's ticket names. */
+  overviewTenantIds?: string[];
+  /** The subject an `/overview` socket was admitted for; a fresh ticket for another is refused. */
+  overviewSubjectId?: string;
 }
 
 /**
@@ -56,6 +66,7 @@ interface BridgeSocketData {
  */
 type Readmission =
   | { kind: 'ticket' }
+  | { kind: 'overview' }
   | { kind: 'credential'; apiSecret?: string; token?: string }
   | { kind: 'storage'; accessToken: string; collections: string[]; unanswered: string[] }
   | { kind: 'alarm'; accessToken: string };
@@ -105,6 +116,16 @@ function categoryRoom(tenantSlug: string, category: string): string {
   return `tenant:${tenantSlug}:category:${category}`;
 }
 
+/** Room a classic socket in the tenant-wide room also joins, which keeps the web app's `dataUpdate` from it. */
+function legacyRoom(tenantSlug: string): string {
+  return `tenant:${tenantSlug}:legacy`;
+}
+
+/** Room a classic socket joins for one v1 collection's `dataUpdate` deltas within a tenant. */
+function legacyFamilyRoom(tenantSlug: string, family: LegacyFamily): string {
+  return `tenant:${tenantSlug}:legacy:${family}`;
+}
+
 /**
  * The categories a grant's socket receives storage events for. A storage event
  * carries whatever record was just written, backdated or not, so a
@@ -123,9 +144,13 @@ function grantedRooms(data: BridgeSocketData): string[] {
   const { tenantSlug, tenantRelay, subjectId, categories = [] } = data;
   if (!tenantSlug) return [];
   const rooms = categories.map((category) => categoryRoom(tenantSlug, category));
+  if (data.legacy) {
+    rooms.push(...legacyFamilies(categories).map((family) => legacyFamilyRoom(tenantSlug, family)));
+  }
   if (tenantRelay !== true) return rooms;
   return [
     `tenant:${tenantSlug}`,
+    ...(data.legacy ? [legacyRoom(tenantSlug)] : []),
     ...rooms,
     ...(subjectId ? [subjectRoom(tenantSlug, subjectId)] : []),
   ];
@@ -188,6 +213,26 @@ function collectionIdentity(collection: string): string {
 /** Room a `/storage` socket joins for a tenant + collection (client spelling). */
 function storageRoom(tenantSlug: string, clientCollection: string): string {
   return `storage:${tenantSlug}:${clientCollection}`;
+}
+
+/**
+ * The storage collections whose changes the cross-tenant overview reads: readings, the treatments
+ * and profiles its insulin and carbs on board come from, and device state. A change to any other
+ * (AAPS control `settings`) pings no follower.
+ */
+const OVERVIEW_COLLECTIONS = new Set([
+  'entries', 'glucose', 'treatments', 'care', 'profiles', 'therapy', 'devicestatus', 'device',
+]);
+
+/** Whether a relayed storage event changes something the cross-tenant overview shows. */
+export function overviewReads(event: Payload): boolean {
+  const collection = stringField(event, 'colName') ?? stringField(event, 'collection');
+  return collection !== undefined && OVERVIEW_COLLECTIONS.has(collection);
+}
+
+/** Room an `/overview` socket joins for a tenant it follows. */
+function overviewRoom(tenantId: string): string {
+  return `overview:${tenantId}`;
 }
 
 /** Room a `/alarm` socket joins for a tenant. */
@@ -299,6 +344,12 @@ class SocketIOServer {
    *  start() attaches them to the same httpServer as the default namespace. */
   private storageNsp: BridgeNamespace | null = null;
   private alarmNsp: BridgeNamespace | null = null;
+  private overviewNsp: BridgeNamespace | null = null;
+  /** The relay each tenant's storage events are reaching the bridge through. */
+  private readonly relays = new Map<string, object>();
+  private readonly legacyDeltas = new LegacyDeltaBuffer((tenantSlug, family, delta) => {
+    this.io?.to(legacyFamilyRoom(tenantSlug, family)).emit('dataUpdate', delta);
+  });
 
   constructor(
     httpServer: HttpServer,
@@ -340,6 +391,7 @@ class SocketIOServer {
         this.setupEventHandlers();
         this.setupStorageNamespace();
         this.setupAlarmNamespace();
+        this.setupOverviewNamespace();
 
         logger.info('Socket.IO server attached to HTTP server');
         resolve();
@@ -539,12 +591,12 @@ class SocketIOServer {
    *  the fresh admission grants, and closes it when nothing is granted; then
    *  schedules the next re-check. Exposed for unit testing. */
   async readmit(socket: BridgeSocket): Promise<void> {
-    const { readmission, tenantSlug } = socket.data;
-    if (!socket.connected || !readmission || !tenantSlug) return;
+    const { readmission } = socket.data;
+    if (!socket.connected || !readmission) return;
 
     let nextMs: number | null;
     try {
-      nextMs = await this.readmitOnce(socket, tenantSlug, readmission);
+      nextMs = await this.readmitOnce(socket, readmission);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn(`Re-checking ${socket.id} failed: ${reason}`);
@@ -554,30 +606,15 @@ class SocketIOServer {
   }
 
   /** One re-check; resolves to the delay before the next, or null once the socket is closed. */
-  private async readmitOnce(
-    socket: BridgeSocket,
-    tenantSlug: string,
-    readmission: Readmission,
-  ): Promise<number | null> {
+  private async readmitOnce(socket: BridgeSocket, readmission: Readmission): Promise<number | null> {
+    if (readmission.kind === 'overview') return this.readmitOverview(socket);
+    const { tenantSlug } = socket.data;
+    if (!tenantSlug) return null;
+
     switch (readmission.kind) {
       case 'ticket': {
         const answer = await this.requestFreshTicket(socket, tenantSlug);
-        if (answer === 'retry') {
-          // A browser that could not reach its ticket endpoint, or a bundle that
-          // predates the request and never answers, keeps its admission for one
-          // more ticket lifetime: a transient outage does not drop every
-          // dashboard, and a socket's admission is still never older than two
-          // ticket lifetimes.
-          socket.data.ticketGraceUntil ??= Date.now() + HANDSHAKE_TICKET_LIFETIME_MS;
-          if (Date.now() < socket.data.ticketGraceUntil) return TICKET_RETRY_MS;
-        }
-        if (answer === 'retry' || answer === 'refused') {
-          // Closing the transport sends the browser back through its handshake,
-          // whose ticket fetch asks the API afresh and ends a denied session.
-          logger.info(`Client ${socket.id} gave no fresh ticket; closing its transport`);
-          socket.conn.close();
-          return null;
-        }
+        if (answer === 'retry' || answer === 'refused') return this.withoutFreshTicket(socket, answer);
         socket.data.ticketGraceUntil = undefined;
         this.regrant(socket, tenantSlug, answer);
         if (!this.holdsTenantNow(tenantSlug, answer.t)) {
@@ -596,6 +633,12 @@ class SocketIOServer {
           return null;
         }
         this.regrant(socket, tenantSlug, admission);
+        if (socket.data.connectedAnnounced && legacyFamilies(socket.data.categories ?? []).length === 0) {
+          logger.info(`Client ${socket.id} no longer receives deltas for tenant ${tenantSlug}; closing its transport`);
+          this.disconnectSocket(socket);
+          return null;
+        }
+        this.announceConnected(socket);
         return ADMISSION_RECHECK_INTERVAL_MS;
       }
       case 'storage': {
@@ -632,12 +675,29 @@ class SocketIOServer {
     }
   }
 
-  /** Asks a browser socket for a fresh handshake ticket. Resolves to the
-   *  ticket once it verifies for the host the socket arrived on and the tenant
-   *  `tenantSlug` serves; `refused` for a denial or a ticket that does not
-   *  verify; `retry` when the browser gave no ticket and no denial, or no answer
-   *  at all. */
-  private async requestFreshTicket(socket: BridgeSocket, tenantSlug: string) {
+  /** What a ticket socket whose browser gave no fresh ticket does next: the delay before it is
+   *  asked again, or null once its transport is closed. */
+  private withoutFreshTicket(socket: BridgeSocket, answer: 'retry' | 'refused'): number | null {
+    if (answer === 'retry') {
+      // A browser that could not reach its ticket endpoint, or a bundle that
+      // predates the request and never answers, keeps its admission for one
+      // more ticket lifetime: a transient outage does not drop every
+      // dashboard, and a socket's admission is still never older than two
+      // ticket lifetimes.
+      socket.data.ticketGraceUntil ??= Date.now() + HANDSHAKE_TICKET_LIFETIME_MS;
+      if (Date.now() < socket.data.ticketGraceUntil) return TICKET_RETRY_MS;
+    }
+    // Closing the transport sends the browser back through its handshake,
+    // whose ticket fetch asks the API afresh and ends a denied session.
+    logger.info(`Client ${socket.id} gave no fresh ticket; closing its transport`);
+    socket.conn.close();
+    return null;
+  }
+
+  /** Asks a browser socket for a fresh handshake ticket. Resolves to its token,
+   *  `refused` for a denial, or `retry` when the browser gave no ticket and no
+   *  denial, or no answer at all. */
+  private async askForTicket(socket: BridgeSocket): Promise<{ token: string } | 'retry' | 'refused'> {
     let reply: unknown;
     try {
       reply = await socket.timeout(TICKET_REFRESH_TIMEOUT_MS).emitWithAck('realtime_ticket');
@@ -646,10 +706,25 @@ class SocketIOServer {
     }
     const token = stringField(reply, 'token');
     if (!token) return isRecord(reply) && reply.denied === true ? 'refused' : 'retry';
+    return { token };
+  }
 
+  /** Whether a ticket's host is the host the socket arrived on. */
+  private arrivedOn(socket: BridgeSocket, ticketHost: string): boolean {
     const host = pickHandshakeHost(socket.handshake.headers);
-    const ticket = verifyHandshakeTicket(this.signingSecret, token);
-    if (!ticket || !host || ticket.h !== normalizeHandshakeHost(host)) return 'refused';
+    return !!host && ticketHost === normalizeHandshakeHost(host);
+  }
+
+  /** Asks a browser socket for a fresh handshake ticket. Resolves to the
+   *  ticket once it verifies for the host the socket arrived on and the tenant
+   *  `tenantSlug` serves; otherwise as {@link askForTicket}, with a ticket that
+   *  does not verify `refused`. */
+  private async requestFreshTicket(socket: BridgeSocket, tenantSlug: string) {
+    const answer = await this.askForTicket(socket);
+    if (answer === 'retry' || answer === 'refused') return answer;
+
+    const ticket = verifyHandshakeTicket(this.signingSecret, answer.token);
+    if (!ticket || !this.arrivedOn(socket, ticket.h)) return 'refused';
     return (await this.isCurrentTenant(tenantSlug, ticket.t)) ? ticket : 'refused';
   }
 
@@ -703,12 +778,52 @@ class SocketIOServer {
     if (admission === null || admission === UNANSWERED) return deny('API denied the credential');
 
     this.setGrant(socket, tenantSlug, admission);
+    socket.data.legacy = true;
     socket.data.handshakeToken = undefined;
     this.joinTenantRoom(socket);
     socket.data.readmission = { kind: 'credential', ...credential };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
+    this.announceConnected(socket);
     callback?.({ read: true, write: false, write_treatment: false });
+  }
+
+  /**
+   * Sends a classic socket the `connected` event upstream Nightscout sends once `authorize`
+   * succeeds. LoopFollow takes it as a promise that every write arrives as a `dataUpdate` delta and
+   * polls three times slower from then on, so it is sent only while that holds: the socket is
+   * granted a v1 collection's deltas (a history-clamped credential is granted none) and the
+   * tenant's storage events are reaching the bridge. A socket that is not sent it keeps its
+   * client polling at its own pace.
+   */
+  private announceConnected(socket: BridgeSocket): void {
+    const { tenantSlug, legacy, connectedAnnounced, categories = [] } = socket.data;
+    if (!legacy || connectedAnnounced || !tenantSlug) return;
+    if (!this.relays.has(tenantSlug) || legacyFamilies(categories).length === 0) return;
+
+    socket.data.connectedAnnounced = true;
+    socket.emit('connected');
+  }
+
+  /**
+   * Records whether a tenant's storage events are reaching the bridge. A classic socket waiting
+   * for them is sent `connected` once they are; one already sent it is disconnected when they
+   * stop, since it would otherwise wait on deltas that cannot arrive (see {@link announceConnected}).
+   * Its transport is closed, as {@link disconnectTenant} closes one, so its client reconnects and
+   * authorizes again. `relay` names the reporter: a relay that closes after another took over its
+   * slug does not end the other's.
+   */
+  setRelayState(tenantSlug: string | undefined, relayed: boolean, relay: object = this): void {
+    if (!tenantSlug) return;
+    if (relayed) this.relays.set(tenantSlug, relay);
+    else if (this.relays.get(tenantSlug) === relay) this.relays.delete(tenantSlug);
+    else return;
+
+    for (const socket of this.io?.of('/').sockets.values() ?? []) {
+      if (socket.data.tenantSlug !== tenantSlug || !socket.data.legacy) continue;
+      if (relayed) this.announceConnected(socket);
+      else if (socket.data.connectedAnnounced) this.disconnectSocket(socket);
+    }
   }
 
   /** Replays a client credential against the API's realtime admission endpoint,
@@ -771,10 +886,11 @@ class SocketIOServer {
   // Methods to broadcast messages to clients
   broadcastDataUpdate(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+    if (!target || !tenantSlug) return;
 
-    logger.debug(`Broadcasting dataUpdate${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('dataUpdate', data);
+    logger.debug(`Broadcasting dataUpdate to tenant ${tenantSlug}`);
+    // A classic socket reads `dataUpdate` as a delta, which it is sent from the storage events.
+    target.except(legacyRoom(tenantSlug)).emit('dataUpdate', data);
   }
 
   broadcastTrackerUpdate(data: unknown, tenantSlug?: string): void {
@@ -807,6 +923,16 @@ class SocketIOServer {
 
   broadcastNotification(notification: unknown, tenantSlug?: string): void {
     this.broadcastToBothNamespaces('notification', notification, tenantSlug);
+  }
+
+  /** Pings the `/overview` sockets that follow `tenantId` that its data changed. The ping names the
+   *  tenant and nothing else, so a socket can only learn to read the overview again. A follower is
+   *  pinged for a relayed `dataUpdate`, a storage event of a collection {@link overviewReads}, a
+   *  tracker or tracker definition change, and an alarm raised or cleared, including one its own
+   *  access does not read: it learns that the tenant changed, never what. */
+  broadcastOverviewUpdate(tenantId?: string): void {
+    if (!this.overviewNsp || !tenantId) return;
+    this.overviewNsp.to(overviewRoom(tenantId)).emit('overviewUpdate', { tenantId });
   }
 
   /** Emit an event to a tenant's `/alarm` subscribers alone, as the API's
@@ -863,6 +989,7 @@ class SocketIOServer {
     if (!broadcastCollection) return;
 
     this.io.to(categoryRoom(tenantSlug, broadcastCollection)).emit(eventType, data);
+    this.legacyDeltas.add(tenantSlug, eventType, data);
 
     // Fan out to v3 `/storage` namespace clients (AAPS, xDrip+, ...). Each
     // spelling of the collection has its own room and its own `colName`, since
@@ -939,6 +1066,10 @@ class SocketIOServer {
   /** Called with the tenant of every socket the API admits, so the bridge can open a relay for a
    *  tenant created since it last read the tenant list. */
   onTenantAdmitted: (tenantSlug: string) => void = () => {};
+
+  /** Called with the tenants of every `/overview` ticket admitted, so the bridge can open a relay
+   *  for a tenant created since it last read the tenant list and ping its followers. */
+  onOverviewAdmitted: (tenantIds: string[]) => void = () => {};
 
   /** Whether `tenantId` is the tenant `tenantSlug` names now. Refuses every ticket until it is wired
    *  to the bridge's tenant list. */
@@ -1314,7 +1445,74 @@ class SocketIOServer {
     }
   }
 
+  /**
+   * The cross-tenant overview namespace. A browser holding the People page connects to
+   * `<origin>/overview` with an overview ticket (see handshake-ticket.ts) and hears only
+   * `overviewUpdate` for the tenants the ticket names. It is not bound to a tenant, so it serves
+   * the apex whatever tenant the apex resolves to, and no message from the socket is handled.
+   */
+  private setupOverviewNamespace(): void {
+    if (!this.io) return;
+    this.overviewNsp = this.io.of('/overview');
+
+    this.useHandshake(this.overviewNsp, (socket, next) => this.authorizeOverviewHandshake(socket, next));
+
+    this.overviewNsp.on('connection', (socket: BridgeSocket) => {
+      this.joinOverviewRooms(socket, socket.data.overviewTenantIds ?? []);
+      socket.on('disconnect', () => {
+        clearTimeout(socket.data.readmissionTimer);
+      });
+    });
+  }
+
+  /** Admits an `/overview` handshake that presents an overview ticket for the host it arrived on.
+   *  Exposed for unit testing. */
+  authorizeOverviewHandshake(socket: BridgeSocket, next: (err?: Error) => void): void {
+    const ticket = verifyOverviewTicket(this.signingSecret, stringField(socket.handshake.auth, 'token'));
+    if (!ticket || !this.arrivedOn(socket, ticket.h)) {
+      logger.warn(`Rejecting /overview connection ${socket.id}: no valid overview ticket for its host`);
+      return next(new Error('unauthorized'));
+    }
+    socket.data.overviewTenantIds = ticket.tenantIds;
+    socket.data.overviewSubjectId = ticket.subjectId;
+    socket.data.readmission = { kind: 'overview' };
+    this.onOverviewAdmitted(ticket.tenantIds);
+    this.scheduleReadmission(socket, ticket.exp - Date.now());
+    next();
+  }
+
+  /**
+   * Moves an `/overview` socket onto the rooms of the tenants its latest ticket names, leaving any
+   * it no longer names. A follower whose access is removed keeps its room until its ticket lapses
+   * and the fresh one drops it, up to one ticket lifetime: the ping names only the tenant, and the
+   * overview read it prompts checks access again.
+   */
+  private joinOverviewRooms(socket: BridgeSocket, tenantIds: string[]): void {
+    const after = new Set(tenantIds.map(overviewRoom));
+    for (const room of [...socket.rooms]) {
+      if (room !== socket.id && !after.has(room)) socket.leave(room);
+    }
+    for (const room of after) socket.join(room);
+    socket.data.overviewTenantIds = tenantIds;
+  }
+
+  /** One re-check of an `/overview` socket: its fresh ticket's tenants replace its rooms. */
+  private async readmitOverview(socket: BridgeSocket): Promise<number | null> {
+    const answer = await this.askForTicket(socket);
+    if (answer === 'retry' || answer === 'refused') return this.withoutFreshTicket(socket, answer);
+
+    const ticket = verifyOverviewTicket(this.signingSecret, answer.token);
+    if (!ticket || !this.arrivedOn(socket, ticket.h) || ticket.subjectId !== socket.data.overviewSubjectId) {
+      return this.withoutFreshTicket(socket, 'refused');
+    }
+    socket.data.ticketGraceUntil = undefined;
+    this.joinOverviewRooms(socket, ticket.tenantIds);
+    this.onOverviewAdmitted(ticket.tenantIds);
+    return ticket.exp - Date.now();
+  }
+
   async stop(): Promise<void> {
+    this.legacyDeltas.clear();
     if (this.io) {
       await this.io.close();
       logger.info('Socket.IO server stopped');

@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import { AlertRuleSeverity, type ClockAlertDto } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertRuleSeverity, type ClockAlertDto } from "@nocturne/api-client";
 import ClockAlertBand from "./ClockAlertBand.svelte";
 
 const firing: ClockAlertDto = {

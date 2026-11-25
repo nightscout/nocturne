@@ -111,7 +111,7 @@ public class DDataServiceTests
                     It.IsAny<string?>(),
                     It.IsAny<int?>(),
                     It.IsAny<int?>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(Array.Empty<Activity>());

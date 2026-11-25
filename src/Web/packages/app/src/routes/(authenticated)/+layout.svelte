@@ -1,7 +1,11 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { BROWSER_SOCKET_TIMING } from "#lib/websocket/socket-options.js";
   import {
+    calculatedBasalInjection,
+    calculatedCob,
+    calculatedIob,
     displayedGlucose,
     refreshSummaryOnNewReading,
   } from "#lib/stores/current-glucose-status.svelte.js";
@@ -31,21 +35,27 @@
   import InitialReadsPrefetch from "#lib/components/layout/InitialReadsPrefetch.svelte";
   import GuestBanner from "#lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "#lib/components/layout/BackupSignInPrompt.svelte";
-  import MembershipRequestAutoSubmit from "#lib/components/members/MembershipRequestAutoSubmit.svelte";
+  import RecoveryEmailPrompt from "#lib/components/layout/RecoveryEmailPrompt.svelte";
+  import ImportInBackgroundBanner from "#lib/components/migration/ImportInBackgroundBanner.svelte";
+  import ImportInBackgroundNotice from "#lib/components/migration/ImportInBackgroundNotice.svelte";
+  import { createImportWatcher } from "#lib/migration/background-import.svelte.js";
+  import { MigrationJobState } from "#lib/api/index.js";
+  import { toast } from "svelte-sonner";
   import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
-  import { getEngineHost } from "water-ui";
+  import { getEngineHost, WARM_IDLE_TIMEOUT_MS } from "water-ui";
+  import { whenIdle } from "#lib/utils/when-idle.js";
   import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
-  import { CoachMarkProvider } from "@nocturne/coach";
+  import { CoachMarkProvider, coachmark } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "#lib/coach-marks/adapter.js";
   import { createCoachRouter } from "#lib/coach-marks/router.js";
-  import { ONBOARDING_CORE_GATE, sequences } from "#lib/coach-marks/sequences.js";
-  import { coachLabels } from "#lib/coach-marks/copy.svelte.js";
+  import { ONBOARDING_CORE_GATE, coachAudience, sequences } from "#lib/coach-marks/sequences.js";
+  import { coachFor, coachLabels } from "#lib/coach-marks/copy.svelte.js";
   import CoachParamHandler from "#lib/coach-marks/CoachParamHandler.svelte";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import ChartPrintPatterns from "#lib/components/charts/print/ChartPrintPatterns.svelte";
 
   // LocalStorage key for title/favicon settings
@@ -63,11 +73,7 @@
   const config = {
     url: typeof window !== "undefined" ? window.location.origin : "",
     disabled: data.isShareHost === true,
-    reconnectAttempts: Infinity,
-    reconnectDelay: 5000,
-    maxReconnectDelay: 30000,
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    ...BROWSER_SOCKET_TIMING,
   };
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
@@ -84,6 +90,16 @@
     () => realtimeStore.currentEntry?.mills,
     () => data.canViewRealtimeData
   );
+  $effect(() => {
+    const canViewTreatments =
+      data.canViewRealtimeData &&
+      satisfiesScope(data.effectivePermissions ?? [], "treatments.read");
+    realtimeStore.calculatedIob = canViewTreatments ? calculatedIob() : undefined;
+    realtimeStore.calculatedCob = canViewTreatments ? calculatedCob() : undefined;
+    realtimeStore.calculatedBasalInjection = canViewTreatments
+      ? calculatedBasalInjection()
+      : undefined;
+  });
   const authStore = createAuthStore(); // Initialize auth store in context
   refreshOnVisible(
     createShellRevalidator(
@@ -118,7 +134,23 @@
   });
   let bannerStripHeight = $state(0);
 
-  const coachMarkAdapter = createCoachMarkAdapter(tenantless);
+  const importWatcher = createImportWatcher({
+    ended: (state, status) => {
+      if (state === MigrationJobState.Completed && !status.hasFailures) {
+        toast.success("The import from Nightscout is complete.");
+      } else {
+        toast.warning("The import from Nightscout did not import everything. See Settings.");
+      }
+    },
+  });
+  // svelte-ignore state_referenced_locally
+  const watchesImport = !tenantless && !!data.user && !data.isGuestSession && !data.isDemo;
+  onMount(() => (watchesImport ? importWatcher.start() : undefined));
+
+  const audience = $derived(coachAudience(data));
+  // The coach-mark endpoints keep marks per subject, and a guest or a share viewer has none.
+  // svelte-ignore state_referenced_locally
+  const coachMarkAdapter = createCoachMarkAdapter(tenantless || audience !== "member");
   const coachRouter = createCoachRouter();
 
   // Title/Favicon service for dynamic updates
@@ -187,6 +219,7 @@
   onDestroy(() => {
     realtimeStore.destroy();
     titleFaviconService.destroy();
+    authStore.destroy();
     if (browser) {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("keydown", handleCommandPaletteKeydown);
@@ -205,12 +238,14 @@
    */
   const engineWarmDeferral = deferredWatercolour();
   let engineWarmScheduled = false;
+  let cancelEngineWarm: (() => void) | undefined;
   $effect(() => {
     if (engineWarmScheduled || !engineWarmDeferral.due) return;
     if (data.canViewRealtimeData && !realtimeStore.currentReadingLoaded) return;
     engineWarmScheduled = true;
-    void getEngineHost().warmWhenIdle();
+    cancelEngineWarm = whenIdle(() => void getEngineHost().warm(), { timeout: WARM_IDLE_TIMEOUT_MS });
   });
+  onDestroy(() => cancelEngineWarm?.());
 
   // Track current time for stale calculation - use shared store
   const now = $derived(realtimeStore.now);
@@ -275,12 +310,26 @@
   adapter={coachMarkAdapter}
   labels={coachLabels()}
   {sequences}
+  {audience}
   gates={{ [ONBOARDING_CORE_GATE]: data.onboardingComplete }}
   router={coachRouter}
 >
   <CoachParamHandler />
   <ChartPrintPatterns />
-  <Sidebar.Provider>
+  <!-- Focuses the main element without adding #main-content to the URL, which a copied link would carry. -->
+  <a
+    href="#main-content"
+    onclick={(event) => {
+      const main = document.getElementById("main-content");
+      if (!main) return;
+      event.preventDefault();
+      main.focus();
+    }}
+    class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-100 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-sm focus:ring-2 focus:ring-ring focus:outline-none print:hidden"
+  >
+    Skip to main content
+  </a>
+  <Sidebar.Provider open={data.sidebarOpen}>
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} tenantTargets={data.tenantTargets} />
     <!-- --app-sticky-top is the top of the usable viewport below the app chrome (the visible
          MobileHeader on a phone, where the banner strip scrolls away; the banner strip from md);
@@ -298,22 +347,30 @@
             <DemoBanner nextResetAt={data.nextResetAt} />
           {/if}
           {#if data.isGuestSession && data.guestExpiresAt}
-            <GuestBanner expiresAt={data.guestExpiresAt} />
+            <div {@attach coachmark(coachFor("guest-tour.access"))}>
+              <GuestBanner expiresAt={data.guestExpiresAt} />
+            </div>
           {/if}
           {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
             <BackupSignInPrompt show={data.showBackupSignInPrompt} />
+            <RecoveryEmailPrompt
+              show={data.showRecoveryEmailPrompt}
+              hasAddress={data.recoveryEmailHasAddress}
+            />
+          {/if}
+          {#if watchesImport}
+            <ImportInBackgroundBanner watcher={importWatcher} />
           {/if}
       </div>
+      {#if watchesImport}
+        <ImportInBackgroundNotice watcher={importWatcher} />
+      {/if}
       {#if !tenantless}
-        <MembershipRequestAutoSubmit
-          isAuthenticated={!!data.user}
-          isGuestSession={data.isGuestSession}
-        />
         {#if satisfiesScope(data.effectivePermissions ?? [], "alerts.read")}
           <AlertSurfaces />
         {/if}
       {/if}
-      <main class="@container/main flex-1 overflow-x-clip">
+      <main id="main-content" tabindex="-1" class="@container/main flex-1 overflow-x-clip focus:outline-none">
         {#if joinWelcome.component}
           <joinWelcome.component />
         {/if}

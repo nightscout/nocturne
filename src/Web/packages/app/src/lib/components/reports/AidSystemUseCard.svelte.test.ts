@@ -22,7 +22,6 @@ describe("AidSystemUseCard", () => {
 
   it.each([
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/],
-    [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/],
     [TimeZoneUnavailableReason.LookupFailed, /The time zone of this data did not load/],
     [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/],
   ])("shows the metrics and the UTC note for %s", async (reason, cause) => {
@@ -34,5 +33,13 @@ describe("AidSystemUseCard", () => {
     await expect.element(page.getByText("5", { exact: true })).toBeVisible();
     await expect.element(page.getByText(cause)).toBeVisible();
     await expect.element(page.getByText(/counts device use on UTC days/)).toBeVisible();
+  });
+
+  it("says a range that ends before the visible hours has no data", async () => {
+    render(AidSystemUseCard, {
+      props: { metrics: { rangeOutsideHistory: true, historyWindowHours: 24 } as AidSystemMetrics },
+    });
+
+    await expect.element(page.getByText(/The range that you selected ends before the last 24 hours/)).toBeVisible();
   });
 });

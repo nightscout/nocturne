@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -10,7 +11,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Controller for compression low detection and review.
+/// Compression low suggestions and their review. List and read suggestions, review them, and run detection.
 /// </summary>
 /// <remarks>
 /// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
@@ -32,6 +33,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <seealso cref="ICompressionLowService"/>
 /// <seealso cref="ICompressionLowDetectionService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Compression Lows")]
 [Tags("TenantAdmin")]
 [Route("api/v4/compression-lows")]
 [RequireScope(Scope.GlucoseRead)]
@@ -84,7 +86,7 @@ public class CompressionLowController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         DateOnly? nightOfDate = null;
-        if (!string.IsNullOrEmpty(nightOf) && DateOnly.TryParse(nightOf, out var parsed))
+        if (!string.IsNullOrEmpty(nightOf) && DateOnly.TryParse(nightOf, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             nightOfDate = parsed;
 
         var suggestions = await _compressionLowService.GetSuggestionsAsync(
@@ -119,6 +121,7 @@ public class CompressionLowController : ControllerBase
 
     /// <summary>
     /// Accept, dismiss or delete several suggestions at once
+    /// Every item is checked before any is written, and one failing item rejects the whole batch. After that the writes are not atomic: a failure part way leaves earlier items applied, and a retry finishes the rest.
     /// </summary>
     /// <remarks>
     /// Not one database commit: <see cref="ICompressionLowService.ApplyBatchAsync"/> says what a
@@ -153,6 +156,7 @@ public class CompressionLowController : ControllerBase
 
     /// <summary>
     /// Manually trigger detection for a date range (for testing)
+    /// Provide either <c>nightOf</c> or a <c>startDate</c> and <c>endDate</c> range (inclusive, one run per night). Each night analysed stores the suggestions it finds.
     /// </summary>
     /// <remarks>
     /// Provide either a single `nightOf` date or a range with `startDate` and `endDate`.
@@ -171,7 +175,7 @@ public class CompressionLowController : ControllerBase
         // Single night mode (backward compatible)
         if (!string.IsNullOrEmpty(request.NightOf))
         {
-            if (!DateOnly.TryParse(request.NightOf, out var nightOf))
+            if (!DateOnly.TryParse(request.NightOf, CultureInfo.InvariantCulture, DateTimeStyles.None, out var nightOf))
                 return Problem(detail: "Invalid date format. Use yyyy-MM-dd", statusCode: 400, title: "Bad Request");
 
             var count = await _detectionService.DetectForNightAsync(nightOf, cancellationToken);
@@ -179,7 +183,7 @@ public class CompressionLowController : ControllerBase
             {
                 TotalSuggestionsCreated = count,
                 NightsProcessed = 1,
-                Results = [new NightDetectionResult { NightOf = nightOf.ToString("yyyy-MM-dd"), SuggestionsCreated = count }]
+                Results = [new NightDetectionResult { NightOf = nightOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), SuggestionsCreated = count }]
             });
         }
 
@@ -187,10 +191,10 @@ public class CompressionLowController : ControllerBase
         if (string.IsNullOrEmpty(request.StartDate) || string.IsNullOrEmpty(request.EndDate))
             return Problem(detail: "Provide either 'nightOf' for a single night or 'startDate' and 'endDate' for a range", statusCode: 400, title: "Bad Request");
 
-        if (!DateOnly.TryParse(request.StartDate, out var startDate))
+        if (!DateOnly.TryParse(request.StartDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var startDate))
             return Problem(detail: "Invalid startDate format. Use yyyy-MM-dd", statusCode: 400, title: "Bad Request");
 
-        if (!DateOnly.TryParse(request.EndDate, out var endDate))
+        if (!DateOnly.TryParse(request.EndDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var endDate))
             return Problem(detail: "Invalid endDate format. Use yyyy-MM-dd", statusCode: 400, title: "Bad Request");
 
         if (endDate < startDate)
@@ -203,7 +207,7 @@ public class CompressionLowController : ControllerBase
         for (var date = startDate; date <= endDate; date = date.AddDays(1))
         {
             var count = await _detectionService.DetectForNightAsync(date, cancellationToken);
-            results.Add(new NightDetectionResult { NightOf = date.ToString("yyyy-MM-dd"), SuggestionsCreated = count });
+            results.Add(new NightDetectionResult { NightOf = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), SuggestionsCreated = count });
             totalCount += count;
         }
 

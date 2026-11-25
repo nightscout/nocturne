@@ -14,6 +14,9 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -85,8 +88,9 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         return JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
     }
 
-    private static async Task<JsonArray> GetV3ResultAsync(HttpClient client, string url)
+    private async Task<JsonArray> GetV3ResultAsync(HttpClient client, string url)
     {
+        await SettleHistoryAsync();
         var response = await client.GetAsync(url);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return JsonNode.Parse(await response.Content.ReadAsStringAsync())!["result"]!.AsArray();
@@ -114,6 +118,27 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
         (await CountAsync(client)).Should().Be(1);
         (await CountAsync(client, $"?find[eventType]={Uri.EscapeDataString(eventType)}")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_state_span_treatment_deduplication_linked_to_another_is_served_once()
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 31));
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 30));
+        await WithTenantScopeAsync(async sp =>
+        {
+            await using var db = await sp.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+            var spans = await db.StateSpans.OrderBy(s => s.StartTimestamp).Select(s => s.Id).ToListAsync();
+            spans.Should().HaveCount(2);
+            await db.LinkedRecords.Where(l => spans.Contains(l.RecordId)).ExecuteDeleteAsync();
+            return await DuplicateGroups.LinkAsync(db, RecordType.StateSpan, spans[0], spans[1]);
+        });
+
+        (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle();
+        (await CountAsync(client)).Should().Be(1);
+        (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle();
+        (await GetV3ResultAsync(client, "/api/v3/treatments/history/0")).Should().ContainSingle();
     }
 
     [Theory]
@@ -146,6 +171,50 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         (await delete.Content.ReadFromJsonAsync<JsonNode>())!["deletedCount"]!.GetValue<long>().Should().Be(1);
         (await GetArrayAsync(client, "/api/v1/treatments")).Should().BeEmpty();
         (await CountAsync(client)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_find_naming_isValid_does_not_list_a_deleted_copy_of_a_state_span_treatment_a_live_primary_stands_for()
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 31));
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 30));
+        await WithTenantScopeAsync(async sp =>
+        {
+            await using var db = await sp.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+            var spans = await db.StateSpans.OrderBy(s => s.StartTimestamp).Select(s => s.Id).ToListAsync();
+            await db.LinkedRecords.Where(l => spans.Contains(l.RecordId)).ExecuteDeleteAsync();
+            await DuplicateGroups.LinkAsync(db, RecordType.StateSpan, spans[0], spans[1]);
+            await db.StateSpans.Where(s => s.Id == spans[1]).ExecuteUpdateAsync(
+                s => s.SetProperty(x => x.DeletedAt, DateTime.UtcNow));
+            return 0;
+        });
+
+        (await GetArrayAsync(client, "/api/v1/treatments?find[isValid]=false")).Should().BeEmpty();
+        (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_find_naming_isValid_lists_a_deleted_state_span_treatment_in_the_window_as_invalid(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload(eventType, minutesAgo: 30));
+        await PostAsync(client, Upload(eventType, minutesAgo: 60 * 24 * 3));
+        var served = await GetArrayAsync(client, "/api/v1/treatments");
+        var inWindow = served.Single(t => DateTime.Parse(t!["created_at"]!.GetValue<string>()) > DateTime.UtcNow.AddDays(-1))!;
+        var outside = served.Single(t => !ReferenceEquals(t, inWindow))!;
+        foreach (var id in new[] { inWindow, outside }.Select(t => t["_id"]!.GetValue<string>()))
+            (await client.DeleteAsync($"/api/v1/treatments/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var since = Uri.EscapeDataString(DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+
+        var invalid = await GetArrayAsync(client, $"/api/v1/treatments?find[isValid]=false&find[created_at][$gte]={since}");
+
+        var listed = invalid.Should().ContainSingle().Subject!;
+        listed["_id"]!.GetValue<string>().Should().Be(inWindow["_id"]!.GetValue<string>());
+        listed["isValid"]!.GetValue<bool>().Should().BeFalse();
+        (await GetArrayAsync(client, $"/api/v1/treatments?find[created_at][$gte]={since}")).Should().BeEmpty();
+        (await CountAsync(client, $"?find[isValid]=false&find[created_at][$gte]={since}")).Should().Be(1);
     }
 
     [Fact]
@@ -391,8 +460,60 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         (await delete.Content.ReadFromJsonAsync<JsonNode>())!["deletedCount"]!.GetValue<long>().Should().Be(1);
         (await GetArrayAsync(client, "/api/v1/treatments")).Should().BeEmpty();
         (await CountAsync(client)).Should().Be(0);
-        (await WithScopeAsync(async sp => await sp.GetRequiredService<INoteRepository>()
+        (await WithTenantScopeAsync(async sp => await sp.GetRequiredService<INoteRepository>()
             .GetByIdAsync(noteId))).Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_put_without_notes_clears_the_note_written_beside_an_older_span(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var uploadedId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["_id"] = uploadedId;
+        await PostAsync(client, upload);
+        var noteId = await WriteNoteBesideAsync(uploadedId, eventType, upload["created_at"]!.GetValue<string>());
+        var servedId = (await GetArrayAsync(client, "/api/v1/treatments")).Single()!["_id"]!.GetValue<string>();
+
+        var put = await client.PutAsJsonAsync($"/api/v1/treatments/{servedId}", Upload(eventType));
+
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var served = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Which!;
+        served["_id"]!.GetValue<string>().Should().Be(servedId);
+        served["notes"].Should().BeNull("the PUT removed the notes the older Note held");
+        (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle()
+            .Which!["notes"].Should().BeNull();
+        (await WithTenantScopeAsync(async sp => await sp.GetRequiredService<INoteRepository>()
+            .GetByIdAsync(noteId))).Should().BeNull();
+    }
+
+    /// <summary>
+    /// A history page whose only rows are Notes written beside older spans serves those spans in
+    /// their place, so the client's cursor still moves past the Notes.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_history_page_of_only_notes_beside_older_spans_advances_the_cursor(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var uploadedId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["_id"] = uploadedId;
+        await PostAsync(client, upload);
+        var synced = (await GetV3ResultAsync(client, "/api/v3/treatments/history/0")).Should().ContainSingle().Subject!;
+        var cursor = synced["srvModified"]!.GetValue<long>();
+        await WriteNoteBesideAsync(uploadedId, eventType, upload["created_at"]!.GetValue<string>());
+
+        var page = await GetV3ResultAsync(client, $"/api/v3/treatments/history/{cursor}");
+
+        var served = page.Should().ContainSingle().Subject!;
+        served["identifier"]!.GetValue<string>().Should().Be(synced["identifier"]!.GetValue<string>());
+        served["eventType"]!.GetValue<string>().Should().Be(eventType);
+        served["notes"]!.GetValue<string>().Should().Be("Written beside");
+        var next = served["srvModified"]!.GetValue<long>();
+        next.Should().BeGreaterThan(cursor);
+        (await GetV3ResultAsync(client, $"/api/v3/treatments/history/{next}")).Should().BeEmpty();
     }
 
     [Fact]
@@ -419,7 +540,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
     /// <summary>The Note an older version of the treatment decomposer wrote beside a span.</summary>
     private Task<Guid> WriteNoteBesideAsync(string treatmentId, string eventType, string createdAt) =>
-        WithScopeAsync(async sp => (await sp.GetRequiredService<INoteRepository>().CreateAsync(
+        WithTenantScopeAsync(async sp => (await sp.GetRequiredService<INoteRepository>().CreateAsync(
             new Note
             {
                 LegacyId = treatmentId,
@@ -739,7 +860,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         });
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var resolved = await WithScopeAsync(async sp => (
+        var resolved = await WithTenantScopeAsync(async sp => (
             Profile: await sp.GetRequiredService<IActiveProfileResolver>().GetActiveProfileNameAsync(now),
             Basal: await sp.GetRequiredService<IBasalRateResolver>().GetBasalRateAsync(now),
             CarbRatio: await sp.GetRequiredService<ICarbRatioResolver>().GetCarbRatioAsync(now),
@@ -770,7 +891,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
             $"glooko_active_profile_{Guid.NewGuid()}_{start.Ticks}",
             $"mylife_active_profile_pump_{start.Ticks}",
         ];
-        await WithScopeAsync(async sp =>
+        await WithTenantScopeAsync(async sp =>
         {
             var activations = sp.GetRequiredService<IProfileActivationRepository>();
             await activations.UpsertAsync(ConnectorProfile(connectorIds[0], DataSources.GlookoConnector, start), WriteOrigin.Live);
@@ -798,7 +919,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
             (await delete.Content.ReadFromJsonAsync<JsonNode>())!["deletedCount"]!.GetValue<long>().Should().Be(0);
         }
 
-        var stored = await WithScopeAsync(async sp => (await sp.GetRequiredService<IProfileActivationRepository>()
+        var stored = await WithTenantScopeAsync(async sp => (await sp.GetRequiredService<IProfileActivationRepository>()
             .GetOverlappingAsync(start.AddHours(-1), DateTime.UtcNow, 100)).ToList());
         stored.Select(a => a.SyncIdentifier).Should().Contain(connectorIds);
     }
@@ -812,14 +933,6 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         DataSource = source,
         BaseProfileName = "Unknown",
     };
-
-    private async Task<T> WithScopeAsync<T>(Func<IServiceProvider, Task<T>> action)
-    {
-        using var scope = Fixture.Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
-            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
-        return await action(scope.ServiceProvider);
-    }
 
     /// <summary>Loop's upload format: NightscoutKit's <c>TimeFormat.timestampStrFromDate</c>.</summary>
     private static string LoopTimestamp(int minutesAgo) =>
@@ -959,6 +1072,48 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
         (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle()
             .Which!.AsObject().ContainsKey("timestamp").Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_state_span_treatment_is_served_its_pump_record_client_id_and_validity_as_uploaded(
+        string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        var clientId = Guid.NewGuid().ToString().ToLowerInvariant();
+        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
+        upload["id"] = clientId;
+        upload["isValid"] = true;
+        upload["pumpId"] = 4102;
+        upload["pumpType"] = "OMNIPOD_DASH";
+        upload["pumpSerial"] = "33013206";
+        await PostAsync(client, upload);
+
+        var v1 = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Subject!;
+        var v3 = (await GetV3ResultAsync(client, "/api/v3/treatments")).Should().ContainSingle().Subject!;
+        foreach (var served in new[] { v1, v3 })
+        {
+            served["id"]!.GetValue<string>().Should().Be(clientId);
+            served["isValid"]!.GetValue<bool>().Should().BeTrue();
+            served["pumpId"]!.GetValue<long>().Should().Be(4102);
+            served["pumpType"]!.GetValue<string>().Should().Be("OMNIPOD_DASH");
+            served["pumpSerial"]!.GetValue<string>().Should().Be("33013206");
+        }
+
+        (await GetArrayAsync(client, $"/api/v1/treatments?find[id]={clientId}")).Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_state_span_treatment_uploaded_without_validity_or_pump_record_is_served_without_them(
+        string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload(eventType));
+
+        var served = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Subject!.AsObject();
+        foreach (var field in new[] { "id", "isValid", "pumpId", "pumpType", "pumpSerial" })
+            served.ContainsKey(field).Should().BeFalse(field);
     }
 
     [Theory]

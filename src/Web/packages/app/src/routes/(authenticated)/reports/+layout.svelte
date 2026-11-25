@@ -25,6 +25,7 @@
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "#lib/hooks/date-params.svelte.js";
     import {createResourceContext} from "#lib/hooks/resource-context.svelte.js";
     import {createReportSlots} from "#lib/hooks/report-slots.svelte.js";
+    import { getCustomReports } from "#lib/api/generated/customReports.generated.remote.js";
 
     let {children} = $props();
 
@@ -38,7 +39,8 @@
     // window (e.g. readings=7, insulin-delivery=30) adjust via
     // requireDateParamsContext(N); the headline 14-day reports then need no
     // adjustment, so they no longer depend on the adjust-up path resolving.
-    const params = useDateParams(14);
+    // A custom report runs over its own saved range, so its URL is left without the shared one.
+    const params = useDateParams(14, () => !page.route.id?.startsWith("/(authenticated)/reports/custom"));
     setDateParamsContext(params);
 
     // Reports declare whether they read the shared range; those that carry their
@@ -91,6 +93,24 @@
     });
 
     let reportRoot = $state<HTMLElement | null>(null);
+    /** The sticky header's height, its page tabs included; 0 before it is measured, or where there is none. */
+    let headerHeight = $state(0);
+    // The header's height before it is measured, so the first paint matches it: the h-14 bar and its
+    // border, and a row of page tabs (its border, py-1.5, and a py-1 link of 20px text) where
+    // ReportPageSwitcher draws one. Only a row that wraps on a narrow screen is corrected after.
+    // The custom report pages draw a single row of 36px and its border instead.
+    const customPages = $derived(page.url.pathname === "/reports/custom" || page.url.pathname.startsWith("/reports/custom/"));
+    const tabbed = $derived(
+        reportCategories().some((c) => c.pages && c.reports.some((r) => r.href === page.url.pathname))
+    );
+    const headerFallback = $derived(customPages ? "3.5rem + 1px + 37px" : tabbed ? "3.5rem + 1px + 41px" : "3.5rem + 1px");
+
+    /** A saved custom report is headed by its own name. */
+    const savedReports = $derived(customPages ? getCustomReports() : null);
+    const savedName = $derived.by(() => {
+        const at = /^\/reports\/custom\/([^/]+)$/.exec(page.url.pathname)?.[1];
+        return at && at !== "new" ? (savedReports?.current ?? []).find((r) => r.id === at)?.name : undefined;
+    });
     $effect(() => installPrintFitFallback(() => reportRoot));
 
     const registryTitles = $derived(
@@ -99,6 +119,7 @@
 
     // Extract report name from the URL
     const reportName = $derived.by(() => {
+        if (savedName) return savedName;
         const declared = registryTitles.get(page.url.pathname) ?? reportSubRouteTitle(page.url.pathname);
         if (declared) return declared;
 
@@ -148,13 +169,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<!-- --headroom-top sits a Headroom panel flush under the sticky report header (h-14 plus its border). -->
-<div class="@container relative min-h-full bg-background [--headroom-top:calc(var(--app-sticky-top,0px)+3.5rem+1px)]" bind:this={reportRoot} data-report-root>
+<!-- --headroom-top sits a Headroom panel, or any sticky part of a report, flush under the sticky report
+     header and its page tabs; before the header is measured, under the h-14 bar and its border. -->
+<div
+        class="@container relative min-h-full bg-background"
+        style:--headroom-top="calc(var(--app-sticky-top, 0px) + {headerHeight > 0 ? `${headerHeight}px` : headerFallback})"
+        bind:this={reportRoot}
+        data-report-root
+>
     {#if page.url.pathname !== "/reports"}
         <ReportPrintHeader title={reportName} period={printPeriod} />
 
         <div
-                class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
+                class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card print:hidden"
+                bind:offsetHeight={headerHeight}
                 {@attach loopAnalysisHeaderMark()}
         >
             <!-- At 35% the darkest wash keeps the bar's text above 9:1 in either theme. -->

@@ -2,7 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Audit;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -20,8 +20,8 @@ namespace Nocturne.API.Tests.Services.V4;
 /// <remarks>
 /// A mock-level count cannot see a store's own statements; the reads and the bulk upsert are capped per
 /// call against PostgreSQL in <c>EntryAndProfileBatchReadsTests</c>. One call here is not one
-/// statement: the read of the rows served-shaped ids name is one statement per 50 such ids per table,
-/// so a page of write-back echoes pulled back scales with the page. The glucose-processing resolver is
+/// statement: the lookup of the ids a page of write-back echoes is pulled back under is one statement
+/// per 50 such ids per table, so that page scales with the page. The glucose-processing resolver is
 /// asked once per reading but is no store: the settings it reads are memoised per scope
 /// (<see cref="GlucoseProcessingConfigProvider"/>), so it is not counted. An edit of a reading served
 /// under its own id is written onto that row (<c>DecomposerBase.WriteOntoStoredAsync</c>),
@@ -84,6 +84,9 @@ public class EntryDecomposerFixedQueryTests
         mock.As<ILegacyKeyedRepository<TRecord>>()
             .Setup(r => r.GetByServedIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        mock.As<ILegacyKeyedRepository<TRecord>>()
+            .Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string>());
         mock.As<IBulkUpsertRepository<TRecord>>()
             .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<TRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<TRecord> records, WriteOrigin _, CancellationToken _) => new BulkWrite<TRecord>([.. records], 0));
@@ -96,13 +99,11 @@ public class EntryDecomposerFixedQueryTests
         _doubles.Add(stamper);
         var config = new Mock<IGlucoseProcessingConfigProvider>();
         config.Setup(c => c.GetSourceDefaultsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        return new EntryDecomposer(
-            Table<ISensorGlucoseRepository, SensorGlucose>().Object,
-            Table<IMeterGlucoseRepository, MeterGlucose>().Object,
-            Table<ICalibrationRepository, Calibration>().Object,
-            new GlucoseProcessingResolver(config.Object),
-            stamper.Object,
-            Mock.Of<IAuditContext>(),
-            NullLogger<EntryDecomposer>.Instance);
+        return EntryDecomposerDoubles.Build(
+            sensorGlucose: Table<ISensorGlucoseRepository, SensorGlucose>().Object,
+            meterGlucose: Table<IMeterGlucoseRepository, MeterGlucose>().Object,
+            calibration: Table<ICalibrationRepository, Calibration>().Object,
+            glucoseResolver: new GlucoseProcessingResolver(config.Object),
+            stamper: stamper.Object);
     }
 }

@@ -19,24 +19,74 @@ public class RuleDataNeedsTests
     }
 
     [NativeFact]
-    public void Threshold_only_triggers_no_optional_needs()
+    public void Threshold_needs_only_the_sensor_state()
     {
         var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.Should().BeEquivalentTo(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
+    }
+
+    /// <summary>
+    /// A target is read as the bucket reads its entry, at the tenant's local time; the newest reading
+    /// as a threshold reads it, through the sensor's state.
+    /// </summary>
+    [NativeFact]
+    public void A_limit_from_a_fact_needs_what_the_fact_reads()
+    {
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Threshold,
+                """{"direction":"below","value_from":{"fact":"target_low","offset":-10}}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with
+            {
+                NeedsSensorState = true,
+                NeedsTargetRange = true,
+                NeedsTenantTimeZone = true,
+            });
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.EventualGlucose,
+                """{"operator":">","value_from":{"fact":"target_high"}}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with
+            {
+                NeedsApsDetermination = true,
+                NeedsTargetRange = true,
+                NeedsTenantTimeZone = true,
+            });
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Predicted,
+                """{"operator":"<","within_minutes":30,"value_from":{"fact":"latest_glucose","offset":-30}}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsPredicted = true, NeedsSensorState = true });
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Predicted,
+                """{"operator":"<","within_minutes":30,"value":70}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsPredicted = true },
+                "a literal limit reads no fact");
     }
 
     [NativeFact]
-    public void Trend_leaf_at_top_level_sets_trend_bucket_need()
+    public void Trend_leaf_needs_only_the_sensor_state()
     {
         var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"rising_fast"}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.NeedsTrendBucket.Should().BeTrue();
-        result.NeedsIob.Should().BeFalse();
+        result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
+    }
+
+    [NativeFact]
+    public void Signal_loss_and_the_sensor_state_leaf_need_what_they_read()
+    {
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SignalLoss, """{"timeout_minutes":15}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None, "signal loss reads the base context alone");
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SensorState, """{"states":["warming_up"]}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
+    }
+
+    /// <summary>The loop's determination is fetched for the two leaves that read it, and only them.</summary>
+    [NativeTheory]
+    [InlineData(AlertConditionType.EventualGlucose)]
+    [InlineData(AlertConditionType.CarbsRequired)]
+    public void A_loop_leaf_needs_the_determination_alone(AlertConditionType type)
+    {
+        RuleDataNeeds.Walk([MakeRule(type, """{"operator":">","value":10}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsApsDetermination = true });
     }
 
     [NativeFact]
@@ -79,7 +129,6 @@ public class RuleDataNeedsTests
         result.NeedsIob.Should().BeTrue();
         result.NeedsCob.Should().BeTrue();
         result.NeedsPredicted.Should().BeTrue();
-        result.NeedsTrendBucket.Should().BeTrue();
         result.NeedsActiveAlerts.Should().BeTrue();
         result.NeedsReservoir.Should().BeFalse();
         result.NeedsSiteAge.Should().BeFalse();
@@ -131,12 +180,12 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Multiple_rules_are_unioned()
     {
-        var trendRule = MakeRule(AlertConditionType.Trend, """{"bucket":"flat"}""");
+        var cobRule = MakeRule(AlertConditionType.Cob, """{"operator":">","value":10}""");
         var iobRule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":1}""");
 
-        var result = RuleDataNeeds.Walk(new[] { trendRule, iobRule });
+        var result = RuleDataNeeds.Walk(new[] { cobRule, iobRule });
 
-        result.NeedsTrendBucket.Should().BeTrue();
+        result.NeedsCob.Should().BeTrue();
         result.NeedsIob.Should().BeTrue();
     }
 
@@ -214,6 +263,18 @@ public class RuleDataNeedsTests
         var result = RuleDataNeeds.Walk(new[] { rule });
 
         result.NeedsUploaderStatus.Should().BeTrue();
+    }
+
+    [NativeFact]
+    public void TransmitterBattery_rule_sets_TransmitterStatus_only()
+    {
+        var rule = MakeRule(AlertConditionType.TransmitterBattery,
+            """{"metric":"voltage_a","operator":"<","value":290}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsTransmitterStatus.Should().BeTrue();
+        result.NeedsUploaderStatus.Should().BeFalse();
     }
 
     [NativeFact]
@@ -327,7 +388,7 @@ public class RuleDataNeedsTests
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.Should().BeEquivalentTo(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
     [NativeFact]
@@ -375,13 +436,21 @@ public class RuleDataNeedsTests
     }
 
     [NativeTheory]
-    [InlineData("""{"mode":8,"is_active":true}""")]
-    [InlineData("""{"mode":"suspended","is_active":true}""")]
-    public void A_pump_mode_that_is_not_a_member_name_selects_no_mode(string conditionParams)
+    [InlineData("""{"mode":"Suspended","is_active":true}""")]
+    [InlineData("""{"mode":"Automatic","is_active":false,"for_minutes":5}""")]
+    public void A_pump_state_leaf_needs_the_pump_modes(string conditionParams)
     {
         var rule = MakeRule(AlertConditionType.PumpState, conditionParams);
 
-        RuleDataNeeds.Walk(new[] { rule }).ReferencedPumpStates.Should().BeEmpty();
+        RuleDataNeeds.Walk(new[] { rule }).NeedsPumpModes.Should().BeTrue();
+    }
+
+    [NativeFact]
+    public void A_rule_without_a_pump_state_leaf_does_not_need_the_pump_modes()
+    {
+        var rule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+
+        RuleDataNeeds.Walk(new[] { rule }).NeedsPumpModes.Should().BeFalse();
     }
 
     private static AlertRuleSnapshot MakeRule(

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Services.Jobs;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Jobs;
@@ -246,8 +247,8 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
 
     /// <summary>
     /// A version moved with no re-resolution after it, as <c>RepairEpochProfileVersions</c> moves them
-    /// in SQL, has its percent temp rates re-resolved by the job the migration requests, run by the
-    /// host's job scheduler, once.
+    /// in SQL, has its percent temp rates re-resolved by the job the migration requests, claimed and
+    /// run by the job scheduler, once.
     /// </summary>
     [Fact]
     public async Task MovedVersionsJob_ReresolvesRatesAgainstAVersionMovedWithoutAWrite()
@@ -268,7 +269,6 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
             var second = (await schedules.GetByProfileNameAsync(store)).Single(v => v.Entries.Single().Value == 2.0);
             second.Timestamp = DaysAgo(10).UtcDateTime;
             await schedules.UpdateAsync(second.Id, second, WriteOrigin.Live);
-            await sp.GetRequiredService<ProfileVersionCache>().RefreshAsync(schedules, store, default);
             return 0;
         });
 
@@ -276,7 +276,7 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
 
         var ledger = Fixture.Services.GetRequiredService<IJobLedger>();
         await ledger.RequestAsync(ProfileVersionsMovedJob.JobName, Fixture.TenantId, default);
-        var row = await WaitUntilFinishedAsync(ledger);
+        var row = await RunRequestedJobAsync(ledger);
 
         var tempBasal = await TempBasalAtAsync(createdAt);
         tempBasal.ScheduledRate.Should().Be(1.0);
@@ -285,17 +285,18 @@ public class ProfileVersionStartIntegrationTests : ApiIntegrationTestBase
         row.Attempts.Should().Be(0);
     }
 
-    private async Task<JobLedgerEntry> WaitUntilFinishedAsync(IJobLedger ledger)
+    /// <summary>
+    /// One claim of a scheduler over the host's services, which the fixture's host does not run
+    /// (<see cref="ApiIntegrationTestFixture.RemoveJobScheduler"/>).
+    /// </summary>
+    private async Task<JobLedgerEntry> RunRequestedJobAsync(IJobLedger ledger)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (true)
-        {
-            var row = (await ledger.ListAsync(100_000, default)).Rows
-                .Single(j => j.Job == ProfileVersionsMovedJob.JobName && j.TenantId == Fixture.TenantId);
-            if (row.NextDueAt is null || DateTime.UtcNow > deadline)
-                return row;
-            await Task.Delay(250);
-        }
+        var scheduler = ActivatorUtilities.CreateInstance<JobScheduler>(Fixture.Services);
+        (await scheduler.PollAsync(default)).Should().BeGreaterThan(0, "the requested row is due");
+        await scheduler.DrainAsync();
+
+        return (await ledger.ListAsync(100_000, default)).Rows
+            .Single(j => j.Job == ProfileVersionsMovedJob.JobName && j.TenantId == Fixture.TenantId);
     }
 
     private Task<Nocturne.Core.Models.V4.TempBasal> TempBasalAtAsync(DateTimeOffset createdAt) =>

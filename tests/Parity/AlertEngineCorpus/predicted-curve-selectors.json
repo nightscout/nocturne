@@ -1,0 +1,377 @@
+{
+  "schema_version": 1,
+  "name": "predicted-curve-selectors",
+  "description": "predicted with each selector over the same named curves: no selector reads default, curve reads one series, min_of and max_of read the pointwise extreme at the offsets every listed series has. UAM is shorter than the others, so a min_of over it ends where it ends; the series that supplies the minimum moves from uam to zt",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30,
+        "curve": "zt"
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30,
+        "curve": "cob"
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30,
+        "min_of": [
+          "iob",
+          "uam",
+          "zt"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30,
+        "min_of": [
+          "iob",
+          "zt"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": ">",
+        "value": 150,
+        "within_minutes": 30,
+        "max_of": [
+          "iob",
+          "cob"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30,
+        "curve": "default"
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 95
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 85
+          },
+          {
+            "offset_minutes": 20,
+            "mgdl": 80
+          },
+          {
+            "offset_minutes": 25,
+            "mgdl": 75
+          },
+          {
+            "offset_minutes": 30,
+            "mgdl": 72
+          }
+        ],
+        "prediction_curves": {
+          "iob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 90
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 85
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 80
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 75
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 72
+            }
+          ],
+          "cob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 110
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 120
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 130
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 140
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 150
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 160
+            }
+          ],
+          "uam": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 90
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 80
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 68
+            }
+          ],
+          "zt": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 92
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 84
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 76
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 69
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 62
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 55
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 95
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 85
+          },
+          {
+            "offset_minutes": 20,
+            "mgdl": 80
+          },
+          {
+            "offset_minutes": 25,
+            "mgdl": 75
+          },
+          {
+            "offset_minutes": 30,
+            "mgdl": 72
+          }
+        ],
+        "prediction_curves": {
+          "iob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 90
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 85
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 80
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 75
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 72
+            }
+          ],
+          "cob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 110
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 120
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 130
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 140
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 150
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 160
+            }
+          ],
+          "uam": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 90
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 80
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 72
+            }
+          ],
+          "zt": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 92
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 84
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 76
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 69
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 62
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 55
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

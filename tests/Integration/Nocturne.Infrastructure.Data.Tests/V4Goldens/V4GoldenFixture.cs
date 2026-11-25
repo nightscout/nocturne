@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// <see cref="SharedPostgres"/> (production role bootstrap, migrations and startup reconcilers) and stands up the production
 /// data-layer DI container via <see cref="ServiceCollectionExtensions.AddPostgreSqlInfrastructure"/>
 /// pointed at that database — so goldens exercise the real repositories AND the real
-/// <c>DeduplicationService</c> against real Postgres, not mocks. These goldens capture current
+/// the duplicate linker against real Postgres, not mocks. These goldens capture current
 /// behaviour and are held identical across the V4RepositoryBase refactor.
 /// </summary>
 public class V4GoldenFixture : IAsyncLifetime
@@ -48,10 +48,9 @@ public class V4GoldenFixture : IAsyncLifetime
         services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
         services.AddPostgreSqlInfrastructure(
             AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
-        // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
-        // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();
-        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(CapturingV4RecordBroadcaster<>));
+        services.AddScoped<IRecordChangeSubscriber, CapturingRecordChangeSubscriber>();
+        services.AddScoped<IRecordChangeSubscriber, CacheInvalidationSubscriber>();
         // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
         // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
         services.AddSingleton<EntryCapture>();
