@@ -69,7 +69,7 @@ public class TreatmentCreateBroadcastTests
             store,
             _decomposer.Object,
             Mock.Of<ITreatmentCache>(),
-            new SignalRTreatmentEventSink(_broadcast.Object, NullLogger<SignalRTreatmentEventSink>.Instance),
+            new SignalRTreatmentEventSink(_broadcast.Object),
             Mock.Of<IPatientInsulinRepository>(),
             NullLogger<TreatmentService>.Instance);
     }
