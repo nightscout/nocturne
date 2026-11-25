@@ -3,10 +3,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Xunit.Abstractions;
@@ -18,7 +20,8 @@ namespace Nocturne.API.Tests.Integration;
 /// Two connectors reported one dose and deduplication linked their copies, and then one connector
 /// withdrew its copy, so the other's was promoted. A copy that connector writes again under the same
 /// legacy id or sync identifier joins the group the other copy kept, so the dose is counted once. A record it writes under a new id is
-/// a different dose and stays apart, however close and however alike.
+/// a different dose and stays apart, however close and however alike, unless both copies are stamped with
+/// the same upstream fingerprint, which a connector publish writes and names the dose's time, amount and type.
 /// </summary>
 [Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
@@ -45,6 +48,22 @@ public class SourceRewriteDeduplicationIntegrationTests(ApiIntegrationTestFixtur
         BolusType = V4Models.BolusType.Normal,
     };
 
+    private Treatment Published(string legacyId, int offsetSeconds, double insulin = 2.0) => new()
+    {
+        Id = legacyId,
+        EventType = "Correction Bolus",
+        Insulin = insulin,
+        CreatedAt = _at.AddSeconds(offsetSeconds).ToString("O"),
+        DataSource = Withdrawing,
+    };
+
+    private async Task PublishAsync(Treatment treatment)
+    {
+        await using var scope = OpenTenantScope();
+        (await scope.ServiceProvider.GetRequiredService<IConnectorPublisher>().Treatments
+            .PublishTreatmentsAsync([treatment], Withdrawing, WriteOrigin.Live)).Should().BeTrue();
+    }
+
     private async Task<int> BolusesOnBoardAsync()
     {
         await using var scope = OpenTenantScope();
@@ -55,14 +74,27 @@ public class SourceRewriteDeduplicationIntegrationTests(ApiIntegrationTestFixtur
     private async Task<int> ServedTreatmentsAsync() =>
         (await AuthenticatedClient.GetFromJsonAsync<JsonElement[]>("/api/v1/treatments"))!.Length;
 
-    /// <summary>Links a pump copy and a withdrawing copy under <paramref name="legacyId"/>, then withdraws that copy.</summary>
-    private async Task LinkAndWithdrawAsync(string legacyId, string? syncIdentifier = null)
+    /// <summary>
+    /// Links a pump copy and a withdrawing copy under <paramref name="legacyId"/>, then withdraws that copy.
+    /// The withdrawing copy carries an upstream fingerprint when <paramref name="stamped"/>, as a connector publish writes it.
+    /// </summary>
+    private async Task LinkAndWithdrawAsync(string legacyId, string? syncIdentifier = null, bool stamped = false)
     {
         await using (var scope = OpenTenantScope())
         {
-            var boluses = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
-            await boluses.CreateAsync(Copy("pump-connector", "pump_bolus_" + Guid.NewGuid().ToString("N"), 0), WriteOrigin.Live);
-            await boluses.CreateAsync(Copy(Withdrawing, legacyId, 5, syncIdentifier), WriteOrigin.Live);
+            await scope.ServiceProvider.GetRequiredService<IBolusRepository>().CreateAsync(
+                Copy("pump-connector", "pump_bolus_" + Guid.NewGuid().ToString("N"), 0), WriteOrigin.Live);
+        }
+
+        if (stamped)
+        {
+            await PublishAsync(Published(legacyId, 5));
+        }
+        else
+        {
+            await using var scope = OpenTenantScope();
+            await scope.ServiceProvider.GetRequiredService<IBolusRepository>()
+                .CreateAsync(Copy(Withdrawing, legacyId, 5, syncIdentifier), WriteOrigin.Live);
         }
         (await BolusesOnBoardAsync()).Should().Be(1, "deduplication counts one copy of the dose");
 
@@ -121,6 +153,57 @@ public class SourceRewriteDeduplicationIntegrationTests(ApiIntegrationTestFixtur
         }
 
         (await BolusesOnBoardAsync()).Should().Be(2, "the withdrawn copy's source still holds its place in the group");
+        (await ServedTreatmentsAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_copy_its_source_withdrew_and_publishes_again_under_a_new_id_is_counted_once()
+    {
+        await LinkAndWithdrawAsync("glooko_bolus_" + Guid.NewGuid().ToString("N"), stamped: true);
+
+        await PublishAsync(Published("glooko_bolus_" + Guid.NewGuid().ToString("N"), 5));
+
+        (await BolusesOnBoardAsync()).Should().Be(1);
+        (await ServedTreatmentsAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(5, 2.04)]
+    [InlineData(20, 2.0)]
+    public async Task A_dose_its_source_publishes_under_a_new_id_that_differs_from_its_withdrawn_copy_is_counted_apart(
+        int offsetSeconds, double insulin)
+    {
+        await LinkAndWithdrawAsync("glooko_bolus_" + Guid.NewGuid().ToString("N"), stamped: true);
+
+        await PublishAsync(Published("glooko_bolus_" + Guid.NewGuid().ToString("N"), offsetSeconds, insulin));
+
+        (await BolusesOnBoardAsync()).Should().Be(2);
+        (await ServedTreatmentsAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_copy_written_again_under_a_new_id_with_no_fingerprint_is_counted_apart()
+    {
+        await LinkAndWithdrawAsync("glooko_bolus_" + Guid.NewGuid().ToString("N"), stamped: true);
+
+        await using (var scope = OpenTenantScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IBolusRepository>()
+                .CreateAsync(Copy(Withdrawing, "glooko_bolus_" + Guid.NewGuid().ToString("N"), 5), WriteOrigin.Live);
+        }
+
+        (await BolusesOnBoardAsync()).Should().Be(2);
+        (await ServedTreatmentsAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_copy_published_under_a_new_id_after_an_unfingerprinted_one_was_withdrawn_is_counted_apart()
+    {
+        await LinkAndWithdrawAsync("glooko_bolus_" + Guid.NewGuid().ToString("N"));
+
+        await PublishAsync(Published("glooko_bolus_" + Guid.NewGuid().ToString("N"), 5));
+
+        (await BolusesOnBoardAsync()).Should().Be(2);
         (await ServedTreatmentsAsync()).Should().Be(2);
     }
 }
