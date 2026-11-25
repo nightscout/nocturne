@@ -851,7 +851,7 @@ public class OAuthController : ControllerBase
     /// <returns>The updated <see cref="OAuthGrantDto"/>, or <c>404</c> / <c>400</c> if the grant is not found or the scopes are invalid.</returns>
     /// <remarks>
     /// New scopes are bounded by <see cref="HttpContextExtensions.GrantScopeBounds"/>; 409
-    /// <c>member_access_from_team</c> on a guest link when the caller may give nothing.
+    /// <c>caller_access_from_team</c> on a guest link when the caller may give nothing.
     /// </remarks>
     [HttpPatch("grants/{grantId}")]
     [RequireInteractiveSession]
@@ -905,7 +905,7 @@ public class OAuthController : ControllerBase
                 ErrorDescription = ex.Message,
             });
         }
-        catch (GrantCeilingViolationException ex) when (ex.Violation.Code == MemberAccessFromTeam.Code)
+        catch (GrantCeilingViolationException ex) when (ex.Violation.Code == CallerAccessFromTeam.Code)
         {
             return this.CallerAccessFromTeamProblem();
         }

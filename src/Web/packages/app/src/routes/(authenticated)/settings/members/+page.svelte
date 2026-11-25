@@ -119,6 +119,8 @@
   const memberProblemMessages: ProblemCodeMessages = {
     member_access_from_team:
       "This member has access only through a team. To change it, stop the team's access to this site.",
+    caller_access_from_team:
+      "You have access to this site only through a team, so you cannot give access to anyone.",
     membership_request_own: "You cannot approve your own request. Ask another member to approve it.",
   };
 

@@ -96,3 +96,70 @@ describe("NotificationItem team rename notice", () => {
     expect(page.getByText(/is now named/).elements()).toHaveLength(0);
   });
 });
+
+describe("NotificationItem team staff notice", () => {
+  const TEAM = "0199a1b2-0000-7000-8000-0000000000bb";
+
+  function staffNotice(type: string, title: string, metadata: Record<string, unknown>): InAppNotificationDto {
+    return {
+      id: "n3",
+      type,
+      urgency: NotificationUrgency.Info,
+      title,
+      createdAt: new Date().toISOString(),
+      metadata,
+    } as InAppNotificationDto;
+  }
+
+  const waiting = (metadata: Record<string, unknown>) =>
+    staffNotice("team.staff_waiting", "team_staff_waiting", metadata);
+
+  it("says that one staff member waits", async () => {
+    render(NotificationItem, { notification: waiting({ team: "Ward 4", teamId: TEAM, count: 1 }) });
+
+    await expect.element(page.getByText("Team staff are waiting for your approval")).toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "1 staff member of the team Ward 4 is waiting for your approval. They cannot see this site's data until an owner approves them.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "Open the team" }))
+      .toHaveAttribute("href", expect.stringMatching(new RegExp(`/settings/members\\?team=${TEAM}$`)));
+  });
+
+  it("says how many staff members wait", async () => {
+    render(NotificationItem, { notification: waiting({ team: "Ward 4", teamId: TEAM, count: 11 }) });
+
+    await expect
+      .element(
+        page.getByText(
+          "11 staff members of the team Ward 4 are waiting for your approval. They cannot see this site's data until an owner approves them.",
+        ),
+      )
+      .toBeVisible();
+  });
+
+  it("says that the team has new staff who can see the site", async () => {
+    render(NotificationItem, {
+      notification: staffNotice("team.staff_joined", "team_staff_joined", { team: "Ward 4", teamId: TEAM }),
+    });
+
+    await expect.element(page.getByText("A team has new staff")).toBeVisible();
+    await expect
+      .element(page.getByText("The team Ward 4 has new staff who can now see this site's data."))
+      .toBeVisible();
+    await expect.element(page.getByRole("link", { name: "Open the team" })).toBeVisible();
+  });
+
+  it("shows the title alone, never the raw key, when the metadata names no team", async () => {
+    render(NotificationItem, { notification: waiting({ count: 3 }) });
+
+    await expect.element(page.getByText("Team staff are waiting for your approval")).toBeVisible();
+    expect(page.getByText("team_staff_waiting").elements()).toHaveLength(0);
+    expect(page.getByText(/waiting for your approval\./).elements()).toHaveLength(0);
+    expect(page.getByRole("link", { name: "Open the team" }).elements()).toHaveLength(0);
+  });
+});

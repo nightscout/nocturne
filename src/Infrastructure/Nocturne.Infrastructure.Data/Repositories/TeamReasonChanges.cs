@@ -33,6 +33,9 @@ public sealed class TeamReasonChanges
     private readonly IReadOnlyList<Given> _given;
     private readonly Func<NocturneDbContext, CancellationToken, Task> _write;
 
+    /// <summary>What the owners of the sites are owed once the write commits: <see cref="WithStaffNotices"/>.</summary>
+    public StaffNotices Notices { get; }
+
     /// <summary>A reason removed; <c>Last</c> when the membership ends with the removals, holding no other reason and gaining none.</summary>
     private sealed record Removal(Guid TenantId, Guid SubjectId, Guid AccessId, bool Last);
 
@@ -41,13 +44,25 @@ public sealed class TeamReasonChanges
 
     private TeamReasonChanges(
         DbUnitOfWork unit, IReadOnlyList<Removal> removals, IReadOnlyList<Given> given,
-        Func<NocturneDbContext, CancellationToken, Task> write)
+        Func<NocturneDbContext, CancellationToken, Task> write, StaffNotices notices)
     {
         _unit = unit;
         _removals = removals;
         _given = given;
         _write = write;
+        Notices = notices;
     }
+
+    /// <summary>
+    /// These changes, owing the owners of the sites once they commit a recount of <paramref name="teamId"/>'s
+    /// waiting staff at <paramref name="recountSites"/>, and a notice that the team's staff newly reach each
+    /// site where a reason is added. An owner is given no reason, so no owner is announced as joined.
+    /// </summary>
+    public TeamReasonChanges WithStaffNotices(Guid teamId, IEnumerable<Guid> recountSites) => new(
+        _unit, _removals, _given, _write,
+        new StaffNotices(
+            recountSites.Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList(),
+            _given.Where(g => !g.Held).Select(g => g.TenantId).Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList()));
 
     /// <summary>The sites where a team reason changes, in ascending tenant id.</summary>
     public IReadOnlyList<Guid> Sites =>
@@ -120,7 +135,7 @@ public sealed class TeamReasonChanges
                 r.SourceId!.Value,
                 !r.TenantMember.Reasons.Any(other => other.Id != r.Id)))
             .ToListAsync(ct);
-        return new TeamReasonChanges(unit, removals, [], write);
+        return new TeamReasonChanges(unit, removals, [], write, StaffNotices.None);
     }
 
     /// <summary>
@@ -193,7 +208,7 @@ public sealed class TeamReasonChanges
             removals.AddRange(gone.Select(accessId => new Removal(tenantId, subjectId, accessId, last)));
         }
 
-        return new TeamReasonChanges(unit, removals, given, (_, _) => Task.CompletedTask);
+        return new TeamReasonChanges(unit, removals, given, (_, _) => Task.CompletedTask, StaffNotices.None);
     }
 
     /// <summary>

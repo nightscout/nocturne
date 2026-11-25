@@ -348,7 +348,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private async Task<Guid> MemberIdAsync(Seeded seeded) =>
         (await new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off)

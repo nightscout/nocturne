@@ -262,7 +262,7 @@ public static class HttpContextExtensions
     /// before anything is written.
     /// </summary>
     public static ObjectResult CallerAccessFromTeamProblem(this ControllerBase controller) =>
-        controller.ProblemWithCode(MemberAccessFromTeam.Code, MemberAccessFromTeam.CallerDetail, StatusCodes.Status409Conflict);
+        controller.ProblemWithCode(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail, StatusCodes.Status409Conflict);
 
     /// <summary>
     /// Clamps every read on the request's services to the last 24 hours, through

@@ -11,7 +11,9 @@ namespace Nocturne.API.Services.Auth;
 /// <remarks>
 /// The tenants are read before any membership goes, and each tenant's stop (<see cref="MadeByStop"/>)
 /// runs on a unit of its own, since the tables it writes force row level security per tenant. Its
-/// sessions are evicted once that unit commits.
+/// sessions are evicted once that unit commits. The teams and sites where the subject is staff are read
+/// before anything goes, since their rows go with the account, and their owners' waiting notices are
+/// recounted once it is deleted.
 /// </remarks>
 public sealed class SubjectDeletion(
     INocturneDbContextFactory contexts,
@@ -20,6 +22,7 @@ public sealed class SubjectDeletion(
     GrantRevocationService grantRevocation,
     IAuthAuditService audit,
     TimeProvider time,
+    TeamStaffAnnouncer teamStaff,
     ILogger<SubjectDeletion> logger) : ISubjectDeletion
 {
     /// <inheritdoc/>
@@ -34,6 +37,7 @@ public sealed class SubjectDeletion(
             return new SubjectDeletionOutcome(new SubjectChange.NotFound(), []);
         }
 
+        var staffNotices = await teamStaff.OwedForDeletionAsync(subjectId, ct);
         var now = time.GetUtcNow().UtcDateTime;
         foreach (var tenantId in await members.ListTenantIdsOfSubjectAsync(subjectId, ct))
         {
@@ -52,6 +56,7 @@ public sealed class SubjectDeletion(
         {
             logger.LogInformation("Deleted subject {SubjectId}", subjectId);
             await audit.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
+            await teamStaff.AnnounceAsync(staffNotices);
         }
 
         return new SubjectDeletionOutcome(change, leftWithoutOwner);

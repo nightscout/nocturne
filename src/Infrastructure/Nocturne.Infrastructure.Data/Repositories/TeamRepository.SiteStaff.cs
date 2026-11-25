@@ -82,7 +82,8 @@ public partial class TeamRepository
             await TeamNameAsync(db, teamId, ct),
             staffSubjectId);
         await db.SaveChangesAsync(ct);
-        return (OwnerDecision.Decided, await TeamReasonChanges.SyncAsync(unit, [(tenantId, staffSubjectId)], now, ct));
+        return (OwnerDecision.Decided, (await TeamReasonChanges.SyncAsync(unit, [(tenantId, staffSubjectId)], now, ct))
+            .WithStaffNotices(teamId, [tenantId]));
     }
 
     /// <summary>
@@ -140,8 +141,9 @@ public partial class TeamRepository
         }
 
         await db.SaveChangesAsync(ct);
-        return (OwnerDecision.Decided, await TeamReasonChanges.SyncAsync(
-            unit, approved.Select(subjectId => (tenantId, subjectId)), now, ct));
+        return (OwnerDecision.Decided, (await TeamReasonChanges.SyncAsync(
+            unit, approved.Select(subjectId => (tenantId, subjectId)), now, ct))
+            .WithStaffNotices(teamId, [tenantId]));
     }
 
     private static Task<TeamTenantAccessEntity?> AccessOfSiteAsync(

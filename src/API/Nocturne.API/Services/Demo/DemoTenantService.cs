@@ -149,9 +149,15 @@ public sealed class DemoTenantService
 
         if (await _members.FindRoleIdBySlugAsync(tenantId, DemoRoleSlug, ct) is { } existingRoleId)
         {
-            await TeamReasonWrites.EditRoleAsync(
+            var edited = await TeamReasonWrites.EditRoleAsync(
                 _factory, _grantRevocation, tenantId, existingRoleId, DemoRoleEdit, editorSubjectId: null,
                 _time.GetUtcNow().UtcDateTime, ct);
+            if (edited.Outcome != RoleChangeOutcome.Changed)
+            {
+                _logger.LogWarning(
+                    "The demo role of tenant {TenantId} was not restored: the edit found {Outcome}",
+                    tenantId, edited.Outcome);
+            }
         }
 
         // One unit, pinned to the tenant: a new role, the Public grant and the demo member, with its

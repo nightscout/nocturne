@@ -27,6 +27,8 @@ const LABEL_MAP: Record<string, string> = {
   open_platform_settings: "Open platform settings",
   release_installed: "Nocturne is updated",
   team_renamed: "A team has a new name",
+  team_staff_joined: "A team has new staff",
+  team_staff_waiting: "Team staff are waiting for your approval",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",

@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -102,7 +103,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         var deletion = new SubjectDeletion(
             contexts, subjects, members,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            audit, TimeProvider.System, NullLogger<SubjectDeletion>.Instance);
+            audit, TimeProvider.System, InertTeamStaff.Announcer(), NullLogger<SubjectDeletion>.Instance);
         return new Scenario(tenant, person, role, service, deletion, new MemberHistoryReader(contexts));
     }
 

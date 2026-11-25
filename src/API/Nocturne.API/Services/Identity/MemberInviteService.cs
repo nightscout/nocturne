@@ -56,6 +56,7 @@ public class MemberInviteService : IMemberInviteService
     private readonly ILogger<MemberInviteService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TeamStaffAnnouncer _teamStaff;
 
     /// <param name="members">For the roles and memberships an invite names.</param>
     /// <param name="invites">The stored invites.</param>
@@ -67,6 +68,7 @@ public class MemberInviteService : IMemberInviteService
     /// <param name="timeProvider">The clock for an invite's creation, expiry and revocation.</param>
     /// <param name="logger">Logs the audit line for each invite created, accepted and revoked.</param>
     /// <param name="grantRevocation">Revokes the grants of an ended membership an accepted invite replaces.</param>
+    /// <param name="teamStaff">Recounts the team staff who wait at the site once an accepted invite makes its owner.</param>
     public MemberInviteService(
         ITenantMembershipRepository members,
         IMemberInviteRepository invites,
@@ -78,7 +80,8 @@ public class MemberInviteService : IMemberInviteService
         TimeProvider timeProvider,
         ILogger<MemberInviteService> logger,
         IAccountLinkRoute linkRoute,
-        GrantRevocationService grantRevocation)
+        GrantRevocationService grantRevocation,
+        TeamStaffAnnouncer teamStaff)
     {
         _members = members ?? throw new ArgumentNullException(nameof(members));
         _invites = invites ?? throw new ArgumentNullException(nameof(invites));
@@ -91,6 +94,7 @@ public class MemberInviteService : IMemberInviteService
         _logger = logger;
         _linkRoute = linkRoute;
         _grantRevocation = grantRevocation ?? throw new ArgumentNullException(nameof(grantRevocation));
+        _teamStaff = teamStaff;
     }
 
     /// <inheritdoc />
@@ -302,6 +306,7 @@ public class MemberInviteService : IMemberInviteService
             return refusal;
 
         _grantRevocation.EvictSessions(revoked);
+        await _teamStaff.RecountOwnerChangeAsync(invite.TenantId, acceptingSubjectId);
 
         var member = await _members.FindMemberAsync(invite.TenantId, acceptingSubjectId, CancellationToken.None)
             ?? throw new InvalidOperationException($"Subject {acceptingSubjectId} did not become a member of tenant {invite.TenantId}.");

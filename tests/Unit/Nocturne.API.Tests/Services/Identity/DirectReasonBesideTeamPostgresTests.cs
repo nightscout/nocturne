@@ -206,7 +206,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         new FakeTimeProvider(Now),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static ITenantRoleService GrantsEverything() =>
         Mock.Of<ITenantRoleService>(r => r.ValidateRoleGrantAsync(
@@ -224,7 +224,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         new FakeTimeProvider(Now),
         NullLogger<MembershipRequestService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static TenantService TenantService(SuppliedContextFactory contexts, GuestSessionCacheService? sessions = null) => new(
         contexts,
@@ -238,7 +238,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         sessions is null ? Revocation() : new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private Task<string> InviteAsync(Seeded s) => InviteByAsync(s, s.Manager);
 
@@ -460,7 +460,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             new FakeTimeProvider(Now),
             NullLogger<AccessRequestService>.Instance,
             AccountLinkRoutes.Off,
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
 
         (await service.ApproveAsync(s.Person, s.Tenant, [s.ViewerRole], null, false, [Scope.FullAccess], s.Manager))
             .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);

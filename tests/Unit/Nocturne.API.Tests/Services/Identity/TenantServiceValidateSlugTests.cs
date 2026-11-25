@@ -33,7 +33,7 @@ public sealed class TenantServiceValidateSlugTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     [Theory]
     [InlineData(3)]
