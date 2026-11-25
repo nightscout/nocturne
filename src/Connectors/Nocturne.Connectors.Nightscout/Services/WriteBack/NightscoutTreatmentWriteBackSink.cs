@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
@@ -61,11 +62,20 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// could store a second copy. The edit is not retried, so upstream keeps the previous version until
 /// the treatment is edited again.
 /// </para>
+/// <para>
+/// Once upstream accepts a treatment, the <see cref="WriteBackFingerprint"/> of each document it went
+/// as is kept on its rows (<see cref="IWriteBackSentRecords"/>), so the connector's pull tells its
+/// echo from an edit made upstream. Before each send they are added to rows that already keep some,
+/// since upstream may hold any of them from the moment it is sent: a pull before the stamp, or after a
+/// meal's bolus is accepted and its carbs are not, would otherwise apply Nocturne's own document as an
+/// upstream edit.
+/// </para>
 /// </remarks>
 public class NightscoutTreatmentWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
     NightscoutCircuitBreaker circuitBreaker,
+    IWriteBackSentRecords sentRecords,
     ILogger<NightscoutTreatmentWriteBackSink> logger)
     : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, circuitBreaker, logger)
 {
@@ -79,6 +89,7 @@ public class NightscoutTreatmentWriteBackSink(
     protected override async Task<IReadOnlyList<Treatment>> PrepareAsync(
         NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> batch, CancellationToken ct)
     {
+        await sentRecords.RecordSendingAsync([.. batch.Select(SentRecord)], ct);
         var sent = new List<Treatment>(batch.Count);
         foreach (var item in batch)
             sent.AddRange(await SplitAsync(config, item, ct));
@@ -90,7 +101,84 @@ public class NightscoutTreatmentWriteBackSink(
     {
         foreach (var item in items.Where(i => PreBolusSplit.ForWriteBack(i).Count == 1))
             await RemoveSplitCopiesAsync(config, item, ct);
+
+        await sentRecords.RecordSentAsync([.. items.Select(SentRecord)], ct);
     }
+
+    private static WriteBackSentRecord SentRecord(Treatment item) =>
+        new(item.LegacyId, item.RecordId, [.. PreBolusSplit.ForWriteBack(item).Select(AsPulled)]);
+
+    /// <summary>
+    /// The <see cref="WriteBackFingerprint"/> of <paramref name="document"/> as it is sent and read back:
+    /// written with <see cref="UpstreamIdentityJson.Options"/>, which every send uses, and read with
+    /// <see cref="UpstreamIdentityJson.ReadOptions"/>, which the connector's pull reads with.
+    /// </summary>
+    internal static string AsPulled(Treatment document) =>
+        WriteBackFingerprint.Of(JsonSerializer.Deserialize<Treatment>(
+            JsonSerializer.Serialize(document, UpstreamIdentityJson.Options), UpstreamIdentityJson.ReadOptions)!);
+
+    /// <summary>
+    /// Up to 15.0.6 the POST of the carbs record a v1 POST split off a meal upserts by time onto the
+    /// carbs write-back split off the meal when it was one record, and is refused for the <c>_id</c>
+    /// it would change. That document is removed, as the update of the meal's bolus that follows would
+    /// remove it. From 15.0.7 the POST is matched by its identifier and is not refused. Any other
+    /// refusal clears nothing.
+    /// </summary>
+    protected override async Task<bool> ClearRefusalAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> batch, string refusal, CancellationToken ct)
+    {
+        if (!IsImmutableIdRefusal(refusal))
+            return false;
+
+        var cleared = false;
+        foreach (var mealId in batch.Select(t => t.PreBolusMealId).OfType<string>().Distinct(StringComparer.Ordinal))
+        {
+            var carbsForms = WriteBackCarbsForms(mealId);
+            if (await FindAsync(config, IdentifierQuery($"{Endpoint}.json", carbsForms), ct) is { Count: > 0 })
+                cleared |= await RemoveAsync(config, carbsForms, ct);
+        }
+
+        return cleared;
+    }
+
+    /// <summary>MongoDB's ImmutableField error: an update that would change a stored document's <c>_id</c>.</summary>
+    private const int ImmutableFieldCode = 66;
+
+    /// <summary>
+    /// Whether a refused POST carries <see cref="ImmutableFieldCode"/>. 15.0.6 answers
+    /// <c>{status: 500, message: 'Mongo Error', description: err}</c>, <c>err</c> being the driver's
+    /// error, or an array of one per refused document for an array POST. Serialized, a driver error
+    /// keeps only <c>driver</c>, <c>name</c>, <c>index</c> and <c>code</c>, so the code is all there is
+    /// to match.
+    /// </summary>
+    private static bool IsImmutableIdRefusal(string refusal)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(refusal);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("description", out var description))
+                return false;
+
+            return description.ValueKind == JsonValueKind.Array
+                ? description.EnumerateArray().Any(HasImmutableFieldCode)
+                : HasImmutableFieldCode(description);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        static bool HasImmutableFieldCode(JsonElement error) =>
+            error.ValueKind == JsonValueKind.Object
+            && error.TryGetProperty("code", out var code)
+            && code.ValueKind == JsonValueKind.Number
+            && code.TryGetInt32(out var value)
+            && value == ImmutableFieldCode;
+    }
+
+    private static IReadOnlyList<string> WriteBackCarbsForms(string legacyId) =>
+        UpstreamIdentityJson.TreatmentWireForms(new Treatment { Id = PreBolusSplit.WriteBackCarbsId(legacyId) });
 
     /// <summary>
     /// <see cref="PreBolusSplit.ForWriteBack"/> of <paramref name="item"/>. The split-off carbs go to
@@ -127,20 +215,16 @@ public class NightscoutTreatmentWriteBackSink(
     /// writes them in place as any edit is. Up to 15.0.6 a copy held under its identifier as its
     /// <c>_id</c> is written by a POST that upserts by time, which a moved time turns into a refused
     /// insert, so such a copy is removed and its carbs created again.
-    /// <para>
-    /// Known gap (#3431): up to 15.0.6 a one-record meal written back and later posted again through v1
-    /// with a preBolus loses its upstream carbs until its carbs record is next edited. That record's
-    /// create upserts onto the split-off document and is refused, and the bolus update removes it.
-    /// </para>
     /// </remarks>
     protected override async Task<bool> SendUpdatedAsync(
         NightscoutConnectorConfiguration config, Treatment item, CancellationToken ct)
     {
+        await sentRecords.RecordSendingAsync([SentRecord(item)], ct);
         var halves = await SplitAsync(config, item, ct);
         if (item.LegacyId is not { Length: > 0 } legacyId)
             return await SendEditAsync(config, halves[0], null, ct);
 
-        var carbsForms = UpstreamIdentityJson.TreatmentWireForms(new Treatment { Id = PreBolusSplit.WriteBackCarbsId(legacyId) });
+        var carbsForms = WriteBackCarbsForms(legacyId);
         var forms = UpstreamIdentityJson.TreatmentWireForms(halves[0]);
         if (await FindAsync(config, IdentifierQuery($"{Endpoint}.json", [.. forms, .. carbsForms]), ct) is not { } found
             || !await SendEditAsync(config, halves[0], found, ct))
@@ -214,7 +298,7 @@ public class NightscoutTreatmentWriteBackSink(
                 return await PostAsync(config, item, legacyId, imported.Identifier ?? legacyId, ct);
         }
 
-        return await PostAsync(config, item, key, key, ct);
+        return await SendCreateAsync(config, new[] { UpstreamIdentityJson.TreatmentPayload(item, key, key) }, [item], null, ct);
     }
 
     private Task<bool> PostAsync(NightscoutConnectorConfiguration config, Treatment item, string id, string identifier, CancellationToken ct)

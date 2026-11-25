@@ -69,7 +69,7 @@ public class TreatmentCreateBroadcastTests
             store,
             _decomposer.Object,
             Mock.Of<ITreatmentCache>(),
-            new SignalRTreatmentEventSink(_broadcast.Object, NullLogger<SignalRTreatmentEventSink>.Instance),
+            new SignalRTreatmentEventSink(_broadcast.Object),
             Mock.Of<IPatientInsulinRepository>(),
             NullLogger<TreatmentService>.Instance);
     }
@@ -192,6 +192,96 @@ public class TreatmentCreateBroadcastTests
     }
 
     /// <summary>
+    /// An upload with <c>isValid: false</c> under the id of a live treatment deletes it. The delete is
+    /// announced as the treatment reads served before it, as a user's delete is, and nothing is
+    /// announced as created.
+    /// </summary>
+    [Fact]
+    public async Task AnUploadThatInvalidatesALiveTreatmentIsAnnouncedAsItsDelete()
+    {
+        var mills = new DateTimeOffset(At).ToUnixTimeMilliseconds();
+        var served = new Treatment { Id = "65f0a1b2c3d4e5f6abcdef01", EventType = "Temporary Override", Mills = mills, Duration = 60 };
+        _projection.Setup(p => p.GetProjectedStateSpanTreatmentAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(served);
+        var deletes = new List<StorageDeleteEvent>();
+        _broadcast
+            .Setup(b => b.BroadcastStorageDeleteAsync("treatments", It.IsAny<object>()))
+            .Callback<string, object>((_, data) => deletes.Add((StorageDeleteEvent)data))
+            .Returns(Task.CompletedTask);
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition?>()))
+            .Returns((IReadOnlyList<Treatment> _, WriteOrigin _, CancellationToken _, TreatmentDecomposition? into) =>
+            {
+                into!.Begin([Guid.CreateVersion7()]);
+                into.WritesNothing(0);
+                into.Invalidate(0);
+                return Task.FromResult(into);
+            });
+
+        await _service.CreateTreatmentsAsync(
+            [new Treatment { Id = ClientId, EventType = "Temporary Override", Mills = mills, Duration = 60, IsValid = false }]);
+
+        var deleted = deletes.Should().ContainSingle().Subject;
+        deleted.Identifier.Should().Be(served.Id);
+        deleted.Doc.Should().BeSameAs(served);
+        served.IsValid.Should().BeFalse();
+        _creates.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The delete an upload with <c>isValid: false</c> made commits before the batch's other writes, so
+    /// it is announced when a later treatment of the batch cannot be read back and the batch fails.
+    /// </summary>
+    [Fact]
+    public async Task AnInvalidationIsAnnouncedAsItsDeleteWhenALaterTreatmentCannotBeReadBack()
+    {
+        var mills = new DateTimeOffset(At).ToUnixTimeMilliseconds();
+        var served = new Treatment { Id = "65f0a1b2c3d4e5f6abcdef01", EventType = "Temporary Override", Mills = mills, Duration = 60 };
+        _projection.Setup(p => p.GetProjectedStateSpanTreatmentAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(served);
+        var deletes = new List<StorageDeleteEvent>();
+        _broadcast
+            .Setup(b => b.BroadcastStorageDeleteAsync("treatments", It.IsAny<object>()))
+            .Callback<string, object>((_, data) => deletes.Add((StorageDeleteEvent)data))
+            .Returns(Task.CompletedTask);
+
+        var target = new Treatment { Id = "t2", EventType = "Temporary Target", Mills = mills + 60_000, Duration = 30 };
+        var perTreatment = new Mock<IPerTreatmentDecomposer>().AnswersBatchPerTreatment();
+        var span = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        span.CreatedRecords.Add(new StateSpan { OriginalId = "t2", Category = StateSpanCategory.TemporaryTarget });
+        perTreatment
+            .Setup(d => d.DecomposeAsync(target, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(span);
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition?>()))
+            .Returns(async (IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct, TreatmentDecomposition? into) =>
+            {
+                var result = await perTreatment.Object.DecomposeBatchAsync(treatments, origin, ct, into);
+                result.WritesNothing(0);
+                result.Invalidate(0);
+                return result;
+            });
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t2", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+
+        var act = () => _service.CreateTreatmentsAsync(
+            [new Treatment { Id = ClientId, EventType = "Temporary Override", Mills = mills, Duration = 60, IsValid = false }, target]);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.Message.Should().Contain("was stored but could not be read back");
+        var deleted = deletes.Should().ContainSingle().Subject;
+        deleted.Identifier.Should().Be(served.Id);
+        deleted.Doc.Should().BeSameAs(served);
+        served.IsValid.Should().BeFalse();
+    }
+
+    /// <summary>
     /// The Nightscout write-back sink skips a treatment by its data source, so a connector's own
     /// temp target or profile switch announced without one would be posted back upstream.
     /// </summary>
@@ -260,6 +350,31 @@ public class TreatmentCreateBroadcastTests
             [new Treatment { Id = ClientId, EventType = "Profile Switch", Mills = activation.Mills, DataSource = Connector }]);
 
         _creates.Should().ContainSingle().Which.Doc.Should().BeOfType<Treatment>().Which.DataSource.Should().Be("glooko-connector");
+    }
+
+    /// <summary>
+    /// An upstream edit keeps its record's data source, and write-back skips only the pull's own
+    /// treatments, so the edit is announced as the pull's: sent back, it would ping-pong.
+    /// </summary>
+    [Fact]
+    public async Task AnUpstreamEditIsAnnouncedAsThePullsOwn()
+    {
+        _decomposer.AnswersBatchPerTreatment(upstreamEdit: _ => true);
+        var activation = new ProfileActivation
+        {
+            Id = Guid.CreateVersion7(), Timestamp = At, LegacyId = ClientId, DataSource = "glooko-connector",
+        };
+        Decomposes(activation);
+        _activations.Setup(r => r.GetByIdAsync(activation.Id, It.IsAny<CancellationToken>())).ReturnsAsync(activation);
+        Serves(new Treatment
+        {
+            Id = activation.Id.ToString(), EventType = "Profile Switch", Mills = activation.Mills, DataSource = "glooko-connector",
+        });
+
+        await _service.CreateTreatmentsAsync(
+            [new Treatment { Id = ClientId, EventType = "Profile Switch", Mills = activation.Mills, DataSource = Connector }]);
+
+        _creates.Should().ContainSingle().Which.Doc.Should().BeOfType<Treatment>().Which.DataSource.Should().Be(Connector);
     }
 
     [Fact]

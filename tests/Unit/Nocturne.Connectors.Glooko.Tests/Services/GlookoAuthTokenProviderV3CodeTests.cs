@@ -6,8 +6,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -16,41 +16,101 @@ namespace Nocturne.Connectors.Glooko.Tests.Services;
 /// <c>/api/v3/session/users</c> call. Every patient-scoped data URL is built from that code, so a
 /// session without it is unusable — caching it as a success poisons the token cache (the cookie
 /// stays valid, so the sync never re-authenticates and logs "Missing Glooko user code" forever).
-/// The sign-in must therefore fail, and retry, when the code cannot be resolved.
+/// The sign-in therefore fails when the code cannot be resolved, and that failure is final.
 /// </summary>
 public class GlookoAuthTokenProviderV3CodeTests
 {
     [Fact]
-    public async Task GetValidTokenAsync_V3ProfileHasNoCode_FailsAndRetries()
+    public async Task GetValidTokenAsync_V3ProfileHasNoCode_FailsWithoutSigningInAgain()
     {
-        var handler = new V3Handler(NoCodeProfile, NoCodeProfile);
+        var handler = new V3Handler(NoCodeProfile, CodeProfile);
 
-        var token = await AuthenticateAsync(handler, maxRetryAttempts: 2);
+        var (token, _) = await AuthenticateAsync(handler, maxRetryAttempts: 3);
 
         token.Should().BeNull("a session with no Glooko code is unusable and must not be cached");
-        handler.SignInCount.Should().Be(2, "the whole attempt budget is spent re-authenticating");
-        handler.ProfileCount.Should().Be(2, "each attempt re-fetches the profile");
+        handler.SignInCount.Should().Be(1);
+        handler.ProfileCount.Should().Be(1);
     }
 
     [Fact]
-    public async Task GetValidTokenAsync_V3ProfileCodeArrivesOnRetry_Recovers()
+    public async Task GetValidTokenAsync_V3ProfileHasTheCode_ReturnsTheSession()
     {
-        // First profile fetch yields no code (transient), the second carries it.
-        var handler = new V3Handler(NoCodeProfile, CodeProfile);
+        var handler = new V3Handler(CodeProfile);
 
-        var token = await AuthenticateAsync(handler, maxRetryAttempts: 3);
+        var (token, _) = await AuthenticateAsync(handler, maxRetryAttempts: 3);
 
         token.Should().Be($"{GlookoConstants.SessionCookieName}=session-abc");
-        handler.SignInCount.Should().Be(2, "it re-authenticated once after the code-less profile");
+        handler.SignInCount.Should().Be(1);
     }
 
-    private static async Task<string?> AuthenticateAsync(V3Handler handler, int maxRetryAttempts)
+    /// <summary>
+    /// On a client with no retry handler, which is how credential verification is registered, a
+    /// profile fetch that hit a transport failure or a retryable status is the loop's to retry.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task GetValidTokenAsync_NoHandler_V3ProfileUnavailableOnce_SignsInAgainAndRecovers(
+        HttpStatusCode status)
+    {
+        var handler = new V3Handler(() => new HttpResponseMessage(status), CodeProfile);
+
+        var (token, _) = await AuthenticateAsync(handler, maxRetryAttempts: 3);
+
+        token.Should().Be($"{GlookoConstants.SessionCookieName}=session-abc");
+        handler.SignInCount.Should().Be(2);
+        handler.ProfileCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetValidTokenAsync_NoHandler_V3ProfileConnectionResetOnce_SignsInAgainAndRecovers()
+    {
+        var handler = new V3Handler(() => throw new HttpRequestException("connection reset"), CodeProfile);
+
+        var (token, _) = await AuthenticateAsync(handler, maxRetryAttempts: 3);
+
+        token.Should().Be($"{GlookoConstants.SessionCookieName}=session-abc");
+        handler.SignInCount.Should().Be(2);
+        handler.ProfileCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetValidTokenAsync_NoHandler_V3ProfileUnavailableEveryTime_SpendsTheBudgetAndSaysNothingAboutTheCredentials()
+    {
+        var handler = new V3Handler(() => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+
+        var (token, reason) = await AuthenticateAsync(handler, maxRetryAttempts: 3);
+
+        token.Should().BeNull();
+        handler.SignInCount.Should().Be(3);
+        reason.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    /// <summary>
+    /// A profile the source refuses is still not a verdict on the credentials the sign-in just
+    /// proved, and nothing a second sign-in could change.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task GetValidTokenAsync_V3ProfileRefused_IsFinalAndNeverNamesTheCredentials(HttpStatusCode status)
+    {
+        var handler = new V3Handler(() => new HttpResponseMessage(status));
+
+        var (token, reason) = await AuthenticateAsync(handler, maxRetryAttempts: 3);
+
+        token.Should().BeNull();
+        handler.SignInCount.Should().Be(1);
+        handler.ProfileCount.Should().Be(1);
+        reason.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    private static async Task<(string? Token, string Reason)> AuthenticateAsync(
+        V3Handler handler, int maxRetryAttempts)
     {
         using var httpClient = new HttpClient(handler);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -59,7 +119,7 @@ public class GlookoAuthTokenProviderV3CodeTests
             httpClient,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<GlookoAuthTokenProvider>.Instance,
             retryDelay.Object);
 
@@ -71,7 +131,8 @@ public class GlookoAuthTokenProviderV3CodeTests
             MaxRetryAttempts = maxRetryAttempts,
         };
 
-        return await provider.GetValidTokenAsync(config, CancellationToken.None);
+        var token = await provider.GetValidTokenAsync(config, CancellationToken.None);
+        return (token, provider.SignInFailureReason);
     }
 
     private static HttpResponseMessage SignInCookie()

@@ -31,6 +31,7 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e == 'true' || github.event_name != 'pull_request' }}
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
+      alertsSwift: ${{ steps.filter.outputs.alertsSwift == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
       composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
       sdk: ${{ steps.filter.outputs.sdk == 'true' || github.event_name != 'pull_request' }}
@@ -54,6 +55,9 @@ jobs:
               - 'tests/**'
               - 'nocturne.sln'
               - 'docs/postgres/**'
+              # The pages and diagrams of the API reference, which RuntimeOpenApiDocumentTests reads.
+              - 'docs/api-descriptions/**'
+              - 'docs/diagrams/**'
               - &alert-crates 'crates/nocturne-alerts-*/**'
               - &crates-workspace 'crates/Cargo.*'
               - 'crates/clippy.toml'
@@ -87,6 +91,10 @@ jobs:
               - 'src/API/**'
               - 'tests/Parity/**'
               - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
+            alertsSwift:
+              - '.github/workflows/tests.yml'
+              - 'crates/**'
+              - 'tests/Parity/AlertEngineCorpus/**'
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
@@ -236,6 +244,7 @@ jobs:
         with:
           name: api-client
           path: |
+            src/Web/packages/api-client/src/
             src/Web/packages/app/src/lib/api/generated/
             src/Web/packages/app/src/lib/api/api-client.generated.ts
           if-no-files-found: error
@@ -318,6 +327,42 @@ jobs:
           cargo clippy --workspace --all-targets --all-features -- -D warnings
           cargo fmt --check -p nocturne-alerts-core -p nocturne-alerts-ffi
 
+  # The alert engine as a Swift package: the UniFFI bindings and static libraries for the Apple
+  # targets, assembled into an xcframework, then one corpus scenario replayed through the generated
+  # Swift. macOS, because xcodebuild and the Apple SDKs exist nowhere else.
+  alerts-swift:
+    needs: changes
+    if: needs.changes.outputs.alertsSwift == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+            !crates/target/swift
+          # Sources, not just the lockfile: see the alerts-ffi-parity job. The script rebuilds
+          # crates/target/swift, which would only duplicate every static library in the cache.
+          key: cargo-swift-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/nocturne-alerts-*/**/*.rs', 'crates/**/Cargo.toml', 'crates/nocturne-alerts-ffi/scripts/build-xcframework.sh') }}
+      - name: Build the xcframework and Swift bindings
+        run: crates/nocturne-alerts-ffi/scripts/build-xcframework.sh
+      - name: Swift package tests
+        working-directory: crates/nocturne-alerts-ffi/swift
+        run: swift test
+      - name: Link the iOS Simulator slice
+        working-directory: crates/nocturne-alerts-ffi/swift
+        run: xcodebuild build-for-testing -scheme NocturneAlerts -destination 'generic/platform=iOS Simulator'
+      - name: Build against the iOS device slice
+        working-directory: crates/nocturne-alerts-ffi/swift
+        run: xcodebuild build -scheme NocturneAlerts -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+
   # The desktop Companion's Tauri crate. Windows only: tauri-winrt-notification's `windows`
   # dependency does not compile elsewhere (see desktop-release.yml). generate_context! embeds
   # frontendDist at compile time, so an empty one stands in for the web build no test reads.
@@ -334,7 +379,9 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          toolchain: stable
+          # Pinned below 1.100: cargo-llvm-cov 0.9.1 reads Cargo 1.100's build-dir layout on Windows
+          # as an uninstrumented binary and fails the report ("no coverage data found").
+          toolchain: 1.99.1
           components: clippy, rustfmt, llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -386,13 +433,35 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: api-client
-          path: src/Web/packages/app/src/lib/api
+          path: src/Web/packages
+      # translator-merge.yml reads and writes catalogs with a vendored copy of the pofile Wuchale
+      # uses, since it installs nothing, and copies a few of Wuchale's loading rules. This keeps the
+      # copy identical to the installed one and fails on a Wuchale upgrade, so the rules are rechecked.
+      - name: Translator merge
+        if: ${{ !cancelled() }}
+        run: |
+          wuchale=$(node -p 'require("fs").realpathSync("node_modules/wuchale")')
+          installed=$(node -p 'require("module").createRequire(process.argv[1] + "/package.json").resolve("pofile")' "$wuchale")
+          cmp "$installed" ../../.github/scripts/vendor/pofile/po.js || {
+            echo "::error::Wuchale's pofile ($installed) differs from .github/scripts/vendor/pofile/po.js. Copy it there."
+            exit 1
+          }
+          version=$(node -p 'require(process.argv[1] + "/package.json").version' "$wuchale")
+          expected=$(node -p 'require("../../.github/scripts/translator-merge.cjs").WUCHALE_VERSION')
+          [ "$version" = "$expected" ] || {
+            echo "::error::Wuchale is $version; translator-merge.cjs copies the loading rules of $expected. Check itemKey and readCatalog against wuchale/dist/pofile.js and adapters.js, then update WUCHALE_VERSION."
+            exit 1
+          }
+          node --test ../../.github/scripts/translator-merge.test.cjs
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
-          pnpm --filter @nightscout/glucose-chart --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
+          pnpm --filter @nocturne/charts --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
+      # svelte-check holds the whole app in one TypeScript program, which passes Node's default heap.
       - name: Typecheck app
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --filter @nocturne/app run check
       # The portal imports the app's appearance store, which imports the generated client.
       - name: Typecheck portal
@@ -417,6 +486,21 @@ jobs:
       - name: CMS unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/cms exec vitest run --coverage
+      - name: Charts unit tests
+        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        run: pnpm --filter @nocturne/charts exec vitest run
+      - name: Scalar plugin typecheck and unit tests
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm --filter @nocturne/scalar-plugin run check
+          pnpm --filter @nocturne/scalar-plugin run test
+      # The API serves the built plugin from wwwroot, where no .NET build can produce it, so the
+      # bundle is tracked. This fails a change to the package that did not rebuild it.
+      - name: Scalar plugin bundle is current
+        if: ${{ !cancelled() }}
+        run: |
+          pnpm --filter @nocturne/scalar-plugin run build
+          git diff --exit-code -- ../API/Nocturne.API/wwwroot/scalar/nocturne-plugin.js
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.
@@ -506,6 +590,16 @@ jobs:
             --collect "XPlat Code Coverage" \
             --test-adapter-path .coverlet \
             --results-directory TestResults/integration
+      - name: Integration tests (Infrastructure.Data unit project, real Postgres)
+        run: |
+          dotnet test tests/Unit/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
+            --no-build \
+            --filter "Category=Integration" \
+            --logger "trx;LogFileName=integration-data-unit.trx" \
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --test-adapter-path .coverlet \
+            --results-directory TestResults/integration
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -537,7 +631,7 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: api-client
-          path: src/Web/packages/app/src/lib/api
+          path: src/Web/packages
       - uses: ./.github/actions/setup-playwright
         with:
           working-directory: src/Web/packages/app
@@ -574,6 +668,9 @@ jobs:
           dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj --no-build \
             --filter "$(tests/quarantine.sh exclude)" \
             --logger "trx;LogFileName=integration-api.trx" \
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --test-adapter-path .coverlet \
             --results-directory TestResults/integration-api
       # tests/quarantine.txt: tests failing on a known product bug. Run so they stay visible, and
       # never fail the job; a quarantined test that passes means its line can go.
@@ -585,6 +682,13 @@ jobs:
             --filter "$(tests/quarantine.sh include)" \
             --logger "trx;LogFileName=integration-api-quarantine.trx" \
             --results-directory TestResults/integration-api-quarantine
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-dotnet-integration-api
+          path: TestResults/integration-api/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
@@ -729,7 +833,7 @@ jobs:
   # request's sticky comment, and applies the patch coverage gate. A fork's pull request runs with
   # a read-only token, so its comment is posted by coverage-comment.yml from the uploaded report.
   coverage:
-    needs: [changes, unit, integration-db, web-static, web-app-tests, desktop-rust]
+    needs: [changes, unit, integration-db, integration-api, web-static, web-app-tests, desktop-rust]
     if: >-
       ${{ !cancelled() && (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true'
       || needs.changes.outputs.desktop == 'true') }}
@@ -918,9 +1022,9 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: api-client
-          path: src/Web/packages/app/src/lib/api
+          path: src/Web/packages
       - name: Filter spec to SDK endpoints (V4 + OAuth)
-        run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
+        run: node sdk/filter-v4-spec.js src/Web/packages/api-client/src/openapi.json sdk/openapi-v4.json
       - name: Generate Java SDK
         uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
@@ -941,6 +1045,7 @@ jobs:
       - build
       - unit
       - alerts-ffi-parity
+      - alerts-swift
       - desktop-rust
       - web-static
       - web-app-tests

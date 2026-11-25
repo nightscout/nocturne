@@ -51,7 +51,7 @@ public class ConnectorConfigurationUnknownKeyTests : IDisposable
 
         _service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
@@ -59,6 +59,7 @@ public class ConnectorConfigurationUnknownKeyTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
 
         _controller = new ConfigurationController(_service, NullLogger<ConfigurationController>.Instance)

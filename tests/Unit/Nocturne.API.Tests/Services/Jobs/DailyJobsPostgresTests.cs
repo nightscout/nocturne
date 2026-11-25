@@ -207,6 +207,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddScoped<IInAppNotificationRepository, InAppNotificationRepository>();
         services.AddSingleton<TimeProvider>(_clock);
         services.AddTransient<IJobLedger, JobLedgerRepository>();

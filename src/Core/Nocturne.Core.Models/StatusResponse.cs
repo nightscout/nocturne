@@ -34,14 +34,14 @@ public class StatusResponse
     public string? ApiVersion { get; set; }
 
     [JsonPropertyName("serverTime")]
-    public DateTime ServerTime { get; set; } = DateTime.UtcNow;
+    public DateTime ServerTime { get; set; }
 
     /// <summary>
     /// Server time as Unix milliseconds since epoch.
     /// Computed from <see cref="ServerTime"/>.
     /// </summary>
     [JsonPropertyName("serverTimeEpoch")]
-    public long ServerTimeEpoch => ((DateTimeOffset)ServerTime).ToUnixTimeMilliseconds();
+    public long ServerTimeEpoch => ServerTime.ToMills();
 
     [JsonPropertyName("enabled")]
     public string[]? Enabled { get; set; }

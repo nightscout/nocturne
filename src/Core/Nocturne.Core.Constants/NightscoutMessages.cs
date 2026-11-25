@@ -42,26 +42,31 @@ public static class NightscoutMessages
         "Nothing at that address answered as Nightscout. Check the site address.";
 
     /// <summary>
-    /// Connector-only: the import reads without a secret, the connector requires one. A scheduled
-    /// poll never gets this far, because ConnectorConfigurationLoader switches an incomplete
-    /// connector off first. A manual "Sync now" does: ConnectorSyncExecutor does not read Enabled.
+    /// The site answered 401 to a read sent with no API secret. A site can be readable without one,
+    /// so the import and the connector ask for a secret only when Nightscout refuses to answer.
     /// </summary>
     public const string ApiSecretMissing =
-        "Nocturne needs your Nightscout API secret before it can sync. Add it in this connector's "
-        + "settings, using the same value as your Nightscout API_SECRET.";
+        "Nightscout did not let Nocturne read data without an API secret. Enter the API_SECRET "
+        + "of your Nightscout site.";
 
     /// <summary>What to tell the tenant about a status their Nightscout answered with.</summary>
     /// <param name="read">
-    ///     Two answers turn on this, along different axes. Only the import reads without a secret,
-    ///     so only its reads offer a blank one after a 401. Only a probe asks for a route every
-    ///     Nightscout serves, so only a probe may read a 404 as a wrong address.
+    ///     Only a probe asks for a route every Nightscout serves, so only a probe may read a 404 as a
+    ///     wrong address.
     /// </param>
-    public static string ForStatus(HttpStatusCode status, string reading, NightscoutRead read) =>
+    /// <param name="secretSent">
+    ///     Whether the request carried an <c>api-secret</c>. A 401 to one that did not asks for a
+    ///     secret; a 401 to one that did rejects it. Only an import read offers a blank secret: its
+    ///     form sends none when the field is blank, while the connector's form reads a blank field
+    ///     as "keep the stored secret".
+    /// </param>
+    public static string ForStatus(HttpStatusCode status, string reading, NightscoutRead read, bool secretSent) =>
         status switch
         {
-            HttpStatusCode.Unauthorized => read is NightscoutRead.ImportProbe or NightscoutRead.ImportCollection
-                ? ApiSecretRejected + " If your site allows reading without one, leave it blank."
-                : ApiSecretRejected,
+            HttpStatusCode.Unauthorized when !secretSent => ApiSecretMissing,
+            HttpStatusCode.Unauthorized when read is NightscoutRead.ImportProbe or NightscoutRead.ImportCollection =>
+                ApiSecretRejected + " If your site allows reading without one, leave it blank.",
+            HttpStatusCode.Unauthorized => ApiSecretRejected,
             HttpStatusCode.Forbidden => Refused,
             HttpStatusCode.NotFound when read is NightscoutRead.ImportProbe or NightscoutRead.ConnectorProbe => NotNightscout,
             // The number is kept for whoever reads a support thread. The fix is not the tenant's

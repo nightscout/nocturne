@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
@@ -14,8 +16,12 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 DeviceStatus controller that provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// Nightscout device status documents. A client can list, read, create, update and delete them, and read changes
+/// since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -50,11 +56,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ErrorEnvelope]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 devicestatus endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -129,7 +130,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var result = await _deviceStatuses.GetDeviceStatusByIdAsync(id, cancellationToken);
@@ -162,10 +163,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 devicestatus create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (
@@ -212,16 +209,19 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             // For single record POSTs, check for deduplication (AAPS expects isDeduplication response)
             var recordsList = deviceStatusRecords.ToList();
+            DeviceStatus? existing = null;
             if (recordsList.Count == 1)
             {
                 var single = recordsList[0];
                 if (!string.IsNullOrEmpty(single.Id))
                 {
-                    var existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
+                    existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
                         single.Id,
                         cancellationToken
                     );
-                    if (existing != null)
+                    // A create with isValid: false is not a duplicate of the status its id names: it
+                    // deletes it, when the write names it (InvalidUploads in Services/V4).
+                    if (existing != null && single.IsValid != false)
                     {
                         return V3Deduplicated(existing.Id, existing.SrvModified);
                     }
@@ -230,6 +230,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             var projectedResults = await _deviceStatuses.CreateDeviceStatusesAsync(
                 recordsList, cancellationToken: cancellationToken);
+
+            if (existing != null && projectedResults.Invalidated.Count > 0)
+                return V3Deduplicated(existing.Id, srvModified: null);
 
             if (deviceStatusData.ValueKind == JsonValueKind.Array)
             {
@@ -298,6 +301,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             );
         }
 
+        if (deviceStatus.IsValid == false)
+            return IsValidImmutable();
+
         // Ensure ID matches
         if (deviceStatus.Id != null && deviceStatus.Id != id)
         {
@@ -306,7 +312,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         var updated = await _deviceStatuses.ReplaceDeviceStatusAsync(id, deviceStatus, cancellationToken);
@@ -346,7 +352,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (!await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
@@ -407,7 +413,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Ensure DeviceStatus has required properties for V3 compatibility
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
     }
 

@@ -5,9 +5,9 @@ namespace Nocturne.API.Middleware;
 
 /// <summary>
 /// Middleware that returns 503 for freshly provisioned tenants (no passkey
-/// credentials) or tenants in recovery mode (orphaned subjects with no
-/// passkey and no OIDC binding). Allows passkey setup, admin, and metadata
-/// endpoints through so setup/recovery flows can complete. Trusted instance-key
+/// credentials) or tenants in recovery mode
+/// (<see cref="ITenantMembershipRepository.ReadSetupGateAsync"/>). Allows passkey setup,
+/// admin, and metadata endpoints through so setup/recovery flows can complete. Trusted instance-key
 /// service requests also bypass the gate (see <see cref="IInstanceKeyValidator"/>)
 /// so automation can configure a tenant before a human owner registers a passkey.
 /// When no tenant is resolved (e.g. tenantless cross-tenant paths, or zero-tenant setup),
@@ -24,6 +24,7 @@ public class TenantSetupMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantSetupMiddleware> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Creates a new instance of <see cref="TenantSetupMiddleware"/>.
@@ -32,10 +33,12 @@ public class TenantSetupMiddleware
     /// <param name="logger">Logger for setup/recovery diagnostics.</param>
     public TenantSetupMiddleware(
         RequestDelegate next,
-        ILogger<TenantSetupMiddleware> logger)
+        ILogger<TenantSetupMiddleware> logger,
+        TimeProvider time)
     {
         _next = next;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>
@@ -131,13 +134,13 @@ public class TenantSetupMiddleware
     /// <summary>What the setup and recovery checks decided for this tenant.</summary>
     private enum SetupGate
     {
-        /// <summary>The tenant is configured and has no locked-out accounts.</summary>
+        /// <summary>The tenant is configured and a member administrator can sign in, or nobody is locked out.</summary>
         Pass,
 
         /// <summary>No member holds a credential yet — first-run setup has not completed.</summary>
         SetupRequired,
 
-        /// <summary>A member cannot sign in at all, so the recovery flow has to be reachable.</summary>
+        /// <summary>The site is in recovery mode (<see cref="Core.Models.Identity.SetupGate.RecoveryMode"/>).</summary>
         RecoveryMode,
     }
 
@@ -147,7 +150,7 @@ public class TenantSetupMiddleware
     /// <remarks>
     /// The reads are system-pinned in the repository (<see cref="ITenantMembershipRepository.ReadSetupGateAsync"/>):
     /// the gate runs on public-share requests too. The counts and the orphan list are read only to
-    /// log a refusal.
+    /// log a refusal, so a site that passes with a stuck member logs nothing.
     /// </remarks>
     private async Task<SetupGate> EvaluateGateAsync(
         ITenantMembershipRepository members,
@@ -155,7 +158,7 @@ public class TenantSetupMiddleware
         string path,
         CancellationToken ct)
     {
-        var gate = await members.ReadSetupGateAsync(tenantId, ct);
+        var gate = await members.ReadSetupGateAsync(tenantId, _time.GetUtcNow().UtcDateTime, ct);
 
         if (gate is not { HasCredentials: true })
         {
@@ -171,7 +174,7 @@ public class TenantSetupMiddleware
             return SetupGate.SetupRequired;
         }
 
-        if (gate.HasOrphans)
+        if (gate.RecoveryMode)
         {
             var orphanedSubjects = (await members.ListOrphanedMembersAsync(tenantId, ct))
                 .Select(s => new { Id = s.SubjectId, s.Name, s.Username })

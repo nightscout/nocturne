@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Health;
 using System.Text.Json;
 using FluentAssertions;
@@ -373,7 +374,7 @@ public class ActivityControllerTests
 
         var result = await _controller.CreateActivities(jsonElement, CancellationToken.None);
 
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        var objectResult = result.Result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _mockActivityService.Verify(
             x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
@@ -419,7 +420,7 @@ public class ActivityControllerTests
         var result = await _controller.UpdateActivity(
             id, new Activity { Type = "exercise" }, CancellationToken.None);
 
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        var objectResult = result.Result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _mockActivityService.Verify(
             x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
@@ -630,18 +631,18 @@ public class ActivityControllerTests
     }
 
     [Fact]
-    public async Task SaveActivities_WhenTheStoreKeepsNothing_Answers500()
+    public async Task SaveActivities_WhenTheStoreKeepsNothing_LeavesItToTheExceptionHandler()
     {
         _mockActivityService
             .Setup(x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var result = await _controller.SaveActivities(
+        var save = () => _controller.SaveActivities(
             JsonSerializer.SerializeToElement(new { type = "Walking" }),
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        await save.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("An error occurred while saving the activity");
     }
 
     [Fact]
@@ -724,7 +725,7 @@ public class ActivityControllerTests
             JsonSerializer.SerializeToElement(new { _id = id, type = "exercise" }),
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _mockActivityService.Verify(
             x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
@@ -776,7 +777,7 @@ public class ActivityControllerTests
     }
 
     [Fact]
-    public async Task GetActivities_WhenServiceThrowsException_ShouldReturnInternalServerError()
+    public async Task GetActivities_WhenServiceThrowsException_TheExceptionEscapes()
     {
         // Arrange
         _mockActivityService
@@ -791,17 +792,14 @@ public class ActivityControllerTests
             .ThrowsAsync(new Exception("Database error"));
 
         // Act
-        var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
+        var act = () => _controller.GetActivities(cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Result.Should().BeOfType<ObjectResult>();
-        var objectResult = result.Result as ObjectResult;
-        objectResult!.StatusCode.Should().Be(500);
+        await act.Should().ThrowAsync<Exception>().WithMessage("Database error");
     }
 
     [Fact]
-    public async Task CreateActivities_WhenServiceThrowsException_ShouldReturnInternalServerError()
+    public async Task CreateActivities_WhenServiceThrowsException_TheExceptionEscapes()
     {
         // Arrange
         var inputActivity = new Activity { Type = "Exercise", Description = "Test" };
@@ -817,12 +815,9 @@ public class ActivityControllerTests
             .ThrowsAsync(new Exception("Database error"));
 
         // Act
-        var result = await _controller.CreateActivities(jsonElement, CancellationToken.None);
+        var act = () => _controller.CreateActivities(jsonElement, CancellationToken.None);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Result.Should().BeOfType<ObjectResult>();
-        var objectResult = result.Result as ObjectResult;
-        objectResult!.StatusCode.Should().Be(500);
+        await act.Should().ThrowAsync<Exception>().WithMessage("Database error");
     }
 }

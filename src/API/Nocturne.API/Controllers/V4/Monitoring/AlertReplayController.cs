@@ -11,8 +11,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// What-if replay of the tenant's enabled alert rules over a historical window.
-/// Returns the events that <em>would</em> have fired had the current rule set been active.
+/// Replay of the enabled alert rules over a past time window: the last 24 hours by default, or one
+/// calendar day. Each result lists the alerts that would have fired. A dry run adds a rule from the
+/// request that is not saved.
 /// </summary>
 /// <seealso cref="AlertReplayReadScopeGuard"/>
 [ApiController]
@@ -38,6 +39,7 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertReplayResult>> Replay(
         [FromBody] AlertReplayRequest request, CancellationToken ct)
     {
@@ -51,6 +53,10 @@ public class AlertReplayController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
 
     /// <summary>
@@ -62,31 +68,84 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
-        var ruleOverride = new ReplayRuleOverride(
-            Id: request.Rule.Id,
-            Name: request.Rule.Name,
-            ConditionType: request.Rule.ConditionType,
-            ConditionParams: request.Rule.ConditionParams,
-            Severity: request.Rule.Severity,
-            AllowThroughDnd: request.Rule.AllowThroughDnd,
-            AutoResolveEnabled: request.Rule.AutoResolveEnabled,
-            AutoResolveParams: request.Rule.AutoResolveParams);
-
+        if (Invalid(request.Rule) is { } invalid)
+            return invalid;
         try
         {
             var result = await _replayService.ReplayDryRunAsync(
-                request.Date, request.Timezone, request.From, request.To, ruleOverride, ct);
+                request.Date, request.Timezone, request.From, request.To, ToOverride(request.Rule), ct);
             return Ok(AlertReplayReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
         }
         catch (ReplayWindowTooLargeException ex)
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
+
+    /// <summary>
+    /// The times an unsaved rule would have fired over the recent past, newest first. Answers
+    /// "when would this alert last have gone off?" before the rule is saved.
+    /// </summary>
+    [HttpPost("dry-run/firings")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(AlertFiringSearchResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
+        [FromBody] AlertFiringSearchRequest request, CancellationToken ct)
+    {
+        if (Invalid(request.Rule) is { } invalid)
+            return invalid;
+        try
+        {
+            return Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+        }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
+    }
+
+    /// <summary>A 422 naming the rule the replay stopped at.</summary>
+    private ObjectResult StepLimit(ReplayStepLimitException ex) =>
+        Problem(detail: ex.Message, statusCode: 422, title: "Unprocessable Entity");
+
+    /// <summary>
+    /// A 400 for an <c>on_unknown</c> naming none of <see cref="AlertRuleOnUnknown"/>, or a
+    /// glucose freshness bound outside <see cref="AlertRuleGlucoseFreshness"/>'s range, else null.
+    /// </summary>
+    private ObjectResult? Invalid(ReplayRuleDefinition rule)
+    {
+        if (rule.OnUnknown is not null && !AlertRuleOnUnknown.IsKnown(rule.OnUnknown))
+            return Problem(detail: AlertRuleOnUnknown.InvalidMessage, statusCode: 400, title: "Bad Request");
+        if (!AlertRuleGlucoseFreshness.IsValid(rule.GlucoseFreshnessMinutes))
+            return Problem(detail: AlertRuleGlucoseFreshness.InvalidMessage, statusCode: 400, title: "Bad Request");
+        return null;
+    }
+
+    private static ReplayRuleOverride ToOverride(ReplayRuleDefinition rule) => new(
+        Id: rule.Id,
+        Name: rule.Name,
+        ConditionType: rule.ConditionType,
+        ConditionParams: rule.ConditionParams,
+        Severity: rule.Severity,
+        AllowThroughDnd: rule.AllowThroughDnd,
+        AutoResolveEnabled: rule.AutoResolveEnabled,
+        AutoResolveParams: rule.AutoResolveParams,
+        OnUnknown: rule.OnUnknown,
+        GlucoseFreshnessMinutes: rule.GlucoseFreshnessMinutes);
 }
+
+/// <summary>Request body for the firing search.</summary>
+public record AlertFiringSearchRequest(ReplayRuleDefinition Rule);
 
 /// <summary>
 /// Request body for the alerts replay endpoint. <paramref name="From"/> and
@@ -117,6 +176,10 @@ public record AlertReplayDryRunRequest(
 /// In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save
 /// shape — the controller doesn't deserialise the condition tree itself, just the
 /// <see cref="ConditionParams"/> JSON blob the rule body would have stored.
+/// <see cref="OnUnknown"/> is one of <see cref="AlertRuleOnUnknown"/>; null is the stored rule's
+/// word when <see cref="Id"/> names one, else <c>hold</c>. <see cref="GlucoseFreshnessMinutes"/> is
+/// in <see cref="AlertRuleGlucoseFreshness"/>'s range; null is the stored rule's bound in the same
+/// way, else the engine's default.
 /// </summary>
 public record ReplayRuleDefinition(
     Guid? Id,
@@ -126,4 +189,6 @@ public record ReplayRuleDefinition(
     AlertRuleSeverity Severity,
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
-    string? AutoResolveParams);
+    string? AutoResolveParams,
+    string? OnUnknown = null,
+    int? GlucoseFreshnessMinutes = null);

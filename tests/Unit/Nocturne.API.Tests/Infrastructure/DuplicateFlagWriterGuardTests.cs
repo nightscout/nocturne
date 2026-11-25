@@ -73,6 +73,10 @@ public partial class DuplicateFlagWriterGuardTests
             "selects the purged rows' own links to delete them",
         [$"{Data}/Extensions/SoftDeleteRestoreExtensions.cs: SoftDeleteRestoreExtensions.CoDeletedCopiesAsync"] =
             "finds the group mates a restore brings back with a row, which is group bookkeeping, not visibility",
+        [$"{Data}/Repositories/V4/SensorGlucoseRepository.cs: SensorGlucoseRepository.GetStreamPredecessorAsync"] =
+            "reads hidden copies on purpose and leaves out the reading's own group, so a copy of a reading is never its predecessor",
+        [$"{Data}/Repositories/V4/SensorGlucoseRepository.cs: SensorGlucoseRepository.GetHiddenAsync"] =
+            "serves the hidden copies with their group primary, which alert replay needs to apply the same predecessor rule",
     };
 
     private static readonly IReadOnlyList<(string Path, SyntaxTree Tree, string Text)> Sources = RepoSources.Src

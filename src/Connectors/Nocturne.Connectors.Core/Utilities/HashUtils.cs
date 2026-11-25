@@ -22,9 +22,9 @@ public static class HashUtils
 
     /// <summary>
     ///     Computes SHA1 hash and returns as lowercase hex string.
-    ///     Used only for Nightscout API-secret hashing, which the Nightscout
-    ///     <c>api-secret</c> wire protocol mandates as SHA-1. Internal hashing we
-    ///     control uses SHA-256 (see <see cref="Sha256Hex"/>) — do not use SHA-1 for new code.
+    ///     Used for Nightscout API-secret hashing, which the Nightscout <c>api-secret</c> wire
+    ///     protocol mandates as SHA-1, and for the hashed keys of <see cref="ConnectorLegacyIds.Hashed"/>,
+    ///     which records are already stored under. Other hashing uses SHA-256 (see <see cref="Sha256Hex"/>).
     /// </summary>
     /// <returns>Lowercase hex string of the SHA1 hash</returns>
     public static string Sha1Hex(string input)

@@ -204,7 +204,7 @@ public class DevAuthController : ControllerBase
             member.SubjectId,
             new SessionContext(
                 DeviceDescription: "dev-login",
-                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                IpAddress: HttpContext.GetClientAddress(),
                 UserAgent: Request.Headers.UserAgent.FirstOrDefault()),
             ct);
 

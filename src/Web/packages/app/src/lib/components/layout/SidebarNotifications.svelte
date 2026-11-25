@@ -19,7 +19,7 @@
   import {
     NotificationUrgency,
     type InAppNotificationDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { EmptyState } from "#lib/components/shared/index.js";
   import NotificationItem from "./NotificationItem.svelte";
   import DndPanel from "#lib/components/alerts/DndPanel.svelte";
@@ -117,9 +117,28 @@
       return;
     }
 
+    if (notification.type === "alerts.channelNotSending" && actionId === "open_rule") {
+      markRead(notification.id);
+      return;
+    }
+
+    if (
+      (notification.type === "team.staff_waiting" || notification.type === "team.staff_joined") &&
+      actionId === "open_team"
+    ) {
+      markRead(notification.id);
+      return;
+    }
+
     if (notification.type === "data.rejected_uploads" && actionId === "review") {
       markRead(notification.id);
       goto(resolve('reports/data-quality/rejected-uploads'));
+      return;
+    }
+
+    if (notification.type === "profile.raw_mmol_values" && actionId === "review") {
+      markRead(notification.id);
+      goto(resolve("settings/profile"));
       return;
     }
 

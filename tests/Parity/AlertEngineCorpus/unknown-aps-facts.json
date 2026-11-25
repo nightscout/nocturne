@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "name": "unknown-aps-facts",
+  "description": "with no APS cycle ever, loop_stale, loop_enaction_stale and sensitivity_ratio are unknown (guards false)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "loop_stale",
+      "condition_params": {
+        "operator": "\u003E",
+        "minutes": 15
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "loop_enaction_stale",
+      "condition_params": {
+        "operator": "\u003E",
+        "minutes": 15
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "sensitivity_ratio",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 1
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": true,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": true,
+        "sleep_session_active": false,
+        "last_aps_cycle_at": "2026-01-05T11:30:00Z",
+        "last_aps_enacted_at": "2026-01-05T11:30:00Z",
+        "sensitivity_ratio": 1.2
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

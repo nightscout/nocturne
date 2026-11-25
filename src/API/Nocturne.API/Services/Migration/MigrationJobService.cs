@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Services.Health;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -9,6 +10,7 @@ using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
+using NightscoutAddress = Nocturne.Connectors.Nightscout.Services.NightscoutAddress;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Auth;
@@ -24,6 +26,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services.Migration;
 
@@ -33,10 +36,18 @@ namespace Nocturne.API.Services.Migration;
 /// </summary>
 public interface IMigrationJobService
 {
+    /// <param name="request">What to import.</param>
+    /// <param name="tenantContext">The tenant the job imports into.</param>
+    /// <param name="starter">
+    /// Who starts it (<see cref="Extensions.HttpContextExtensions.CredentialMakerAsync"/>), the maker of
+    /// every token it adopts; null when no subject starts it, and the tokens then have no maker.
+    /// </param>
+    /// <param name="ct">Cancels the start.</param>
     /// <exception cref="MigrationAlreadyRunningException">Thrown when the tenant already has a job in flight.</exception>
     Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
+        CredentialMaker? starter,
         CancellationToken ct = default
     );
 
@@ -50,10 +61,32 @@ public interface IMigrationJobService
         TestMigrationConnectionRequest request,
         CancellationToken ct = default
     );
-    PendingMigrationConfig GetPendingConfig();
+    /// <summary>
+    /// The instance's configured migration source, with its URL masked, to a caller with
+    /// <paramref name="instanceStanding"/>; no pending source to any other.
+    /// </summary>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    PendingMigrationConfig GetPendingConfig(bool instanceStanding);
+
+    /// <summary>
+    /// The Nightscout URL an API-mode request reads: <paramref name="requested"/>, or the configured
+    /// source's when it is blank and the caller has <paramref name="instanceStanding"/>.
+    /// <see cref="GetPendingConfig"/> gives a form only the masked form of the configured URL, so a
+    /// form that keeps it sends none.
+    /// </summary>
+    /// <param name="requested">The URL the request names.</param>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    string? ResolveNightscoutUrl(string? requested, bool instanceStanding);
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Runs the tenant's live job for one slice, from where its last slice stopped. For
+    /// <see cref="MigrationRunJob"/>.
+    /// </summary>
+    /// <returns>Whether the job has more to do; false when it ended or the tenant has none live.</returns>
+    Task<bool> RunSliceAsync(TenantContext tenant, CancellationToken ct);
 
     /// <summary>Reads a Nightscout instance's display units and current profile's units and timezone.</summary>
     /// <exception cref="MigrationSourceException">The instance could not be read.</exception>
@@ -63,11 +96,15 @@ public interface IMigrationJobService
 }
 
 /// <summary>
-/// Implements <see cref="IMigrationJobService"/>. Runs migration jobs as background
-/// <see cref="Task"/> instances, tracked in a <see cref="ConcurrentDictionary{TKey,TValue}"/>
-/// keyed by job ID. Each job streams MongoDB collections into the Nocturne EF Core database in
-/// configurable batches.
+/// Implements <see cref="IMigrationJobService"/>. A job is its <c>migration_runs</c> row: starting
+/// one writes the row and requests <see cref="MigrationRunJob"/>, which runs it a slice at a time,
+/// so any replica answers its status and takes its cancel, and a job whose process stopped goes on
+/// from its last checkpoint on whichever replica claims it next.
 /// </summary>
+/// <remarks>
+/// A start, a cancel and each checkpoint take the tenant's run lock (<see cref="RunLockClass"/>), so
+/// a tenant has one live job and none of them overwrites what another has just written.
+/// </remarks>
 /// <seealso cref="IMigrationJobService"/>
 public class MigrationJobService : IMigrationJobService
 {
@@ -80,42 +117,56 @@ public class MigrationJobService : IMigrationJobService
     private readonly ILogger<MigrationJobService> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
-    private readonly ConcurrentDictionary<Guid, MigrationJob> _jobs = new();
-    private readonly TenantRunGuard _runGuard;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly ISecretEncryptionService _secrets;
     private readonly TimeProvider _timeProvider;
 
-    internal const string MigrationRunName = "migration";
+    /// <summary>The jobs this process is running a slice of, so a cancel stops one at once.</summary>
+    private readonly ConcurrentDictionary<Guid, MigrationJob> _running = new();
+
+    /// <summary>The job-ledger job that runs a tenant's live migration.</summary>
+    internal const string RunJobName = "migration-run";
+
+    /// <summary>The advisory lock class of a tenant's run lock.</summary>
+    internal const int RunLockClass = 0x4E4D_4952;
+
+    private static readonly string[] s_liveStates = [.. MigrationJobStates.LiveNames];
+
+    private const string UnreadableRequestMessage =
+        "Nocturne could not read the source details saved for this import, so it could not continue. Start the import again.";
+
+    /// <summary>How long one slice of a job lasts before it hands back to the scheduler.</summary>
+    internal TimeSpan SliceLength { get; init; } = TimeSpan.FromMinutes(5);
 
     public MigrationJobService(
         ILogger<MigrationJobService> logger,
         IServiceProvider serviceProvider,
         IConfiguration configuration,
-        TenantRunGuard runGuard,
+        INocturneDbContextFactory contexts,
+        ISecretEncryptionService secrets,
         TimeProvider timeProvider
     )
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _configuration = configuration;
-        _runGuard = runGuard;
+        _contexts = contexts;
+        _secrets = secrets;
         _timeProvider = timeProvider;
     }
 
-    private static readonly TimeSpan TerminalHolderWait = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan TerminalHolderPollInterval = TimeSpan.FromMilliseconds(20);
-
-    private bool IsTerminal(Guid jobId) =>
-        _jobs.TryGetValue(jobId, out var job)
-        && !job.GetStatus().State.IsLive();
+    private static IQueryable<MigrationRunEntity> LiveRuns(NocturneDbContext db, Guid tenantId) =>
+        db.MigrationRuns.Where(r => r.TenantId == tenantId && s_liveStates.Contains(r.State));
 
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
+        CredentialMaker? starter,
         CancellationToken ct = default
     )
     {
-        // Never start a migration without a resolved tenant: the detached background task writes
-        // under whatever tenant it is given.
+        // Never start a migration without a resolved tenant: the job writes under whatever tenant
+        // its row names.
         if (tenantContext is null || tenantContext.TenantId == Guid.Empty)
         {
             throw new InvalidOperationException(
@@ -126,7 +177,7 @@ public class MigrationJobService : IMigrationJobService
         var tenantId = tenantContext.TenantId;
         var sourceDesc =
             request.Mode == MigrationMode.Api
-                ? request.NightscoutUrl is { } url ? NightscoutBaseUri.Display(url) : null
+                ? request.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null
                 : $"MongoDB: {request.MongoDatabaseName}";
 
         var jobInfo = new MigrationJobInfo
@@ -137,70 +188,27 @@ public class MigrationJobService : IMigrationJobService
             SourceDescription = sourceDesc,
         };
 
-        var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider, _timeProvider);
+        var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider, _timeProvider)
+        {
+            StoredRequest = _secrets.Encrypt(System.Text.Json.JsonSerializer.Serialize(request)),
+            Starter = starter,
+        };
 
         // One migration per tenant at a time: two runs over the same target race on their inserts.
-        // The lease is held for the whole run and records the job id, so a refused start can report
-        // which job it collided with rather than a bare conflict.
-        IDisposable? lease;
-        var terminalHolderDeadline = _timeProvider.GetUtcNow().UtcDateTime + TerminalHolderWait;
-        while ((lease = _runGuard.TryAcquire(tenantId, MigrationRunName, jobId)) is null)
+        // The row and the request for its job commit together, so no row is left waiting for a job
+        // nothing asked for.
+        await using var db = await _contexts.CreateForTenantAsync(tenantId, ct);
+        await db.ExecuteInTransactionAsync(async token =>
         {
-            if (_runGuard.TryGetHolder(tenantId, MigrationRunName, out var runningJobId))
-            {
-                // A job reports its terminal state before it writes its final record and releases
-                // the lease, so a caller who saw it finish must not be refused for that window.
-                if (IsTerminal(runningJobId) && _timeProvider.GetUtcNow().UtcDateTime < terminalHolderDeadline)
-                {
-                    await Task.Delay(TerminalHolderPollInterval, ct);
-                    continue;
-                }
+            await db.LockForTransactionAsync(RunLockClass, tenantId, token);
+            if (await LiveRuns(db, tenantId).Select(r => (Guid?)r.Id).FirstOrDefaultAsync(token) is { } live)
+                throw new MigrationAlreadyRunningException(live);
 
-                throw new MigrationAlreadyRunningException(runningJobId);
-            }
-
-            // The holder released between the failed acquire and the read; try again.
-        }
-
-        // Record the job (and its source) before the work starts. The in-process task cannot
-        // survive an API restart, but its record must: job history and "was this source ever
-        // migrated?" checks read these rows, and without them a restart erases all evidence
-        // that the run happened. Registered in the job map only after the record exists, so a
-        // failed persist doesn't leave a phantom Pending job answering status probes.
-        try
-        {
-            await job.PersistSnapshotAsync(ct);
-        }
-        catch
-        {
-            lease.Dispose();
-            throw;
-        }
-
-        _jobs[jobId] = job;
-
-        // Start migration on a detached background task. This deliberately does NOT use the
-        // request's CancellationToken (HttpContext.RequestAborted): the migration is designed to
-        // outlive the HTTP request that kicked it off, and tying it to the request token would
-        // cancel/abort it as soon as that request completes. User-initiated cancellation flows
-        // through the job's own CancellationTokenSource via Cancel().
-        _ = Task.Run(
-            async () =>
-            {
-                using (lease)
-                {
-                    try
-                    {
-                        await job.ExecuteAsync(CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Migration job {JobId} failed", jobId);
-                    }
-                }
-            },
-            CancellationToken.None
-        );
+            await job.WriteAsync(db, token);
+            await db.SaveChangesAsync(token);
+            await JobLedgerRepository.RequestInTransactionAsync(db, RunJobName, token);
+            return jobId;
+        }, verifySucceeded: (id, token) => db.MigrationRuns.AnyAsync(r => r.Id == id, token), ct: ct);
 
         _logger.LogInformation(
             "Started migration job {JobId} in {Mode} mode from {Source}",
@@ -212,42 +220,109 @@ public class MigrationJobService : IMigrationJobService
         return jobInfo;
     }
 
-    public async Task<MigrationJobStatus> GetStatusAsync(Guid tenantId, Guid jobId)
+    /// <inheritdoc />
+    public async Task<bool> RunSliceAsync(TenantContext tenant, CancellationToken ct)
     {
-        if (_jobs.TryGetValue(jobId, out var job) && job.TenantId == tenantId)
+        MigrationRunEntity? run;
+        await using (var db = await _contexts.CreateAsync(ct))
         {
-            return job.GetStatus();
+            run = await LiveRuns(db, tenant.TenantId).AsNoTracking().OrderBy(r => r.CreatedAt).FirstOrDefaultAsync(ct);
         }
 
-        // Not in memory (e.g. the API restarted since the job ran): serve the persisted record.
+        if (run is null)
+            return false;
+
+        if (ReadRequest(run) is not { } request)
+        {
+            _logger.LogError("Migration job {JobId} has no readable request and cannot continue", run.Id);
+            await EndAsync(tenant.TenantId, run.Id, MigrationJobState.Failed, UnreadableRequestMessage);
+            return false;
+        }
+
+        var job = MigrationJob.Resume(run, request, tenant, _logger, _serviceProvider, _timeProvider);
+        _running[run.Id] = job;
+        try
+        {
+            await job.ExecuteAsync(SliceLength, ct);
+        }
+        finally
+        {
+            _running.TryRemove(KeyValuePair.Create(run.Id, job));
+        }
+
+        // The record says whether the job has ended, not the slice: an end the slice could not
+        // store leaves the record live, and the next slice reaches that end again and stores it.
+        await using var after = await _contexts.CreateAsync(ct);
+        return await LiveRuns(after, tenant.TenantId).AnyAsync(r => r.Id == run.Id, ct);
+    }
+
+    private StartMigrationRequest? ReadRequest(MigrationRunEntity run)
+    {
+        if (string.IsNullOrEmpty(run.RequestEncrypted) || !_secrets.CanDecrypt(run.RequestEncrypted))
+            return null;
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<StartMigrationRequest>(_secrets.Decrypt(run.RequestEncrypted));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Ends the tenant's job in <paramref name="state"/> if it is still live.</summary>
+    /// <returns>Whether it was live.</returns>
+    /// <exception cref="KeyNotFoundException">The tenant has no such job.</exception>
+    private async Task<bool> EndAsync(Guid tenantId, Guid jobId, MigrationJobState state, string? message)
+    {
+        await using var db = await _contexts.CreateForTenantAsync(tenantId);
+        return await db.ExecuteInTransactionAsync(async token =>
+        {
+            await db.LockForTransactionAsync(RunLockClass, tenantId, token);
+            var run = await db.MigrationRuns.FirstOrDefaultAsync(r => r.Id == jobId && r.TenantId == tenantId, token)
+                ?? throw new KeyNotFoundException($"Migration job {jobId} not found");
+            if (!s_liveStates.Contains(run.State))
+                return false;
+
+            run.State = state.ToString();
+            run.CompletedAt = _timeProvider.GetUtcNow().UtcDateTime;
+            run.ErrorMessage = message ?? run.ErrorMessage;
+            run.Checkpoint = null;
+            run.RequestEncrypted = null;
+            run.Revision++;
+            await db.SaveChangesAsync(token);
+            return true;
+        });
+    }
+
+    public async Task<MigrationJobStatus> GetStatusAsync(Guid tenantId, Guid jobId)
+    {
         var record = await FindRunAsync(tenantId, jobId)
             ?? throw new KeyNotFoundException($"Migration job {jobId} not found");
 
-        return MigrationJob.StatusFromRecord(record);
+        return MigrationJob.StatusFromRecord(record, _timeProvider.GetUtcNow().UtcDateTime);
     }
 
+    /// <remarks>
+    /// A job running in this process stops at once. One running in another stops before its next
+    /// page, or its next batch of a MongoDB collection, when it finds its row ended.
+    /// </remarks>
     public async Task CancelAsync(Guid tenantId, Guid jobId)
     {
-        if (_jobs.TryGetValue(jobId, out var job) && job.TenantId == tenantId)
-        {
+        var wasLive = await EndAsync(tenantId, jobId, MigrationJobState.Cancelled, message: null);
+        if (_running.TryGetValue(jobId, out var job))
             job.Cancel();
-            await job.PersistSnapshotAsync(CancellationToken.None);
+
+        if (wasLive)
             _logger.LogInformation("Cancelled migration job {JobId}", jobId);
-            return;
-        }
-
-        // A persisted record without a live job is terminal or orphaned by a restart — nothing
-        // left to stop, but the id is valid, so don't report it as unknown.
-        _ = await FindRunAsync(tenantId, jobId)
-            ?? throw new KeyNotFoundException($"Migration job {jobId} not found");
-
-        _logger.LogInformation("Cancel requested for migration job {JobId} which is no longer running", jobId);
+        else
+            _logger.LogInformation("Cancel requested for migration job {JobId} which is no longer running", jobId);
     }
 
     public async Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync(Guid tenantId)
     {
-        using var scope = _serviceProvider.CreateScope();
-        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+        await using var db = await _contexts.CreateAsync();
 
         var runs = await db.MigrationRuns.AsNoTracking()
             .Where(r => r.TenantId == tenantId)
@@ -259,8 +334,7 @@ public class MigrationJobService : IMigrationJobService
 
     private async Task<MigrationRunEntity?> FindRunAsync(Guid tenantId, Guid jobId)
     {
-        using var scope = _serviceProvider.CreateScope();
-        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+        await using var db = await _contexts.CreateAsync();
         return await db.MigrationRuns.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == jobId && r.TenantId == tenantId);
     }
@@ -306,16 +380,16 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out var baseAddress))
+        if (!NightscoutAddress.TryResolve(request.NightscoutUrl, out var address))
         {
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = NightscoutBaseUri.InvalidUrlMessage,
+                ErrorMessage = NightscoutAddress.InvalidUrlMessage,
             };
         }
 
-        var httpClient = CreateSourceClient(baseAddress, request.NightscoutApiSecret);
+        var httpClient = CreateSourceClient(address, request.NightscoutApiSecret);
 
         try
         {
@@ -325,7 +399,7 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = true,
-                SiteName = NightscoutBaseUri.Display(request.NightscoutUrl),
+                SiteName = NightscoutAddress.Masked(request.NightscoutUrl),
                 AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
@@ -345,20 +419,20 @@ public class MigrationJobService : IMigrationJobService
     public async Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
         string nightscoutUrl, string? apiSecret, CancellationToken ct = default)
     {
-        if (!NightscoutBaseUri.TryFor(nightscoutUrl, out var baseAddress))
-            throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+        if (!NightscoutAddress.TryResolve(nightscoutUrl, out var address))
+            throw new MigrationSourceException(NightscoutAddress.InvalidUrlMessage, MigrationFailureCause.Unreachable);
 
-        var httpClient = CreateSourceClient(baseAddress, apiSecret);
+        var httpClient = CreateSourceClient(address, apiSecret);
         var status = await MigrationJob.ReadFromSourceAsync(
             httpClient, "api/v1/status.json", "status", ct, NightscoutRead.ImportProbe);
         var profiles = await MigrationJob.ReadFromSourceAsync(httpClient, "api/v1/profile.json", "profile", ct);
         return NightscoutDisplaySettings.Parse(status, profiles);
     }
 
-    private HttpClient CreateSourceClient(Uri baseAddress, string? apiSecret)
+    private HttpClient CreateSourceClient(NightscoutAddress address, string? apiSecret)
     {
         var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
-        httpClient.BaseAddress = baseAddress;
+        httpClient.BaseAddress = address.BaseUri;
 
         // Nightscout expects the SHA1 hash of the secret.
         if (!string.IsNullOrEmpty(apiSecret))
@@ -429,41 +503,36 @@ public class MigrationJobService : IMigrationJobService
         };
     }
 
-    public PendingMigrationConfig GetPendingConfig()
-    {
-        var migrationMode = _configuration["MIGRATION_MODE"];
+    /// <inheritdoc />
+    public PendingMigrationConfig GetPendingConfig(bool instanceStanding) =>
+        instanceStanding && ConfiguredMigrationSource.Read(_configuration) is { } source
+            ? new PendingMigrationConfig
+            {
+                HasPendingConfig = true,
+                Mode = source.Mode,
+                NightscoutUrl = source.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null,
+                HasApiSecret = source.HasApiSecret,
+                HasMongoConnectionString = source.MongoConnectionString is not null,
+                MongoDatabaseName = source.MongoDatabaseName,
+            }
+            : new PendingMigrationConfig { HasPendingConfig = false };
 
-        if (string.IsNullOrEmpty(migrationMode))
-        {
-            return new PendingMigrationConfig { HasPendingConfig = false };
-        }
-
-        var mode = migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase)
-            ? MigrationMode.MongoDb
-            : MigrationMode.Api;
-
-        return new PendingMigrationConfig
-        {
-            HasPendingConfig = true,
-            Mode = mode,
-            NightscoutUrl = _configuration["MIGRATION_NS_URL"] is { Length: > 0 } url ? NightscoutBaseUri.Display(url) : null,
-            HasApiSecret = !string.IsNullOrEmpty(_configuration["MIGRATION_NS_API_SECRET"]),
-            HasMongoConnectionString = !string.IsNullOrEmpty(
-                _configuration["MIGRATION_MONGO_CONNECTION_STRING"]
-            ),
-            MongoDatabaseName = _configuration["MIGRATION_MONGO_DATABASE_NAME"],
-        };
-    }
+    /// <inheritdoc />
+    public string? ResolveNightscoutUrl(string? requested, bool instanceStanding) =>
+        string.IsNullOrWhiteSpace(requested)
+        && instanceStanding
+        && ConfiguredMigrationSource.Read(_configuration)?.NightscoutUrl is { } configured
+            ? configured
+            : requested;
 
     public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(
         Guid tenantId,
         CancellationToken ct = default
     )
     {
-        using var scope = _serviceProvider.CreateScope();
-        await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
+        await using var dbContext = await _contexts.CreateAsync(ct);
 
-        var sources = (await dbContext
+        return await dbContext
             .MigrationSources
             .Where(s => s.TenantId == tenantId)
             .OrderByDescending(s => s.LastMigrationAt ?? s.CreatedAt)
@@ -477,16 +546,14 @@ public class MigrationJobService : IMigrationJobService
                 LastMigratedDataTimestamp = s.LastMigratedDataTimestamp,
                 CreatedAt = s.CreatedAt,
             })
-            .ToListAsync(ct))
-            .Select(s => s.NightscoutUrl is null ? s : s with { NightscoutUrl = NightscoutBaseUri.Display(s.NightscoutUrl) })
-            .ToList();
-
-        return sources;
+            .ToListAsync(ct);
     }
 }
 
 /// <summary>
-/// Represents a running migration job
+/// One migration job, run a slice at a time. What a slice needs from the ones before it is in
+/// <see cref="Checkpoint"/>, which <see cref="PauseAsync"/> stores on the job's run record before each
+/// page, and <see cref="Resume"/> builds the job for the next slice from that record.
 /// </summary>
 internal class MigrationJob
 {
@@ -499,6 +566,24 @@ internal class MigrationJob
     private readonly IServiceProvider _serviceProvider;
     private readonly TimeProvider _timeProvider;
     private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>The request as <see cref="MigrationRunEntity.RequestEncrypted"/> holds it, written when the run record is added.</summary>
+    public string? StoredRequest { get; init; }
+
+    /// <summary>
+    /// Who started the job, written to <see cref="MigrationRunEntity.StartedBySubjectId"/> and
+    /// <see cref="MigrationRunEntity.StarterAccessEndsAt"/> when the run record is added.
+    /// </summary>
+    public CredentialMaker? Starter { get; init; }
+
+    /// <summary>The <see cref="MigrationRunEntity.Revision"/> this job last wrote, or was resumed at.</summary>
+    private int _revision;
+
+    /// <summary>Set when the run record was found ended, as a cancel leaves it.</summary>
+    private bool _recordEnded;
+
+    /// <summary>Set when the run record was found live at a revision this job did not write.</summary>
+    private bool _recordMoved;
 
     private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -584,7 +669,8 @@ internal class MigrationJob
                 ErrorMessage = _errorMessage,
                 StartedAt = _startedAt,
                 CompletedAt = _completedAt,
-                EstimatedTimeRemaining = EstimateTimeRemaining(),
+                EstimatedTimeRemaining = EstimateTimeRemaining(
+                    _state, _documentWeighted, _pullStartedAt, _currentCollection, _collectionProgress, _progressPercentage, UtcNow),
                 HasFailures = HasFailures(_state, _collectionProgress.Values),
                 RecentDataReady = _recentDataReady || _state is MigrationJobState.Completed,
                 CollectionProgress = _collectionProgress.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
@@ -612,20 +698,26 @@ internal class MigrationJob
     /// seconds, for a source that did not count every collection it can, where progress steps by
     /// collection, and while the collection in flight has no total.
     /// </summary>
-    private TimeSpan? EstimateTimeRemaining()
+    private static TimeSpan? EstimateTimeRemaining(
+        MigrationJobState state,
+        bool documentWeighted,
+        DateTime? pullStartedAt,
+        string? currentCollection,
+        IReadOnlyDictionary<string, CollectionProgress> collections,
+        double progress,
+        DateTime now)
     {
-        if (_state != MigrationJobState.Running || !_documentWeighted || _pullStartedAt is not { } started)
+        if (state != MigrationJobState.Running || !documentWeighted || pullStartedAt is not { } started)
             return null;
 
-        if (_currentCollection is { } current
-            && _collectionProgress.TryGetValue(current, out var inFlight)
+        if (currentCollection is { } current
+            && collections.TryGetValue(current, out var inFlight)
             && inFlight is { IsComplete: false, TotalDocuments: 0 })
         {
             return null;
         }
 
-        var elapsed = UtcNow - started;
-        var progress = _progressPercentage;
+        var elapsed = now - started;
         if (elapsed < MinimumElapsedForEstimate || progress < 1)
             return null;
 
@@ -648,24 +740,54 @@ internal class MigrationJob
         }
     }
 
-    public async Task ExecuteAsync(CancellationToken externalCt)
+    /// <summary>How long this call runs before it stops at a checkpoint.</summary>
+    private TimeSpan _slice;
+
+    private long _sliceStarted;
+
+    /// <summary>Whether this call has stored anything, so a slice of any length moves the run on.</summary>
+    private bool _advanced;
+
+    /// <summary>Set when this call stopped at a checkpoint with the run unfinished.</summary>
+    private bool _paused;
+
+    /// <summary>
+    /// Runs the job from its checkpoint for up to <paramref name="slice"/>, then stops at the next
+    /// checkpoint with the run still live.
+    /// </summary>
+    /// <returns>Whether the run is still live, so has more to do.</returns>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="externalCt"/> ended the call. The run stays live at its checkpoint, for whoever
+    /// runs it next.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The run record is live at a revision this job did not write: another process holds the run,
+    /// or a write of this job's landed without its knowing. The call stored nothing after finding
+    /// that, and the run goes on from the record when it is next run.
+    /// </exception>
+    public async Task<bool> ExecuteAsync(TimeSpan slice, CancellationToken externalCt)
     {
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
             _cts.Token,
             externalCt
         );
         var ct = linkedCts.Token;
+        (_slice, _sliceStarted, _advanced, _paused) = (slice, _timeProvider.GetTimestamp(), false, false);
 
         lock (_statusLock)
         {
-            _startedAt = UtcNow;
             if (_state == MigrationJobState.Pending)
+            {
+                _startedAt = UtcNow;
                 _state = MigrationJobState.Running;
+            }
         }
         await PersistSnapshotAsync(CancellationToken.None);
 
         try
         {
+            ct.ThrowIfCancellationRequested();
+
             if (_request.Mode == MigrationMode.Api)
             {
                 await ExecuteApiMigrationAsync(ct);
@@ -675,19 +797,22 @@ internal class MigrationJob
                 await ExecuteMongoMigrationAsync(ct);
             }
 
-            // A run that got some collections through stays Completed rather than gaining a state
-            // the UI's badge switch does not know; the summary is what stops it reading as a clean
-            // import.
-            var summary = FailureSummary();
-            lock (_statusLock)
+            if (!_paused)
             {
-                _errorMessage = summary;
-                _progressPercentage = 100;
-                _completedAt = UtcNow;
-                _state = MigrationJobState.Completed;
+                // A run that got some collections through stays Completed rather than gaining a state
+                // the UI's badge switch does not know; the summary is what stops it reading as a clean
+                // import.
+                var summary = FailureSummary();
+                lock (_statusLock)
+                {
+                    _errorMessage = summary;
+                    _progressPercentage = 100;
+                    _completedAt = UtcNow;
+                    _state = MigrationJobState.Completed;
+                }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested || !externalCt.IsCancellationRequested)
         {
             lock (_statusLock)
             {
@@ -695,7 +820,7 @@ internal class MigrationJob
                 _state = MigrationJobState.Cancelled;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var message = ex switch
             {
@@ -717,15 +842,98 @@ internal class MigrationJob
         {
             await PersistSnapshotAsync(CancellationToken.None);
         }
+
+        if (_recordMoved)
+            throw new InvalidOperationException($"Migration job {_id} was written to by another holder; it goes on from its record.");
+
+        lock (_statusLock)
+        {
+            return _state.IsLive();
+        }
     }
 
     /// <summary>
-    /// Upserts the job's persisted run record (and its migration source) from the current
-    /// in-memory state. The initial call (state Pending) propagates failures — a job whose
-    /// record cannot be written must not start; later calls log instead, because the running
-    /// work matters more than its record and the terminal snapshot retries.
+    /// Stores the run's checkpoint and says whether the call stops here: its slice is used up and it
+    /// has stored something. Everything the run has read is stored when this is called, so the next
+    /// slice, or the process that takes the run over, goes on from here.
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The call was cancelled, or the run record has ended or changed hands.</exception>
+    private async Task<bool> PauseAsync(CancellationToken ct)
+    {
+        await StoreProgressAsync(ct);
+
+        if (!_advanced || _timeProvider.GetElapsedTime(_sliceStarted) < _slice)
+            return false;
+
+        _paused = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Stores the run's state, so its status is current and a cancel made in another process is
+    /// seen, without offering the slice a place to stop.
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The call was cancelled, or the run record has ended or changed hands.</exception>
+    private async Task StoreProgressAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        await PersistSnapshotAsync(CancellationToken.None);
+        ct.ThrowIfCancellationRequested();
+    }
+
+    /// <summary>
+    /// Writes the job's state to its run record under the tenant's run lock. A record that has ended
+    /// or changed hands (<see cref="WriteAsync"/>) is left alone and the job is cancelled. A job
+    /// with no record yet propagates failures, since it must not start without one; later calls log
+    /// instead, because the running work matters more than its record and the next call retries.
     /// </summary>
     public async Task PersistSnapshotAsync(CancellationToken ct)
+    {
+        MigrationJobState state;
+        lock (_statusLock)
+        {
+            state = _state;
+        }
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
+
+            var written = await db.ExecuteInTransactionAsync(async token =>
+            {
+                await db.LockForTransactionAsync(MigrationJobService.RunLockClass, _tenantId, token);
+                var revision = await WriteAsync(db, token);
+                if (revision is not null)
+                    await db.SaveChangesAsync(token);
+                return revision;
+            }, ct: ct);
+
+            if (written is { } stored)
+            {
+                _revision = stored;
+            }
+            else
+            {
+                _recordMoved = !_recordEnded;
+                await _cts.CancelAsync();
+            }
+        }
+        catch (Exception ex) when (state is not MigrationJobState.Pending)
+        {
+            _logger.LogError(ex, "Failed to persist migration job {JobId}", _id);
+        }
+    }
+
+    /// <summary>
+    /// Puts the job's state on its run record and migration source in <paramref name="db"/>, adding
+    /// the record when the job has none. The caller holds the tenant's run lock, and saves.
+    /// </summary>
+    /// <returns>
+    /// The revision the record now carries, or null when it was left alone: it has ended, as when it
+    /// was cancelled, or another process has written to it since this job last did.
+    /// </returns>
+    internal async Task<int?> WriteAsync(NocturneDbContext db, CancellationToken ct)
     {
         MigrationJobState state;
         DateTime startedAt;
@@ -736,57 +944,214 @@ internal class MigrationJob
             (state, startedAt, completedAt, errorMessage) = (_state, _startedAt, _completedAt, _errorMessage);
         }
 
+        var run = await db.MigrationRuns.FirstOrDefaultAsync(r => r.Id == _id, ct);
+        if (run is not null && !MigrationJobStates.LiveNames.Contains(run.State))
+        {
+            _recordEnded = true;
+            return null;
+        }
+
+        if (run is not null && run.Revision != _revision)
+            return null;
+
+        var revision = run is null ? _revision : _revision + 1;
+        if (run is null)
+        {
+            run = new MigrationRunEntity
+            {
+                Id = _id,
+                CreatedAt = _info.CreatedAt,
+                RequestEncrypted = StoredRequest,
+                StartedBySubjectId = Starter?.SubjectId,
+                StarterAccessEndsAt = Starter?.AccessEndsAt,
+            };
+            db.MigrationRuns.Add(run);
+        }
+
+        var sourceId = await UpsertSourceAsync(db, ct);
+
+        run.SourceId = sourceId;
+        run.TenantId = _tenantId;
+        run.Mode = _request.Mode.ToString();
+        run.SourceDescription = _info.SourceDescription is { Length: > 512 } d ? d[..512] : _info.SourceDescription;
+        run.State = state.ToString();
+        run.StartedAt = startedAt == default ? _info.CreatedAt : startedAt;
+        run.CompletedAt = completedAt;
+        run.DateRangeStart = _request.StartDate?.AsUtc();
+        run.DateRangeEnd = _request.EndDate?.AsUtc();
+        run.ErrorMessage = errorMessage;
+        run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
+        run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
+        run.CollectionOutcomes = _collectionProgress.IsEmpty
+            ? null
+            : System.Text.Json.JsonSerializer.Serialize(_collectionProgress.Values.ToList(), s_outcomeJson);
+        run.SourceAlarmSettings = _sourceAlarmSettings;
+        run.Revision = revision;
+        run.Checkpoint = state.IsLive()
+            ? System.Text.Json.JsonSerializer.Serialize(ToCheckpoint(), s_outcomeJson)
+            : null;
+        if (!state.IsLive())
+            run.RequestEncrypted = null;
+
+        if (state == MigrationJobState.Completed)
+        {
+            var source = await db.MigrationSources.FirstAsync(s => s.Id == sourceId, ct);
+            source.LastMigrationAt = completedAt ?? UtcNow;
+
+            // A run bounded to an older date range covers ground an earlier run already
+            // covered, so the watermark only ever advances.
+            if (_newestMigratedData is { } newest
+                && newest > (source.LastMigratedDataTimestamp ?? DateTime.MinValue))
+            {
+                source.LastMigratedDataTimestamp = newest;
+            }
+        }
+
+        return revision;
+    }
+
+    /// <summary>
+    /// What a live run stores in <see cref="MigrationRunEntity.Checkpoint"/>: where it is, what it
+    /// has decided and counted on the way, and what it is doing, for the status of a run no process
+    /// is holding. The per-collection outcomes are in <see cref="MigrationRunEntity.CollectionOutcomes"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Pass</c> and <c>Next</c> are the part of the range and the collection the run reads next,
+    /// and a paged collection's <see cref="PagedPull.Bound"/> is where in it. A step that pages on
+    /// no time, and every MongoDB collection, is read again from its start.
+    /// </para>
+    /// <para>
+    /// A live run outlives the version that started it, so a position is stored as what it names
+    /// (<c>Split</c>, <c>Next</c>), never as an index into a list the code defines. A change to what
+    /// any member means raises <see cref="CheckpointVersion"/>, and a run stored under another
+    /// version starts over.
+    /// </para>
+    /// </remarks>
+    internal sealed record Checkpoint
+    {
+        public int Version { get; init; }
+        public bool Counted { get; init; }
+        public DateTime WindowTo { get; init; }
+        public DateTime? Split { get; init; }
+        public int Pass { get; init; }
+        public string? Next { get; init; }
+        public bool DocumentWeighted { get; init; }
+        public DateTime? PullStartedAt { get; init; }
+        public bool RecentDataReady { get; init; }
+        public List<string> Answered { get; init; } = [];
+        public MigrationFailureCause? AbandonedAfter { get; init; }
+        public DateTime? NewestMigratedData { get; init; }
+        public Dictionary<string, PagedPull> Pulls { get; init; } = [];
+        public double Progress { get; init; }
+        public string? Operation { get; init; }
+        public MigrationPhase Phase { get; init; }
+        public string? Collection { get; init; }
+    }
+
+    internal const int CheckpointVersion = 1;
+
+    private Checkpoint ToCheckpoint() => new()
+    {
+        Version = CheckpointVersion,
+        Counted = _counted,
+        WindowTo = _window.To,
+        Split = _split,
+        Pass = _pass,
+        Next = _next,
+        DocumentWeighted = _documentWeighted,
+        PullStartedAt = _pullStartedAt,
+        RecentDataReady = _recentDataReady,
+        Answered = [.. _answered],
+        AbandonedAfter = _abandonedAfter,
+        NewestMigratedData = _newestMigratedData,
+        Pulls = new(_pulls),
+        Progress = _progressPercentage,
+        Operation = _currentOperation,
+        Phase = _phase,
+        Collection = _currentCollection,
+    };
+
+    /// <summary>
+    /// The checkpoint a run record holds, or null when it holds none, one this version cannot read
+    /// or one of another <see cref="CheckpointVersion"/>; the run then starts over, which stores
+    /// nothing twice.
+    /// </summary>
+    private static Checkpoint? ReadCheckpoint(MigrationRunEntity run)
+    {
+        if (string.IsNullOrEmpty(run.Checkpoint))
+            return null;
+
         try
         {
-            using var scope = _serviceProvider.CreateScope();
-            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
-
-            var sourceId = await UpsertSourceAsync(db, ct);
-
-            var run = await db.MigrationRuns.FirstOrDefaultAsync(r => r.Id == _id, ct);
-            if (run is null)
-            {
-                run = new MigrationRunEntity { Id = _id, CreatedAt = _info.CreatedAt };
-                db.MigrationRuns.Add(run);
-            }
-
-            run.SourceId = sourceId;
-            run.TenantId = _tenantId;
-            run.Mode = _request.Mode.ToString();
-            run.SourceDescription = _info.SourceDescription is { Length: > 512 } d ? d[..512] : _info.SourceDescription;
-            run.State = state.ToString();
-            run.StartedAt = startedAt == default ? _info.CreatedAt : startedAt;
-            run.CompletedAt = completedAt;
-            run.DateRangeStart = _request.StartDate?.AsUtc();
-            run.DateRangeEnd = _request.EndDate?.AsUtc();
-            run.ErrorMessage = errorMessage;
-            run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
-            run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
-            run.CollectionOutcomes = _collectionProgress.IsEmpty
-                ? null
-                : System.Text.Json.JsonSerializer.Serialize(_collectionProgress.Values.ToList(), s_outcomeJson);
-            run.SourceAlarmSettings = _sourceAlarmSettings;
-
-            if (state == MigrationJobState.Completed)
-            {
-                var source = await db.MigrationSources.FirstAsync(s => s.Id == sourceId, ct);
-                source.LastMigrationAt = completedAt ?? UtcNow;
-
-                // A run bounded to an older date range covers ground an earlier run already
-                // covered, so the watermark only ever advances.
-                if (_newestMigratedData is { } newest
-                    && newest > (source.LastMigratedDataTimestamp ?? DateTime.MinValue))
-                {
-                    source.LastMigratedDataTimestamp = newest;
-                }
-            }
-
-            await db.SaveChangesAsync(ct);
+            return System.Text.Json.JsonSerializer.Deserialize<Checkpoint>(run.Checkpoint, s_outcomeJson)
+                is { Version: CheckpointVersion } saved
+                ? saved
+                : null;
         }
-        catch (Exception ex) when (state is not MigrationJobState.Pending)
+        catch (System.Text.Json.JsonException)
         {
-            _logger.LogError(ex, "Failed to persist migration job {JobId}", _id);
+            return null;
         }
+    }
+
+    /// <summary>The job for a live run record, at the record's checkpoint.</summary>
+    internal static MigrationJob Resume(
+        MigrationRunEntity run,
+        StartMigrationRequest request,
+        TenantContext tenant,
+        ILogger logger,
+        IServiceProvider serviceProvider,
+        TimeProvider timeProvider)
+    {
+        var job = new MigrationJob(
+            run.Id,
+            run.TenantId,
+            request,
+            new MigrationJobInfo
+            {
+                Id = run.Id,
+                Mode = request.Mode,
+                CreatedAt = run.CreatedAt,
+                SourceDescription = run.SourceDescription,
+            },
+            tenant,
+            logger,
+            serviceProvider,
+            timeProvider);
+
+        job._revision = run.Revision;
+        job._state = Enum.TryParse<MigrationJobState>(run.State, out var state) ? state : MigrationJobState.Pending;
+        job._startedAt = run.StartedAt;
+        job._sourceAlarmSettings = run.SourceAlarmSettings;
+
+        if (ReadCheckpoint(run) is not { } saved)
+            return job;
+
+        if (saved.Counted)
+        {
+            foreach (var (name, outcome) in OutcomesFromRecord(run, job._state))
+                job._collectionProgress[name] = outcome;
+        }
+
+        job._counted = saved.Counted;
+        job._window = new ImportWindow(request.StartDate?.AsUtc(), saved.WindowTo);
+        job._split = saved.Split;
+        job._pass = saved.Pass;
+        job._next = saved.Next;
+        job._documentWeighted = saved.DocumentWeighted;
+        job._pullStartedAt = saved.PullStartedAt;
+        job._recentDataReady = saved.RecentDataReady;
+        job._answered.UnionWith(saved.Answered);
+        job._abandonedAfter = saved.AbandonedAfter;
+        job._newestMigratedData = saved.NewestMigratedData;
+        foreach (var (name, pull) in saved.Pulls)
+            job._pulls[name] = pull;
+        job._progressPercentage = saved.Progress;
+        job._currentOperation = saved.Operation;
+        job._phase = saved.Phase;
+        job._currentCollection = saved.Collection;
+        return job;
     }
 
     private long MigratedCount(string collection) =>
@@ -800,45 +1165,32 @@ internal class MigrationJob
 
     /// <summary>
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
-    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>: the Nightscout URL for
-    /// API mode, a SHA-256 digest of the connection string for MongoDB mode. Only non-usable
-    /// digests are stored — never the API secret, a URL's token or the connection string themselves.
+    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>, a SHA-256 digest of the
+    /// Nightscout base for API mode and of the connection string for MongoDB mode. Only non-usable
+    /// digests and the <see cref="NightscoutAddress.Masked"/> URL are stored, never the API secret,
+    /// a URL's token or path secret, or the connection string themselves.
     /// </summary>
-    /// <remarks>
-    /// A row stored under <see cref="LegacyApiSourceIdentifier"/> is taken over and rewritten, so
-    /// its history stays attached and a token it recorded is dropped.
-    /// </remarks>
     private async Task<Guid> UpsertSourceAsync(NocturneDbContext db, CancellationToken ct)
     {
         var isApi = _request.Mode == MigrationMode.Api;
         var identifier = isApi
             ? ApiSourceIdentifier(_request.NightscoutUrl!)
             : MongoSourceIdentifier(_request.MongoConnectionString ?? string.Empty);
-        var legacyIdentifier = isApi ? LegacyApiSourceIdentifier(_request.NightscoutUrl!) : identifier;
 
-        var matches = await db.MigrationSources
-            .Where(s => s.TenantId == _tenantId
-                && (s.SourceIdentifier == identifier || s.SourceIdentifier == legacyIdentifier))
-            .ToListAsync(ct);
-        var source = matches.FirstOrDefault(s => s.SourceIdentifier == identifier);
-        if (source is not null)
-            return source.Id;
+        var existing = await db.MigrationSources
+            .Where(s => s.TenantId == _tenantId && s.SourceIdentifier == identifier)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(ct);
+        if (existing is { } id)
+            return id;
 
-        source = matches.FirstOrDefault();
-        if (source is not null)
-        {
-            source.SourceIdentifier = identifier;
-            source.NightscoutUrl = identifier;
-            return source.Id;
-        }
-
-        source = new MigrationSourceEntity
+        var source = new MigrationSourceEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
             Mode = _request.Mode.ToString(),
             SourceIdentifier = identifier,
-            NightscoutUrl = isApi ? identifier : null,
+            NightscoutUrl = isApi ? NightscoutAddress.Masked(_request.NightscoutUrl!) : null,
             NightscoutApiSecretHash = isApi && !string.IsNullOrEmpty(_request.NightscoutApiSecret)
                 ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
                 : null,
@@ -849,34 +1201,45 @@ internal class MigrationJob
         return source.Id;
     }
 
-    /// <summary>Canonical source identifier for an API-mode migration. Shared with the startup pending-migration check so the two always agree.</summary>
-    internal static string ApiSourceIdentifier(string nightscoutUrl) => NightscoutBaseUri.Display(nightscoutUrl);
-
-    /// <summary>The identifier API-mode sources were stored under before <see cref="ApiSourceIdentifier"/> normalised the URL.</summary>
-    internal static string LegacyApiSourceIdentifier(string nightscoutUrl) => nightscoutUrl.TrimEnd('/');
+    /// <summary>
+    /// Canonical source identifier for an API-mode migration: a non-usable digest of the
+    /// <see cref="NightscoutAddress.Display"/> base, never the URL itself. Shared with the startup
+    /// pending-migration check so the two always agree.
+    /// </summary>
+    internal static string ApiSourceIdentifier(string nightscoutUrl) =>
+        HashUtils.Sha256Hex(NightscoutAddress.Display(nightscoutUrl));
 
     /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
     internal static string MongoSourceIdentifier(string connectionString) =>
         HashUtils.Sha256Hex(connectionString);
 
-    /// <summary>Reconstructs a status snapshot from a persisted run (post-restart lookups).</summary>
-    public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run)
+    /// <summary>A run record's status as of <paramref name="now"/>; a live run's from its checkpoint.</summary>
+    public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run, DateTime now)
     {
         var state = Enum.TryParse<MigrationJobState>(run.State, out var s)
             ? s
             : MigrationJobState.Interrupted;
         var outcomes = OutcomesFromRecord(run, state);
+        var saved = state.IsLive() ? ReadCheckpoint(run) : null;
+        var progress = state == MigrationJobState.Completed ? 100 : saved?.Progress ?? 0;
 
         return new MigrationJobStatus
         {
             JobId = run.Id,
             State = state,
-            ProgressPercentage = state == MigrationJobState.Completed ? 100 : 0,
+            ProgressPercentage = progress,
+            CurrentOperation = saved?.Operation,
+            Phase = state.IsLive() ? saved?.Phase ?? MigrationPhase.Connecting : null,
+            CurrentCollection = saved?.Collection,
             ErrorMessage = run.ErrorMessage,
             StartedAt = run.StartedAt,
             CompletedAt = run.CompletedAt,
+            EstimatedTimeRemaining = saved is null
+                ? null
+                : EstimateTimeRemaining(
+                    state, saved.DocumentWeighted, saved.PullStartedAt, saved.Collection, outcomes, progress, now),
             HasFailures = HasFailures(state, outcomes.Values),
-            RecentDataReady = state == MigrationJobState.Completed,
+            RecentDataReady = state == MigrationJobState.Completed || saved?.RecentDataReady == true,
             CollectionProgress = outcomes,
         };
     }
@@ -939,9 +1302,7 @@ internal class MigrationJob
             Id = run.Id,
             Mode = Enum.TryParse<MigrationMode>(run.Mode, out var m) ? m : MigrationMode.Api,
             CreatedAt = run.CreatedAt,
-            SourceDescription = run.Mode == nameof(MigrationMode.Api) && run.SourceDescription is { } url
-                ? NightscoutBaseUri.Display(url)
-                : run.SourceDescription,
+            SourceDescription = run.SourceDescription,
             State = state,
             StartedAt = run.StartedAt,
             CompletedAt = run.CompletedAt,
@@ -958,6 +1319,18 @@ internal class MigrationJob
 
     /// <summary>When the first collection started, after the counts, for <see cref="EstimateTimeRemaining"/>.</summary>
     private DateTime? _pullStartedAt;
+
+    /// <summary>Whether the run has fixed <see cref="_window"/> and counted its collections, which it does once.</summary>
+    private bool _counted;
+
+    /// <summary>The index in <see cref="Passes"/> of the part of the range an API run reads next.</summary>
+    private int _pass;
+
+    /// <summary>The collection an API run reads next in <see cref="_pass"/>, or null for the pass's first.</summary>
+    private string? _next;
+
+    /// <summary>Where <see cref="Passes"/> divides <see cref="_window"/>, fixed with it; null for a range read as one part.</summary>
+    private DateTime? _split;
 
     /// <summary>
     /// The time range this run imports: the requested dates, with the end no later than the moment
@@ -996,17 +1369,20 @@ internal class MigrationJob
     /// The parts share no instant, and the boundary is a whole millisecond, which both cursors can
     /// write, so a record on it is read once.
     /// </remarks>
-    private ImportWindow[] Passes()
+    private ImportWindow[] Passes() => _split is { } split
+        ? [new ImportWindow(split, _window.To), new ImportWindow(_window.From, split, ToExclusive: true)]
+        : [_window];
+
+    /// <summary>The instant <see cref="ReadFirst"/> back from the end of <see cref="_window"/>, or null when the range starts no earlier.</summary>
+    private DateTime? SplitOfWindow()
     {
         if (ReadFirst is not { } recent)
-            return [_window];
+            return null;
 
         var split = _window.To - recent;
         split = split.AddTicks(-(split.Ticks % TimeSpan.TicksPerMillisecond));
 
-        return _window.From is { } from && from >= split
-            ? [_window]
-            : [new ImportWindow(split, _window.To), new ImportWindow(_window.From, split, ToExclusive: true)];
+        return _window.From is { } from && from >= split ? null : split;
     }
 
     /// <param name="anchored">
@@ -1047,22 +1423,18 @@ internal class MigrationJob
 
     private async Task ExecuteApiMigrationAsync(CancellationToken ct)
     {
-        _currentOperation = "Connecting to Nightscout";
-
         using var scope = CreateTenantScope();
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient(MigrationJobService.HttpClientName);
-        httpClient.BaseAddress = NightscoutBaseUri.TryFor(_request.NightscoutUrl, out var baseAddress)
-            ? baseAddress
-            : throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+        httpClient.BaseAddress = NightscoutAddress.TryResolve(_request.NightscoutUrl, out var address)
+            ? address.BaseUri
+            : throw new MigrationSourceException(NightscoutAddress.InvalidUrlMessage, MigrationFailureCause.Unreachable);
 
         // Add API secret header if provided (Nightscout expects the SHA1 hash)
         if (!string.IsNullOrEmpty(_request.NightscoutApiSecret))
         {
             httpClient.DefaultRequestHeaders.Add("api-secret", HashApiSecret(_request.NightscoutApiSecret));
         }
-
-        _sourceAlarmSettings = await ReadAlarmSettingsAsync(httpClient, ct);
 
         await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
 
@@ -1072,7 +1444,8 @@ internal class MigrationJob
         {
             ("subjects", false, (client, _, token) => MigrateSubjectsViaApiAsync(
                 client, dbContext, scope.ServiceProvider.GetRequiredService<IOAuthGrantRepository>(),
-                scope.ServiceProvider.GetRequiredService<IRoleRepository>(), token)),
+                scope.ServiceProvider.GetRequiredService<IRoleRepository>(),
+                scope.ServiceProvider.GetRequiredService<ITenantRepository>(), token)),
             ("entries", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_entriesCollection, pass, token)),
             ("treatments", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_treatmentsCollection, pass, token)),
             ("devicestatus", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_deviceStatusCollection, pass, token)),
@@ -1086,36 +1459,60 @@ internal class MigrationJob
             .OrderBy(c => ImportRank(c.name))
             .ToList();
 
-        _currentOperation = "Counting records";
-        _phase = MigrationPhase.Counting;
-        _window = RequestedWindow(anchored: true);
-
-        var counts = await Task.WhenAll(
-            collectionsToMigrate.Select(c => FetchCollectionCountAsync(httpClient, c.name, ct)));
-        for (var i = 0; i < collectionsToMigrate.Count; i++)
+        if (!_counted)
         {
-            var name = collectionsToMigrate[i].name;
-            _collectionProgress[name] = new CollectionProgress { CollectionName = name, TotalDocuments = counts[i] ?? 0 };
+            _currentOperation = "Connecting to Nightscout";
+            _sourceAlarmSettings = await ReadAlarmSettingsAsync(httpClient, ct);
+
+            _currentOperation = "Counting records";
+            _phase = MigrationPhase.Counting;
+            _window = RequestedWindow(anchored: true);
+            _split = SplitOfWindow();
+
+            var counts = await Task.WhenAll(
+                collectionsToMigrate.Select(c => FetchCollectionCountAsync(httpClient, c.name, ct)));
+            for (var i = 0; i < collectionsToMigrate.Count; i++)
+            {
+                var name = collectionsToMigrate[i].name;
+                _collectionProgress[name] = new CollectionProgress { CollectionName = name, TotalDocuments = counts[i] ?? 0 };
+            }
+
+            // A collection the source could have counted and did not would be weighed at what it has
+            // served so far, which reads as nearly done for as long as it is pulled.
+            _documentWeighted = counts.All(c => c is not null) && counts.Any(c => c > 0);
+            _pullStartedAt = UtcNow;
+            _counted = true;
         }
 
-        // A collection the source could have counted and did not would be weighed at what it has
-        // served so far, which reads as nearly done for as long as it is pulled.
-        _documentWeighted = counts.All(c => c is not null) && counts.Any(c => c > 0);
-        _pullStartedAt = UtcNow;
-
         var passes = Passes();
-        for (var p = 0; p < passes.Length; p++)
+        for (var p = _pass; p < passes.Length; p++)
         {
             var pass = new ImportPass(passes[p], Last: p == passes.Length - 1);
-            foreach (var (name, dated, migrate) in collectionsToMigrate)
+
+            // A collection the run no longer lists starts the pass again.
+            var first = _next is null ? 0 : Math.Max(0, collectionsToMigrate.FindIndex(c => c.name == _next));
+            for (var s = first; s < collectionsToMigrate.Count; s++)
             {
+                var (name, dated, migrate) = collectionsToMigrate[s];
+                var following = s + 1 < collectionsToMigrate.Count ? collectionsToMigrate[s + 1].name : null;
+
                 // A later pass reads only what is dated, and nothing more of a collection that failed.
                 if (p > 0 && (!dated || Progress(name).IsComplete))
+                {
+                    _next = following;
                     continue;
+                }
+
+                _next = name;
+                if (await PauseAsync(ct))
+                    return;
 
                 try
                 {
                     await migrate(httpClient, pass, ct);
+                    if (_paused)
+                        return;
+
                     UpdateOverallProgress();
                     if (Progress(name).SkippedReason is null)
                         _answered.Add(name);
@@ -1144,12 +1541,17 @@ internal class MigrationJob
                         return;
                     }
                 }
+
+                _next = following;
+                _advanced = true;
             }
 
             // A collection that failed has no recent data to show, and the run's end is where
             // that is reported.
             if (!_collectionProgress.Values.Any(c => c.FailureReason is not null))
                 _recentDataReady = true;
+
+            (_pass, _next) = (p + 1, null);
         }
     }
 
@@ -1310,7 +1712,8 @@ internal class MigrationJob
         Func<HttpContent, CancellationToken, Task<T>> readBody, CancellationToken ct)
     {
         using var readToken = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        readToken.CancelAfter(httpClient.Timeout); // HttpClient.Timeout stops covering a headers-only send once the headers arrive
+        // Real time on purpose: it carries HttpClient.Timeout past the headers, and HttpClient measures that on the system clock.
+        readToken.CancelAfter(httpClient.Timeout);
         using var response = await SendToSourceAsync(httpClient, url, label, read, readToken.Token, ct);
         try
         {
@@ -1329,9 +1732,11 @@ internal class MigrationJob
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, sendToken);
+            response = await httpClient.GetAsync(
+                httpClient.BaseAddress is { } site ? NightscoutAddress.Of(site).For(url) : url,
+                HttpCompletionOption.ResponseHeadersRead, sendToken);
         }
-        catch (Nocturne.Core.Models.Net.OutboundRefusedException ex)
+        catch (Nocturne.Infrastructure.Outbound.OutboundRefusedException ex)
         {
             throw new MigrationSourceException(ex.Message, MigrationFailureCause.Unreachable, ex);
         }
@@ -1349,7 +1754,8 @@ internal class MigrationJob
             // ApiSecretRejected cause. That is how Nightscout's admin routes turn down a
             // non-admin secret, which the subjects step skips over rather than failing on.
             throw new MigrationSourceException(
-                NightscoutMessages.ForStatus(response.StatusCode, label, read),
+                NightscoutMessages.ForStatus(
+                    response.StatusCode, label, read, secretSent: httpClient.DefaultRequestHeaders.Contains("api-secret")),
                 response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                     ? MigrationFailureCause.ApiSecretRejected
                     : MigrationFailureCause.Status)
@@ -1385,14 +1791,14 @@ internal class MigrationJob
     /// unreachable host is not tolerated: those defeat every collection, so the run fails here
     /// with the right words.
     /// </remarks>
-    private async Task<long?> FetchCollectionCountAsync(
+    internal async Task<long?> FetchCollectionCountAsync(
         HttpClient httpClient, string collectionName, CancellationToken ct)
     {
         if (!s_countableCollections.TryGetValue(collectionName, out var cursor))
             return 0;
 
-        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(CountBudget);
+        using var deadline = new CancellationTokenSource(CountBudget, _timeProvider);
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
 
         try
         {
@@ -1681,23 +2087,35 @@ internal class MigrationJob
         return ([.. parsed], newlyFailed);
     }
 
-    /// <summary>What a paged collection has done so far, carried from one <see cref="ImportPass"/> to the next.</summary>
-    /// <remarks><c>knownTotal</c> is the source's count over the whole of <see cref="_window"/>, or 0 with none.</remarks>
-    private sealed class PagedPull(long knownTotal)
+    /// <summary>
+    /// What a paged collection has done so far, carried from one <see cref="ImportPass"/> to the next
+    /// and, in <see cref="Checkpoint"/>, from one slice to the next.
+    /// </summary>
+    /// <remarks><c>KnownTotal</c> is the source's count over the whole of <see cref="_window"/>, or 0 with none.</remarks>
+    internal sealed class PagedPull
     {
-        public long KnownTotal { get; } = knownTotal;
-        public long Migrated;
-        public long Failed;
-        public long OutsideWindow;
-        public DecompositionTally Tally;
-        public int PageNumber;
-        public HashSet<string> FailedIds { get; } = new(StringComparer.Ordinal);
+        public long KnownTotal { get; init; }
+        public long Migrated { get; set; }
+        public long Failed { get; set; }
+        public long OutsideWindow { get; set; }
+        public DecompositionTally Tally { get; set; }
+        public int PageNumber { get; set; }
+
+        /// <summary>
+        /// The upper bound of the page the pass in flight reads next, every record newer than it
+        /// stored; null between passes. A pass resumed from it is served the records at the bound's
+        /// own second again, which are stored once and counted twice.
+        /// </summary>
+        public DateTime? Bound { get; set; }
+
+        public HashSet<string> FailedIds { get; init; } = new(StringComparer.Ordinal);
 
         /// <summary>Ids of the records taken with no usable time. Every pass is served them, so they are taken once.</summary>
-        public HashSet<string> UndatedIds { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> UndatedIds { get; init; } = new(StringComparer.Ordinal);
 
-        public HashSet<string> OutsideIds { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> OutsideIds { get; init; } = new(StringComparer.Ordinal);
 
+        [System.Text.Json.Serialization.JsonIgnore]
         public long Seen => Migrated + Failed + Tally.DocumentsSkipped;
     }
 
@@ -1712,7 +2130,7 @@ internal class MigrationJob
     {
         BeginCollection(collection.Name, collection.Label);
         if (!_pulls.TryGetValue(collection.Name, out var pull))
-            _pulls[collection.Name] = pull = new PagedPull(Progress(collection.Name).TotalDocuments);
+            _pulls[collection.Name] = pull = new PagedPull { KnownTotal = Progress(collection.Name).TotalDocuments };
 
         using var scope = CreateTenantScope();
         var decompose = collection.Decompose(scope.ServiceProvider);
@@ -1723,12 +2141,16 @@ internal class MigrationJob
         var window = pass.Window;
         var pages = BackwardTimePager.PageAsync<T>(
             from: window.From - collection.Cursor.Envelope,
-            to: window.To + collection.Cursor.Envelope,
+            to: pull.Bound ?? window.To + collection.Cursor.Envelope,
             collection.PageSize,
             BackwardTimePager.WidestPageSize(collection.PageSize),
             async (bound, count) =>
             {
-                ct.ThrowIfCancellationRequested();
+                // A reply serving nothing ends the paging, which is how the slice stops here.
+                pull.Bound = bound;
+                if (await PauseAsync(ct))
+                    return new TimePage<T>([], 0);
+
                 pull.PageNumber++;
 
                 var url = $"api/v1/{collection.Name}.json?count={count}"
@@ -1780,8 +2202,13 @@ internal class MigrationJob
 
             UpdateCollectionProgress(collection.Name, Expected(), pull.Migrated, pull.Failed, false, pull.Tally);
             UpdateOverallProgress();
+            _advanced = true;
         }
 
+        if (_paused)
+            return;
+
+        pull.Bound = null;
         if (!pass.Last)
             return;
 
@@ -1966,7 +2393,8 @@ internal class MigrationJob
 
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
     {
-        _currentOperation = "Connecting to MongoDB";
+        if (!_counted)
+            _currentOperation = "Connecting to MongoDB";
 
         var client = new MongoClient(_request.MongoConnectionString);
         var database = client.GetDatabase(_request.MongoDatabaseName);
@@ -1986,26 +2414,28 @@ internal class MigrationJob
             .OrderBy(ImportRank)
             .ToList();
 
-        _currentOperation = "Counting records";
-        _phase = MigrationPhase.Counting;
-        _window = RequestedWindow(anchored: false);
-        foreach (var collectionName in collectionsToMigrate)
+        if (!_counted)
         {
-            _collectionProgress[collectionName] = new CollectionProgress
-            {
-                CollectionName = collectionName,
-                TotalDocuments = ImportableFromMongo(collectionName)
-                    ? await database.GetCollection<BsonDocument>(collectionName)
-                        .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct)
-                    : 0,
-            };
+            _currentOperation = "Counting records";
+            _phase = MigrationPhase.Counting;
+            _window = RequestedWindow(anchored: false);
+            foreach (var collectionName in collectionsToMigrate)
+                _collectionProgress[collectionName] = await CountedAsync(collectionName);
+            _documentWeighted = true;
+            _pullStartedAt = UtcNow;
+            _counted = true;
         }
-        _documentWeighted = true;
-        _pullStartedAt = UtcNow;
 
-        foreach (var collectionName in collectionsToMigrate)
+        // A collection is read whole, so a resumed run reads the one it was in again and leaves the
+        // finished ones alone.
+        foreach (var collectionName in collectionsToMigrate.Where(c => _collectionProgress.TryGetValue(c, out var done) && !done.IsComplete))
         {
-            ct.ThrowIfCancellationRequested();
+            if (await PauseAsync(ct))
+                return;
+
+            // Read again, it is tallied again, against a fresh count.
+            if (DocumentsSeen(Progress(collectionName)) > 0)
+                _collectionProgress[collectionName] = await CountedAsync(collectionName);
 
             BeginCollection(collectionName, collectionName);
 
@@ -2030,7 +2460,17 @@ internal class MigrationJob
             }
 
             UpdateOverallProgress();
+            _advanced = true;
         }
+
+        async Task<CollectionProgress> CountedAsync(string collectionName) => new()
+        {
+            CollectionName = collectionName,
+            TotalDocuments = ImportableFromMongo(collectionName)
+                ? await database.GetCollection<BsonDocument>(collectionName)
+                    .CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct)
+                : 0,
+        };
     }
 
     private static bool ImportableFromMongo(string collection) =>
@@ -2120,6 +2560,7 @@ internal class MigrationJob
                 Math.Max(totalDocs - outsideWindow, totalMigrated + totalFailed + tally.DocumentsSkipped),
                 totalMigrated, totalFailed, false, tally);
             UpdateOverallProgress();
+            await StoreProgressAsync(ct);
         }
 
         UpdateCollectionProgress(collection.Name,
@@ -2216,6 +2657,7 @@ internal class MigrationJob
                 IsComplete = false,
             };
             UpdateOverallProgress();
+            await StoreProgressAsync(ct);
         }
 
         _collectionProgress[collectionName] = Progress(collectionName) with
@@ -2317,7 +2759,7 @@ internal class MigrationJob
             StartDate = doc.GetValue("startDate", BsonNull.Value) switch
             {
                 { IsString: true } value => value.AsString,
-                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 _ => null,
             },
             Mills = mills,
@@ -2398,11 +2840,26 @@ internal class MigrationJob
         return Convert.ToHexStringLower(bytes);
     }
 
+    /// <summary>
+    /// The maker the run record holds for the tokens it adopts. It is read from the record, not from
+    /// <see cref="Starter"/>, so a resumed run stamps the end captured at start, lowered by any cap
+    /// since (<see cref="MemberCreations.CapAsync"/>); null for a run that recorded no starter.
+    /// </summary>
+    private async Task<CredentialMaker?> ReadStarterAsync(NocturneDbContext dbContext, CancellationToken ct)
+    {
+        var run = await dbContext.MigrationRuns.AsNoTracking()
+            .Where(r => r.Id == _id && r.TenantId == _tenantId)
+            .Select(r => new { r.StartedBySubjectId, r.StarterAccessEndsAt })
+            .FirstOrDefaultAsync(ct);
+        return run?.StartedBySubjectId is { } subjectId ? new CredentialMaker(subjectId, run.StarterAccessEndsAt) : null;
+    }
+
     private async Task MigrateSubjectsViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
         IOAuthGrantRepository grants,
         IRoleRepository roleCatalogue,
+        ITenantRepository tenants,
         CancellationToken ct)
     {
         var collectionName = "subjects";
@@ -2449,6 +2906,7 @@ internal class MigrationJob
         var existingHashes = (await grants.GetTokenHashesAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
         var nocturneRoles = (await roleCatalogue.ListAsync(ct)).ToDictionary(r => r.Name, r => r);
+        var addsMissingRoles = await Auth.InstanceStanding.IsOnlyTenantAsync(tenants, _tenantId, ct);
 
         // Nightscout derives each subject's token from digest = sha1(sha1(api_secret) + _id).
         // HashApiSecret yields exactly that inner sha1(api_secret), so with the mongo _id we
@@ -2458,6 +2916,7 @@ internal class MigrationJob
             : HashApiSecret(_request.NightscoutApiSecret);
 
         Guid? deviceSubjectId = null;
+        var starter = await ReadStarterAsync(dbContext, ct);
 
         foreach (var subject in subjects)
         {
@@ -2488,8 +2947,9 @@ internal class MigrationJob
                     continue;
                 }
 
-                var roles = await ResolveRolesAsync(roleCatalogue, nocturneRoles, rolePermissions, subject.Roles, ct);
-                var scopes = ScopeTranslator.FromPermissions(GrantedPermissions(roles, rolePermissions));
+                if (addsMissingRoles)
+                    await AddMissingRolesAsync(roleCatalogue, nocturneRoles, rolePermissions, subject.Roles, ct);
+                var scopes = ScopeTranslator.FromPermissions(GrantedPermissions(subject.Roles, nocturneRoles, rolePermissions));
 
                 // A subject whose permissions all fall outside Nocturne's vocabulary would get a
                 // credential that authorizes nothing. Skip it rather than leave a token on the list
@@ -2517,7 +2977,9 @@ internal class MigrationJob
                         subject.Name ?? "Unnamed",
                         [.. scopes],
                         TokenHash: tokenHash,
-                        LegacyTokenDigest: legacyDigest),
+                        LegacyTokenDigest: legacyDigest,
+                        CreatedBySubjectId: starter?.SubjectId,
+                        ExpiresAt: starter?.AccessEndsAt),
                     ct);
 
                 existingHashes.Add(tokenHash);
@@ -2542,40 +3004,34 @@ internal class MigrationJob
     }
 
     /// <summary>
-    /// Resolves a Nightscout subject's role names to Nocturne roles, creating any the instance does
-    /// not already have from the permissions fetched off the source. The <paramref name="knownRoles"/>
-    /// lookup is updated so each custom role is created once per run.
+    /// Adds each of a subject's role names the instance lacks to the global roles, with the source's
+    /// definition, so a later edit through the V2 subjects API can name it. The grant's scopes do not
+    /// depend on it (<see cref="GrantedPermissions"/>). Every tenant reads the global roles, so the
+    /// caller adds them only on the instance's only tenant
+    /// (<see cref="Auth.InstanceStanding.IsOnlyTenantAsync"/>): the job holds no record of whether whoever
+    /// started it had standing over the instance. <paramref name="knownRoles"/> is updated so each
+    /// role is added once per run.
     /// </summary>
     /// <remarks>
-    /// "denied" is dropped: it is Nightscout's way of spelling "no access", carried instead by
-    /// the subject's <c>is_active</c> flag, and a role row for it would grant nothing anyway.
+    /// "denied" is skipped: it is Nightscout's way of spelling "no access", carried instead by the
+    /// subject's <c>is_active</c> flag. <see cref="PlatformAdminCredentials.RoleName"/> is reserved.
     /// </remarks>
-    private static async Task<List<AuthRole>> ResolveRolesAsync(
+    private static async Task AddMissingRolesAsync(
         IRoleRepository roleCatalogue,
         Dictionary<string, AuthRole> knownRoles,
         Dictionary<string, List<string>> sourcePermissions,
         List<string>? roleNames,
         CancellationToken ct)
     {
-        var resolved = new List<AuthRole>();
-
         foreach (var roleName in roleNames ?? [])
         {
-            if (roleName == "denied")
+            if (roleName == "denied" || PlatformAdminCredentials.IsRoleName(roleName) || knownRoles.ContainsKey(roleName))
                 continue;
 
-            if (!knownRoles.TryGetValue(roleName, out var role))
-            {
-                role = await roleCatalogue.CreateAsync(
-                    new NewRole(roleName, "Migrated from Nightscout", sourcePermissions.GetValueOrDefault(roleName, []), IsSystemRole: false),
-                    ct);
-                knownRoles[roleName] = role;
-            }
-
-            resolved.Add(role);
+            knownRoles[roleName] = await roleCatalogue.CreateAsync(
+                new NewRole(roleName, "Migrated from Nightscout", sourcePermissions.GetValueOrDefault(roleName, []), IsSystemRole: false),
+                ct);
         }
-
-        return resolved;
     }
 
     /// <summary>
@@ -2583,13 +3039,14 @@ internal class MigrationJob
     /// definition wins over the same-named Nocturne role, which may be a wider seeded role that
     /// merely shares a name (a hand-written Nightscout role called <c>admin</c> need not mean
     /// <c>*</c>). The local definition is the fallback for a source whose roles endpoint was
-    /// inaccessible.
+    /// inaccessible. "denied" grants nothing.
     /// </summary>
     private static IEnumerable<string> GrantedPermissions(
-        List<AuthRole> roles, Dictionary<string, List<string>> sourcePermissions) =>
-        roles.SelectMany(role => sourcePermissions.TryGetValue(role.Name, out var fromSource)
-            ? fromSource
-            : role.Permissions);
+        List<string>? roleNames, Dictionary<string, AuthRole> knownRoles, Dictionary<string, List<string>> sourcePermissions) =>
+        (roleNames ?? []).Where(name => name != "denied").SelectMany(name =>
+            sourcePermissions.TryGetValue(name, out var fromSource) ? fromSource
+            : knownRoles.TryGetValue(name, out var local) ? local.Permissions
+            : []);
 
     /// <summary>
     /// Fetches Nightscout role definitions and returns a name-to-permissions lookup.
@@ -2598,7 +3055,7 @@ internal class MigrationJob
     private async Task<Dictionary<string, List<string>>> FetchNightscoutRolePermissionsAsync(
         HttpClient httpClient, CancellationToken ct)
     {
-        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         try
         {

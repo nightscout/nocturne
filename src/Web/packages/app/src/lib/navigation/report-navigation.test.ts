@@ -4,9 +4,13 @@ import {
   visibleReportCategories,
   getSidebarReportItems,
   reportDescription,
+  reportKeywordWords,
+  reportKeywords,
+  type ReportKeywordKey,
   reportSubRouteTitle,
   reportTitle,
   type ReportViewer,
+  withEnglishWords,
 } from "./report-navigation.svelte";
 
 /** Seed-role grants, as `MemberScopeMiddleware` resolves them. */
@@ -163,6 +167,66 @@ describe("a report made of several pages", () => {
 
   it("is found by searching for the report", () => {
     expect(loop().reports.find((r) => r.href.endsWith("/daily-profile"))?.keywords).toContain("loop analysis");
+  });
+});
+
+describe("report search keywords", () => {
+  const find = (translated: Parameters<typeof reportKeywords>[1], word: string) =>
+    Object.keys(reportKeywordWords()).filter((key) => reportKeywords(key as ReportKeywordKey, translated).includes(word));
+
+  it("finds a report by a translated word and still by the English one", () => {
+    const translated = { executiveSummary: ["Uebersicht", "Kurzbericht"], basalAnalysis: ["Basalrate"] };
+    expect(find(translated, "Uebersicht")).toEqual(["executiveSummary"]);
+    expect(find(translated, "Basalrate")).toEqual(["basalAnalysis"]);
+    expect(find(translated, "overview")).toEqual(["executiveSummary"]);
+    expect(find(translated, "background insulin")).toEqual(["basalAnalysis"]);
+  });
+
+  it("hands a report's translated and English words to search", () => {
+    const german = { executiveSummary: ["Uebersicht", "Kurzbericht"], basalAnalysis: ["Basalrate"] };
+    const keywordsOf = (href: string) =>
+      reportCategories(german).flatMap((c) => c.reports).find((r) => r.href === href)?.keywords;
+
+    expect(keywordsOf("/reports/executive-summary")).toEqual(expect.arrayContaining(["Uebersicht", "Kurzbericht", "overview"]));
+    expect(keywordsOf("/reports/basal-analysis")).toEqual(expect.arrayContaining(["Basalrate", "background insulin"]));
+    expect(keywordsOf("/reports/basal-analysis")).not.toContain("Uebersicht");
+  });
+
+  it("keeps an English word a translated list leaves out", () => {
+    expect(find({}, "blood sugar")).toEqual(["readings"]);
+    expect(reportKeywordWords().readings).not.toContain("blood sugar");
+  });
+
+  it("keeps an English word for every translated one", () => {
+    for (const [key, words] of Object.entries(reportKeywordWords())) {
+      expect(reportKeywords(key as ReportKeywordKey, {})).toEqual(expect.arrayContaining(words.map((word) => word.toLowerCase())));
+    }
+  });
+
+  it("lists a word once when the translation repeats the English", () => {
+    expect(reportKeywords("glucoseDistribution", { glucoseDistribution: ["spread", "Verteilung"] })).toEqual(["spread", "Verteilung"]);
+  });
+
+  it("gives every available report its keywords once", () => {
+    for (const report of reportCategories().flatMap((c) => c.reports)) {
+      if (report.status !== "available") continue;
+      expect(report.keywords?.length).toBeGreaterThan(0);
+      expect(new Set(report.keywords).size).toBe(report.keywords?.length);
+    }
+  });
+});
+
+describe("withEnglishWords", () => {
+  it("puts the locale's words first, then the English ones", () => {
+    expect(withEnglishWords(["Uebersicht"], ["overview", "summary"])).toEqual(["Uebersicht", "overview", "summary"]);
+  });
+
+  it("lists a word once when both lists hold it", () => {
+    expect(withEnglishWords(["spread", "Verteilung"], ["spread"])).toEqual(["spread", "Verteilung"]);
+  });
+
+  it("falls back to the English words when there is no translation", () => {
+    expect(withEnglishWords([], ["overview"])).toEqual(["overview"]);
   });
 });
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Attributes;
@@ -49,6 +50,12 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     [JsonIgnore]
     public Guid? RecordId { get; set; }
+
+    /// <summary>
+    /// For the carbs <see cref="PreBolusSplit"/> split off a meal, the meal's legacy id. Never on the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? PreBolusMealId { get; set; }
 
     /// <summary>
     /// V3 API identifier - alias for Id for Nightscout V3 compatibility.
@@ -221,7 +228,7 @@ public class Treatment : ProcessableDocumentBase
                 {
                     return DateTimeOffset
                         .FromUnixTimeMilliseconds(mills)
-                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                 }
             }
             return _created_at;
@@ -237,11 +244,7 @@ public class Treatment : ProcessableDocumentBase
     /// Calculates from Insulin / Rate if null, defaults to 0.
     /// Note: Nightscout V1 always includes this field (defaults to 0).
     /// </summary>
-    [JsonPropertyName("duration")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
-    // Serializes rounded to whole minutes (AAPS parses duration as a Long); the getter keeps the
-    // exact value so in-memory duration math (e.g. temp-basal cutting) is not corrupted.
-    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
+    [JsonIgnore]
     public double? Duration
     {
         get
@@ -262,6 +265,29 @@ public class Treatment : ProcessableDocumentBase
             return 0;
         }
         set => _duration = value;
+    }
+
+    /// <summary>True when a caller set <see cref="Duration"/> rather than it deriving from insulin and rate.</summary>
+    [JsonIgnore]
+    public bool HasSetDuration => _duration.HasValue;
+
+    /// <summary>
+    /// True when <see cref="Duration"/> is the value the uploader sent, which is then served exactly as
+    /// Nightscout serves it, fraction included, whoever reads it. Any other duration is computed here
+    /// and serves whole: AAPS parses <c>duration</c> as a Long and throws on a fraction, so Nocturne
+    /// adds none of its own.
+    /// </summary>
+    [JsonIgnore]
+    public bool DurationIsUploaded { get; set; }
+
+    /// <summary>The wire form of <see cref="Duration"/>; setting it sets <see cref="Duration"/>.</summary>
+    [JsonPropertyName("duration")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    [JsonConverter(typeof(FlexibleNullableDoubleConverter))]
+    public double? DurationOnWire
+    {
+        get => Duration is { } minutes && !DurationIsUploaded ? Math.Round(minutes) : Duration;
+        set => Duration = value;
     }
 
     /// <summary>
@@ -399,27 +425,6 @@ public class Treatment : ProcessableDocumentBase
         {
             if (value != Timestamp)
                 RawTimestamp = value is null ? null : JsonSerializer.SerializeToElement(value);
-        }
-    }
-
-    /// <summary>
-    /// Calculates Mills from Created_at if Mills is not set - for API compatibility
-    /// </summary>
-    [JsonIgnore]
-    public long CalculatedMills
-    {
-        get
-        {
-            if (Mills > 0)
-                return Mills;
-
-            if (
-                !string.IsNullOrEmpty(Created_at)
-                && UploaderTimestamp.TryParse(Created_at, out var createdAtDate)
-            )
-                return createdAtDate.ToUnixTimeMilliseconds();
-
-            return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
     }
 

@@ -4,7 +4,7 @@
     type AvailableConnector,
     type GoogleHealthStatus,
     type UploaderApp,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Item } from "#lib/components/ui/item/index.js";
@@ -17,12 +17,12 @@
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Copy from "@lucide/svelte/icons/copy";
-  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import TabletSmartphone from "@lucide/svelte/icons/tablet-smartphone";
   import { resolve } from "$app/paths";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import {
     getUploaderDescription,
     getUploaderName,
@@ -31,6 +31,7 @@
   let {
     open = $bindable(false),
     canAddCloudAccount,
+    signInRequiredForApps = false,
     uploaderApps,
     connectors,
     listFailed = false,
@@ -42,6 +43,11 @@
     open: boolean;
     /** Without it the dialog is the app branch alone, with no first question. */
     canAddCloudAccount: boolean;
+    /**
+     * The session started from a sign-in link, so the app branch, whose every action makes a token
+     * or approves a device, offers the person's own sign-in instead.
+     */
+    signInRequiredForApps?: boolean;
     /** Undefined while the list is loading. */
     uploaderApps: UploaderApp[] | undefined;
     /** Connectors with no configuration yet. Undefined while the list is loading. */
@@ -160,10 +166,16 @@
   {#if googleHealthUnavailable}
     <li>
       <Item variant="row">
-        <HeartPulse
-          class="mx-1.5 size-5 shrink-0 text-muted-foreground"
+        <span
+          class="flex size-8 shrink-0 items-center justify-center"
           aria-hidden="true"
-        />
+        >
+          <AppLogo
+            icon="google-health"
+            invertMode
+            class="size-8 object-contain"
+          />
+        </span>
         <span class="min-w-0 flex-1">
           <span class="block font-medium text-muted-foreground">
             Google Health
@@ -177,10 +189,16 @@
   {:else}
     <li>
       <Item variant="row" href={resolve("settings/connectors/google-health")}>
-        <HeartPulse
-          class="mx-1.5 size-5 shrink-0 text-muted-foreground"
+        <span
+          class="flex size-8 shrink-0 items-center justify-center"
           aria-hidden="true"
-        />
+        >
+          <AppLogo
+            icon="google-health"
+            invertMode
+            class="size-8 object-contain"
+          />
+        </span>
         <span class="min-w-0 flex-1">
           <span class="block font-medium">Google Health</span>
           <span class="block text-sm text-muted-foreground">
@@ -256,7 +274,15 @@
       {@render listControls("Search apps")}
 
       <div class="-mx-6 min-h-0 flex-1 space-y-4 overflow-y-auto px-6">
-        {#if listFailed}
+        {#if signInRequiredForApps}
+          <SignInGate
+            reason="Sign in again to connect an app or create an API token."
+            onrequest={() => {
+              open = false;
+              reset();
+            }}
+          />
+        {:else if listFailed}
           {@render loadFailure()}
         {:else if uploaderApps === undefined}
           {@render loadingRows()}
@@ -302,6 +328,7 @@
 
         <section class="space-y-2">
           <h3 class="text-sm font-semibold">Set up manually</h3>
+          {#if !signInRequiredForApps}
           <ul class="divide-y border-y">
             <li>
               <Item
@@ -340,6 +367,7 @@
               </Item>
             </li>
           </ul>
+          {/if}
 
           {#if baseUrl}
             <div class="space-y-2 pt-2">

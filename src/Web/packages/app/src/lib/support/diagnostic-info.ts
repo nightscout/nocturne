@@ -1,4 +1,4 @@
-import type { SupportDiagnosticsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { SupportDiagnosticsResponse } from "@nocturne/api-client";
 import type { ApiFailure } from "./api-failure-log";
 
 /** What the support form knows about the session, before the user chooses what to share. */

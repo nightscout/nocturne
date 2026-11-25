@@ -24,6 +24,10 @@ public class TenantEntity : ISystemTimestamped
     [MaxLength(64)]
     public string Slug { get; set; } = string.Empty;
 
+    /// <summary>When <see cref="Slug"/> was last changed, or null if it never was.</summary>
+    [Column("slug_changed_at")]
+    public DateTime? SlugChangedAt { get; set; }
+
     /// <summary>
     /// Human-readable display name
     /// </summary>
@@ -130,6 +134,13 @@ public class TenantEntity : ISystemTimestamped
     /// <summary>When the public share link was last accessed. Drives the owner's rotate signal.</summary>
     [Column("share_last_accessed_at")]
     public DateTime? ShareLastAccessedAt { get; set; }
+
+    /// <summary>
+    /// The subject the first-run setup owner step created for this tenant, while setup has not
+    /// completed as it (<c>ISubjectRepository.FindSetupOwnerCandidateAsync</c>).
+    /// </summary>
+    [Column("setup_owner_subject_id")]
+    public Guid? SetupOwnerSubjectId { get; set; }
 
     /// <summary>
     /// When the tenant record was created

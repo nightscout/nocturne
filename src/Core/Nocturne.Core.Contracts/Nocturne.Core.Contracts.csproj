@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <Import Project="..\CoreNetworkBan.props"/>
     <PropertyGroup>
         <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -6,8 +7,5 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
-    </ItemGroup>
-    <ItemGroup>
-        <PackageReference Include="HtmlSanitizer"/>
     </ItemGroup>
 </Project>

@@ -875,8 +875,8 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         // IOB, COB, and trend sparkline for Medium and Large
         if (size is "medium" or "large")
         {
-            data["iob"] = Math.Round(summary.Iob * 100) / 100;
-            data["cob"] = (int)summary.Cob;
+            data["iob"] = summary.IobKnown ? $"{summary.Iob:0.##} U" : "--";
+            data["cob"] = summary.CobKnown ? $"{(int)summary.Cob} g" : "--";
 
             var (chartW, chartH) = size == "large" ? (600, 200) : (600, 150);
             data["chart"] = GlucoseSparkline.RenderDataUri(summary, chartW, chartH) ?? "";

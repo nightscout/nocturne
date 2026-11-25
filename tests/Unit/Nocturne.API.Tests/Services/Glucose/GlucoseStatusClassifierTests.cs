@@ -44,6 +44,7 @@ public class GlucoseStatusClassifierTests
             Rule(AlertConditionType.Threshold, """{"direction":"above","value":220}""", AlertRuleSeverity.Warning),
             Rule(AlertConditionType.Threshold, "not json", AlertRuleSeverity.Critical),
             Rule(AlertConditionType.Threshold, """{"value":300}""", AlertRuleSeverity.Critical),
+            Rule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""", AlertRuleSeverity.Critical),
             Rule(AlertConditionType.RateOfChange, """{"direction":"below","rate":2}""", AlertRuleSeverity.Critical),
         ]);
 

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "name": "sensor-state-unknown-enum-name",
+  "description": "a sensor state the engine has no name for is read as a state that is not ok: threshold is unknown by sensor_state with reason unrecognised, and sensor_state and not() over it are unknown by the same, whatever states the leaf lists",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "sensor_state",
+      "condition_params": {
+        "states": [
+          "ok"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "sensor_state",
+          "sensor_state": {
+            "states": [
+              "ok"
+            ]
+          }
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "rebooting",
+          "since": "2026-01-05T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

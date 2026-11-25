@@ -119,18 +119,20 @@ public class AuthenticationMiddleware
             if (authContext is { IsAuthenticated: true, SubjectId: { } subjectId }
                 && HeldToMembership(authContext) is { } tenantId)
             {
-                var carriesPlatformAdmin = PlatformAdminCredentials.Carries(authContext.AuthType);
+                var carriesPlatformAdmin = PlatformAdminCredentials.Carries(authContext);
                 if (carriesPlatformAdmin || RequestMembership.Of(context, subjectId, tenantId) is null)
                 {
                     var (membership, isPlatformAdmin) = await RequestMembership.ReadAsync(
                         context.RequestServices.GetRequiredService<Nocturne.Core.Contracts.Multitenancy.ITenantMembershipRepository>(),
-                        subjectId, tenantId, context.RequestAborted);
+                        subjectId, tenantId,
+                        context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime,
+                        context.RequestAborted);
                     membership.StoreOn(context);
                     authContext.IsPlatformAdmin = carriesPlatformAdmin && isPlatformAdmin;
                 }
             }
             else if (authContext is { IsAuthenticated: true, SubjectId: not null }
-                && PlatformAdminCredentials.Carries(authContext.AuthType))
+                && PlatformAdminCredentials.Carries(authContext))
             {
                 using var scope = _scopeFactory.CreateScope();
                 authContext.IsPlatformAdmin = await scope.ServiceProvider
@@ -152,14 +154,14 @@ public class AuthenticationMiddleware
                     claims.Add(new(System.Security.Claims.ClaimTypes.Email, authContext.Email));
                 }
 
-                foreach (var role in authContext.Roles)
+                foreach (var role in authContext.Roles.Where(r => !PlatformAdminCredentials.IsRoleName(r)))
                 {
                     claims.Add(new(System.Security.Claims.ClaimTypes.Role, role));
                 }
 
                 if (authContext.IsPlatformAdmin)
                 {
-                    claims.Add(new(System.Security.Claims.ClaimTypes.Role, "platform_admin"));
+                    claims.Add(new(System.Security.Claims.ClaimTypes.Role, PlatformAdminCredentials.RoleName));
                 }
 
                 foreach (var permission in authContext.Permissions)
@@ -502,7 +504,6 @@ public class AuthenticationMiddleware
             AuthType.ApiKey => AuthenticationType.ApiSecret,
             AuthType.InstanceKey => AuthenticationType.ApiSecret,
             AuthType.LegacyJwt => AuthenticationType.JwtToken,
-            AuthType.OidcToken => AuthenticationType.JwtToken,
             AuthType.SessionCookie => AuthenticationType.JwtToken,
             _ => AuthenticationType.None,
         };

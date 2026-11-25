@@ -27,7 +27,7 @@ internal static class TestPublicAccessCache
 
         return new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()),
-            new TenantMembershipRepository(factory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             NullLogger<PublicAccessCacheService>.Instance);
     }
 }

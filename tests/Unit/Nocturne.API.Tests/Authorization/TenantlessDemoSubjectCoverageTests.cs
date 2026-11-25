@@ -69,6 +69,9 @@ public class TenantlessDemoSubjectCoverageTests
             // deletes any it picked up elsewhere — so both return the tenant already on screen.
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
+            ["MyTenantsController.GetReview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
+            ["MyTenantsController.GetPerson"] = "reads one of the caller's own memberships, which for the demo subject is the demo tenant",
+            ["OverviewAdmissionController.GetOverviewAdmission"] = "lists the ids of the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetMyTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
 
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",
@@ -124,6 +127,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["SupportController.AcceptRelayedIssue"] = "files the posted form as a GitHub issue on the operator's PAT, for another instance's server; reads no session and names no tenant, and is 404 unless the instance opted in to relaying",
             ["SupportController.GetSupportConfig"] = "returns the operator's own support and billing links from deployment configuration; reads no session and names no tenant",
             ["TlsAuthorizationController.Authorize"] = "answers the edge's on-demand-TLS ask for a hostname; it takes no credential and reads no session",
+            ["TotpController.GetTrustedDevicePolicy"] = "reads one instance setting, the trusted-device lifetime, and resolves no subject",
             ["TotpController.Login"] = "mints the session; the subject comes from the passkey step-up token, and it additionally requires membership of the resolved tenant, which a tenantless host has none of",
         };
 

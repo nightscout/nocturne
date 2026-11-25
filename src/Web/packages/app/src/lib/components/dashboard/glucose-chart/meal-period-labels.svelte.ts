@@ -1,4 +1,4 @@
-import { MealPeriod } from "#lib/api/index.js";
+import { MealPeriod } from "@nocturne/charts/core";
 
 /** Built per call so wuchale reads them in the current locale. */
 export function mealPeriodLabel(period: MealPeriod | null | undefined): string | undefined {

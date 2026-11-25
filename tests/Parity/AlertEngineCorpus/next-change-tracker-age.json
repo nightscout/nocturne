@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "name": "next-change-tracker-age",
+  "description": "tracker_age before a scheduled event: the negative elapsed time truncates toward zero, so the change falls within the tick before the bound and is reported at its start",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0000-0000000000bb",
+        "operator": ">=",
+        "minutes": -30
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "context": {
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0000-0000000000bb",
+            "reference_at": "2026-03-02T13:00:00Z",
+            "scheduled": true
+          }
+        ],
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

@@ -89,7 +89,7 @@ public class AlertDeliveryWebhookSigningTests
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
-        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant))
+        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant), TimeProvider.System)
             .GetChannelsAsync([ruleId], CancellationToken.None))[ruleId];
 
         var provider = new WebhookProvider(
@@ -99,7 +99,7 @@ public class AlertDeliveryWebhookSigningTests
 
         var service = new AlertDeliveryService(
             factory.AsNocturneFactory(),
-            new TenantMembershipRepository(factory.AsNocturneFactory()),
+            new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),

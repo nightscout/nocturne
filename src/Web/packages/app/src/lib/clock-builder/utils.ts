@@ -11,7 +11,7 @@ import {
   elementInfo,
   type InternalElement,
 } from "./types";
-import { getGlucoseColor, type GlucoseThresholds } from "#lib/utils/chart-colors.js";
+import { getGlucoseColor, type GlucoseThresholds } from "@nocturne/charts/core";
 
 export const DEFAULT_ELEMENT_COLOR = "#ffffff";
 

@@ -5,12 +5,12 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests;
@@ -57,33 +57,32 @@ public class MyFitnessPalSyncRequestTests
     }
 
     /// <summary>
-    /// The rule lives in <c>FullWalkSchedule</c>; this pins the binding: the stamp read is
-    /// <c>LastFullWalkAt</c> and the interval is <c>FullWalkInterval</c>.
+    /// The rule lives in <c>FullWalkSchedule</c>; this pins the binding: the stamp read is the
+    /// resume state's <c>FullWalkStamp</c> and the interval is <c>FullWalkInterval</c>.
     /// </summary>
     [Fact]
-    public void IsFullWalkDue_ReadsLastFullWalkAtAgainstTheFullWalkInterval()
+    public async Task IsFullWalkDue_ReadsTheFullWalkStampAgainstTheFullWalkInterval()
     {
         var now = new DateTimeOffset(2026, 7, 20, 10, 0, 0, TimeSpan.Zero);
-        var service = ServiceAt(now);
-
-        service.IsFullWalkDue(new MyFitnessPalConnectorConfiguration())
-            .Should().BeTrue();
-
-        var oneMinuteShort = now - MyFitnessPalConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
-        service.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
+        Task<bool> DueWith(DateTimeOffset? stamp)
         {
-            LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteShort),
-        }).Should().BeFalse();
+            var state = new InMemoryConnectorStateStore();
+            if (stamp is { } at)
+                state.Resume[MyFitnessPalConstants.FullWalkStamp] = at.UtcDateTime;
+            return ServiceAt(now, state).IsFullWalkDueAsync(CancellationToken.None);
+        }
 
-        var oneMinuteOver = now - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1);
-        service.IsFullWalkDue(new MyFitnessPalConnectorConfiguration
-        {
-            LastFullWalkAt = FullWalkSchedule.Stamp(oneMinuteOver),
-        }).Should().BeTrue();
+        (await DueWith(null)).Should().BeTrue();
+        (await DueWith(now - MyFitnessPalConstants.FullWalkInterval + TimeSpan.FromMinutes(1))).Should().BeFalse();
+        (await DueWith(now - MyFitnessPalConstants.FullWalkInterval - TimeSpan.FromMinutes(1))).Should().BeTrue();
     }
 
-    private static MyFitnessPalConnectorService ServiceAt(DateTimeOffset now)
+    private static MyFitnessPalConnectorService ServiceAt(DateTimeOffset now, IConnectorStateStore state)
     {
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        publisher.SetupGet(p => p.State).Returns(state);
+
         var resolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null);
         var http = new HttpClient();
         var tenant = new Mock<ITenantAccessor>();
@@ -102,7 +101,8 @@ public class MyFitnessPalSyncRequestTests
             Mock.Of<IRetryDelayStrategy>(),
             tokenProvider,
             Mock.Of<IConnectorConfigurationService>(),
-            timeProvider: new FakeTimeProvider(now));
+            publisher.Object,
+            new FakeTimeProvider(now));
     }
 
     [Fact]

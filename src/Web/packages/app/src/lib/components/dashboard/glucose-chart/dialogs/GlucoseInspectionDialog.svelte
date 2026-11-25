@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { BasalDeliveryOrigin } from "#lib/api/index.js";
+  import { BasalDeliveryOrigin } from "@nocturne/charts/core";
   import { bg, bgDelta, bgLabel, formatLocale, time } from "#lib/utils/formatting.js";
   import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { useApsPrediction } from "./aps-prediction.svelte";

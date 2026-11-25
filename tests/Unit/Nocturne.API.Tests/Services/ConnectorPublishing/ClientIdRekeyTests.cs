@@ -1,30 +1,22 @@
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Tests.Services.Treatments;
-using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -50,6 +42,7 @@ public class ClientIdRekeyTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TreatmentPublisher _publisher;
     private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly RecordingRecordChangeSubscriber _published = new();
 
     public ClientIdRekeyTests()
     {
@@ -95,6 +88,11 @@ public class ClientIdRekeyTests : IDisposable
         await _publisher.PublishTreatmentsAsync([Equivalent(ObjectIdC, 12, MealAt.AddHours(3))], Source, WriteOrigin.Live);
 
         _legacyReads.Models.Should().Contain([typeof(Nocturne.Core.Models.V4.CarbIntake), typeof(StateSpan)]);
+        _published.Batches.Should().Contain(batch =>
+            batch.Changes.Any(c => c.RecordType == typeof(Nocturne.Core.Models.V4.DeviceEvent))
+            && batch.Changes.Any(c => c.RecordType == typeof(StateSpan))
+            && batch.Changes.All(c => !c.HasRecords),
+            "the re-key announces every table it may move rows in, by type");
     }
 
     [Fact]
@@ -232,12 +230,12 @@ public class ClientIdRekeyTests : IDisposable
         var deviceEvents = new DeviceEventRepository(ctxFactory, dedup, audit, NullLogger<DeviceEventRepository>.Instance);
         var calculations = new BolusCalculationRepository(ctxFactory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance);
 
-        var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()), bolus, EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(), carbs, bgChecks, notes, deviceEvents, calculations,
-            Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(), new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance,
-            legacyReads: _legacyReads);
+        var decomposer = TreatmentDecomposerDoubles.Build(
+            _context.AsFactory(),
+            bolus: bolus, tempBasal: EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(),
+            carbIntake: carbs, bgCheck: bgChecks, note: notes, deviceEvent: deviceEvents, bolusCalculation: calculations,
+            audit: audit,
+            changes: _legacyReads.AsRecordChanges(_published));
         var service = WritingTreatmentService.Over(
             decomposer, Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations);
 

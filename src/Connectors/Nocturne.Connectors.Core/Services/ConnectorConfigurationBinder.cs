@@ -125,7 +125,7 @@ public static class ConnectorConfigurationBinder
         return false;
     }
 
-    private static string GetBoundKeyName(PropertyInfo property)
+    internal static string GetBoundKeyName(PropertyInfo property)
     {
         var keyName = property.GetCustomAttribute<ConnectorPropertyAttribute>()?.GetKeyName()
             ?? property.Name;

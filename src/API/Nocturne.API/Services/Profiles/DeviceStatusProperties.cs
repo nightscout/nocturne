@@ -112,8 +112,8 @@ internal static class DeviceStatusProperties
             ["lastPredicted"] = lastPredicted?.DeepClone(),
             ["lastOkMoment"] = lastOkMoment is { } ok ? Iso(ok) : null,
         };
-        // The projection never serves an ended (active: false) override, so an override seen only on an older
-        // status may have ended since; serve it only while the newest Loop status still carries it.
+        // A status stored before its override object was kept serves only an active override, so an override
+        // seen only on an older status may have ended since; serve it only while the newest Loop status still carries it.
         if (lastOverride is not null && ReferenceEquals(lastOverride, newestLoopOverride))
             result["lastOverride"] = lastOverride.DeepClone();
         result["display"] = LoopDisplay(lastLoop, lastLoopMoment, recent);

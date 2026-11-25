@@ -1,0 +1,170 @@
+---
+title: Custom reports
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Custom reports
+
+A custom report shows the data that you choose, in the way that you choose. You
+make it from a question, such as "Is there a dawn rise?", and then you change it.
+Nocturne keeps the report, so you and the other members of your account can open
+it again.
+
+To open your custom reports, select **Reports** in the app navigation, then
+**Custom reports**. To make a report, select **New**.
+
+## Start a report
+
+The new report page starts with a list of questions under four headings:
+**Glucose**, **Lows and highs**, **Meals and insulin** and **Body and devices**.
+Each question has a line that tells you what its chart shows. Select
+**More questions** under a heading to see all its questions.
+
+- Select a question to start from it. The report opens with a chart that
+  answers the question. You can change everything in it.
+- Select **Blank report** to start with one empty chart.
+- Under **Ready-made reports**, select a report to open it in the form. See
+  [The form](#the-form).
+
+## Build a chart
+
+A chart has four parts: the signals, the lens, the groups and the options.
+Above the chart, one sentence (the caption) says what the chart shows. Select a
+part of the caption to go to its setting.
+
+### Signals
+
+A signal is one kind of data, such as glucose, insulin on board, carbs or heart
+rate. The list at the side of the chart shows the signals in families:
+**Glucose**, **Insulin**, **Food**, **Devices**, **Settings**, **Body** and
+**Context**.
+
+- Select a signal to put it on the chart. Select it again to remove it.
+- **In other views** lists the signals that another lens can show. Select one to
+  change to that lens and put the signal on the chart.
+- **Not in your access** lists the signals that your access does not include.
+  Each one shows the data that it needs.
+
+Each signal on the chart has a chip above the chart. Select a chip to change how
+the signal is drawn, for example as a line, an area or bars. You can also smooth
+the signal, add a trend line, or give the signal a lane of its own.
+
+### Lenses
+
+The lens sets how time is shown:
+
+| Lens | What it shows |
+|------|---------------|
+| **Timeline** | Each value at the time it occurred. |
+| **Typical day** | All the days put on top of one day, as the median and the middle half. |
+| **Around an event** | The hours before and after each event, put on top of each other. |
+| **Day by day** | One value for each day. |
+| **One against another** | Two signals as points, each 15 minutes, one along each axis. |
+
+A lens that cannot show the chart now is not available. The reason shows under
+the lens buttons.
+
+### Groups of events
+
+With the lens **Around an event**, you compare groups of events. Each group has a
+letter: A, B, C and so on.
+
+- Select the kind of event: for example, meals, correction boluses, lows,
+  highs, exercise, sleep starts, sensor starts or site changes.
+- Select **Narrow** to keep only some events of the group. You can narrow by
+  time of day, weekday, meal size, food, or the time since the last carbs. You
+  can also narrow by the glucose or the insulin on board at the event.
+- Select **Compare with another group** to add a group.
+- Select **Compare with everything else** to add a group of all the other events
+  of the same kind.
+
+A chart shows up to three groups on top of each other. From four groups, the
+chart shows a small chart for each group, with the same scale on each.
+
+**Options** sets the time before and after each event. You can also keep only
+events with nothing else near them, or compare the groups with an earlier
+period.
+
+### Show the events
+
+With the lens **Around an event**, **Show** sets how the events are shown:
+
+| Show | What it shows |
+|------|---------------|
+| **Over time** | The signals from before to after the events. |
+| **Each event** | Each event as one point: one figure (for example, the peak rise) against another (for example, the glucose at the event). A line can go through the points. |
+| **Spread** | How many events had each value of one figure. |
+| **When** | How many events started at each hour of the day, or on each weekday. |
+
+An earlier period shows only with **Over time**. If you change to another way,
+the earlier period is removed, and a line under **Show** tells you so.
+
+### Groups of days
+
+With the lenses **Typical day** and **Day by day**, you can compare groups of
+days:
+
+- **Weekday**: for example, Monday to Friday against Saturday and Sunday.
+- **What happened**: the days with a low, with exercise, with illness, or with a
+  total of carbs that you set, against all the other days.
+
+Each group of what happened shows how many days it has. A day that is only partly
+in the range is in neither group.
+
+## Add blocks
+
+A report can have more than one block. Under the last block, select:
+
+- **Add a chart** for one more chart.
+- **Add figures** for key figures, such as time in range.
+- **Add a table** for one row for each treatment, day, event or reading.
+- **Add a comparison** for two periods side by side.
+
+Each block can have its own range. When a report is at a limit, the add buttons
+are not available, and a line tells you the limit.
+
+## Save and open a report
+
+Select **Save**, type a name, and select **Save the report**. Sometimes you
+cannot save the report, for example when a chart has no signals. Then **Save**
+is not available, and the reason shows next to it.
+
+To change a saved report, open it and select **Edit**.
+
+- A report that you made with a question opens in the same builder, with its
+  signals, lens and groups.
+- A report that was not made in this builder, or that was changed outside it,
+  opens in the form. A line at the top tells you so.
+
+## The form
+
+The form shows each setting of a report: its panels, tracks and layers, and the
+data each one reads.
+
+To move a report from the builder to the form, open **All settings** at the
+bottom of the report and select **Change in the form**. After you save a report
+from the form, it opens only in the form.
+
+## Good to know
+
+- **Other members' reports.** You can change or delete only the reports that you
+  made, unless you can change all reports. To keep your own version of another
+  member's report, select **Save as**.
+- **The last 24 hours only.** If your access is limited to the last 24 hours,
+  you cannot make, change or copy reports.
+- **Only the data you can read.** A report shows only the data that your access
+  includes. A part that needs other data says which data it needs.
+
+<Callout type="warning" title="A pattern, not a reason">
+
+  A custom report shows what happened. It does not show why, and it does not
+  tell you what to change. A group with few events can show a pattern that is
+  not there: each group shows how many events or days it has. Meals, activity,
+  sleep, illness and sensor problems can all change the figures. A custom report
+  is not medical advice. Discuss a pattern with your diabetes care team before
+  you change your treatment.
+
+</Callout>

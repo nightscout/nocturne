@@ -3,7 +3,7 @@
  */
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { ManualTestRequestSchema } from '#lib/api/generated/schemas.js';
+import { ManualTestRequestSchema } from '@nocturne/api-client/schemas';
 import { errorStatus } from '#lib/forms/submit-error.js';
 
 /**

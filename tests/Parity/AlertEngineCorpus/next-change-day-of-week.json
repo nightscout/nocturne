@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "name": "next-change-day-of-week",
+  "description": "day_of_week changes at the next local midnight in the tenant zone",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "day_of_week",
+      "condition_params": {
+        "days": [
+          "monday"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "context": {
+        "tenant_time_zone_id": "America/New_York",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

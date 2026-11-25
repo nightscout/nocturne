@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -46,7 +47,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
 
         using var deleteScope = scope.ServiceProvider.CreateScope();
         var delete = deleteScope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>()
-            .DeleteBySourceAsync("dexcom-connector", WriteOrigin.Live);
+            .DeleteAsync(RecordSelector.ForSource("dexcom-connector"), WriteOrigin.Live);
         await PostgresLockWaits.UntilBlockedAsync(fixture.AppConnectionString, delete);
 
         using var liveScope = scope.ServiceProvider.CreateScope();
@@ -56,7 +57,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         cursor = HistoryCursor(duringDelete, cursor);
 
         await held.CommitAsync();
-        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(3);
+        (await delete.WaitAsync(Eventually.DefaultPatience)).Should().Be(3);
 
         var afterDelete = await history.GetModifiedSinceAsync(cursor, 100);
         var delivered = duringDelete.Concat(afterDelete).ToList();
@@ -79,6 +80,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
             await command.ExecuteScalarAsync();
 
         var written = await CreateAsync(scope, T0, "xdrip");
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
 
         (await history.GetModifiedSinceAsync(0, 100)).Select(h => h.Record.Id).Should().Contain(written.Id);
     }
@@ -108,7 +110,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         cursor = HistoryCursor(duringDelete, cursor);
 
         await held.DisposeAsync();
-        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(3);
+        (await delete.WaitAsync(Eventually.DefaultPatience)).Should().Be(3);
 
         var delivered = duringDelete.Concat(await history.GetModifiedSinceAsync(cursor, 100)).ToList();
         delivered.Where(h => h.Deleted).Select(h => h.Record.Id).Should().BeEquivalentTo(doomed);
@@ -137,7 +139,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         finally
         {
             await held.DisposeAsync();
-            await delete.WaitAsync(TimeSpan.FromSeconds(30));
+            await delete.WaitAsync(Eventually.DefaultPatience);
         }
 
         own.Should().BeOnOrBefore(deleteStart);
@@ -200,7 +202,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         DateTime started, own, others;
         try
         {
-            started = await written.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            started = await written.Task.WaitAsync(Eventually.DefaultPatience);
             await PauseDatabaseClockAsync();
             own = await HorizonForAsync(scope, tenant);
             others = await HorizonForAsync(scope, other);
@@ -208,7 +210,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         finally
         {
             release.TrySetResult();
-            await importing.WaitAsync(TimeSpan.FromSeconds(30));
+            await importing.WaitAsync(Eventually.DefaultPatience);
         }
 
         own.Should().BeOnOrBefore(started);
@@ -268,13 +270,11 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         var written = await CreateAsync(scope, T0, "xdrip");
 
         var first = await ProductionHistoryAsync(options, tenant);
-        var deadline = DateTime.UtcNow.AddSeconds(30);
         var delivered = first;
-        while (!delivered.Contains(written.Id) && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(100);
-            delivered = await ProductionHistoryAsync(options, tenant);
-        }
+        await Eventually.UntilAsync(
+            "the write to reach history",
+            async () => (delivered = await ProductionHistoryAsync(options, tenant)).Contains(written.Id),
+            step: TimeSpan.FromMilliseconds(100));
 
         first.Should().NotContain(written.Id, "the read came within the margin of the write");
         delivered.Should().Contain(written.Id);

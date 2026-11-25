@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Polly;
 
 namespace Nocturne.Connectors.Core.Extensions;
@@ -129,7 +129,8 @@ public static class HttpClientExtensions
         ///     This configuration:
         ///     - 2 minute timeout per individual HTTP request (AttemptTimeout)
         ///     - 10 minute total timeout for all retries (TotalRequestTimeout)
-        ///     - Retries up to 3 times with exponential backoff for transient failures
+        ///     - Retries a <see cref="RepeatableRequest"/> up to 3 times, or fewer when it carries a smaller attempt
+        ///     budget, with exponential backoff for transient failures
         ///     - Circuit breaker to fail fast when the remote service is consistently failing
         /// </remarks>
         private IHttpClientBuilder ConfigureConnectorResilience(TimeSpan? attemptTimeout = null,
@@ -139,6 +140,7 @@ public static class HttpClientExtensions
             var perAttemptTimeout = attemptTimeout ?? TimeSpan.FromMinutes(2);
             var totalRequestTimeout = totalTimeout ?? TimeSpan.FromMinutes(10);
 
+            builder.AddHttpMessageHandler(() => new RepeatableRequest.PassageRecorder());
             builder.AddResilienceHandler(
                 "ConnectorResilience",
                 resilienceBuilder =>
@@ -154,10 +156,7 @@ public static class HttpClientExtensions
                             Delay = TimeSpan.FromSeconds(2),
                             BackoffType = DelayBackoffType.Exponential,
                             UseJitter = true,
-                            ShouldHandle = args =>
-                                ValueTask.FromResult(
-                                    HttpClientResiliencePredicates.IsTransient(args.Outcome)
-                                )
+                            ShouldHandle = RepeatableRequest.ShouldRetry
                         }
                     );
 

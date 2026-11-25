@@ -125,7 +125,7 @@ public class OAuthTokenService : IOAuthTokenService
             // hashes exist. On a genuine replay the tokens already issued from the code are revoked
             // (RFC 6749 Section 4.1.2, OAuth 2.0 Security BCP Section 4.1.2).
             await RevokeGrantOnCodeReplayAsync(codeHash, ct);
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
+            return InvalidAuthorizationCodeFailure();
         }
 
         var authCode = await _tokens.FindAuthorizationCodeAsync(codeHash, ct);
@@ -134,7 +134,7 @@ public class OAuthTokenService : IOAuthTokenService
         {
             // The row was claimed a moment ago, so this only happens if it was deleted meanwhile.
             _logger.LogWarning("Authorization code exchange failed: claimed code no longer readable");
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
+            return InvalidAuthorizationCodeFailure();
         }
 
         // Verify client_id matches
@@ -158,7 +158,18 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("invalid_grant", "PKCE code_verifier validation failed.");
         }
 
-        // Create or update grant
+        var subject = await _subjectService.GetSubjectByIdAsync(authCode.SubjectId);
+        if (subject == null)
+        {
+            return SubjectNotFoundFailure();
+        }
+
+        if (!subject.IsActive)
+        {
+            _logger.LogWarning("Authorization code exchange failed: subject is not active");
+            return InvalidAuthorizationCodeFailure();
+        }
+
         var grant = await _grantService.CreateOrUpdateGrantAsync(
             authCode.ClientEntityId,
             authCode.SubjectId,
@@ -167,8 +178,13 @@ public class OAuthTokenService : IOAuthTokenService
             ct: ct
         );
 
-        // Mint tokens
-        return await MintTokenPairAsync(grant, ct);
+        if (grant is null)
+        {
+            _logger.LogWarning("Authorization code exchange failed: subject holds no membership of the tenant");
+            return InvalidAuthorizationCodeFailure();
+        }
+
+        return await MintTokenPairAsync(grant, subject, ct);
     }
 
     /// <summary>
@@ -227,15 +243,29 @@ public class OAuthTokenService : IOAuthTokenService
         }
 
         // Verify grant is still active
-        if (oauthToken.Grant == null || oauthToken.Grant.IsRevoked)
+        if (oauthToken.Grant == null || oauthToken.Grant.IsRevoked || oauthToken.Grant.ExpiresAt <= UtcNow)
         {
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization grant has been revoked.");
+            return RevokedGrantFailure();
         }
 
         // Verify client_id if provided
         if (!string.IsNullOrEmpty(clientId) && oauthToken.Grant.ClientId != clientId)
         {
             return OAuthTokenResult.Fail("invalid_grant", "Client ID does not match.");
+        }
+
+        var grant = oauthToken.Grant;
+        var subject = await _subjectService.GetSubjectByIdAsync(grant.SubjectId);
+        if (subject == null)
+        {
+            return SubjectNotFoundFailure();
+        }
+
+        // Refused before the grace claim and the rotation, so the token stays as it was and
+        // refreshes again once the subject is active.
+        if (!subject.IsActive)
+        {
+            return RevokedGrantFailure();
         }
 
         if (oauthToken.IsRevoked && !await TryRedeemWithinGraceAsync(oauthToken, ct))
@@ -274,14 +304,20 @@ public class OAuthTokenService : IOAuthTokenService
         // Update grant last used
         await _grantService.UpdateLastUsedAsync(oauthToken.GrantId, null, null, ct);
 
-        // Mint access token
-        var grant = oauthToken.Grant;
-        var subject = await _subjectService.GetSubjectByIdAsync(grant.SubjectId);
-        if (subject == null)
-        {
-            return OAuthTokenResult.Fail("server_error", "Subject not found.");
-        }
+        var lifetime = GrantTokenLifetime.Of(_jwtService.GetAccessTokenLifetime(), grant.ExpiresAt, _timeProvider.GetUtcNow());
+        var accessToken = await GenerateAccessTokenAsync(
+            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject, lifetime);
 
+        var expiresIn = (int)lifetime.TotalSeconds;
+        var scopeStr = string.Join(" ", grant.Scopes);
+
+        return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
+    }
+
+    private async Task<string> GenerateAccessTokenAsync(
+        Guid grantId, Guid tenantId, IReadOnlyList<string> scopes, string? clientId, bool limitTo24Hours, Subject subject,
+        TimeSpan lifetime)
+    {
         var subjectInfo = new SubjectInfo
         {
             Id = subject.Id,
@@ -290,27 +326,47 @@ public class OAuthTokenService : IOAuthTokenService
         };
 
         var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-        var permissions = ScopeTranslator.ToPermissions(grant.Scopes).ToList();
+        var permissions = ScopeTranslator.ToPermissions(scopes).ToList();
 
-        var accessToken = _jwtService.GenerateAccessToken(
+        return _jwtService.GenerateAccessToken(
             subjectInfo,
             permissions,
             roles,
-            grant.Scopes,
-            grant.ClientId,
-            limitTo24Hours: grant.LimitTo24Hours,
-            tenantId: grant.TenantId,
-            grantId: grant.Id
+            scopes,
+            clientId,
+            limitTo24Hours: limitTo24Hours,
+            tenantId: tenantId,
+            lifetime: lifetime,
+            grantId: grantId
         );
-
-        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
-        var scopeStr = string.Join(" ", grant.Scopes);
-
-        return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
     }
 
     private static OAuthTokenResult RevokedTokenFailure() =>
         OAuthTokenResult.Fail("invalid_grant", "Refresh token has been revoked.");
+
+    /// <summary>
+    /// The answer to a refresh whose grant is revoked, and to one whose subject is not active, so
+    /// the response does not say that the account exists.
+    /// </summary>
+    private static OAuthTokenResult RevokedGrantFailure() =>
+        OAuthTokenResult.Fail("invalid_grant", "Authorization grant has been revoked.");
+
+    /// <summary>
+    /// The answer to an unknown, expired or spent authorization code, and to one whose subject is
+    /// not active, for the reason <see cref="RevokedGrantFailure"/> gives.
+    /// </summary>
+    private static OAuthTokenResult InvalidAuthorizationCodeFailure() =>
+        OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
+
+    /// <summary>
+    /// The answer to an unknown or spent device code, and to one whose subject is not active, for
+    /// the reason <see cref="RevokedGrantFailure"/> gives.
+    /// </summary>
+    private static OAuthTokenResult InvalidDeviceCodeFailure() =>
+        OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
+
+    private static OAuthTokenResult SubjectNotFoundFailure() =>
+        OAuthTokenResult.Fail("server_error", "Subject not found.");
 
     /// <summary>
     /// Whether <paramref name="token"/> was rotated, not revoked, within <see cref="RefreshReuseGrace"/>.
@@ -462,7 +518,7 @@ public class OAuthTokenService : IOAuthTokenService
         if (entity == null)
         {
             _logger.LogWarning("Device code exchange failed: code not found");
-            return OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
+            return InvalidDeviceCodeFailure();
         }
 
         if (entity.ClientId != clientId)
@@ -480,7 +536,7 @@ public class OAuthTokenService : IOAuthTokenService
         if (entity.RedeemedAt != null)
         {
             await RevokeGrantOnDeviceCodeReplayAsync(entity.GrantId, ct);
-            return OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
+            return InvalidDeviceCodeFailure();
         }
 
         if (entity.IsDenied)
@@ -511,12 +567,6 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("authorization_pending", "The authorization request is still pending.");
         }
 
-        if (!await _tokens.TryRedeemDeviceCodeAsync(entity.Id, UtcNow, ct))
-        {
-            await RevokeGrantOnDeviceCodeReplayAsync(entity.GrantId, ct);
-            return OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
-        }
-
         var grantInfo = await LoadGrantAsync(entity.GrantId.Value, ct);
 
         if (grantInfo == null)
@@ -525,10 +575,29 @@ public class OAuthTokenService : IOAuthTokenService
                 "Device code exchange failed: grant {GrantId} not found or revoked",
                 entity.GrantId
             );
-            return OAuthTokenResult.Fail("server_error", "Grant not found.");
+            return await RefuseApprovedDeviceCodeAsync(
+                entity.Id, OAuthTokenResult.Fail("server_error", "Grant not found."), ct);
         }
 
-        var result = await MintTokenPairAsync(grantInfo, ct);
+        var subject = await _subjectService.GetSubjectByIdAsync(grantInfo.SubjectId);
+        if (subject == null)
+        {
+            return await RefuseApprovedDeviceCodeAsync(entity.Id, SubjectNotFoundFailure(), ct);
+        }
+
+        if (!subject.IsActive)
+        {
+            _logger.LogWarning("Device code exchange failed: subject is not active");
+            return await RefuseApprovedDeviceCodeAsync(entity.Id, InvalidDeviceCodeFailure(), ct);
+        }
+
+        if (!await _tokens.TryRedeemDeviceCodeAsync(entity.Id, UtcNow, ct))
+        {
+            await RevokeGrantOnDeviceCodeReplayAsync(entity.GrantId, ct);
+            return InvalidDeviceCodeFailure();
+        }
+
+        var result = await MintTokenPairAsync(grantInfo, subject, ct);
 
         await _grantService.UpdateLastUsedAsync(entity.GrantId.Value, null, null, ct);
 
@@ -541,13 +610,26 @@ public class OAuthTokenService : IOAuthTokenService
     }
 
     /// <summary>
+    /// Ends an approved device code that cannot be exchanged, so every later poll with it is
+    /// answered as one with an unknown code. Deleted rather than redeemed: a redeemed code presented
+    /// again revokes its grant as a replay, and the approval may have reused a grant the subject
+    /// already holds for the client.
+    /// </summary>
+    private async Task<OAuthTokenResult> RefuseApprovedDeviceCodeAsync(
+        Guid deviceCodeId, OAuthTokenResult failure, CancellationToken ct)
+    {
+        await _tokens.DeleteDeviceCodeAsync(deviceCodeId, ct);
+        return failure;
+    }
+
+    /// <summary>
     /// The grant a device code was approved into, with its client; null when it is gone or
     /// revoked.
     /// </summary>
     private async Task<OAuthGrantInfo?> LoadGrantAsync(Guid grantId, CancellationToken ct)
     {
         var grant = await _grants.GetAsync(grantId, ct);
-        return grant is null || grant.IsRevoked ? null : OAuthGrantService.ToInfo(grant);
+        return grant is null || grant.IsRevoked ? null : OAuthGrantMapper.ToInfo(grant);
     }
 
     /// <summary>
@@ -564,36 +646,15 @@ public class OAuthTokenService : IOAuthTokenService
     }
 
     /// <summary>
-    /// Mint an access + refresh token pair for a grant.
+    /// Mint an access + refresh token pair for a grant whose subject the caller has checked is
+    /// active.
     /// </summary>
-    private async Task<OAuthTokenResult> MintTokenPairAsync(OAuthGrantInfo grant, CancellationToken ct)
+    private async Task<OAuthTokenResult> MintTokenPairAsync(
+        OAuthGrantInfo grant, Subject subject, CancellationToken ct)
     {
-        var subject = await _subjectService.GetSubjectByIdAsync(grant.SubjectId);
-        if (subject == null)
-        {
-            return OAuthTokenResult.Fail("server_error", "Subject not found.");
-        }
-
-        var subjectInfo = new SubjectInfo
-        {
-            Id = subject.Id,
-            Name = subject.Name,
-            Email = subject.Email,
-        };
-
-        var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-        var permissions = ScopeTranslator.ToPermissions(grant.Scopes).ToList();
-
-        var accessToken = _jwtService.GenerateAccessToken(
-            subjectInfo,
-            permissions,
-            roles,
-            grant.Scopes,
-            grant.ClientId,
-            limitTo24Hours: grant.LimitTo24Hours,
-            tenantId: grant.TenantId,
-            grantId: grant.Id
-        );
+        var lifetime = GrantTokenLifetime.Of(_jwtService.GetAccessTokenLifetime(), grant.ExpiresAt, _timeProvider.GetUtcNow());
+        var accessToken = await GenerateAccessTokenAsync(
+            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject, lifetime);
 
         // Generate and store refresh token
         var refreshToken = _jwtService.GenerateRefreshToken();
@@ -609,7 +670,7 @@ public class OAuthTokenService : IOAuthTokenService
             "OAuthAudit: {Event} grant_id={GrantId} client_id={ClientId} subject_id={SubjectId} scopes={Scopes}",
             "token_issued", grant.Id, grant.ClientId, grant.SubjectId, string.Join(" ", grant.Scopes));
 
-        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
+        var expiresIn = (int)lifetime.TotalSeconds;
         var scope = string.Join(" ", grant.Scopes);
 
         return OAuthTokenResult.Ok(accessToken, refreshToken, expiresIn, scope);

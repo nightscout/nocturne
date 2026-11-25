@@ -86,7 +86,7 @@ function createTenantClient(
   confirmReconnect: () => Promise<boolean>,
 ): SignalRClient {
   const tenantHost = `${tenantSlug}.${baseDomain}`;
-  const messageTranslator = new MessageTranslator(socketIOServer, tenantSlug);
+  const messageTranslator = new MessageTranslator(socketIOServer, tenantSlug, tenantId);
 
   return new SignalRClient(messageTranslator, {
     hubUrl: config.signalr.hubUrl,
@@ -179,6 +179,7 @@ export async function setupBridge(
   });
 
   socketIOServer.onTenantAdmitted = (slug) => registry.ensure(slug);
+  socketIOServer.onOverviewAdmitted = (ids) => registry.ensureIds(ids);
   socketIOServer.isCurrentTenant = (slug, id) => registry.holds(slug, id);
   socketIOServer.holdsTenantNow = (slug, id) => registry.holdsNow(slug, id);
   socketIOServer.onApexUnresolved = async () => {

@@ -1,5 +1,4 @@
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -32,9 +31,8 @@ public static class TrackerSchedule
     /// <summary>
     /// The instant <paramref name="threshold"/> fires for <paramref name="instance"/>, or null when it
     /// never can: a misconfigured negative threshold, or an Event instance with no scheduled time.
-    /// Requires <see cref="TrackerInstanceEntity.Definition"/> to be loaded.
     /// </summary>
-    public static DateTime? FiresAt(TrackerInstanceEntity instance, TrackerNotificationThresholdEntity threshold)
+    public static DateTime? FiresAt(TrackerInstance instance, TrackerNotificationThreshold threshold)
     {
         var definition = instance.Definition;
         var reference = definition.Mode == TrackerMode.Event ? instance.ScheduledAt : instance.StartedAt;
@@ -45,6 +43,18 @@ public static class TrackerSchedule
             ? referenceAt.AddMinutes(minutes)
             : null;
     }
+
+    /// <summary>
+    /// The level a running <paramref name="instance"/> has reached at <paramref name="at"/>: the
+    /// highest urgency among the thresholds that fire at or before it, else
+    /// <see cref="NotificationUrgency.Info"/>.
+    /// </summary>
+    public static NotificationUrgency UrgencyAt(TrackerInstance instance, DateTime at) =>
+        instance.Definition.NotificationThresholds
+            .Where(t => FiresAt(instance, t) is { } firesAt && firesAt <= at)
+            .Select(t => t.Urgency)
+            .DefaultIfEmpty(NotificationUrgency.Info)
+            .Max();
 
     /// <summary>
     /// Why a run that was ended by a newer one is over, as the history reads it: a run that reached its

@@ -1,21 +1,22 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
+import { setMode } from "mode-watcher";
+import { glucoseChartLookback } from "#lib/stores/appearance-store.svelte.js";
 
-const { goto, store, NOW } = vi.hoisted(() => {
-  const NOW = Date.UTC(2026, 9, 25, 12, 0, 0);
-  return {
-    NOW,
-    goto: vi.fn(() => Promise.resolve()),
-    store: {
-      pillsData: {},
-      now: NOW,
-      legacyFallbacks: [] as unknown[],
-      legacyCoverage: [] as unknown[],
-      trackerInstances: [] as unknown[],
-    },
-  };
+const { goto, NOW } = vi.hoisted(() => ({
+  NOW: Date.UTC(2026, 9, 25, 12, 0, 0),
+  goto: vi.fn(() => Promise.resolve()),
+}));
+
+// Reactive, so a live value changing while the palette is open reaches it.
+const store = $state({
+  pillsData: {} as { iob?: { display: string }; cob?: { display: string } },
+  nowMinute: NOW,
+  legacyFallbacks: [] as unknown[],
+  legacyCoverage: [] as unknown[],
+  trackerInstances: [] as unknown[],
 });
 
 vi.mock("$app/navigation", () => ({ goto }));
@@ -24,10 +25,16 @@ vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
 }));
 
+vi.mock("./command-palette-items.svelte.js", async (importOriginal) => {
+  const items = await importOriginal<typeof import("./command-palette-items.svelte.js")>();
+  return { ...items, paletteItemsFor: vi.fn(items.paletteItemsFor) };
+});
+
 // The vitals strip reads live glucose; the palette under test only owns its items.
 vi.mock("./CommandPaletteVitals.svelte", () => ({ default: () => {} }));
 
 import CommandPalette from "./CommandPalette.svelte";
+import { paletteItemsFor } from "./command-palette-items.svelte.js";
 import { pinnedItemIds, recentItemIds } from "./command-palette-store.svelte";
 
 const item = (name: string) => page.getByRole("option", { name, exact: true });
@@ -42,9 +49,15 @@ describe("CommandPalette", () => {
     pinnedItemIds.current = [];
     recentItemIds.current = [];
     pageState.data = { effectivePermissions: [], isPlatformAdmin: false };
+    store.pillsData = {};
     store.legacyFallbacks = [];
     store.legacyCoverage = [];
     store.trackerInstances = [];
+  });
+
+  afterEach(() => {
+    setMode("system");
+    glucoseChartLookback.current = 12;
   });
 
   // The palette's ages run on the store's clock from the timestamps the server sent.
@@ -202,5 +215,170 @@ describe("CommandPalette", () => {
 
     await expect.element(report("Day-by-day view")).toBeVisible();
     await expect.element(report("Battery")).not.toBeInTheDocument();
+  });
+
+  it("gives a quick setting one label for its text, its search value and its pin, and follows a toggle", async () => {
+    setMode("dark");
+    render(CommandPalette, { open: true });
+
+    const option = () => page.getByRole("option", { name: /^Dark mode: / });
+    await expect.element(option()).toHaveTextContent(/^Dark mode: On/);
+    await expect.element(option()).toHaveAttribute("data-value", "Dark mode: On");
+    await expect
+      .element(page.getByRole("button", { name: "Pin Dark mode: On" }))
+      .toBeInTheDocument();
+
+    await option().click();
+
+    await expect.element(option()).toHaveTextContent(/^Dark mode: Off/);
+    await expect.element(option()).toHaveAttribute("data-value", "Dark mode: Off");
+    await expect
+      .element(page.getByRole("button", { name: "Pin Dark mode: Off" }))
+      .toBeInTheDocument();
+  });
+
+  it("builds no items while closed, whatever the live values do", async () => {
+    render(CommandPalette, { open: false });
+    await new Promise((settle) => setTimeout(settle, 50));
+    vi.mocked(paletteItemsFor).mockClear();
+
+    store.nowMinute += 60_000;
+    store.pillsData = { iob: { display: "1.3 U" } };
+    await new Promise((settle) => setTimeout(settle, 50));
+
+    expect(paletteItemsFor).not.toHaveBeenCalled();
+  });
+
+  it("gives a stat one label for its text, its search value and its pin, and finds it by its value", async () => {
+    store.pillsData = { iob: { display: "1.2 U" } };
+    render(CommandPalette, { open: true });
+
+    const option = () => page.getByRole("option", { name: /^IOB/ });
+    await expect.element(option()).toHaveTextContent(/^IOB: 1\.2 U/);
+    await expect.element(option()).toHaveAttribute("data-value", "IOB: 1.2 U");
+    await expect
+      .element(page.getByRole("button", { name: "Pin IOB: 1.2 U" }))
+      .toBeInTheDocument();
+
+    await page.getByPlaceholder("Search commands...").fill("1.2");
+
+    await expect.element(option()).toBeVisible();
+    await expect.element(page.getByRole("option", { name: /^COB/ })).not.toBeInTheDocument();
+  });
+
+  it("names a stat with no value by its name alone", async () => {
+    render(CommandPalette, { open: true });
+
+    await expect
+      .element(page.getByRole("option", { name: /^IOB(?!:)/ }))
+      .toHaveAttribute("data-value", "IOB");
+    await expect
+      .element(page.getByRole("button", { name: "Pin IOB" }))
+      .toBeInTheDocument();
+  });
+
+  it("keeps the keyboard highlight where it is when a stat's value changes", async () => {
+    store.pillsData = { iob: { display: "1.2 U" } };
+    pinnedItemIds.current = ["stat-iob"];
+    recentItemIds.current = ["qs-chart-lookback"];
+    render(CommandPalette, { open: true });
+
+    const lookback = page.getByRole("option", { name: /^Chart lookback: / });
+    await expect
+      .element(page.getByRole("option", { name: /^IOB/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+
+    store.pillsData = { iob: { display: "1.3 U" } };
+
+    await expect
+      .element(page.getByRole("option", { name: /^IOB/ }))
+      .toHaveTextContent(/^IOB: 1\.3 U/);
+    await new Promise((settle) => setTimeout(settle, 150));
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keeps the highlight on a stat whose own value changes", async () => {
+    store.pillsData = { iob: { display: "1.2 U" }, cob: { display: "5 g" } };
+    pinnedItemIds.current = ["stat-cob", "stat-iob"];
+    render(CommandPalette, { open: true });
+
+    const iob = page.getByRole("option", { name: /^IOB/ });
+    await expect
+      .element(page.getByRole("option", { name: /^COB/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(iob).toHaveAttribute("aria-selected", "true");
+
+    store.pillsData = { iob: { display: "1.3 U" }, cob: { display: "5 g" } };
+
+    await expect.element(iob).toHaveTextContent(/^IOB: 1\.3 U/);
+    await new Promise((settle) => setTimeout(settle, 150));
+    await expect.element(iob).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("moves the highlight to a rendered item when a stat's new value no longer matches the search", async () => {
+    store.pillsData = { iob: { display: "1.2 U" }, cob: { display: "25 g" } };
+    render(CommandPalette, { open: true });
+
+    const iob = page.getByRole("option", { name: /^IOB/ });
+    await page.getByPlaceholder("Search commands...").fill("2");
+    await expect.element(iob).toBeVisible();
+    await userEvent.hover(iob);
+    await expect.element(iob).toHaveAttribute("aria-selected", "true");
+
+    store.pillsData = { iob: { display: "1.3 U" }, cob: { display: "25 g" } };
+
+    await expect.element(iob).not.toBeInTheDocument();
+    await new Promise((settle) => setTimeout(settle, 150));
+    await expect.element(page.getByRole("option", { name: /^COB/ })).toBeVisible();
+    await expect
+      .element(page.getByRole("option", { selected: true }))
+      .toBeInTheDocument();
+  });
+
+  it("keeps the highlight on a quick setting after Enter, so Enter cycles it again", async () => {
+    pinnedItemIds.current = ["stat-iob"];
+    recentItemIds.current = ["qs-chart-lookback"];
+    glucoseChartLookback.current = 12;
+    render(CommandPalette, { open: true });
+
+    const lookback = page.getByRole("option", { name: /^Chart lookback: / });
+    await expect
+      .element(page.getByRole("option", { name: /^IOB/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+
+    await userEvent.keyboard("{Enter}");
+    await expect.element(lookback).toHaveTextContent(/^Chart lookback: 24h/);
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+
+    await userEvent.keyboard("{Enter}");
+    await expect.element(lookback).toHaveTextContent(/^Chart lookback: 48h/);
+    await expect.element(lookback).toHaveAttribute("aria-selected", "true");
+    expect(glucoseChartLookback.current).toBe(48);
+  });
+
+  it("hands the highlight back to search when text arrives without a key press", async () => {
+    pinnedItemIds.current = ["stat-iob"];
+    recentItemIds.current = ["qs-chart-lookback"];
+    glucoseChartLookback.current = 12;
+    render(CommandPalette, { open: true });
+
+    const lookback = page.getByRole("option", { name: /^Chart lookback: / });
+    await expect
+      .element(page.getByRole("option", { name: /^IOB/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{Enter}");
+    await expect.element(lookback).toHaveTextContent(/^Chart lookback: 24h/);
+
+    await page.getByPlaceholder("Search commands...").fill("dark");
+
+    await expect
+      .element(page.getByRole("option", { selected: true }))
+      .toBeInTheDocument();
   });
 });

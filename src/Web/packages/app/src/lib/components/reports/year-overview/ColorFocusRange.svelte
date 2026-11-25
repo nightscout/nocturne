@@ -307,11 +307,8 @@
         {/each}
       </div>
 
-      <!-- The dimming window is its own slider laid over the color bar, so it never moves the
-           colors. Its handles stand taller than the color dots, which lie above them: the bar and
-           the dots take the pointer for the colors, and above and below the bar it reaches the
-           window's handles. -->
-      <div class="relative h-12 w-full">
+      <!-- Separate lanes keep coincident window handles and color dots independently draggable. -->
+      <div class="relative h-20 w-full">
         <Slider.Root
           type="multiple"
           min={scale.axis[0]}
@@ -320,7 +317,7 @@
           autoSort={false}
           thumbPositioning="exact"
           bind:value={() => [...windowValues], moveWindow}
-          class="pointer-events-none absolute inset-0 flex touch-none select-none items-center"
+          class="pointer-events-none absolute inset-x-0 top-0 flex h-10 touch-none select-none items-center"
           aria-label={`${metricLabel} focus window`}
           data-testid={glucose ? "glucose-focus-slider" : "focus-slider"}
         >
@@ -330,7 +327,7 @@
                 index={thumb.index}
                 aria-label={`${metricLabel} focus ${thumb.index === 0 ? "minimum" : "maximum"}`}
                 aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                class="pointer-events-auto relative z-10 block h-12 w-2.5 cursor-ew-resize rounded-sm border-2 border-foreground bg-background shadow-md before:absolute before:inset-y-0 before:-inset-x-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                class="pointer-events-auto relative z-10 block h-8 w-2.5 cursor-ew-resize rounded-sm border-2 border-foreground bg-background shadow-md before:absolute before:inset-y-0 before:-inset-x-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
               />
             {/each}
           {/snippet}
@@ -344,7 +341,7 @@
           autoSort={false}
           thumbPositioning="exact"
           bind:value={() => [...colorValues], moveColors}
-          class="pointer-events-none relative flex h-12 w-full touch-none select-none items-center"
+          class="pointer-events-none absolute inset-x-0 bottom-0 flex h-10 w-full touch-none select-none items-center"
           aria-label={`${metricLabel} color scale`}
         >
           {#snippet children({ thumbItems })}

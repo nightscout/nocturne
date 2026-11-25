@@ -1,13 +1,14 @@
 <script lang="ts">
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
     relativeAge,
   } from "#lib/utils/formatting.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
@@ -28,18 +29,16 @@
 
   // This header is the glucose surface on a phone unless the Current Glucose widget is showing —
   // CurrentBGDisplay hides itself below @md — so it carries the same stale/disconnected states.
-  const rawCurrentBG = $derived(glucose.currentBG);
+  const value = $derived(glucose.value);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(
     getGlucoseTileVariant(glucose.status)
   );
   const now = $derived(realtimeStore?.now ?? Date.now());
-  const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
+  const displayCurrentBG = $derived(value === null ? "—" : formatGlucoseValue(value, units));
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
-  // No reading yet: show the skeleton rather than rendering the 0 sentinel as a
-  // glucose value.
-  const isLoading = $derived(rawCurrentBG <= 0);
+  const isLoading = $derived(value === null && !(realtimeStore?.currentReadingLoaded ?? true));
   const statusText = $derived(
     isDisconnected
       ? "Connection error"
@@ -88,6 +87,9 @@
   <!-- Current BG display on the right -->
   {#if realtimeStore}
     <div class="flex items-center gap-2">
+      {#if value === null && !isLoading}
+        <span class="sr-only">No glucose reading</span>
+      {/if}
       <GlucoseValueIndicator
         displayValue={displayCurrentBG}
         variant={tileVariant}
@@ -101,9 +103,9 @@
 
       <!-- Direction arrow and delta. Hidden while stale: the trend describes a
            reading that is no longer current. -->
-      {#if !isLoading && !isStale}
+      {#if value !== null && !isStale}
         <div class="flex flex-col items-center text-xs">
-          <span class={directionInfo.css}>
+          <span class={deltaColorClass(glucose.direction)}>
             {#if directionInfo.icon}
               {@const Icon = directionInfo.icon}
               <Icon class="w-4 h-4" />

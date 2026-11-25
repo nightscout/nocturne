@@ -81,6 +81,12 @@ public enum OAuthScope
     [EnumMember(Value = "food.readwrite"), JsonStringEnumMemberName("food.readwrite")]
     FoodReadWrite,
 
+    [EnumMember(Value = "connectors.read"), JsonStringEnumMemberName("connectors.read")]
+    ConnectorsRead,
+
+    [EnumMember(Value = "connectors.readwrite"), JsonStringEnumMemberName("connectors.readwrite")]
+    ConnectorsReadWrite,
+
     [EnumMember(Value = "device.notify"), JsonStringEnumMemberName("device.notify")]
     DeviceNotify,
 

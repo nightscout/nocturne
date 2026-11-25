@@ -85,15 +85,15 @@ public sealed class ShareLinkServiceTests : IDisposable
         return new ShareLinkService(
             db.AsFactory(),
             new TenantRepository(db.AsFactory()),
-            new TenantMembershipRepository(db.AsFactory()),
+            new TenantMembershipRepository(db.AsFactory(), AccountLinkRoutes.Off),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
                 new MemoryCache(new MemoryCacheOptions()), new TenantRepository(factory.Object.AsNocturneFactory()), NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
-                new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory()), NullLogger<PublicAccessCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), NullLogger<PublicAccessCacheService>.Instance),
             secrets,
             NullLogger<ShareLinkService>.Instance,
-            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }), AccountLinkRoutes.Off);
     }
 
     public void Dispose() => _db.Dispose();

@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Treatments;
 
@@ -11,6 +12,12 @@ namespace Nocturne.Core.Contracts.Treatments;
 public interface IMealMatchingService
 {
     /// <summary>
+    /// Notification type for a suggested match. Registered in <c>BuiltInNotificationTemplates</c>,
+    /// which supplies its category, icon and source.
+    /// </summary>
+    const string SuggestedMatchNotificationType = "meal_matching.suggested_match";
+
+    /// <summary>
     /// Process newly imported food entries and create match notifications.
     /// </summary>
     /// <param name="userId">The user ID for notification delivery.</param>
@@ -18,18 +25,12 @@ public interface IMealMatchingService
     Task ProcessNewFoodEntriesAsync(string userId, IEnumerable<Guid> foodEntryIds, CancellationToken ct = default);
 
     /// <summary>
-    /// Accept a meal match, creating a TreatmentFood entry
+    /// Dismiss a match, marking the pending food entry as standalone
     /// </summary>
-    /// <param name="foodEntryId">The connector food entry ID</param>
-    /// <param name="carbIntakeId">The carb intake to link the food to</param>
-    /// <param name="carbs">The carb amount (may be adjusted from original)</param>
-    /// <param name="timeOffsetMinutes">Minutes offset from the carb intake time (0 = ate at bolus time)</param>
-    Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
-
-    /// <summary>
-    /// Dismiss a match, marking the food entry as standalone
-    /// </summary>
-    Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
+    /// <returns>
+    /// What the dismiss did. See <see cref="IConnectorFoodEntryRepository.DismissAsync"/> for the outcomes.
+    /// </returns>
+    Task<DismissMatchOutcome> DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
 
     /// <summary>
     /// Withdraws any live match suggestion for a food entry that no longer exists upstream.

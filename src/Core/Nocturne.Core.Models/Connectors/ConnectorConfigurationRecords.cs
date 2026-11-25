@@ -3,8 +3,8 @@ namespace Nocturne.Core.Models.Connectors;
 /// <summary>A tenant's stored configuration of one connector.</summary>
 /// <param name="ConnectorName">The canonical (lower-case) connector name.</param>
 /// <param name="SecretsJson">The secrets as stored: a JSON object of encrypted values.</param>
-/// <param name="SyncCursorsJson">The incremental-sync cursors, keyed by resource; null until the first cursor-based sync.</param>
-/// <param name="BackfillLowWaterMarks">The backfill low-water marks, keyed by collection; null when none is held.</param>
+/// <param name="VendorStateJson">The connector's vendor state, a JSON object keyed by the connector; null when none is held.</param>
+/// <param name="ResumeStateJson">The connector's resume state, a JSON map of named UTC times; null when none is held.</param>
 public sealed record ConnectorConfigurationRecord(
     Guid TenantId,
     string ConnectorName,
@@ -18,8 +18,8 @@ public sealed record ConnectorConfigurationRecord(
     string? LastErrorMessage,
     DateTime? LastErrorAt,
     bool IsHealthy,
-    string? SyncCursorsJson,
-    string? BackfillLowWaterMarks)
+    string? VendorStateJson,
+    string? ResumeStateJson)
 {
     /// <summary>
     /// The longest <see cref="LastErrorMessage"/> stored. A connector reports one error per failing

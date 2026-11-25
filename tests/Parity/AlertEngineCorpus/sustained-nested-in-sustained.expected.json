@@ -16,13 +16,17 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "timer_ops": [
             {
               "op": "set",
               "path": "sustained[0].sustained",
+              "at": "2026-01-05T12:00:00Z"
+            },
+            {
+              "op": "clear",
+              "path": "sustained",
               "at": "2026-01-05T12:00:00Z"
             }
           ]
@@ -43,8 +47,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "timer_ops": [
             {
@@ -71,7 +74,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         }
@@ -92,18 +94,19 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T12:15:00Z"
           },
           "timer_ops": [
             {
               "op": "clear",
-              "path": "sustained[0].sustained"
+              "path": "sustained[0].sustained",
+              "at": "2026-01-05T12:15:00Z"
             },
             {
               "op": "clear",
-              "path": "sustained"
+              "path": "sustained",
+              "at": "2026-01-05T12:15:00Z"
             }
           ]
         }

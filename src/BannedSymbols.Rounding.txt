@@ -1,0 +1,8 @@
+M:System.Math.Round(System.Double,System.Int32);Use ScaledRounding.Round: since .NET 11 this rounds the exact binary value, so Math.Round(0.175, 2) is 0.17 where Nightscout gives 0.18.
+M:System.Math.Round(System.Double,System.Int32,System.MidpointRounding);Use ScaledRounding.Round: since .NET 11 this rounds the exact binary value, so Math.Round(0.175, 2) is 0.17 where Nightscout gives 0.18.
+M:System.MathF.Round(System.Single,System.Int32);Use ScaledRounding.Round on a double: this rounds the exact binary value, so it differs from Nightscout at a midpoint.
+M:System.MathF.Round(System.Single,System.Int32,System.MidpointRounding);Use ScaledRounding.Round on a double: this rounds the exact binary value, so it differs from Nightscout at a midpoint.
+M:System.Double.Round(System.Double,System.Int32);Use ScaledRounding.Round: this is Math.Round(double, int), which rounds the exact binary value.
+M:System.Double.Round(System.Double,System.Int32,System.MidpointRounding);Use ScaledRounding.Round: this is Math.Round(double, int, MidpointRounding), which rounds the exact binary value.
+M:System.Single.Round(System.Single,System.Int32);Use ScaledRounding.Round on a double: this rounds the exact binary value, so it differs from Nightscout at a midpoint.
+M:System.Single.Round(System.Single,System.Int32,System.MidpointRounding);Use ScaledRounding.Round on a double: this rounds the exact binary value, so it differs from Nightscout at a midpoint.

@@ -113,6 +113,13 @@ public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
     public ConnectorFoodEntryStatus Status { get; set; } = ConnectorFoodEntryStatus.Pending;
 
     /// <summary>
+    /// The carb intake this entry was matched to. Set only while <see cref="Status"/> is
+    /// <see cref="ConnectorFoodEntryStatus.Matched"/>, and null on a row matched before it was recorded.
+    /// </summary>
+    [Column("matched_carb_intake_id")]
+    public Guid? MatchedCarbIntakeId { get; set; }
+
+    /// <summary>
     /// When the entry status was resolved
     /// </summary>
     [Column("resolved_at")]

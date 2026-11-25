@@ -2,6 +2,7 @@
   import { untrack, type ComponentProps } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -16,24 +17,25 @@
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
-    setAuthCookies,
     signInWithAuthenticator,
     signInWithRecoveryCode,
   } from "#routes/(unauthenticated)/auth/auth.remote.js";
   import {
     discoverableLoginOptions,
     loginOptions,
-    loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
-  import { invalidateAll } from "$app/navigation";
+  import { getTrustedDevicePolicy } from "#lib/api/generated/totps.generated.remote.js";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
+  import { invalidateAll } from "$app/navigation";
   import { page } from "$app/state";
+  import FirstRecoveryCodes from "./FirstRecoveryCodes.svelte";
   import { describePasskeyError } from "./passkey-errors";
   import {
     offerPasskeyInAutofill,
     runPasskeyAssertion,
     type CeremonyOptionsResponse,
   } from "./passkey-login";
+  import { completePasskeySignIn, settleSignIn, type SignInResult } from "./sign-in-result";
   import { brandColors } from "./brand-colors";
   import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
@@ -49,6 +51,13 @@
     tenantless?: boolean;
     /** A step-up token from an identity-provider sign-in that still needs the authenticator code. */
     pendingStepUpToken?: string;
+    /**
+     * Told when a passkey sign-in starts and stops being in flight, and while first recovery codes
+     * show. A dialog that holds the form must not close in between: the request finishes whether
+     * or not the form is still there, and the codes are shown nowhere else. Told false when the
+     * form unmounts.
+     */
+    onBusyChange?: (busy: boolean) => void;
   }
 
   let {
@@ -56,6 +65,7 @@
     onSuccess,
     tenantless = false,
     pendingStepUpToken,
+    onBusyChange,
   }: Props = $props();
 
   const oidcQuery = getOidcProviders();
@@ -78,8 +88,13 @@
   );
   const passkeyLastUsed = $derived(isLastUsed(lastSignIn, "passkey"));
 
+  /** How long the API trusts a device for. 0 when it does not offer to, so nothing is shown. */
+  const trustPolicyQuery = getTrustedDevicePolicy();
+  const trustDays = $derived(trustPolicyQuery.current?.days ?? 0);
+  let trustDevice = $state(false);
+
   // UI mode
-  type LoginMode = "default" | "username" | "recovery" | "totp";
+  type LoginMode = "default" | "username" | "recovery" | "totp" | "recovery-codes";
   let mode = $state<LoginMode>(
     untrack(() => (pendingStepUpToken ? "totp" : "default"))
   );
@@ -116,53 +131,46 @@
    */
   let stepUpToken = $state(untrack(() => pendingStepUpToken ?? ""));
 
-  async function handleAuthResult(result: {
-    success?: boolean;
-    accessToken?: string;
-    refreshToken?: string;
-    expiresIn?: number;
-    refreshExpiresIn?: number;
-    totpRequired?: boolean;
-    stepUpToken?: string | null;
-    error?: string;
-  }) {
-    if (!result.success) {
-      passkeyError =
-        result.error ?? "Could not sign you in. Try again.";
+  let issuedRecoveryCodes = $state<string[]>([]);
+
+  const busy = $derived(isLoading || mode === "recovery-codes");
+
+  $effect(() => onBusyChange?.(busy));
+  $effect(() => () => onBusyChange?.(false));
+
+  async function finishSignIn() {
+    if (onSuccess) {
+      await invalidateAll();
+      onSuccess();
+    } else {
+      await goToReturnUrl(returnUrl, { refreshAll: true });
+    }
+  }
+
+  async function handleAuthResult(result: SignInResult) {
+    const outcome = await settleSignIn(result);
+
+    if (outcome.state === "refused") {
+      passkeyError = outcome.message;
       return;
     }
 
-    // The passkey was accepted but this account also has an authenticator, so there is
-    // no session yet — collect the code and finish there.
-    if (result.totpRequired) {
-      if (!result.stepUpToken) {
-        passkeyError = "Could not sign you in. Try again.";
-        return;
-      }
-      stepUpToken = result.stepUpToken;
+    // No session yet: collect the authenticator code and finish there.
+    if (outcome.state === "second-factor") {
+      stepUpToken = outcome.stepUpToken;
       totpCode = "";
       authenticator.clear();
       mode = "totp";
       return;
     }
 
-    // Set auth cookies via server-side command
-    if (result.accessToken) {
-      await setAuthCookies({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        expiresIn: result.expiresIn,
-        refreshExpiresIn: result.refreshExpiresIn,
-      });
+    if (outcome.recoveryCodes.length > 0) {
+      issuedRecoveryCodes = outcome.recoveryCodes;
+      mode = "recovery-codes";
+      return;
     }
 
-    await invalidateAll();
-
-    if (onSuccess) {
-      onSuccess();
-    } else {
-      await goToReturnUrl(returnUrl, { refreshAll: true });
-    }
+    await finishSignIn();
   }
 
   /**
@@ -178,7 +186,7 @@
 
     try {
       await handleAuthResult(
-        await runPasskeyAssertion(requestOptions, loginComplete)
+        await runPasskeyAssertion(requestOptions, completePasskeySignIn)
       );
     } catch (err) {
       console.error("Passkey sign-in failed:", err);
@@ -211,21 +219,26 @@
   $effect(() => {
     if (mode !== "username" || tenantless || !passkeysSupported) return;
 
-    let abandoned = false;
-
     void offerPasskeyInAutofill(async () => {
-      const result = await runPasskeyAssertion(
-        discoverableLoginOptions,
-        loginComplete,
-        true
-      );
-      if (!abandoned) await handleAuthResult(result);
+      let submitted = false;
+      try {
+        await handleAuthResult(
+          await runPasskeyAssertion(
+            discoverableLoginOptions,
+            (assertion) => {
+              submitted = true;
+              isLoading = true;
+              return completePasskeySignIn(assertion);
+            },
+            true
+          )
+        );
+      } finally {
+        if (submitted) isLoading = false;
+      }
     }).catch(() => {});
 
-    return () => {
-      abandoned = true;
-      WebAuthnAbortService.cancelCeremony();
-    };
+    return () => WebAuthnAbortService.cancelCeremony();
   });
 
   function loginWithProvider(providerId: string) {
@@ -249,6 +262,7 @@
     if (newMode !== "totp") {
       stepUpToken = "";
       totpCode = "";
+      trustDevice = false;
     }
   }
 </script>
@@ -474,8 +488,6 @@
           await recovery.run(submit, onSuccess);
         })}
       >
-        <input {...signInWithRecoveryCode.fields.returnUrl.as("hidden", returnUrl)} />
-
         <FormError issues={recovery.error} focusOnShow />
 
         <FormField
@@ -566,6 +578,32 @@
           Enter the current code from your authenticator app to finish signing in.
         </p>
 
+        <!-- Above the code field: a complete code submits the form by itself. -->
+        {#if trustDays > 0}
+          <div class="flex items-start gap-2">
+            <Checkbox
+              id="totp-trust-device"
+              class="mt-0.5"
+              name={signInWithAuthenticator.fields.trustDevice.as("checkbox").name}
+              aria-describedby="totp-trust-device-help"
+              bind:checked={trustDevice}
+            />
+            <div class="space-y-1">
+              <Label for="totp-trust-device">
+                {#if trustDays === 1}
+                  Trust this device for 1 day
+                {:else}
+                  Trust this device for {trustDays} days
+                {/if}
+              </Label>
+              <p id="totp-trust-device-help" class="text-xs text-muted-foreground">
+                You will not need a code on this device during that time.
+                Select this only on a device that only you use.
+              </p>
+            </div>
+          </div>
+        {/if}
+
         <div class="space-y-2">
           <Label for="totp-code-input">Authenticator code</Label>
           <div class="flex justify-center">
@@ -622,6 +660,9 @@
       <div class="text-center">
         {@render backToSignIn("Back to sign in")}
       </div>
+
+    {:else if mode === "recovery-codes"}
+      <FirstRecoveryCodes codes={issuedRecoveryCodes} onContinue={finishSignIn} />
     {/if}
   </div>
 {/if}

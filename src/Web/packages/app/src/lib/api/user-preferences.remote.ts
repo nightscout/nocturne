@@ -1,7 +1,7 @@
 /** Remote functions for user preferences management */
 import { getRequestEvent, command } from "$app/server";
 import { z } from "zod";
-import { UserDisplayPreferencesSchema } from "#lib/api/generated/schemas.js";
+import { UserDisplayPreferencesSchema } from "@nocturne/api-client/schemas";
 
 const updateLanguageSchema = z.object({
   preferredLanguage: z.string(),

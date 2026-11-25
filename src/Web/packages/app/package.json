@@ -16,9 +16,7 @@
     "./stores/*": "./src/lib/stores/*",
     "./components/*.svelte": "./src/lib/components/*.svelte",
     "./components/*": "./src/lib/components/*",
-    "./constants/*": "./src/lib/constants/*.ts",
-    "./api/*": "./src/lib/api/generated/*",
-    "./api-client": "./src/lib/api/generated/nocturne-api-client.ts"
+    "./constants/*": "./src/lib/constants/*.ts"
   },
   "directories": {
     "lib": "lib"
@@ -29,15 +27,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "vite dev",
-    "generate-api-client": "dotnet build -t:GenerateClient ../../../API/Nocturne.API/Nocturne.API.csproj",
-    "generate:remote": "cd ../.. && pnpm run generate-remote-functions",
     "dev:install": "pnpm install && pnpm run dev",
     "dev:install:fresh": "pnpm install --force && pnpm run dev",
     "dev:demo": "vite dev --mode demo",
     "dev:prod": "vite dev --mode production",
     "dev:test": "vite dev --mode test",
-    "build": "vite build",
-    "build:sveltekit": "vite build",
+    "build": "vite build && pnpm run build:report-image-worker",
+    "build:sveltekit": "vite build && pnpm run build:report-image-worker",
+    "build:report-image-worker": "vite build -c vite.report-image-worker.config.ts",
     "dev:sveltekit": "vite dev",
     "dev:sveltekit:prod": "vite dev --mode production",
     "dev:sveltekit:test": "vite dev --mode test",
@@ -72,7 +69,7 @@
     "@vitest/browser-playwright": "^4.1.6",
     "@vitest/coverage-v8": "4.1.6",
     "autoprefixer": "^10.5.0",
-    "bits-ui": "^2.18.1",
+    "bits-ui": "^2.18.2",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "eslint": "^10.3.0",
@@ -98,7 +95,10 @@
     "vitest-browser-svelte": "^2.1.1"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.0",
+    "@nocturne/api-client": "workspace:*",
     "@nocturne/bot": "workspace:*",
+    "@nocturne/charts": "workspace:*",
     "@nocturne/bridge": "workspace:*",
     "@nocturne/cms": "workspace:*",
     "@nocturne/coach": "workspace:*",

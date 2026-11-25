@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,6 +7,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Helpers;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -32,7 +34,9 @@ public class OidcAuthService : IOidcAuthService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly IMemberInviteService _memberInviteService;
-    private readonly ITotpService _totpService;
+    private readonly ITenantCreationInviteService _tenantCreationInvites;
+    private readonly ITenantRepository _tenants;
+    private readonly SignInCompletion _signIn;
     private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
@@ -49,7 +53,9 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
     /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
-    /// <param name="totpService">Service that withholds the session behind an authenticator code when one is enrolled.</param>
+    /// <param name="tenantCreationInvites">Reads the tenant-creation link a tenantless login returns to.</param>
+    /// <param name="tenants">Finds the sole tenant a tenantless host serves, for a join link handed out there.</param>
+    /// <param name="signIn">Finishes a login once the identity is proved and admitted.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
@@ -63,7 +69,9 @@ public class OidcAuthService : IOidcAuthService
         IHttpClientFactory httpClientFactory,
         ITenantMemberService tenantMemberService,
         IMemberInviteService memberInviteService,
-        ITotpService totpService,
+        ITenantCreationInviteService tenantCreationInvites,
+        ITenantRepository tenants,
+        SignInCompletion signIn,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
@@ -78,7 +86,9 @@ public class OidcAuthService : IOidcAuthService
         _httpClientFactory = httpClientFactory;
         _tenantMemberService = tenantMemberService;
         _memberInviteService = memberInviteService;
-        _totpService = totpService;
+        _tenantCreationInvites = tenantCreationInvites;
+        _tenants = tenants;
+        _signIn = signIn;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
@@ -279,7 +289,8 @@ public class OidcAuthService : IOidcAuthService
         string expectedState,
         string? ipAddress = null,
         string? userAgent = null,
-        Guid? currentTenantId = null
+        Guid? currentTenantId = null,
+        string? trustedDeviceToken = null
     )
     {
         var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState);
@@ -289,15 +300,29 @@ public class OidcAuthService : IOidcAuthService
         }
 
         return await CompleteLoginAsync(
-            parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent);
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent,
+            trustedDeviceToken);
     }
 
     /// <summary>
+    /// Identifies an external identity that has no subject in audit rows and logs. A digest, not
+    /// the sub claim, because a mapped OAuth2 provider can make the sub a login name or an email,
+    /// and a row with no subject is never scrubbed when a person is deleted.
+    /// </summary>
+    internal static string ExternalIdentityDigest(string issuer, string sub) =>
+        HashUtils.Sha256Hex(issuer + "\n" + sub);
+
+    /// <summary>
     /// Completes a login after the OIDC callback has been validated and the ID token parsed:
-    /// resolves the subject from the external identity, enforces tenant membership, and issues
-    /// a session. Because an OIDC identity resolves to a <em>global</em> subject, a valid external
-    /// identity must still be a member of <paramref name="currentTenantId"/> before a session is
-    /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
+    /// looks up the subject the external identity is linked to, refuses it when deactivated,
+    /// enforces tenant membership, and only then records the sign-in on the subject (creating it
+    /// for an identity not seen before) and hands it to <see cref="SignInCompletion"/>. Because an
+    /// OIDC identity resolves to a <em>global</em> subject, a valid external identity must still be
+    /// a member of <paramref name="currentTenantId"/> before a session is issued; otherwise any
+    /// external identity could mint a session on any tenant's subdomain. With no tenant resolved,
+    /// only an existing subject, or a first-time identity holding a link that authorises an
+    /// account, is admitted. A sign-in refused here writes no subject, identity link or profile
+    /// change; the completion checks a member's membership again after them.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
     /// </summary>
@@ -307,20 +332,20 @@ public class OidcAuthService : IOidcAuthService
         OidcIdTokenClaims idTokenClaims,
         Guid? currentTenantId,
         string? ipAddress,
-        string? userAgent)
+        string? userAgent,
+        string? trustedDeviceToken = null)
     {
-        // Find or create subject
-        var subject = await _subjectService.FindOrCreateFromOidcAsync(
-            provider.Id,
-            idTokenClaims.Sub,
-            provider.IssuerUrl,
-            idTokenClaims.Email,
-            idTokenClaims.EmailVerified == true,
-            idTokenClaims.Name ?? idTokenClaims.PreferredUsername,
-            provider.DefaultRoles
-        );
+        var existing = await _subjectService.FindFromOidcAsync(idTokenClaims.Sub, provider.IssuerUrl);
 
-        // Cross-tenant guard: deny — without issuing a session — when the authenticated
+        // A failed callback rather than NotAMember, which would offer a deactivated account the
+        // membership request.
+        if (existing is { IsActive: false })
+        {
+            _logger.LogWarning("OIDC login denied: subject {SubjectId} is deactivated", existing.Id);
+            return OidcCallbackResult.Failed("callback_failed", "Authentication failed");
+        }
+
+        // Cross-tenant guard: deny, without issuing a session, when the authenticated
         // identity is not a member of the tenant being logged into, and holds no invite to it.
         // The per-request membership gate in AuthenticationMiddleware would block this subject's
         // data access anyway, but only after a session (and a "logged in" UI) already existed.
@@ -334,24 +359,18 @@ public class OidcAuthService : IOidcAuthService
         //
         // A state that names a tenant also requires one to have resolved. Such a state was
         // minted by a tenant login and must have been bounced to that subdomain, so an
-        // unresolved tenant means something upstream failed — and treating that as "nothing to
+        // unresolved tenant means something upstream failed, and treating that as "nothing to
         // check" is how the gate silently disappeared when the state encoding changed.
+        //
+        // With no tenant at all, a subject is global, so an existing one is admitted. There is no
+        // open sign-up: a first-time identity is admitted only by a link that authorises an account.
+        var admitted = false;
         var admittedByInvite = false;
         if (currentTenantId is { } tenantId)
         {
-            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
-            {
-                if (!await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
-                {
-                    _logger.LogWarning(
-                        "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
-                        subject.Id,
-                        tenantId);
-                    return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
-                }
-
-                admittedByInvite = true;
-            }
+            admitted = existing is not null && await _tenantMemberService.IsMemberAsync(existing.Id, tenantId);
+            if (!admitted && await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+                admitted = admittedByInvite = true;
         }
         else if (!string.IsNullOrEmpty(stateData.TenantSlug))
         {
@@ -363,27 +382,79 @@ public class OidcAuthService : IOidcAuthService
                 "invalid_state",
                 "The login could not be completed against the tenant it was started from.");
         }
-
-        if (await _totpService.GetCredentialCountAsync(subject.Id) > 0)
+        else
         {
-            return OidcCallbackResult.SecondFactorRequired(
-                subject.Id,
-                await _totpService.CreateStepUpTokenAsync(subject.Id, currentTenantId, admittedByInvite),
-                stateData.ReturnUrl,
-                provider.Id);
+            admitted = existing is not null || await AuthorisesAccountOnTenantlessHostAsync(stateData.ReturnUrl);
         }
 
-        // Update last login
-        await _subjectService.UpdateLastLoginAsync(subject.Id);
+        if (!admitted)
+        {
+            var digest = existing is null
+                ? ExternalIdentityDigest(provider.IssuerUrl, idTokenClaims.Sub)
+                : null;
+            if (currentTenantId is { } deniedTenant)
+                _logger.LogWarning(
+                    "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
+                        + "identity digest {IdentityDigest}) is not admitted to tenant {TenantId}",
+                    provider.Id, existing?.Id, digest, deniedTenant);
+            else
+                _logger.LogWarning(
+                    "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
+                        + "identity digest {IdentityDigest}) is not admitted (no tenant resolved)",
+                    provider.Id, existing?.Id, digest);
+            return OidcCallbackResult.NotAMember(
+                existing?.Id, provider.Id, digest, stateData.ReturnUrl);
+        }
 
-        // Issue session via SessionService
-        var session = await _sessionService.IssueSessionAsync(
+        var subject = await _subjectService.FindOrCreateFromOidcAsync(
+            provider.Id,
+            idTokenClaims.Sub,
+            provider.IssuerUrl,
+            idTokenClaims.Email,
+            idTokenClaims.EmailVerified == true,
+            idTokenClaims.Name ?? idTokenClaims.PreferredUsername,
+            provider.DefaultRoles
+        );
+
+        SignInAdmission admission = currentTenantId is { } admittedTo
+            ? admittedByInvite ? new SignInAdmission.Invite(admittedTo) : new SignInAdmission.Member(admittedTo)
+            : new SignInAdmission.Account();
+        var outcome = await _signIn.CompleteAsync(new SignInAttempt(
             subject.Id,
+            SignInMethod.Oidc,
+            admission,
+            new SecondFactorProof.Primary(trustedDeviceToken),
             new SessionContext(
                 OidcSessionId: idTokenClaims.SessionId,
                 DeviceDescription: ParseUserAgentShort(userAgent),
                 IpAddress: ipAddress,
-                UserAgent: userAgent));
+                UserAgent: userAgent),
+            provider.Id,
+            new RefusalAudit.ModuleRow(ReasonAsErrorMessage: true, [new("providerId", provider.Id)])));
+
+        SessionTokenPair session;
+        bool usedTrustedDevice;
+        switch (outcome)
+        {
+            case SignInOutcome.SecondFactorRequired required:
+                return OidcCallbackResult.SecondFactorRequired(
+                    subject.Id, required.StepUpToken, stateData.ReturnUrl, provider.Id);
+            case SignInOutcome.SignedIn signedIn:
+                session = signedIn.Session;
+                usedTrustedDevice = signedIn.TrustedDevice;
+                break;
+            case SignInOutcome.Refused:
+                _logger.LogWarning(
+                    "OIDC login refused at completion: subject {SubjectId} via provider {ProviderId} "
+                        + "is not admitted to tenant {TenantId}",
+                    subject.Id, provider.Id, currentTenantId);
+                var refused = OidcCallbackResult.NotAMember(
+                    subject.Id, provider.Id, externalIdentityDigest: null, stateData.ReturnUrl);
+                refused.RefusalAudited = true;
+                return refused;
+            default:
+                throw new UnreachableException($"Unknown sign-in outcome {outcome.GetType().Name}");
+        }
 
         var tokens = new OidcTokenResponse
         {
@@ -413,13 +484,13 @@ public class OidcAuthService : IOidcAuthService
         };
 
         _logger.LogInformation(
-            "OIDC authentication successful for user {Name} ({Email}) via {Provider}",
-            subject.Name,
-            subject.Email ?? "no email",
-            provider.Name
+            "OIDC authentication successful for subject {SubjectId} via provider {ProviderId}",
+            subject.Id,
+            provider.Id
         );
 
-        return OidcCallbackResult.Succeeded(tokens, userInfo, stateData.ReturnUrl, provider.Id);
+        return OidcCallbackResult.Succeeded(
+            tokens, userInfo, stateData.ReturnUrl, provider.Id, usedTrustedDevice);
     }
 
     /// <summary>
@@ -441,7 +512,8 @@ public class OidcAuthService : IOidcAuthService
     /// </remarks>
     private async Task<bool> IsInvitedByReturnUrlAsync(string? returnUrl, Guid tenantId)
     {
-        var token = InviteTokenFromReturnUrl(returnUrl);
+        var token = TokenFromReturnUrl(
+            returnUrl, IMemberInviteService.JoinPath, IMemberInviteService.TokenQueryParameter);
         if (token == null)
             return false;
 
@@ -450,12 +522,38 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Reads the invite token out of a join link (<c>/join?token=...</c>), the only return URL
-    /// that carries one. Returns null for any other return URL.
+    /// Whether a login on a host that resolves no tenant returns to a link that authorises an
+    /// account for a first-time identity: a tenant-creation link that can still be redeemed, or a
+    /// join link of the sole tenant that host serves.
+    /// </summary>
+    /// <param name="returnUrl">The return URL carried in the (data-protected) state.</param>
+    /// <remarks>
+    /// Neither link is used here. The tenant is created, or the membership written, by the page the
+    /// login returns to, for the reason <see cref="IsInvitedByReturnUrlAsync"/> gives.
+    /// </remarks>
+    private async Task<bool> AuthorisesAccountOnTenantlessHostAsync(string? returnUrl)
+    {
+        var creationToken = TokenFromReturnUrl(
+            returnUrl, ITenantCreationInviteService.StartPath, ITenantCreationInviteService.TokenQueryParameter);
+        if (creationToken != null)
+            return (await _tenantCreationInvites.GetInfoAsync(creationToken, CancellationToken.None)).Refusal is null;
+
+        if (TokenFromReturnUrl(returnUrl, IMemberInviteService.JoinPath, IMemberInviteService.TokenQueryParameter) == null)
+            return false;
+
+        return await _tenants.FindSoleTenantAsync(CancellationToken.None) is { } sole
+            && await IsInvitedByReturnUrlAsync(returnUrl, sole.Id);
+    }
+
+    /// <summary>
+    /// Reads the token out of a link to <paramref name="path"/> (<c>/join?token=...</c>,
+    /// <c>/start?token=...</c>). Returns null for any other return URL.
     /// </summary>
     /// <param name="returnUrl">The return URL carried in the state.</param>
-    /// <returns>The invite token, or null.</returns>
-    private static string? InviteTokenFromReturnUrl(string? returnUrl)
+    /// <param name="path">The page the link opens.</param>
+    /// <param name="parameter">The query parameter carrying the token.</param>
+    /// <returns>The token, or null.</returns>
+    internal static string? TokenFromReturnUrl(string? returnUrl, string path, string parameter)
     {
         if (string.IsNullOrEmpty(returnUrl))
             return null;
@@ -464,15 +562,12 @@ public class OidcAuthService : IOidcAuthService
         if (queryStart < 0)
             return null;
 
-        if (!returnUrl.AsSpan(0, queryStart)
-                .Equals(IMemberInviteService.JoinPath, StringComparison.OrdinalIgnoreCase))
-        {
+        if (!returnUrl.AsSpan(0, queryStart).Equals(path, StringComparison.OrdinalIgnoreCase))
             return null;
-        }
 
         var token = Microsoft.AspNetCore.WebUtilities.QueryHelpers
             .ParseQuery(returnUrl[queryStart..])
-            .TryGetValue(IMemberInviteService.TokenQueryParameter, out var values)
+            .TryGetValue(parameter, out var values)
                 ? values.ToString()
                 : null;
 
@@ -524,7 +619,8 @@ public class OidcAuthService : IOidcAuthService
             claims.Permissions,
             claims.Roles,
             owner.SessionId,
-            accessTokenLifetime
+            accessTokenLifetime,
+            owner.HandedOff
         );
 
         return new OidcTokenResponse
@@ -540,19 +636,13 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <inheritdoc />
-    public async Task<OidcLogoutResult> LogoutAsync(string refreshToken, Guid? providerId = null)
+    public async Task<OidcLogoutResult> LogoutAsync(
+        string? refreshToken, RefreshTokenSession? signedIn, Guid? providerId = null)
     {
-        // Revoke the refresh token
-        var revoked = await _refreshTokenService.RevokeRefreshTokenAsync(
-            refreshToken,
-            "User logout"
-        );
-
-        if (!revoked)
-        {
-            // Token might already be revoked, which is fine
-            _logger.LogDebug("Refresh token not found or already revoked during logout");
-        }
+        var presented = string.IsNullOrEmpty(refreshToken) ? null : await _refreshTokenService.FindOwnerAsync(refreshToken);
+        foreach (var session in new[] { presented, signedIn }.OfType<RefreshTokenSession>()
+                     .DistinctBy(session => (session.SubjectId, session.SessionId)))
+            await _refreshTokenService.RevokeSessionForSubjectAsync(session.SubjectId, session.SessionId, "User logout");
 
         // Get provider logout URL if requested
         string? providerLogoutUrl = null;
@@ -621,8 +711,17 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <inheritdoc />
-    public async Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
-        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null)
+    public Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null) =>
+        GenerateLinkAuthorizationUrlAsync(providerId, subjectId, returnUrl, tenantSlug, LinkIntent);
+
+    /// <inheritdoc />
+    public Task<OidcAuthorizationRequest> GenerateRecoveryLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null) =>
+        GenerateLinkAuthorizationUrlAsync(providerId, subjectId, returnUrl, tenantSlug, RecoveryIntent);
+
+    private async Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl, string? tenantSlug, string intent)
     {
         var provider =
             await _providerService.GetProviderByIdAsync(providerId)
@@ -640,7 +739,7 @@ public class OidcAuthService : IOidcAuthService
             Nonce = GenerateRandomString(32),
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
-            Intent = "link",
+            Intent = intent,
             SubjectId = subjectId,
             TenantSlug = tenantSlug,
         };
@@ -660,11 +759,22 @@ public class OidcAuthService : IOidcAuthService
             return OidcLinkResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
-        var stateData = parsed.StateData!;
-        var provider = parsed.Provider!;
-        var claims = parsed.Claims!;
+        return await AttachVerifiedIdentityAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, authenticatedSubjectId, LinkIntent);
+    }
 
-        return await AttachVerifiedIdentityAsync(stateData, provider, claims, authenticatedSubjectId);
+    /// <inheritdoc />
+    public async Task<OidcLinkResult> HandleRecoveryLinkCallbackAsync(
+        string code, string state, string expectedState, Guid recoverySubjectId)
+    {
+        var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, LinkCallbackPath);
+        if (!parsed.Success)
+        {
+            return OidcLinkResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
+        }
+
+        return await AttachVerifiedIdentityAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, recoverySubjectId, RecoveryIntent);
     }
 
     /// <inheritdoc />
@@ -695,17 +805,26 @@ public class OidcAuthService : IOidcAuthService
 
     /// <inheritdoc />
     public async Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
-        string code, string state, string expectedState,
-        string? ipAddress = null, string? userAgent = null)
+        string code, string state, string expectedState, Guid tenantId)
     {
         var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, SetupCallbackPath);
         if (!parsed.Success)
             return OidcSetupCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
 
-        var stateData = parsed.StateData!;
-        var provider = parsed.Provider!;
-        var claims = parsed.Claims!;
+        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, tenantId);
+    }
 
+    /// <summary>
+    /// Links the identity for the setup owner step after the callback has been validated and the
+    /// ID token parsed. Extracted from <see cref="HandleSetupCallbackAsync"/> so it can be tested
+    /// without the code exchange.
+    /// </summary>
+    internal async Task<OidcSetupCallbackResult> CompleteSetupAsync(
+        OidcStateData stateData,
+        OidcProvider provider,
+        OidcIdTokenClaims claims,
+        Guid tenantId)
+    {
         if (stateData.Intent != "setup")
             return OidcSetupCallbackResult.Failed("invalid_intent", "State was not issued for a setup flow");
 
@@ -714,72 +833,68 @@ public class OidcAuthService : IOidcAuthService
 
         var subjectId = stateData.SubjectId.Value;
 
-        // Link OIDC identity to the pre-created admin subject
-        var (outcome, _) = await _subjectService.AttachOidcIdentityAsync(
+        var outcome = await _subjectService.AttachSetupOwnerOidcIdentityAsync(
+            tenantId,
             subjectId,
             provider.Id,
             claims.Sub,
             provider.IssuerUrl,
-            claims.Email);
+            claims.Email,
+            claims.EmailVerified == true);
+
+        if (outcome is null)
+            return OidcSetupCallbackResult.Failed(
+                "setup_already_complete", "Another completion has claimed the setup");
 
         if (outcome == OidcLinkOutcome.AlreadyLinkedToOther)
-            return OidcSetupCallbackResult.Failed(
-                "identity_already_linked",
-                "This provider account is already linked to another Nocturne user");
+        {
+            // The caller has just proved the identity, so a subject that holds it and nothing that
+            // could make someone else the owner is theirs.
+            if (stateData.TenantSlug is not { } tenantSlug
+                || await _subjectService.AdoptForSetupAsync(subjectId, claims.Sub, provider.IssuerUrl, tenantSlug)
+                    is not { } adoptedId)
+                return OidcSetupCallbackResult.Failed(
+                    "identity_already_linked",
+                    "This provider account is already linked to another Nocturne user");
 
-        // Update subject email/name from OIDC claims if not already set
+            subjectId = adoptedId;
+        }
+
         var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
         if (subject == null)
             return OidcSetupCallbackResult.Failed("subject_not_found", "Pre-created setup subject not found");
-
-        await _subjectService.UpdateLastLoginAsync(subjectId);
-
-        // Issue session via SessionService
-        var session = await _sessionService.IssueSessionAsync(
-            subjectId,
-            new SessionContext(
-                OidcSessionId: claims.SessionId,
-                DeviceDescription: "Setup OIDC",
-                IpAddress: ipAddress,
-                UserAgent: userAgent));
-
-        var tokens = new OidcTokenResponse
-        {
-            AccessToken = session.AccessToken,
-            RefreshToken = session.RefreshToken,
-            TokenType = "Bearer",
-            ExpiresIn = session.ExpiresInSeconds,
-            RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
-            SubjectId = subjectId,
-        };
 
         _logger.LogInformation(
             "Setup OIDC: linked identity for subject {SubjectId} via provider {Provider}",
             subjectId, provider.Name);
 
-        return OidcSetupCallbackResult.Succeeded(subjectId, tokens, stateData.ReturnUrl);
+        return OidcSetupCallbackResult.Succeeded(subjectId, provider.Id, claims.SessionId, stateData.ReturnUrl);
     }
 
     /// <summary>
-    /// Attaches a verified OIDC identity to an already-authenticated subject.
+    /// Attaches a verified OIDC identity to the subject the caller proved it is, by a signed-in
+    /// session for <see cref="LinkIntent"/> or a recovery session for <see cref="RecoveryIntent"/>.
+    /// The state must have been issued for that same proof, so neither flow's state completes the
+    /// other, and for that same subject.
     /// Extracted from <see cref="HandleLinkCallbackAsync"/> to enable unit testing
     /// without mocking token exchange and JWKS verification.
     /// </summary>
-    /// <param name="stateData">Decoded state data from the link callback, which must have <c>Intent == "link"</c>.</param>
+    /// <param name="stateData">Decoded state data from the link callback.</param>
     /// <param name="provider">The OIDC provider from which the identity originated.</param>
     /// <param name="claims">Parsed claims from the provider's ID token.</param>
-    /// <param name="authenticatedSubjectId">The currently authenticated subject to link the identity to.</param>
+    /// <param name="authenticatedSubjectId">The subject the caller proved it is, to link the identity to.</param>
+    /// <param name="intent">The intent the caller's proof completes.</param>
     /// <returns>An <see cref="OidcLinkResult"/> describing the outcome of the link operation.</returns>
     internal async Task<OidcLinkResult> AttachVerifiedIdentityAsync(
         OidcStateData stateData,
         OidcProvider provider,
         OidcIdTokenClaims claims,
-        Guid authenticatedSubjectId)
+        Guid authenticatedSubjectId,
+        string intent = LinkIntent)
     {
-        if (stateData.Intent != "link")
+        if (stateData.Intent != intent)
         {
-            return OidcLinkResult.Failed("invalid_intent", "State was not issued for a link flow");
+            return OidcLinkResult.Failed("invalid_intent", "State was not issued for this link flow");
         }
         if (stateData.SubjectId != authenticatedSubjectId)
         {
@@ -791,21 +906,36 @@ public class OidcAuthService : IOidcAuthService
             provider.Id,
             claims.Sub,
             provider.IssuerUrl,
-            claims.Email);
+            claims.Email,
+            claims.EmailVerified == true);
 
         return outcome switch
         {
             OidcLinkOutcome.Created or OidcLinkOutcome.AlreadyLinkedToSelf
-                => OidcLinkResult.Succeeded(identityId!.Value, stateData.ReturnUrl),
+                => OidcLinkResult.Succeeded(
+                    identityId!.Value, stateData.ReturnUrl, provider.Id, added: outcome == OidcLinkOutcome.Created),
             OidcLinkOutcome.AlreadyLinkedToOther
-                => OidcLinkResult.Failed(
-                    "identity_already_linked",
-                    "This provider account is already linked to another Nocturne user"),
+                => await _subjectService.TakeUnclaimedOidcIdentityAsync(
+                        authenticatedSubjectId, claims.Sub, provider.IssuerUrl, claims.Email,
+                        claims.EmailVerified == true) is { } takenId
+                    ? OidcLinkResult.Succeeded(takenId, stateData.ReturnUrl, provider.Id, added: true)
+                    : OidcLinkResult.Failed(
+                        "identity_already_linked",
+                        "This provider account is already linked to another Nocturne user"),
             _ => OidcLinkResult.Failed("unknown_error", "Unexpected link outcome"),
         };
     }
 
     #region Private Helper Methods
+
+    /// <summary>The state intent of a link a signed-in member starts.</summary>
+    internal const string LinkIntent = "link";
+
+    /// <summary>
+    /// The state intent of a link started under a recovery session. It shares the link callback,
+    /// which every provider already has registered, and completes only with a recovery session.
+    /// </summary>
+    internal const string RecoveryIntent = "recovery";
 
     private const string LoginCallbackPath = "/api/auth/oidc/callback";
     private const string LinkCallbackPath = "/api/auth/oidc/link/callback";
@@ -1191,6 +1321,23 @@ public class OidcAuthService : IOidcAuthService
 
         return JsonSerializer.Deserialize<OidcStateData>(json)
             ?? throw new InvalidOperationException("Invalid state data");
+    }
+
+    /// <inheritdoc />
+    public bool IsRecoveryState(string state)
+    {
+        if (string.IsNullOrEmpty(state))
+            return false;
+
+        try
+        {
+            return DecodeState(state).Intent == RecoveryIntent;
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException or InvalidOperationException)
+        {
+            _logger.LogDebug(ex, "Could not read an intent from the OIDC state");
+            return false;
+        }
     }
 
     /// <inheritdoc />

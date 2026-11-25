@@ -8,37 +8,44 @@
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { recoveryModeRedeem } from "#lib/api/generated/passkeys.generated.remote.js";
+  import { getAuthStatus, recoveryModeRedeem } from "#lib/api/generated/passkeys.generated.remote.js";
   import { goto, replaceState } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import LockedOutMembers from "./LockedOutMembers.svelte";
+  import RecoveryNextStep from "#lib/components/auth/RecoveryNextStep.svelte";
+  import LockedOutMembers from "#lib/components/members/LockedOutMembers.svelte";
 
-  // A link an administrator sends carries the code, so the member lands here and goes straight
-  // on to registering a passkey.
+  // A link an administrator or an email sends carries the code, so the member lands here and goes
+  // straight on to adding a sign-in method.
   const linkedCode = page.url.searchParams.get("code");
+
+  const authStatusQuery = getAuthStatus();
+  const emailRecoveryOffered = $derived(authStatusQuery.current?.emailRecoveryOffered ?? false);
 
   let code = $state(linkedCode ?? "");
   let isRedeeming = $state(false);
   let errorMessage = $state<string | null>(null);
+  let codeRefused = $state(false);
 
   /**
    * Spends the recovery code. It names the account itself, so nobody types a username here:
-   * the passkey page that follows enrols onto whichever account the code was issued for.
+   * the page that follows enrols onto whichever account the code was issued for.
    */
   async function redeem() {
     if (isRedeeming || !code.trim()) return;
     isRedeeming = true;
     errorMessage = null;
+    codeRefused = false;
 
     try {
       const { username } = await recoveryModeRedeem({ code: code.trim() });
 
       await goto(resolve(`auth/recovery/passkey?${new URLSearchParams({ username: username ?? "" })}`), { replace: true });
     } catch(err) {
-      errorMessage = errorStatus(err) === 429
-        ? "Too many attempts. Wait a minute, then try again."
-        : "That recovery code has expired or was already used. Ask an administrator for a new one.";
+      codeRefused = errorStatus(err) !== 429;
+      errorMessage = codeRefused
+        ? "That recovery code or link has expired or was already used."
+        : "Too many attempts. Wait a minute, then try again.";
     } finally {
       isRedeeming = false;
     }
@@ -58,7 +65,7 @@
 </script>
 
 <svelte:head>
-  <title>Recovery mode - Nocturne</title>
+  <title>Recover your account - Nocturne</title>
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
@@ -68,10 +75,10 @@
       <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
         <ShieldAlert class="h-6 w-6 text-warning" />
       </div>
-      <Card.Title class="text-xl">Recovery mode</Card.Title>
+      <Card.Title class="text-xl">Recover your account</Card.Title>
       <Card.Description>
-        Some accounts here have no way to sign in. If yours is one of them, sign in with one of
-        your own recovery codes, or ask an administrator for a one-time recovery code.
+        Use a recovery code from an administrator, or open the link sent to your email. It lets you
+        add one new way to sign in.
       </Card.Description>
     </Card.Header>
 
@@ -98,6 +105,10 @@
 
         <FormError issues={errorMessage} focusOnShow />
 
+        {#if codeRefused}
+          <RecoveryNextStep {emailRecoveryOffered} />
+        {/if}
+
         <Button type="submit" class="w-full" size="lg" disabled={!code.trim() || isRedeeming}>
           {#if isRedeeming}
             <Loader2 class="mr-2 h-5 w-5 animate-spin" />
@@ -119,6 +130,6 @@
   </Card.Root>
 
   {#if page.data.isAuthenticated}
-    <LockedOutMembers />
+    <LockedOutMembers signInRequired={page.data.isHandedOffSession === true} />
   {/if}
 </div>

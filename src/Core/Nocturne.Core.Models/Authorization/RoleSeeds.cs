@@ -11,7 +11,7 @@ public static class RoleSeeds
     public const string Owner = "owner";
     /// <summary>Everything except minting another superuser.</summary>
     public const string Admin = "admin";
-    /// <summary>A caregiver who may log treatments and manage alerts.</summary>
+    /// <summary>A caregiver who may log treatments, manage alerts and set up data sources.</summary>
     public const string Caretaker = "caretaker";
     /// <summary>Read-only access to glucose and reports.</summary>
     public const string Viewer = "viewer";
@@ -51,6 +51,7 @@ public static class RoleSeeds
             Scope.FoodRead, Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead,
             Scope.ReportsRead,
             Scope.TherapyRead, Scope.AlertsReadWrite,
+            Scope.ConnectorsReadWrite,
             Scope.DeviceNotify, Scope.DeviceActuate,
         ],
         [Clinician] =

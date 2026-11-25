@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { ConnectionStatus } from "#lib/api/generated/nocturne-api-client.js";
+  import { ConnectionStatus } from "@nocturne/api-client";
   import Ban from "@lucide/svelte/icons/ban";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import CircleDashed from "@lucide/svelte/icons/circle-dashed";
   import CircleOff from "@lucide/svelte/icons/circle-off";
+  import FileCheck from "@lucide/svelte/icons/file-check";
   import Clock from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
@@ -34,6 +35,9 @@
   {:else if status === ConnectionStatus.Quiet}
     <CircleDashed class="size-4 text-muted-foreground" aria-hidden="true" />
     <span class="text-muted-foreground">Quiet</span>
+  {:else if status === ConnectionStatus.Imported}
+    <FileCheck class="size-4 text-muted-foreground" aria-hidden="true" />
+    <span class="text-muted-foreground">Imported</span>
   {:else if status === ConnectionStatus.Disabled}
     <CircleOff class="size-4 text-muted-foreground" aria-hidden="true" />
     <span class="text-muted-foreground">Off</span>

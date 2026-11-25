@@ -1,7 +1,7 @@
-import { OAuthScope } from "../api/generated/nocturne-api-client";
+import { OAuthScope } from "@nocturne/api-client";
 import { scopeLabels } from "./scope-labels.svelte";
 
-export { OAuthScope } from "../api/generated/nocturne-api-client";
+export { OAuthScope } from "@nocturne/api-client";
 
 // The device.* scopes gate the alert engine's device-actuation feature.
 export const DEVICE_NOTIFY_SCOPE = "device.notify";

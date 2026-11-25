@@ -28,6 +28,24 @@ internal readonly record struct ConditionLeaf(AlertConditionType? Kind, JsonElem
         return null;
     }
 
+    /// <summary>The fact the leaf's limit names (<c>value_from.fact</c>), or null when its limit is a number.</summary>
+    public AlertLimitFact? LimitFact()
+    {
+        if (Params.ValueKind != JsonValueKind.Object
+            || !Params.TryGetProperty("value_from", out var reference)
+            || reference.ValueKind != JsonValueKind.Object
+            || !reference.TryGetProperty("fact", out var fact)
+            || fact.ValueKind != JsonValueKind.String)
+            return null;
+        return fact.GetString() switch
+        {
+            "latest_glucose" => AlertLimitFact.LatestGlucose,
+            "target_low" => AlertLimitFact.TargetLow,
+            "target_high" => AlertLimitFact.TargetHigh,
+            _ => null,
+        };
+    }
+
     /// <summary>The operand <paramref name="name"/> when it is a string.</summary>
     public string? StringParam(string name) =>
         Params.ValueKind == JsonValueKind.Object
@@ -59,6 +77,10 @@ internal static class RuleTrees
 
     private static readonly ConcurrentDictionary<DescriptionKey, Description> Descriptions = new();
 
+    private static readonly ConcurrentDictionary<NextChangeKey, bool> NextChangeVerdicts = new();
+
+    private static readonly ConcurrentDictionary<DescriptionKey, IReadOnlyList<string>> FactsRead = new();
+
     /// <summary>
     /// The leaves of the rule's body in pre-order, then those of its auto-resolve tree when
     /// <paramref name="includeAutoResolve"/> and auto-resolve is enabled.
@@ -87,13 +109,59 @@ internal static class RuleTrees
     /// </summary>
     /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
     public static bool ReferencesWallClock(AlertRuleSnapshot rule) =>
-        RustAlertEngine.ReferencesWallClock(new RustRuleConditionsRequest
-        {
-            ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-            ConditionParams = Body(rule.ConditionType, rule.ConditionParams),
-            AutoResolveEnabled = rule.AutoResolveEnabled,
-            AutoResolveParams = rule.AutoResolveEnabled ? AutoResolve(rule.AutoResolveParams) : null,
-        });
+        RustAlertEngine.ReferencesWallClock(ConditionsRequest(rule));
+
+    /// <summary>
+    /// The context facts the rule reads (docs/alerts/engine-semantics.md §5.2), by wire name. Kept per
+    /// condition, as descriptions are.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
+    public static IReadOnlyList<string> Reads(AlertRuleSnapshot rule)
+    {
+        var key = new DescriptionKey(
+            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled ? rule.AutoResolveParams : null);
+        if (FactsRead.TryGetValue(key, out var kept))
+            return kept;
+
+        var reads = RustAlertEngine.RuleReads(ConditionsRequest(rule));
+        if (FactsRead.Count >= CacheLimit)
+            FactsRead.Clear();
+        FactsRead[key] = reads;
+        return reads;
+    }
+
+    /// <summary>
+    /// Whether the rule references the wall clock and every fact it reads is one the sweep may wait
+    /// for (<see cref="ContextFactWrites.SweepMayWaitFor"/>), so between its evaluations only the
+    /// clock moves it, and its last evaluation's next change (docs/alerts/engine-semantics.md §5.3) is
+    /// the earliest instant one can differ. Kept per condition, as descriptions are.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
+    public static bool WaitsForNextChange(AlertRuleSnapshot rule)
+    {
+        var key = new NextChangeKey(
+            new DescriptionKey(
+                rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled ? rule.AutoResolveParams : null),
+            rule.OnUnknown);
+        if (NextChangeVerdicts.TryGetValue(key, out var kept))
+            return kept;
+
+        var waits = RustAlertEngine.ReferencesWallClock(ConditionsRequest(rule))
+                    && Reads(rule).All(ContextFactWrites.SweepMayWaitFor);
+        if (NextChangeVerdicts.Count >= CacheLimit)
+            NextChangeVerdicts.Clear();
+        NextChangeVerdicts[key] = waits;
+        return waits;
+    }
+
+    private static RustRuleConditionsRequest ConditionsRequest(AlertRuleSnapshot rule) => new()
+    {
+        ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
+        ConditionParams = Body(rule.ConditionType, rule.ConditionParams),
+        AutoResolveEnabled = rule.AutoResolveEnabled,
+        AutoResolveParams = rule.AutoResolveEnabled ? AutoResolve(rule.AutoResolveParams) : null,
+        OnUnknown = rule.OnUnknown,
+    };
 
     /// <summary>
     /// The body as replay sends it: a body that is not JSON goes as a JSON string, which the engine
@@ -126,8 +194,13 @@ internal static class RuleTrees
         }
     }
 
-    /// <summary>Drops every kept description.</summary>
-    internal static void ClearCache() => Descriptions.Clear();
+    /// <summary>Drops every kept description, fact set and next-change verdict.</summary>
+    internal static void ClearCache()
+    {
+        Descriptions.Clear();
+        NextChangeVerdicts.Clear();
+        FactsRead.Clear();
+    }
 
     /// <param name="type">The condition type <paramref name="conditionParams"/> is stored for.</param>
     /// <param name="conditionParams">The rule's body as stored.</param>
@@ -184,6 +257,9 @@ internal static class RuleTrees
 
     private readonly record struct DescriptionKey(
         AlertConditionType Type, string ConditionParams, string? AutoResolveParams);
+
+    /// <summary>A rule's <c>on_unknown</c> decides whether it is wall-clock, so it keys the verdict.</summary>
+    private readonly record struct NextChangeKey(DescriptionKey Conditions, string OnUnknown);
 
     /// <param name="Body">The body's leaves.</param>
     /// <param name="All">The body's leaves, then the auto-resolve tree's.</param>

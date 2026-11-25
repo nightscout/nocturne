@@ -2,16 +2,24 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using IAuthorizationService = Nocturne.Core.Contracts.Identity.IAuthorizationService;
+using PlatformAdminCredentials = Nocturne.Core.Models.Authorization.PlatformAdminCredentials;
 
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// Authorization controller that provides 1:1 compatibility with Nightscout authorization endpoints.
+/// Nightscout authorization. A client can exchange an access token for a JWT and read its
+/// permissions. A client with full access can list, create, update and delete subjects and list
+/// roles. Writing a role also needs <see cref="RequireInstanceStandingAttribute"/>, since roles are
+/// shared by every tenant.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with Nightscout authorization endpoints.
+/// </remarks>
 /// <seealso cref="IAuthorizationService"/>
 [ApiController]
 [Tags("V2")]
@@ -170,6 +178,11 @@ public class AuthorizationController : ControllerBase
     {
         _logger.LogDebug("Create subject requested: {Name}", subject.Name);
 
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
@@ -181,7 +194,8 @@ public class AuthorizationController : ControllerBase
         Subject createdSubject;
         try
         {
-            createdSubject = await _authorizationService.CreateSubjectAsync(subject);
+            createdSubject = await _authorizationService.CreateSubjectAsync(
+                subject, await HttpContext.CredentialMakerAsync(HttpContext.RequestAborted));
         }
         catch (ArgumentException ex)
         {
@@ -214,6 +228,11 @@ public class AuthorizationController : ControllerBase
     public async Task<ActionResult<Subject>> UpdateSubject([FromBody] Subject subject)
     {
         _logger.LogDebug("Update subject requested: {Id}", subject.Id);
+
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
 
         if (!ModelState.IsValid)
         {
@@ -305,6 +324,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Created role</returns>
     [HttpPost("roles")]
     [RequireSuperuser]
+    [RequireInstanceStanding]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 201)]
@@ -316,9 +336,9 @@ public class AuthorizationController : ControllerBase
     {
         _logger.LogDebug("Create role requested: {Name}", role.Name);
 
-        if (!ModelState.IsValid)
+        if (ReservedRoleName(role) is { } refused)
         {
-            return BadRequest(ModelState);
+            return refused;
         }
 
         // Clear ID to ensure new object
@@ -341,6 +361,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Updated role</returns>
     [HttpPut("roles")]
     [RequireSuperuser]
+    [RequireInstanceStanding]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 200)]
@@ -351,11 +372,16 @@ public class AuthorizationController : ControllerBase
     [ErrorEnvelope]
     public async Task<ActionResult<Role>> UpdateRole([FromBody] Role role)
     {
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
+        {
+            return Challenge();
+        }
+
         _logger.LogDebug("Update role requested: {Id}", role.Id);
 
-        if (!ModelState.IsValid)
+        if (ReservedRoleName(role) is { } refused)
         {
-            return BadRequest(ModelState);
+            return refused;
         }
 
         if (string.IsNullOrEmpty(role.Id))
@@ -382,6 +408,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Success response</returns>
     [HttpDelete("roles/{id}")]
     [RequireSuperuser]
+    [RequireInstanceStanding]
     [NightscoutEndpoint("/api/v2/authorization/roles/:id")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(204)]
@@ -403,5 +430,20 @@ public class AuthorizationController : ControllerBase
 
         _logger.LogDebug("Successfully deleted role: {Id}", id);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Refuses a role named <see cref="PlatformAdminCredentials.RoleName"/>
+    /// as an invalid name is refused.
+    /// </summary>
+    private ActionResult? ReservedRoleName(Role role)
+    {
+        if (PlatformAdminCredentials.IsRoleName(role.Name))
+        {
+            ModelState.AddModelError(nameof(Role.Name), "The Name field names a reserved role.");
+            return ValidationProblem(ModelState);
+        }
+
+        return ModelState.IsValid ? null : BadRequest(ModelState);
     }
 }

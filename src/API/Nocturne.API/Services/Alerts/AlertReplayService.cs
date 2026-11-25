@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.API.Configuration;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -11,28 +12,31 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Replays the tenant's enabled rule set over a historical glucose window. This service builds
-/// each 5-minute tick's context as of that instant, through the same
+/// Replays the tenant's enabled rule set over a historical glucose window. This service builds a
+/// tick at each reading and, in a gap between readings, a sample of the other facts every
+/// <see cref="SampleInterval"/>, each with its context as of that instant, through the same
 /// <see cref="ISensorContextEnricher"/> the live engine uses
 /// (<see cref="ISensorContextEnricher.EnrichAsOfAsync"/>), resolves Do Not Disturb per tick, and
-/// captures the fact timelines. The <see cref="IAlertReplayEngine"/> evaluates the rules over those
-/// ticks (docs/alerts/engine-semantics.md §8).
+/// captures the fact timelines. The <see cref="IAlertReplayEngine"/> steps the rules over those
+/// ticks and the instants between them (docs/alerts/engine-semantics.md §8).
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
+    IDndWindowRepository dndWindowRepository,
     ISensorGlucoseRepository glucoseRepository,
     ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
     IOptions<AlertEvaluationOptions> evaluationOptions,
     IAlertReplayEngine replayEngine,
+    ImportedHistory importedHistory,
     TimeProvider timeProvider)
     : IAlertReplayService
 {
     /// <summary>
-    /// Replay tick cadence. Glucose is reported every ~5 minutes; finer resolution would
-    /// re-evaluate rules without new data.
+    /// How often a gap between readings samples the other facts. Their writes are not replayed
+    /// one by one, so a fact that moves inside a gap is seen at most this late.
     /// </summary>
-    private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan SampleInterval = TimeSpan.FromMinutes(5);
 
     public Task<AlertReplayResult> ReplayAsync(
         DateOnly? localDate, string? timezone, DateTime? fromUtc, DateTime? toUtc, CancellationToken ct)
@@ -44,6 +48,73 @@ internal sealed class AlertReplayService(
     {
         ArgumentNullException.ThrowIfNull(ruleOverride);
         return ReplayInternalAsync(localDate, timezone, fromUtc, toUtc, ruleOverride, ct);
+    }
+
+    /// <summary>
+    /// Replayed ahead of each searched day and not reported. Replay starts every rule from rest,
+    /// so a condition already true at the start of a window fires on its first tick; the lead-in
+    /// moves that edge out of the day, where the day before reports the real one. It is longer
+    /// than any "for at least" duration the editor offers.
+    /// </summary>
+    private static readonly TimeSpan FiringSearchLeadIn = TimeSpan.FromHours(3);
+
+    private const int MaxFiringsReturned = 50;
+
+    public async Task<AlertFiringSearchResult> FindFiringsAsync(
+        ReplayRuleOverride ruleOverride, bool lastDayOnly, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ruleOverride);
+
+        var options = evaluationOptions.Value;
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+        // On a sample boundary, so a repeated search covers the same days.
+        var searchedTo = new DateTime(
+            utcNow.Ticks - utcNow.Ticks % SampleInterval.Ticks, DateTimeKind.Utc);
+
+        var tenantId = tenantAccessor.TenantId;
+        if (tenantId == Guid.Empty)
+        {
+            return new AlertFiringSearchResult(searchedTo, searchedTo, false, 0, []);
+        }
+
+        var candidate = await OverrideSnapshotAsync(ruleOverride, tenantId, ct);
+        IReadOnlyList<AlertRuleSnapshot> rules = RuleDataNeeds.Walk([candidate]).NeedsActiveAlerts
+            ? Layer(await alertRepository.GetEnabledRulesAsync(ct), candidate)
+            : [candidate];
+
+        var started = timeProvider.GetTimestamp();
+        var firings = new List<AlertFiring>();
+        var hasReadings = false;
+        var searchedFrom = searchedTo;
+
+        var days = lastDayOnly ? 1 : Math.Max(1, options.FiringSearchDays);
+        var arrivals = await ArrivalsAsync(searchedTo.AddDays(-days) - FiringSearchLeadIn, searchedTo, ct);
+        for (var day = 0; day < days; day++)
+        {
+            var dayEnd = searchedTo.AddDays(-day);
+            var dayStart = dayEnd.AddDays(-1);
+
+            var series = await BuildTicksAsync(
+                rules, dayStart - FiringSearchLeadIn, dayEnd, arrivals, captureFacts: false, ct);
+            var run = await replayEngine.ReplayAsync(
+                new AlertReplayInput(rules, series.Ticks, Until: dayEnd), ct);
+
+            firings.AddRange(run.Events
+                .Where(e => e.RuleId == candidate.Id
+                            && e.At >= dayStart
+                            && e.Kind is AlertReplayTransition.Fired or AlertReplayTransition.SuppressedByDnd)
+                .OrderByDescending(e => e.At)
+                .Select(e => new AlertFiring(DateTime.SpecifyKind(e.At, DateTimeKind.Utc), EventKind(e.Kind))));
+            hasReadings |= series.HasReadings;
+            searchedFrom = dayStart;
+
+            if (timeProvider.GetElapsedTime(started) > options.FiringSearchBudget)
+                break;
+        }
+
+        return new AlertFiringSearchResult(
+            searchedFrom, searchedTo, hasReadings, firings.Count,
+            firings.Take(MaxFiringsReturned).ToList());
     }
 
     /// <summary>
@@ -77,17 +148,91 @@ internal sealed class AlertReplayService(
         }
 
         var stored = await alertRepository.GetEnabledRulesAsync(ct);
-        var rules = ApplyOverride(stored, ruleOverride, tenantId);
+        var rules = ruleOverride is null
+            ? stored
+            : Layer(stored, await OverrideSnapshotAsync(ruleOverride, tenantId, ct));
         if (rules.Count == 0)
         {
             return new AlertReplayResult(windowStart, windowEnd, []);
         }
 
+        var series = await BuildTicksAsync(
+            rules, windowStart, windowEnd, await ArrivalsAsync(windowStart, windowEnd, ct), captureFacts: true, ct);
+
+        var run = await replayEngine.ReplayAsync(
+            new AlertReplayInput(rules, series.Ticks, Until: windowEnd), ct);
+
+        var byId = rules.ToDictionary(r => r.Id);
+        var events = run.Events
+            .Where(e => e.Kind is AlertReplayTransition.Fired
+                or AlertReplayTransition.SuppressedByDnd
+                or AlertReplayTransition.AutoResolved)
+            .Select(e =>
+            {
+                var rule = byId[e.RuleId];
+                return new AlertReplayEvent(
+                    DateTime.SpecifyKind(e.At, DateTimeKind.Utc), rule.Id, rule.Name, rule.Severity, EventKind(e.Kind));
+            })
+            .ToList();
+
+        var factTimelines = series.FactPoints.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (IReadOnlyList<FactSnapshotPoint>)kvp.Value);
+
+        return new AlertReplayResult(windowStart, windowEnd, events)
+        {
+            LeafTransitionsByRule = run.LeafTransitions.ToDictionary(l => l.RuleId, l => l.Leaves),
+            FactTimelines = factTimelines,
+        };
+    }
+
+    /// <summary>The ticks of one replay window, each enriched as of its own instant.</summary>
+    /// <param name="FactPoints">Empty unless the fact timelines were asked for.</param>
+    /// <param name="HasReadings">Whether any tick had a glucose reading at or before it.</param>
+    private sealed record TickSeries(
+        IReadOnlyList<AlertReplayTick> Ticks,
+        Dictionary<string, List<FactSnapshotPoint>> FactPoints,
+        bool HasReadings);
+
+    /// <summary>
+    /// How replay tells the window's live arrivals from imported history: once per replay request,
+    /// not per tick.
+    /// </summary>
+    private async Task<Arrivals> ArrivalsAsync(DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
+        new(await importedHistory.InAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct));
+
+    /// <summary>
+    /// Where live evaluated each reading (docs/alerts/engine-semantics.md §8). A reading dated
+    /// before its connection first sent anything (<paramref name="Imported"/>) is imported history, as
+    /// is one stored further before its timestamp than the clock tolerance. Every other reading is
+    /// a live arrival, however late: live evaluated it when it was stored, and no earlier than its
+    /// timestamp, since a tick is never before its reading.
+    /// </summary>
+    private sealed record Arrivals(IReadOnlySet<Guid> Imported)
+    {
+        public bool Live(SensorGlucose reading) =>
+            !Imported.Contains(reading.Id)
+            && reading.CreatedAt >= reading.Timestamp - RustAlertEngine.ClockTolerance();
+
+        public DateTime EvaluatedAt(SensorGlucose reading) =>
+            Live(reading) && reading.CreatedAt > reading.Timestamp ? reading.CreatedAt : reading.Timestamp;
+    }
+
+    private async Task<TickSeries> BuildTicksAsync(
+        IReadOnlyList<AlertRuleSnapshot> rules,
+        DateTime windowStart,
+        DateTime windowEnd,
+        Arrivals arrivals,
+        bool captureFacts,
+        CancellationToken ct)
+    {
         // Replay walks the canonical stream — the same series the live engine alarms on. The
         // window is keyset-paged and consumed by the tick loop as a left-to-right fold, so the
         // readings are never all resident; the per-tick contexts built from them are.
         await using var readings = await ReadingCursor.CreateAsync(
-            StreamCanonicalReadingsAsync(windowStart, windowEnd, ct), ct);
+            StreamCanonicalReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
+            StreamHiddenReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
+            windowStart, ct);
 
         // Scoped DND (ADR 0004 D5): the tenant's windows received by the replay's end, resolved
         // per tick with WasActiveAt (receipt-gated) so replay reproduces what the live engine
@@ -95,7 +240,7 @@ internal sealed class AlertReplayService(
         // do_not_disturb leaf's ActiveDoNotDisturb snapshot re-source from these windows per
         // tick. Scheduled DND is not reconstructible historically (the schedule row keeps no
         // change history), so — as before D5 — replay considers windows only.
-        var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(windowEnd, ct);
+        var dndWindows = await dndWindowRepository.GetReceivedByAsync(windowEnd, ct);
 
         // Per-tick fact snapshots (site age, IOB, temp basal rate, etc.). Keyed by snake_case
         // fact name; same compression as the leaf log — emit baseline + on rounded-value flip.
@@ -104,26 +249,61 @@ internal sealed class AlertReplayService(
         var factPrev = new Dictionary<string, decimal>();
         var factPoints = new Dictionary<string, List<FactSnapshotPoint>>();
         var ticks = new List<AlertReplayTick>();
+        var hasReadings = false;
 
-        for (var tick = windowStart; tick < windowEnd; tick += TickInterval)
+        // Readings the cursor has walked past, waiting for the instant live evaluated them.
+        var arriving = new PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime>();
+        (SensorGlucose Reading, ReadingTrend Trend)? known = null;
+        // The newest known reading with a value, and the first with none after it, as live's look
+        // back finds them (AlertReadings.LookBackAsync), so a reading with no value reads as live
+        // reads it.
+        SensorGlucose? usable = null;
+        DateTime? valuelessSince = null;
+
+        // The window's start stands for the evaluation of the last reading before it, so every rule
+        // is evaluated there; after it, a tick is a reading where live evaluated it, or a sample.
+        var isReading = true;
+        for (var tick = windowStart; tick < windowEnd;)
         {
             ct.ThrowIfCancellationRequested();
 
             // Walk the reading stream once across the whole replay rather than re-scanning per
-            // tick. Snap to the most recent reading at-or-before tick; trailing readings
-            // (those after tick) stay queued for later ticks.
+            // tick. A reading is evaluated no earlier than its timestamp, so every reading
+            // evaluated by `tick` has been walked past once the cursor reaches `tick`.
             await readings.AdvanceToAsync(tick);
-            var current = readings.Current;
-            var hasReadingForTick = current is not null && current.Timestamp <= tick;
+            Enqueue(readings, arrivals, arriving);
+            while (arriving.TryPeek(out var reading, out var evaluatedAt) && evaluatedAt <= tick)
+            {
+                arriving.Dequeue();
+                if (reading.Reading.Timestamp <= AlertReadings.Bound(tick)
+                    && (known is null || reading.Reading.Timestamp > known.Value.Reading.Timestamp))
+                {
+                    known = reading;
+                    if (AlertReadings.HasValue(reading.Reading))
+                        (usable, valuelessSince) = (reading.Reading, null);
+                    else
+                        valuelessSince ??= reading.Reading.Timestamp;
+                }
+            }
+
+            var current = known?.Reading;
+            var trend = known?.Trend ?? default;
+            hasReadings |= current is not null;
+            var valueless = current is not null && !AlertReadings.HasValue(current);
 
             var baseContext = new SensorContext
             {
-                LatestValue = hasReadingForTick ? current!.Mgdl.ToDecimal() : null,
-                LatestTimestamp = hasReadingForTick ? current!.Timestamp : null,
-                TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? tr.ToDecimal() : null,
+                LatestValue = valueless ? null : current?.Mgdl.ToDecimal(),
+                LatestTimestamp = current?.Timestamp,
+                LatestReceivedAt = current is not null && arrivals.Live(current) ? current.CreatedAt : null,
+                TrendRate = valueless ? null : trend.Rate,
+                TrendBucket = valueless ? null : trend.Bucket,
                 // A tick before the window's first reading reads as fresh rather than as never
-                // having had one (engine-semantics.md §8).
-                LastReadingAt = hasReadingForTick ? current!.Timestamp : tick,
+                // having had one (engine-semantics.md §8). After a reading with no value it is the
+                // last reading with one (CanonicalAlertEvaluator.ContextForValueless).
+                LastReadingAt = valueless ? usable?.Timestamp ?? valuelessSince : current?.Timestamp ?? tick,
+                SensorState = valueless ? new SensorStateSnapshot(SensorState.NoValue, valuelessSince) : null,
+                LatestSource = current is null ? null : new ReadingSource(current.DataSource, current.Device),
                 ActiveAlerts = new Dictionary<Guid, ActiveAlertSnapshot>(),
             };
 
@@ -142,7 +322,8 @@ internal sealed class AlertReplayService(
                 ActiveDoNotDisturb = tickDnd.ActiveDoNotDisturb,
             };
 
-            CaptureFactSnapshots(enrichedBase, tickUtc, factPrev, factPoints);
+            if (captureFacts)
+                CaptureFactSnapshots(enrichedBase, tickUtc, factPrev, factPoints);
 
             // The gate live delivery applies when an excursion opens: a non-Critical rule whose
             // class an active scope covers is recorded as suppressed.
@@ -150,31 +331,42 @@ internal sealed class AlertReplayService(
                 .Where(r => DndSuppressionGate.IsSuppressed(r, tickDnd.Scopes))
                 .Select(r => r.Id)
                 .ToHashSet();
-            ticks.Add(new AlertReplayTick(tickUtc, enrichedBase, suppressed));
+            ticks.Add(new AlertReplayTick(tickUtc, enrichedBase, suppressed, isReading));
+
+            var sample = tick + SampleInterval;
+            var next = await NextEvaluationAsync(readings, arrivals, arriving);
+            isReading = next <= sample;
+            tick = isReading ? next!.Value : sample;
         }
 
-        var run = await replayEngine.ReplayAsync(new AlertReplayInput(rules, ticks), ct);
+        return new TickSeries(ticks, factPoints, hasReadings);
+    }
 
-        var byId = rules.ToDictionary(r => r.Id);
-        var events = run.Events
-            .Where(e => e.Kind != AlertReplayTransition.Cleared)
-            .Select(e =>
-            {
-                var rule = byId[e.RuleId];
-                return new AlertReplayEvent(
-                    DateTime.SpecifyKind(e.At, DateTimeKind.Utc), rule.Id, rule.Name, rule.Severity, EventKind(e.Kind));
-            })
-            .ToList();
+    private static void Enqueue(
+        ReadingCursor readings, Arrivals arrivals,
+        PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving)
+    {
+        foreach (var advanced in readings.TakeAdvanced())
+            arriving.Enqueue(advanced, arrivals.EvaluatedAt(advanced.Reading));
+    }
 
-        var factTimelines = factPoints.ToDictionary(
-            kvp => kvp.Key,
-            kvp => (IReadOnlyList<FactSnapshotPoint>)kvp.Value);
-
-        return new AlertReplayResult(windowStart, windowEnd, events)
+    /// <summary>
+    /// The next instant a reading is evaluated. A reading not yet walked past is evaluated no
+    /// earlier than its timestamp, so the cursor walks on until none can come before the earliest
+    /// one waiting.
+    /// </summary>
+    private static async Task<DateTime?> NextEvaluationAsync(
+        ReadingCursor readings, Arrivals arrivals,
+        PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving)
+    {
+        while (true)
         {
-            LeafTransitionsByRule = run.LeafTransitions.ToDictionary(l => l.RuleId, l => l.Leaves),
-            FactTimelines = factTimelines,
-        };
+            DateTime? due = arriving.TryPeek(out _, out var at) ? at : null;
+            if (readings.Upcoming is not { } upcoming || (due is { } d && d <= upcoming))
+                return due;
+            await readings.AdvanceToAsync(upcoming);
+            Enqueue(readings, arrivals, arriving);
+        }
     }
 
     private static AlertReplayEventKind EventKind(AlertReplayTransition transition) => transition switch
@@ -189,9 +381,32 @@ internal sealed class AlertReplayService(
     /// Keyset-pages the window's canonical glucose rows in ascending time order, a page of
     /// <see cref="Configuration.AlertEvaluationOptions.ReplayGlucosePageSize"/> at a time.
     /// </summary>
-    private async IAsyncEnumerable<SensorGlucose> StreamCanonicalReadingsAsync(
-        DateTime windowStart,
-        DateTime windowEnd,
+    private IAsyncEnumerable<SensorGlucose> StreamCanonicalReadingsAsync(
+        DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
+        KeysetPagesAsync(
+            async (pageSize, afterTimestamp, afterId) => (IReadOnlyList<SensorGlucose>)(await glucoseRepository.GetAsync(
+                from: windowStart, to: windowEnd, device: null, source: null,
+                limit: pageSize, offset: 0, descending: false,
+                afterTimestamp: afterTimestamp, afterId: afterId, ct: ct,
+                streams: GlucoseStreams.Canonical)).ToList(),
+            reading => reading,
+            ct);
+
+    /// <summary>
+    /// Keyset-pages the window's glucose rows the canonical read leaves out, which only ever serve
+    /// as the earlier reading of a derived <see cref="ReadingTrend"/>.
+    /// </summary>
+    private IAsyncEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> StreamHiddenReadingsAsync(
+        DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
+        KeysetPagesAsync(
+            (pageSize, afterTimestamp, afterId) => glucoseRepository.GetHiddenAsync(
+                windowStart, windowEnd, pageSize, afterTimestamp, afterId, ct),
+            row => row.Reading,
+            ct);
+
+    private async IAsyncEnumerable<T> KeysetPagesAsync<T>(
+        Func<int, DateTime?, Guid?, Task<IReadOnlyList<T>>> fetchPage,
+        Func<T, SensorGlucose> readingOf,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var pageSize = Math.Max(1, evaluationOptions.Value.ReplayGlucosePageSize);
@@ -202,15 +417,11 @@ internal sealed class AlertReplayService(
         {
             ct.ThrowIfCancellationRequested();
 
-            var fetched = (await glucoseRepository.GetAsync(
-                from: windowStart, to: windowEnd, device: null, source: null,
-                limit: pageSize, offset: 0, descending: false,
-                afterTimestamp: afterTimestamp, afterId: afterId, ct: ct,
-                streams: GlucoseStreams.Canonical)).ToList();
+            var fetched = await fetchPage(pageSize, afterTimestamp, afterId);
 
             if (fetched.Count > 0)
             {
-                var last = fetched[^1];
+                var last = readingOf(fetched[^1]);
                 // Every non-empty page must end strictly past the cursor it was fetched with. A
                 // fetch that ignores the cursor returns the same full page forever, and the loop
                 // would never terminate; fail loudly instead of spinning.
@@ -227,8 +438,8 @@ internal sealed class AlertReplayService(
                 afterId = last.Id;
             }
 
-            foreach (var reading in fetched)
-                yield return reading;
+            foreach (var row in fetched)
+                yield return row;
 
             // A short page is the last one.
             if (fetched.Count < pageSize)
@@ -237,36 +448,73 @@ internal sealed class AlertReplayService(
     }
 
     /// <summary>
-    /// One-reading-lookahead cursor over the paged canonical stream. The tick loop needs the most
-    /// recent reading at-or-before each tick, which a left-to-right fold over ascending readings
-    /// gets from the current reading plus a peek at the next one — so no reading older than the
-    /// playhead has to stay resident. <see cref="Current"/> is seeded with the first reading (as
-    /// the pre-paging list walk did, starting at index 0) and never advances past the last, so a
-    /// window whose readings all post-date a tick reports no reading for it, and ticks after the
-    /// final reading keep seeing that reading.
+    /// One-reading-lookahead cursor over the paged canonical stream, walked in timestamp order. Each
+    /// reading of the window it walks past is handed out once by <see cref="TakeAdvanced"/>; the
+    /// readings before the window start serve only as the earlier readings of a trend.
     /// </summary>
+    /// <remarks>
+    /// The earlier readings are those of the last <see cref="ReadingTrend.MaxGap"/> before the
+    /// reading walked to, canonical and hidden, those before the window start included, so each
+    /// reading derives its trend from the readings already loaded, by the rule live evaluation reads by.
+    /// </remarks>
     private sealed class ReadingCursor : IAsyncDisposable
     {
         private readonly IAsyncEnumerator<SensorGlucose> _source;
+        private readonly IAsyncEnumerator<(SensorGlucose Reading, Guid? DuplicateOf)> _hidden;
+        private readonly List<(SensorGlucose Reading, Guid? DuplicateOf)> _earlier = [];
+        private (SensorGlucose Reading, Guid? DuplicateOf)? _nextHidden;
         private SensorGlucose? _next;
         private bool _exhausted;
+        private bool _hiddenExhausted;
 
-        private ReadingCursor(IAsyncEnumerator<SensorGlucose> source) => _source = source;
+        private ReadingCursor(
+            IAsyncEnumerator<SensorGlucose> source,
+            IAsyncEnumerator<(SensorGlucose Reading, Guid? DuplicateOf)> hidden)
+        {
+            _source = source;
+            _hidden = hidden;
+        }
 
-        public SensorGlucose? Current { get; private set; }
+        private readonly List<(SensorGlucose Reading, ReadingTrend Trend)> _advanced = [];
+
+        private SensorGlucose? Current { get; set; }
+
+        /// <summary>The timestamp of the first reading the cursor has not advanced to.</summary>
+        public DateTime? Upcoming => _next?.Timestamp;
+
+        /// <summary>
+        /// The readings advanced to since the last call, each with the trend it derives from the
+        /// readings before it.
+        /// </summary>
+        public List<(SensorGlucose Reading, ReadingTrend Trend)> TakeAdvanced()
+        {
+            var advanced = _advanced.ToList();
+            _advanced.Clear();
+            return advanced;
+        }
 
         public static async Task<ReadingCursor> CreateAsync(
-            IAsyncEnumerable<SensorGlucose> source, CancellationToken ct)
+            IAsyncEnumerable<SensorGlucose> source,
+            IAsyncEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> hidden,
+            DateTime windowStart,
+            CancellationToken ct)
         {
-            var cursor = new ReadingCursor(source.GetAsyncEnumerator(ct));
+            var cursor = new ReadingCursor(source.GetAsyncEnumerator(ct), hidden.GetAsyncEnumerator(ct));
             try
             {
-                cursor.Current = await cursor.PullAsync();
+                var first = await cursor.PullAsync();
+                while (first is not null && first.Timestamp < windowStart)
+                {
+                    cursor._earlier.Add((first, null));
+                    first = await cursor.PullAsync();
+                }
+                cursor._nextHidden = await cursor.PullHiddenAsync();
+                await cursor.MoveToAsync(first);
                 cursor._next = await cursor.PullAsync();
             }
             catch
             {
-                // Seeding owns the enumerator before the caller's `await using` does.
+                // Seeding owns the enumerators before the caller's `await using` does.
                 await cursor.DisposeAsync();
                 throw;
             }
@@ -278,9 +526,24 @@ internal sealed class AlertReplayService(
         {
             while (_next is { } next && next.Timestamp <= tick)
             {
-                Current = next;
+                _earlier.Add((Current!, null));
+                await MoveToAsync(next);
                 _next = await PullAsync();
             }
+        }
+
+        private async Task MoveToAsync(SensorGlucose? reading)
+        {
+            Current = reading;
+            if (reading is null) return;
+
+            while (_nextHidden is { } hidden && hidden.Reading.Timestamp <= reading.Timestamp)
+            {
+                _earlier.Add(hidden);
+                _nextHidden = await PullHiddenAsync();
+            }
+            _earlier.RemoveAll(e => reading.Timestamp - e.Reading.Timestamp > ReadingTrend.MaxGap);
+            _advanced.Add((reading, ReadingTrend.Of(reading, _earlier)));
         }
 
         private async Task<SensorGlucose?> PullAsync()
@@ -291,7 +554,19 @@ internal sealed class AlertReplayService(
             return null;
         }
 
-        public ValueTask DisposeAsync() => _source.DisposeAsync();
+        private async Task<(SensorGlucose Reading, Guid? DuplicateOf)?> PullHiddenAsync()
+        {
+            if (_hiddenExhausted) return null;
+            if (await _hidden.MoveNextAsync()) return _hidden.Current;
+            _hiddenExhausted = true;
+            return null;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _source.DisposeAsync();
+            await _hidden.DisposeAsync();
+        }
     }
 
     /// <summary>
@@ -413,22 +688,20 @@ internal sealed class AlertReplayService(
     }
 
     /// <summary>
-    /// Layers <paramref name="ruleOverride"/> onto <paramref name="stored"/>: when its Id
-    /// matches an existing rule the override replaces it; otherwise the override is appended
-    /// (with a synthesised id so any <c>alert_state</c> references the editor seeded resolve
-    /// against the override rather than against a non-existent rule). The original list is
-    /// returned unchanged when <paramref name="ruleOverride"/> is null.
+    /// The override as a snapshot, with a synthesised id when it has none so any
+    /// <c>alert_state</c> references the editor seeded resolve against it. Without its own
+    /// <c>on_unknown</c> or glucose freshness bound it takes the stored rule's, disabled or not, so
+    /// a replay reads an unknown root and a stale reading as the live engine does.
     /// </summary>
-    private static IReadOnlyList<AlertRuleSnapshot> ApplyOverride(
-        IReadOnlyList<AlertRuleSnapshot> stored,
-        ReplayRuleOverride? ruleOverride,
-        Guid tenantId)
+    private async Task<AlertRuleSnapshot> OverrideSnapshotAsync(
+        ReplayRuleOverride ruleOverride, Guid tenantId, CancellationToken ct)
     {
-        if (ruleOverride is null) return stored;
-
-        var overrideId = ruleOverride.Id ?? Guid.CreateVersion7();
-        var overrideSnapshot = new AlertRuleSnapshot(
-            Id: overrideId,
+        var stored = ruleOverride.Id is { } id
+                     && (ruleOverride.OnUnknown is null || ruleOverride.GlucoseFreshnessMinutes is null)
+            ? (await alertRepository.GetRuleAsync(id, ct))?.Rule
+            : null;
+        return new(
+            Id: ruleOverride.Id ?? Guid.CreateVersion7(),
             TenantId: tenantId,
             Name: ruleOverride.Name,
             ConditionType: ruleOverride.ConditionType,
@@ -438,20 +711,28 @@ internal sealed class AlertReplayService(
             SortOrder: 0,
             AutoResolveEnabled: ruleOverride.AutoResolveEnabled,
             AutoResolveParams: ruleOverride.AutoResolveParams,
-            AllowThroughDnd: ruleOverride.AllowThroughDnd);
+            AllowThroughDnd: ruleOverride.AllowThroughDnd,
+            OnUnknown: ruleOverride.OnUnknown ?? stored?.OnUnknown ?? AlertRuleOnUnknown.Hold,
+            GlucoseFreshnessMinutes: ruleOverride.GlucoseFreshnessMinutes ?? stored?.GlucoseFreshnessMinutes);
+    }
 
-        var matchedExisting = ruleOverride.Id.HasValue
-            && stored.Any(r => r.Id == ruleOverride.Id.Value);
-        if (matchedExisting)
+    /// <summary>
+    /// Layers <paramref name="candidate"/> onto <paramref name="stored"/>: when its Id matches an
+    /// existing rule it replaces it; otherwise it is appended.
+    /// </summary>
+    private static IReadOnlyList<AlertRuleSnapshot> Layer(
+        IReadOnlyList<AlertRuleSnapshot> stored, AlertRuleSnapshot candidate)
+    {
+        if (stored.Any(r => r.Id == candidate.Id))
         {
             return stored
-                .Select(r => r.Id == overrideId ? overrideSnapshot : r)
+                .Select(r => r.Id == candidate.Id ? candidate : r)
                 .ToList();
         }
 
         var combined = new List<AlertRuleSnapshot>(stored.Count + 1);
         combined.AddRange(stored);
-        combined.Add(overrideSnapshot);
+        combined.Add(candidate);
         return combined;
     }
 }

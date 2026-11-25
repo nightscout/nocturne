@@ -2,8 +2,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Infrastructure;
@@ -12,9 +14,14 @@ namespace Nocturne.API.Tests.Infrastructure;
 public static class ProfileActivationTestDeps
 {
     public static ProfileActivationRepository Repository(NocturneDbContext context) =>
-        new(new TestNocturneDbContextFactory(context), Mock.Of<IAuditContext>(),
-            NullLogger<ProfileActivationRepository>.Instance);
+        Repository(new TestNocturneDbContextFactory(context));
+
+    public static ProfileActivationRepository Repository(INocturneDbContextFactory contexts) =>
+        new(contexts, Mock.Of<IAuditContext>(), NullLogger<ProfileActivationRepository>.Instance);
 
     public static ProfileActivationWriter Writer(NocturneDbContext context) =>
-        new(Repository(context), TempBasalTestDeps.NoReresolution());
+        Writer(Repository(context));
+
+    public static ProfileActivationWriter Writer(IProfileActivationRepository repository) =>
+        new(repository, TempBasalTestDeps.NoReresolution());
 }

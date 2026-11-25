@@ -38,13 +38,27 @@ public class HistoryClampLiftPremiseTests
         // inserts do nothing on conflict.
         "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
+        // platform_policy is a platform table no policy covers, and its insert does nothing on conflict.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantCreationInviteRepository.cs",
+        // spent_passkey_challenges is a platform table no policy covers, and its insert does nothing on
+        // conflict as a plain command.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SpentPasskeyChallengeRepository.cs",
         // dedup_reconcile_state has no recency column, so no clamp reads it, and its insert does nothing
         // on conflict as a plain command.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/DuplicateReconciler.cs",
         // job_ledger is a platform table no policy covers, and its upserts run as plain commands.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/JobLedgerRepository.cs",
+        // alert_evaluated_readings is unclamped, and its upsert runs as a plain command in a job scope.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertEvaluatedReadingRepository.cs",
+        // google_health_work has no recency column, so no clamp reads it, and its upserts run as plain
+        // commands.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/GoogleHealthWorkRepository.cs",
         // A migration runs as the migrator, outside any reader's clamp, and upserts job_ledger rows.
         "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261102093846_AddSecondaryStreamFlagToSensorGlucose.cs",
+        // A migration runs as the migrator, outside any reader's clamp, and inserts google_health_work rows.
+        "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261124103542_MoveGoogleHealthStateToSlots.cs",
+        // A migration runs as the migrator, outside any reader's clamp, and upserts job_ledger rows.
+        "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261124222813_RetireInvalidUploadedTreatmentRows.cs",
     ];
 
     [Fact]

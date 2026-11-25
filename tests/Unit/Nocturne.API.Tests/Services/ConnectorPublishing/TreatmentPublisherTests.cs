@@ -520,7 +520,7 @@ public class TreatmentPublisherTests
         _mockTreatmentService
             .Setup(d => d.SelectForRepublishAsync(
                 "nightscout-connector", It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([changed]);
+            .ReturnsAsync(new TreatmentRepublish([changed], []));
         _mockTreatmentService
             .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BulkWrite<Treatment>([], 0));
@@ -531,6 +531,49 @@ public class TreatmentPublisherTests
         written.Should().Be(1);
         _mockTreatmentService.Verify(s => s.CreateTreatmentsAsync(
             It.Is<IEnumerable<Treatment>>(ts => ts.Single().Id == "changed"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockTreatmentService.Verify(s => s.RepublishSpansAsync(
+            It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData(WriteOrigin.Live)]
+    [InlineData(WriteOrigin.Backfill)]
+    public async Task PublishRecentTreatmentsAsync_WritesSelectedSpansInPlaceUnderTheirFingerprints(WriteOrigin origin)
+    {
+        var auditContext = new AuditContext { AuthType = "bearer", SubjectId = Guid.NewGuid() };
+        var publisher = CreatePublisher(auditContext);
+        var shortened = new Treatment
+        {
+            Id = "ov-1", EventType = "Temporary Override", Duration = 30,
+            Created_at = "2026-03-01T12:00:00.000Z", DataSource = "nightscout-connector",
+        };
+        _mockTreatmentService
+            .Setup(d => d.SelectForRepublishAsync(
+                "nightscout-connector", It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TreatmentRepublish([], [shortened]));
+        bool? systemDuringWrite = null;
+        bool? fingerprintScoped = null;
+        _mockTreatmentService
+            .Setup(s => s.RepublishSpansAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                systemDuringWrite = auditContext.IsSystem;
+                fingerprintScoped = UpstreamFingerprintScope.IsOpen;
+            })
+            .ReturnsAsync(1);
+
+        var written = await publisher.PublishRecentTreatmentsAsync([shortened], "nightscout-connector", origin);
+
+        written.Should().Be(1);
+        systemDuringWrite.Should().BeTrue();
+        fingerprintScoped.Should().BeTrue("the span takes the fingerprint of the treatment it is written from");
+        _mockTreatmentService.Verify(s => s.RepublishSpansAsync(
+            "nightscout-connector", It.Is<IReadOnlyList<Treatment>>(ts => ts.Single().Id == "ov-1"), origin,
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockTreatmentService.Verify(s => s.CreateTreatmentsAsync(
+            It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -872,4 +915,20 @@ public class TreatmentPublisherTests
     }
 
     #endregion
+
+    [Fact]
+    public async Task GetStoredCarbIntakeIdsAsync_AnswersEachHeldLegacyIdWithItsStoredId()
+    {
+        var held = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = "glooko_food_a" };
+        _mockCarbIntakeRepository
+            .Setup(r => r.GetByLegacyIdsAsync(
+                It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { "glooko_food_a", "glooko_food_b" })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([held]);
+
+        var stored = await _publisher.GetStoredCarbIntakeIdsAsync(
+            ["glooko_food_a", "glooko_food_b"], CancellationToken.None);
+
+        stored.Should().BeEquivalentTo(new Dictionary<string, Guid> { ["glooko_food_a"] = held.Id });
+    }
 }

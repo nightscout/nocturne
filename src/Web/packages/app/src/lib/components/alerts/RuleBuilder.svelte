@@ -1,6 +1,6 @@
 <script lang="ts">
   import Brackets from "@lucide/svelte/icons/brackets";
-  import type { ConditionNode } from "./types";
+  import type { ConditionNode, RulePurpose } from "./types";
   import OperatorToggle from "./OperatorToggle.svelte";
   import RuleBuilderRow from "./RuleBuilderRow.svelte";
   import RuleBuilderAddPicker from "./RuleBuilderAddPicker.svelte";
@@ -21,12 +21,18 @@
      *  `ensureCompositeRoot` from types.ts before mounting if unsure. */
     node: ConditionNode;
     availableRules?: AvailableRule[];
-    /** When true, suppress the "Notify when …" preamble (used by recursive
-     *  nested groups so only the outermost shows the lead-in). */
+    /** When true, suppress the lead-in (used by recursive nested groups so
+     *  only the outermost shows it). */
     nested?: boolean;
+    purpose?: RulePurpose;
   }
 
-  let { node = $bindable(), availableRules = [], nested = false }: Props = $props();
+  let {
+    node = $bindable(),
+    availableRules = [],
+    nested = false,
+    purpose = "notify",
+  }: Props = $props();
 
   // The rule builder always edits at the group level; if a caller hands us a
   // non-composite node, render an empty stub so the runtime doesn't crash —
@@ -58,7 +64,15 @@
 <div class="space-y-2">
   {#if !nested && node.composite}
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
-      <span>Notify when</span>
+      <span>
+        {#if purpose === "resolve"}
+          Close the alert when
+        {:else if purpose === "snooze"}
+          Extend the snooze while
+        {:else}
+          Notify when
+        {/if}
+      </span>
       <OperatorToggle
         value={node.composite.operator}
         onChange={setOperator}
@@ -85,7 +99,7 @@
           out:sendRow={{ key: child._uid }}
           animate:flip={{ duration: 220 }}
         >
-          <RuleBuilderRow parent={node} index={i} {availableRules} {shiftHeld} />
+          <RuleBuilderRow parent={node} index={i} {availableRules} {shiftHeld} {purpose} />
         </div>
       {/each}
     {/if}

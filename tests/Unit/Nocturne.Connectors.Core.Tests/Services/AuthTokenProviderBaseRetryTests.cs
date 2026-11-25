@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -136,16 +137,14 @@ public class AuthTokenProviderBaseRetryTests
     [Fact]
     public async Task GetValidTokenAsync_CancelledDuringRetryDelay_PropagatesCancellation()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         using var cts = new CancellationTokenSource();
         using var provider = new CountingTokenProvider(
             new HttpClient(),
             new ConnectorTokenCache(),
             NoOpResolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<CountingTokenProvider>.Instance,
             new CancellingRetryDelayStrategy(cts));
 
@@ -167,16 +166,14 @@ public class AuthTokenProviderBaseRetryTests
     public async Task AcquireToken_AttemptsLoginAsManyTimesAsMaxRetryAttempts(
         int maxRetryAttempts, int expectedAttempts)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         using var httpClient = new HttpClient();
         using var provider = new CountingTokenProvider(
             httpClient,
             new ConnectorTokenCache(),
             NoOpResolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<CountingTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
 
@@ -441,14 +438,12 @@ public class AuthTokenProviderBaseRetryTests
     public async Task GetValidTokenAsync_RefetchesFromTheRefreshMargin()
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
         using var provider = new LifetimeTokenProvider(
             new HttpClient(),
             new ConnectorTokenCache(clock),
             NoOpResolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<LifetimeTokenProvider>.Instance,
             clock,
             TimeSpan.FromMinutes(30));

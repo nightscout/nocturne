@@ -48,12 +48,48 @@ public interface IAlertReplayService
         DateTime? toUtc,
         ReplayRuleOverride ruleOverride,
         CancellationToken ct);
+
+    /// <summary>
+    /// Finds the times <paramref name="ruleOverride"/> would have fired over the recent past, newest
+    /// first, so the author of a rule sees the last occasion it applies to before saving it. Only
+    /// that rule is evaluated, with the saved rules beside it when its condition reads their state.
+    /// </summary>
+    /// <param name="lastDayOnly">
+    /// Search the last day only, for a reader limited to the last 24 hours: no earlier reading is
+    /// shown to them, so an earlier day would be searched empty and reported as a day the alert
+    /// did not start in.
+    /// </param>
+    Task<AlertFiringSearchResult> FindFiringsAsync(ReplayRuleOverride ruleOverride, bool lastDayOnly, CancellationToken ct);
 }
+
+/// <summary>A time a rule would have fired.</summary>
+/// <param name="At">The instant, UTC.</param>
+/// <param name="Kind">
+/// <see cref="AlertReplayEventKind.Fired"/>, or <see cref="AlertReplayEventKind.SuppressedByDnd"/>
+/// when Do Not Disturb would have kept it silent.
+/// </param>
+public record AlertFiring(DateTime At, AlertReplayEventKind Kind);
+
+/// <summary>Result of <see cref="IAlertReplayService.FindFiringsAsync"/>. Timestamps are UTC.</summary>
+/// <param name="SearchedFrom">
+/// Start of the span that was searched. Later than the configured lookback when the search ran
+/// out of time.
+/// </param>
+/// <param name="SearchedTo">End of the span that was searched.</param>
+/// <param name="HasReadings">Whether the span holds any glucose reading.</param>
+/// <param name="Total">How many times the rule would have fired in the span.</param>
+/// <param name="Firings">The most recent of them, newest first.</param>
+public record AlertFiringSearchResult(
+    DateTime SearchedFrom,
+    DateTime SearchedTo,
+    bool HasReadings,
+    int Total,
+    IReadOnlyList<AlertFiring> Firings);
 
 /// <summary>
 /// Thrown when a replay request's resolved window is longer than the configured maximum
-/// (<c>AlertEvaluation:MaxReplayWindow</c>). Replay evaluates every enabled rule on a 5-minute
-/// tick and re-enriches each tick from the historical repositories, so an unbounded window is
+/// (<c>AlertEvaluation:MaxReplayWindow</c>). Replay evaluates every enabled rule at each reading
+/// and re-enriches each tick from the historical repositories, so an unbounded window is
 /// an unbounded amount of work and an unbounded transition log. The request is rejected so the
 /// caller narrows it, rather than being answered with a silently truncated window.
 /// </summary>
@@ -76,9 +112,31 @@ public sealed class ReplayWindowTooLargeException : Exception
 }
 
 /// <summary>
+/// Thrown when a rule changes more often between two replay ticks than the engine steps
+/// (docs/alerts/engine-semantics.md §8, the bound): the replay fails rather than return a result
+/// cut short.
+/// </summary>
+public sealed class ReplayStepLimitException : Exception
+{
+    public ReplayStepLimitException(Guid ruleId, string ruleName, Exception innerException)
+        : base($"The rule \"{ruleName}\" changes too often between two readings to replay.", innerException)
+    {
+        RuleId = ruleId;
+        RuleName = ruleName;
+    }
+
+    public Guid RuleId { get; }
+
+    public string RuleName { get; }
+}
+
+/// <summary>
 /// In-memory rule definition layered into a dry-run replay. Mirrors the editor's pre-save
 /// shape. <see cref="Id"/> is optional: when present and matching an existing rule it
 /// replaces it for the replay; otherwise the override is appended to the rule list.
+/// <see cref="OnUnknown"/> null is the stored rule's word when <see cref="Id"/> names one, else
+/// <c>hold</c>; <see cref="GlucoseFreshnessMinutes"/> null is the stored rule's bound in the same
+/// way, else the engine's default.
 /// </summary>
 public record ReplayRuleOverride(
     Guid? Id,
@@ -88,7 +146,9 @@ public record ReplayRuleOverride(
     Nocturne.Core.Models.Alerts.AlertRuleSeverity Severity,
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
-    string? AutoResolveParams);
+    string? AutoResolveParams,
+    string? OnUnknown = null,
+    int? GlucoseFreshnessMinutes = null);
 
 /// <summary>
 /// Discriminator for the per-rule timeline events surfaced by replay. Defaults to
@@ -111,11 +171,12 @@ public enum AlertReplayEventKind
 }
 
 /// <summary>
-/// A single point on a rule's replay timeline. <see cref="Kind"/> distinguishes the leading
-/// edge of firing, an auto-resolve close, and a fire that the live engine would have
-/// suppressed under DND. Continuous-fire periods still produce one <see cref="Kind.Fired"/>
-/// (or <see cref="Kind.SuppressedByDnd"/>) at the leading edge — re-fires after either a
-/// natural clear or an auto-resolve produce a second event.
+/// A single point on a rule's replay timeline. <see cref="Kind"/> distinguishes an excursion
+/// opening, an auto-resolve close, and an opening that the live engine would have suppressed
+/// under DND. One excursion produces one <see cref="Kind.Fired"/> (or
+/// <see cref="Kind.SuppressedByDnd"/>) when it opens, however often its condition goes false
+/// and true again inside its hysteresis window; a new excursion after it closes, or after an
+/// auto-resolve, produces a second.
 /// </summary>
 public record AlertReplayEvent(
     DateTime At,

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using Nocturne.Core.Clinical.Schedules;
@@ -266,7 +267,7 @@ public class DDataService : IDDataService
         // filter temp target
         var tempTargetTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Temporary Target")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.TemporaryTarget)
             )
             .ToList();
         if (preserveOriginalTreatments)
@@ -656,8 +657,8 @@ public class DDataService : IDDataService
         {
             ["created_at"] = new Dictionary<string, string>
             {
-                ["$gte"] = fromMills.ToUtcDateTime().ToString("o"),
-                ["$lte"] = toMills.ToUtcDateTime().ToString("o"),
+                ["$gte"] = fromMills.ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
+                ["$lte"] = toMills.ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
             },
         });
 
@@ -812,8 +813,8 @@ public class DDataService : IDDataService
             {
                 ["created_at"] = new Dictionary<string, string>
                 {
-                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o"),
-                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o"),
+                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
+                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
                 },
             };
             var deviceStatuses = await _deviceStatuses.GetDeviceStatusesAsync(

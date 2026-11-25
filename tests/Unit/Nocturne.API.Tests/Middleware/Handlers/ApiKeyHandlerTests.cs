@@ -589,7 +589,7 @@ public class ApiKeyHandlerTests : IDisposable
         var result = await _handler.AuthenticateAsync(context);
 
         Assert.True(result.Succeeded);
-        await nudged.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await nudged.Task.WaitAsync(Eventually.DefaultPatience);
 
         Assert.True(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
@@ -691,7 +691,7 @@ public class ApiKeyHandlerTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddScoped<ISubjectRepository>(_ => new SubjectRepository(_dbContextFactory.Object.AsNocturneFactory()));
+        services.AddScoped<ISubjectRepository>(_ => new SubjectRepository(_dbContextFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off));
         var owner = ownerSubjectId?.ToString();
         services.AddScoped(_ => Mock.Of<ITenantOwnerResolver>(r =>
             r.GetOwnerSubjectIdAsync(_testTenantId, It.IsAny<CancellationToken>()) == Task.FromResult(owner)));

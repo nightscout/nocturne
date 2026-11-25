@@ -17,8 +17,7 @@ public class GlookoFoodEnergyTests
     private readonly GlookoV4TreatmentMapper _mapper = new(
         "glooko-connector",
         new GlookoTimeMapper(new GlookoConnectorConfiguration(), NullLogger.Instance),
-        NullLogger.Instance,
-        TimeProvider.System);
+        NullLogger.Instance);
 
     [Fact]
     public void A_v2_food_is_stored_in_kilojoules()
@@ -29,7 +28,7 @@ public class GlookoFoodEnergyTests
               "carbs":30.0,"calories":100.0}]}
             """)!;
 
-        var entry = _mapper.MapFoodsToConnectorEntries(batch).Should().ContainSingle().Subject;
+        var entry = _mapper.MapFoodsToConnectorEntries(batch).Should().ContainSingle().Subject.Entry;
 
         entry.Energy.Should().Be(418.4m);
         entry.Food!.Energy.Should().Be(418.4m);
@@ -45,7 +44,7 @@ public class GlookoFoodEnergyTests
               "foods":[{"guid":"food-1","name":"Toast","carbs":30.0,"calories":250.0}]}}]}
             """)!;
 
-        var entry = _mapper.MapV3HistoryMealsToConnectorEntries(histories).Should().ContainSingle().Subject;
+        var entry = _mapper.MapV3HistoryMealsToConnectorEntries(histories).Should().ContainSingle().Subject.Entry;
 
         entry.Energy.Should().Be(1046m);
         entry.Food!.Energy.Should().Be(1046m);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Attributes;
@@ -113,14 +114,14 @@ public class Entry : ProcessableDocumentBase
             // If dateString is not set but we have date, format it
             if (string.IsNullOrEmpty(_dateString) && _date.HasValue)
             {
-                return _date.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                return _date.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             }
             // If dateString is not set but we have mills, format it
             if (string.IsNullOrEmpty(_dateString) && _mills > 0)
             {
                 return DateTimeOffset
                     .FromUnixTimeMilliseconds(_mills)
-                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             }
             return _dateString;
         }

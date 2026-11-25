@@ -11,6 +11,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Docs;
@@ -23,12 +24,12 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
 using Nocturne.API.Hubs;
+using Nocturne.API.Reports;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Scalar.AspNetCore;
-using Nocturne.Aspire.Scalar;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -85,6 +86,9 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100 MB
 });
 
+builder.Services.Configure<HostOptions>(options =>
+    options.ShutdownTimeout = TimeSpan.FromSeconds(ApplicationConstants.Shutdown.HostTimeoutSeconds));
+
 builder.AddServiceDefaults();
 builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
@@ -109,9 +113,7 @@ var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
     builder.Configuration,
     builder.Environment.IsDevelopment());
 
-// Registered whether or not the pool is built, so the resolution above is observable from a test
-// host, which always runs as Testing and so never reaches the registration below.
-builder.Services.AddSingleton(postgreSqlOptions);
+builder.Services.AddPostgreSqlConfiguration(postgreSqlOptions);
 
 if (!isTesting)
 {
@@ -127,6 +129,11 @@ else
 
 builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
+builder.Services.AddV4Repositories();
+builder.Services.AddHealthRepositories();
+builder.Services.AddFoodRepositories();
+builder.Services.AddNotificationAndEventRepositories();
+builder.Services.AddAuditRepositories();
 
 builder.Services.AddDataProtection()
     // Never change this string. It is part of the root purpose for every payload, and TOTP secrets
@@ -145,6 +152,8 @@ builder.Services.AddNocturneMemoryCache();
 // Add response caching for GET endpoints
 builder.Services.AddResponseCaching();
 
+builder.Services.AddRequestDecompression();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddScheduledJob<AuditRetentionJob>();
@@ -161,6 +170,8 @@ builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddScoped<OuraImportService>();
 builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<OuraImportService>());
+builder.Services.AddSingleton<OuraImportJobService>();
+builder.Services.AddScoped<IConnectorPurgeGuard, OuraImportPurgeGuard>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
@@ -203,11 +214,12 @@ builder.Services.AddOpenApi("nocturne", options =>
 {
     options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
+    options.AddOperationTransformer<ControllerTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
-    options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<IntroductionDocumentTransformer>();
     options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
@@ -215,11 +227,12 @@ builder.Services.AddOpenApi("nightscout", options =>
 {
     options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
+    options.AddOperationTransformer<ControllerTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddSchemaTransformer<NumericSchemaTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
-    options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<IntroductionDocumentTransformer>();
     options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
@@ -232,6 +245,7 @@ builder.Services.AddRealTimeAndNotifications(builder.Configuration);
 builder.Services.AddAlertingAndMonitoring(builder.Configuration);
 builder.Services.AddConnectorInfrastructure(builder.Configuration);
 builder.Services.AddMigrationServices();
+builder.Services.AddCustomReports();
 
 
 // Configure JWT authentication - derive signing key from instance key
@@ -359,7 +373,14 @@ else
 
 // Configure middleware pipeline
 app.UseSecurityHeaders();
-app.UseExceptionHandler();
+// A request Kestrel refuses while the action reads it (a body over [RequestSizeLimit]) keeps its
+// own status, 413 say, rather than reading as a server failure.
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    StatusCodeSelector = exception => exception is BadHttpRequestException refused
+        ? refused.StatusCode
+        : StatusCodes.Status500InternalServerError,
+});
 app.UseStatusCodePages();
 // Documentation paths get the any-origin policy, foreign origins on the legacy API get
 // LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.
@@ -382,6 +403,7 @@ app.UseWhen(
     branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
+app.UseMiddleware<ClientAddressMiddleware>();
 
 // Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
 // Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
@@ -395,6 +417,7 @@ app.UseMiddleware<V2FallbackMiddleware>();
 // Here rather than where minimal hosting would insert it, so the middleware below see the
 // matched endpoint.
 app.UseRouting();
+app.UseRequestDecompression();
 
 // The policies are attached to endpoints, so this needs UseRouting to have run. Everything
 // without a policy passes through untouched, and no policy partitions on anything this position
@@ -468,7 +491,11 @@ app.MapScalarApiReference((options, httpContext) =>
     options.WithOperationTitleSource(OperationTitleSource.Path);
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
-    options.AddHeadContent(MermaidLazyLoader.HeadContent);
+    // Built from src/Web/packages/scalar-plugin; renders the diagrams and the other fenced blocks
+    // of the reference pages.
+    // A path: this page loads Scalar from its own host, so the import resolves against the page and
+    // does not depend on the forwarded scheme or host.
+    options.AddPluginUrl("/scalar/nocturne-plugin.js");
     if (!string.IsNullOrEmpty(scalarCss))
         options.WithCustomCss(scalarCss);
     options.EnablePersistentAuthentication();
@@ -617,6 +644,14 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
         await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
 
+        var startedAt = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
+        var grantRevocation = scope.ServiceProvider.GetRequiredService<GrantRevocationService>();
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            migratorConnectionString,
+            startedAt,
+            (unit, changes, token) => TeamReasonWrites.ApplyAsync(unit, changes, grantRevocation, startedAt, token),
+            logger);
+
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
         await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(
@@ -633,6 +668,10 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
     // migrations (it depends on the widened share_token column) and before the server accepts
     // requests, so no request can read a column in the old format.
     await CredentialAtRestStartupTask.RunAsync(app.Services);
+
+    app.Lifetime.ApplicationStarted.Register(() => _ = app.Services
+        .GetRequiredService<Nocturne.API.Services.V4.RawMmolProfileNotifier>()
+        .NotifyAllAsync(app.Lifetime.ApplicationStopping));
 }
 else if (isNSwagGeneration)
 {

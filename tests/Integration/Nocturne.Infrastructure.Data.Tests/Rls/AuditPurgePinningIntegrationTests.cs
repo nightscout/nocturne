@@ -236,7 +236,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
             .UseNpgsql(dataSource)
             .AddInterceptors(new TenantConnectionInterceptor(), extra)
             .Options;
-        return new PlainContextFactory(options);
+        return new SuppliedContextFactory(() => new NocturneDbContext(options));
     }
 
     public async ValueTask DisposeAsync()
@@ -328,13 +328,6 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         p.ParameterName = name;
         p.Value = value;
         cmd.Parameters.Add(p);
-    }
-
-    private sealed class PlainContextFactory(DbContextOptions<NocturneDbContext> options)
-        : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(options));
     }
 
     private sealed class CapturingInterceptor : DbCommandInterceptor

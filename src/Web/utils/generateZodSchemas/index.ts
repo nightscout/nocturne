@@ -9,15 +9,15 @@ const __dirname = path.dirname(__filename);
 
 const OPENAPI_PATH = path.join(
   __dirname,
-  "../../packages/app/src/lib/api/generated/openapi.json",
+  "../../packages/api-client/src/openapi.json",
 );
 const OUTPUT_PATH = path.join(
   __dirname,
-  "../../packages/app/src/lib/api/generated/schemas.ts",
+  "../../packages/api-client/src/schemas.ts",
 );
 const CLIENT_PATH = path.join(
   __dirname,
-  "../../packages/app/src/lib/api/generated/nocturne-api-client.ts",
+  "../../packages/api-client/src/nocturne-api-client.ts",
 );
 
 /**
@@ -329,7 +329,7 @@ function generateZodSchemas(): void {
   for (const input of [OPENAPI_PATH, CLIENT_PATH]) {
     if (!fs.existsSync(input)) {
       console.error(`Not found: ${input}`);
-      console.error("Run 'pnpm run generate-api-client' first to generate the OpenAPI spec and client.");
+      console.error("Run 'pnpm run generate-api' first to generate the OpenAPI spec and client.");
       process.exit(1);
     }
   }

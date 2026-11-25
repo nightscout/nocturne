@@ -53,4 +53,22 @@ describe("calendar page", () => {
     await expect.element(page.getByText("Avg TIR")).toBeVisible();
     await expect.element(page.getByText("80.0%")).toBeVisible();
   });
+
+  it.each([360, 412])("fits the seven days of a week in %ipx", async (width) => {
+    const original = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(width, 800);
+    try {
+      const { container } = render(CalendarPage, {});
+
+      await expect.element(page.getByText("Avg TIR")).toBeVisible();
+      const firstWeek = container.querySelector(".grid-rows-6")?.firstElementChild;
+      const cells = [...(firstWeek?.children ?? [])];
+      expect(cells).toHaveLength(7);
+      const rightEdge = Math.max(...cells.map((cell) => cell.getBoundingClientRect().right));
+      expect(rightEdge).toBeLessThanOrEqual(width);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+    } finally {
+      await page.viewport(original[0], original[1]);
+    }
+  });
 });

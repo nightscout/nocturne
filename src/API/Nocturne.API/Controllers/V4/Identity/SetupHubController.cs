@@ -13,8 +13,9 @@ using Nocturne.Core.Models.SetupHub;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The owner's setup hub: the items left to set up after onboarding, and the dashboard strip that
-/// offers them. Owner-only, like the onboarding answers it follows on from.
+/// The owner's setup checklist: the setup items still open, and the dashboard strip that offers
+/// them. A caller can read the checklist, update an item, confirm the About step and dismiss the
+/// strip. Only the owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
@@ -30,9 +31,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<SetupHubStatus>> GetSetupHub(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await setupHub.GetAsync(HttpContext.GetSubjectId(), ct));
     }
 
@@ -52,9 +50,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     public async Task<ActionResult<SetupHubStatus>> SetSetupHubItemState(
         [FromRoute] SetupHubItemKey key, [FromBody] SetSetupHubItemStateRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         if (request.State == SetupHubItemState.Done)
             return Problem(detail: "An item is done when it works; it cannot be marked done.", statusCode: 400, title: "Bad Request");
 
@@ -83,9 +78,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SetupHubStatus>> ConfirmAboutSetupItem(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         try
         {
             return Ok(await setupHub.ConfirmAboutAsync(HttpContext.GetSubjectId(), ct));
@@ -109,9 +101,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     public async Task<ActionResult<SetupHubStatus>> DismissSetupStrip(
         [FromBody] DismissSetupStripRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await setupHub.DismissStripAsync(HttpContext.GetSubjectId(), request.Revision, ct));
     }
 }

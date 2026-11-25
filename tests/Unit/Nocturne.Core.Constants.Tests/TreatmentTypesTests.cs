@@ -27,4 +27,20 @@ public class TreatmentTypesTests
         TreatmentTypes.TempBasalEventTypes.Should().Contain(TreatmentTypes.InsulinContextBasalEventTypes);
         TreatmentTypes.TempBasalEventTypes.Should().Contain("TempBasal");
     }
+
+    [Theory]
+    [InlineData(TreatmentTypes.TemporaryOverride, "Temporary Override")]
+    [InlineData(TreatmentTypes.TemporaryOverrideCancel, "Temporary Override Cancel")]
+    [InlineData(TreatmentTypes.TemporaryTarget, "Temporary Target")]
+    [InlineData(TreatmentTypes.TemporaryTargetCancel, "Temporary Target Cancel")]
+    [InlineData(TreatmentTypes.Note, "Note")]
+    [InlineData(TreatmentTypes.Announcement, "Announcement")]
+    [InlineData(TreatmentTypes.Exercise, "Exercise")]
+    [InlineData(TreatmentTypes.ExternalInsulin, "External Insulin")]
+    [InlineData(TreatmentTypes.Carbs, "Carbs")]
+    [InlineData(TreatmentTypes.OpenApsOffline, "OpenAPS Offline")]
+    public void EventTypeConstant_IsTheWireValueNightscoutUses(string constant, string wireValue)
+    {
+        constant.Should().Be(wireValue);
+    }
 }

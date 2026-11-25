@@ -22,6 +22,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -35,6 +36,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public class AlertReplayServicePagingTests
 {
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<IDndWindowRepository> _dndWindows = new();
+    private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<IIobCalculator> _iobCalculator = new();
@@ -56,11 +59,12 @@ public class AlertReplayServicePagingTests
     public AlertReplayServicePagingTests()
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
-        _alertRepository
-            .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        SetupHidden([]);
+        _dndWindows
+            .Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
-        _alertRepository
-            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        _dndWindows
+            .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
     }
 
@@ -80,13 +84,16 @@ public class AlertReplayServicePagingTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _alertSettings.Object,
+            _dndWindows.Object,
             new Mock<ITargetRangeScheduleRepository>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IActiveProfileResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
-            new Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository>().Object,
+            new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,
@@ -99,11 +106,13 @@ public class AlertReplayServicePagingTests
 
         return new AlertReplayService(
             _alertRepository.Object,
+            _dndWindows.Object,
             _glucoseRepository.Object,
             enricher,
             _tenantAccessor.Object,
             Options.Create(options),
             new RustAlertReplayEngine(new AlertEngineErrors(new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()),
             TimeProvider.System);
     }
 
@@ -139,6 +148,29 @@ public class AlertReplayServicePagingTests
             });
     }
 
+    /// <summary>
+    /// Backs the hidden-row read with an in-memory series, keyset-paged as
+    /// <see cref="SetupSeries"/> pages the canonical one.
+    /// </summary>
+    private void SetupHidden(IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)> all)
+    {
+        _glucoseRepository
+            .Setup(r => r.GetHiddenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Returns((DateTime from, DateTime to, int limit, DateTime? afterTimestamp, Guid? afterId, CancellationToken _) =>
+            {
+                var rows = all
+                    .Where(r => r.Reading.Timestamp >= from && r.Reading.Timestamp <= to)
+                    .Where(r => afterTimestamp is not { } ts || afterId is not { } id
+                        || r.Reading.Timestamp > ts || (r.Reading.Timestamp == ts && r.Reading.Id.CompareTo(id) > 0))
+                    .OrderBy(r => r.Reading.Timestamp)
+                    .ThenBy(r => r.Reading.Id)
+                    .Take(limit)
+                    .ToList();
+                return Task.FromResult<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>>(rows);
+            });
+    }
+
     private static long _idCounter;
 
     private static SensorGlucose Reading(DateTime at, double mgdl, Guid? patientDeviceId = null,
@@ -151,6 +183,7 @@ public class AlertReplayServicePagingTests
             Id = new Guid((uint)Interlocked.Increment(ref _idCounter), 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0),
             Timestamp = at,
+            CreatedAt = at,
             Mgdl = mgdl,
             PatientDeviceId = patientDeviceId,
             DataSource = dataSource,
@@ -252,13 +285,13 @@ public class AlertReplayServicePagingTests
     /// </summary>
     /// <remarks>
     /// The replay runs under an expiring token so a regression that removes the guard surfaces as
-    /// the wrong exception type within seconds. <c>[Fact(Timeout)]</c> is not enough on its own:
+    /// the wrong exception type within the hang guard. <c>[Fact(Timeout)]</c> is not enough on its own:
     /// xUnit reports the timeout but does not abandon the runaway loop, which wedges the run.
     /// </remarks>
-    [Fact(Timeout = 30000)]
+    [Fact(Timeout = 120000)]
     public async Task AFetchThatIgnoresTheKeysetCursor_Fails_RatherThanSpinning()
     {
-        using var spinGuard = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var spinGuard = new CancellationTokenSource(Eventually.DefaultPatience);
 
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(Guid.NewGuid(), 70m) });
@@ -394,5 +427,259 @@ public class AlertReplayServicePagingTests
         var problem = response.Result.Should().BeOfType<ObjectResult>().Which;
         problem.StatusCode.Should().Be(400);
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Controller_MapsTheStepLimitToAProblemNamingTheRule()
+    {
+        var replayService = new Mock<IAlertReplayService>();
+        var ruleId = Guid.NewGuid();
+        replayService
+            .Setup(s => s.ReplayAsync(It.IsAny<DateOnly?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ReplayStepLimitException(ruleId, "Night low", new InvalidOperationException()));
+        var controller = new AlertReplayController(replayService.Object);
+
+        var response = await controller.Replay(
+            new AlertReplayRequest(null, null, _dayStart, _dayStart.AddDays(1)), CancellationToken.None);
+
+        var problem = response.Result.Should().BeOfType<ObjectResult>().Which;
+        problem.StatusCode.Should().Be(422);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("\"Night low\"");
+    }
+
+    private static AlertRuleSnapshot Rule(Guid id, AlertConditionType type, string json) =>
+        new(id, Guid.NewGuid(), type.ToString(), type, json, AlertRuleSeverity.Warning, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null);
+
+    /// <summary>
+    /// Readings that store no rate (Dexcom, Glooko) are judged by the rate derived from the
+    /// previous reading of their stream, as live evaluation judges them, whatever the page size.
+    /// </summary>
+    [NativeFact]
+    public async Task RateAndTrendRulesFireOverAFallWithNoStoredRate()
+    {
+        var rateRule = Guid.NewGuid();
+        var trendRule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                Rule(rateRule, AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}"""),
+                Rule(trendRule, AlertConditionType.Trend, """{"bucket":"falling_fast"}"""),
+            });
+        var series = Enumerable.Range(0, 21)
+            .Select(i => Reading(_dayStart.AddHours(2).AddMinutes(i), i <= 10 ? 150 : 150 - 4 * (i - 10)))
+            .ToList();
+        // A reading of a second uploader between each pair: paired with one, a 150 mg/dL reading
+        // would read as a steep fall from 250 and fire before the real fall starts.
+        series.AddRange(Enumerable.Range(0, 21)
+            .Select(i => Reading(_dayStart.AddHours(2).AddMinutes(i).AddSeconds(30), 250, dataSource: "other")));
+        SetupSeries(series);
+
+        // Each reading of the fall fires, and each flat reading of the second uploader after it
+        // closes the excursion again, as live evaluation of each arriving reading does.
+        var falling = Enumerable.Range(11, 10).Select(i => _dayStart.AddHours(2).AddMinutes(i)).ToList();
+        foreach (var pageSize in new[] { 1, 3, 1000 })
+        {
+            var result = await CreateSut(pageSize)
+                .ReplayAsync(new DateOnly(2026, 4, 28), "UTC", null, null, CancellationToken.None);
+
+            result.Events.Select(e => (e.RuleId, e.At, e.Kind)).Should().BeEquivalentTo(
+                falling.SelectMany(at => new[]
+                {
+                    (rateRule, at, AlertReplayEventKind.Fired),
+                    (trendRule, at, AlertReplayEventKind.Fired),
+                }),
+                "page size {0}", pageSize);
+        }
+    }
+
+    /// <summary>
+    /// The window's first reading pairs with the reading before the window, as it did live, but
+    /// that earlier reading is never the current reading of a tick inside the window.
+    /// </summary>
+    [NativeFact]
+    public async Task TheFirstReadingPairsWithAReadingBeforeTheWindowWithoutBecomingCurrent()
+    {
+        var rateRule = Guid.NewGuid();
+        var lowRule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                Rule(rateRule, AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}"""),
+                ThresholdBelow(lowRule, 200m),
+            });
+        SetupSeries(
+        [
+            Reading(_dayStart.AddMinutes(-2), 125),
+            Reading(_dayStart.AddMinutes(3), 100),
+        ]);
+
+        var result = await CreateSut(pageSize: 1000)
+            .ReplayAsync(new DateOnly(2026, 4, 28), "UTC", null, null, CancellationToken.None);
+
+        result.Events.Select(e => (e.RuleId, e.At)).Should().BeEquivalentTo(
+        [
+            (rateRule, _dayStart.AddMinutes(3)),
+            (lowRule, _dayStart.AddMinutes(3)),
+        ]);
+    }
+
+    private static AlertRuleSnapshot FallingFasterThan(Guid id, int rate) =>
+        Rule(id, AlertConditionType.RateOfChange, $$"""{"direction":"falling","rate":{{rate}}}""");
+
+    private async Task<IReadOnlyList<DateTime>> FiredAtAsync(Guid ruleId, int pageSize = 1000)
+    {
+        var result = await CreateSut(pageSize)
+            .ReplayAsync(new DateOnly(2026, 4, 28), "UTC", null, null, CancellationToken.None);
+        return result.Events.Where(e => e.RuleId == ruleId && e.Kind == AlertReplayEventKind.Fired)
+            .Select(e => e.At).ToList();
+    }
+
+    [NativeTheory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task A_pair_at_most_fifteen_minutes_apart_derives(int secondsOver, bool fires)
+    {
+        var rule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { FallingFasterThan(rule, 1) });
+        var first = _dayStart.AddHours(2);
+        SetupSeries(
+        [
+            Reading(first, 130),
+            Reading(first + ReadingTrend.MaxGap + TimeSpan.FromSeconds(secondsOver), 100),
+        ]);
+
+        (await FiredAtAsync(rule)).Should().HaveCount(fires ? 1 : 0);
+    }
+
+    [NativeTheory]
+    [InlineData(30, true)]
+    [InlineData(29, false)]
+    public async Task A_pair_at_least_thirty_seconds_apart_derives(int seconds, bool fires)
+    {
+        var rule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { FallingFasterThan(rule, 1) });
+        var first = _dayStart.AddHours(2);
+        SetupSeries([Reading(first, 101), Reading(first.AddSeconds(seconds), 100)]);
+
+        (await FiredAtAsync(rule)).Should().HaveCount(fires ? 1 : 0);
+    }
+
+    /// <summary>
+    /// A Dexcom Share connector and xDrip upload one G7. Whichever copy lands first is shown, so
+    /// the shown readings alternate between the two streams and each one's previous reading of its
+    /// own stream is a hidden copy. Values fall 20 mg/dL every 5 minutes.
+    /// </summary>
+    [NativeFact]
+    public async Task Two_uploaders_taking_turns_derive_from_the_hidden_copy_of_their_own_stream()
+    {
+        var rule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { FallingFasterThan(rule, 3) });
+        var (shown, hidden) = TakingTurns(patientDeviceId: null);
+        SetupSeries(shown);
+        SetupHidden(hidden);
+
+        foreach (var pageSize in new[] { 1, 3, 1000 })
+            (await FiredAtAsync(rule, pageSize)).Should().Equal(new[] { _dayStart.AddHours(2).AddMinutes(4).AddSeconds(3) },
+                "the xdrip reading at 02:04:03 pairs with the hidden xdrip copy at 01:59:03 (page size {0})", pageSize);
+    }
+
+    /// <summary>
+    /// The same two uploaders with one registered device, so both copies are one stream. The
+    /// other uploader's copy of the reading itself, three seconds older, is not its previous one.
+    /// </summary>
+    [NativeFact]
+    public async Task A_registered_device_derives_past_the_other_uploaders_copy_of_the_same_reading()
+    {
+        var rule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { FallingFasterThan(rule, 3) });
+        var (shown, hidden) = TakingTurns(patientDeviceId: Guid.NewGuid());
+        SetupSeries(shown);
+        SetupHidden(hidden);
+
+        (await FiredAtAsync(rule)).Should().Equal(new[] { _dayStart.AddHours(2).AddMinutes(4).AddSeconds(3) },
+            "the xdrip reading at 02:04:03 pairs with the xdrip copy at 01:59:03, not the dexcom copy at 02:04:00");
+    }
+
+    /// <summary>
+    /// Two apps upload one registered G7 and deduplication links none of their copies: the xdrip
+    /// copy of each reading lands 40 seconds after the dexcom one, so both are shown and each is
+    /// evaluated in turn. Over a 20 mg/dL fall every 5 minutes with equal copies, paired
+    /// with the dexcom copy the rate would be 0. Over flat glucose with the xdrip copy 3 mg/dL low,
+    /// it would be -4.5 mg/dL/min.
+    /// </summary>
+    [NativeTheory]
+    [InlineData(20, 0, true)]
+    [InlineData(0, -3, false)]
+    public async Task Another_uploaders_unlinked_copy_is_never_the_pair(int fallPerFiveMinutes, int xdripOffset, bool fires)
+    {
+        var rule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { FallingFasterThan(rule, 3) });
+        var device = Guid.NewGuid();
+        var series = new List<SensorGlucose>();
+        for (var i = 0; i < 4; i++)
+        {
+            var at = _dayStart.AddHours(2).AddMinutes(5 * i - 1);
+            var mgdl = 200 - fallPerFiveMinutes * i;
+            series.Add(Reading(at, mgdl, device, dataSource: "dexcom-connector"));
+            series.Add(Reading(at.AddSeconds(40), mgdl + xdripOffset, device, dataSource: "xdrip"));
+        }
+        SetupSeries(series);
+
+        foreach (var pageSize in new[] { 1, 3, 1000 })
+            (await FiredAtAsync(rule, pageSize)).Should().Equal(
+                fires ? new[] { _dayStart.AddHours(2).AddMinutes(4) } : [],
+                "each copy pairs with its own uploader's copy 5 minutes before it (page size {0})", pageSize);
+    }
+
+    /// <summary>
+    /// The window's first shown reading, an xdrip copy at 00:01:03, has its own uploader's previous
+    /// reading only as a hidden copy at 23:57:03 the day before, under a dexcom copy that is shown.
+    /// </summary>
+    [NativeFact]
+    public async Task The_first_reading_pairs_with_a_hidden_copy_from_before_the_window()
+    {
+        var rule = Guid.NewGuid();
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { FallingFasterThan(rule, 3) });
+        var before = _dayStart.AddMinutes(-3);
+        var after = _dayStart.AddMinutes(1);
+        var dexcomBefore = Reading(before, 130, dataSource: "dexcom-connector");
+        var xdripBefore = Reading(before.AddSeconds(3), 130, dataSource: "xdrip");
+        var xdripAfter = Reading(after.AddSeconds(3), 110, dataSource: "xdrip");
+        var dexcomAfter = Reading(after, 110, dataSource: "dexcom-connector");
+        SetupSeries([dexcomBefore, xdripAfter]);
+        SetupHidden([(xdripBefore, dexcomBefore.Id), (dexcomAfter, xdripAfter.Id)]);
+
+        (await FiredAtAsync(rule)).Should().Equal(after.AddSeconds(3));
+    }
+
+    /// <summary>
+    /// Readings at 01:59 to 02:19 falling 20 mg/dL every 5 minutes, each with a dexcom copy on the
+    /// minute and an xdrip copy three seconds later. The dexcom copy is shown at 01:59, 02:09 and
+    /// 02:19, the xdrip copy at 02:04 and 02:14; the other copy is hidden as a duplicate of it.
+    /// </summary>
+    private (List<SensorGlucose> Shown, List<(SensorGlucose Reading, Guid? DuplicateOf)> Hidden) TakingTurns(
+        Guid? patientDeviceId)
+    {
+        var shown = new List<SensorGlucose>();
+        var hidden = new List<(SensorGlucose, Guid?)>();
+        for (var i = 0; i < 5; i++)
+        {
+            var at = _dayStart.AddHours(2).AddMinutes(5 * i - 1);
+            var mgdl = 200 - 20 * i;
+            var dexcom = Reading(at, mgdl, patientDeviceId, dataSource: "dexcom-connector");
+            var xdrip = Reading(at.AddSeconds(3), mgdl, patientDeviceId, dataSource: "xdrip");
+            var (primary, copy) = i % 2 == 0 ? (dexcom, xdrip) : (xdrip, dexcom);
+            shown.Add(primary);
+            hidden.Add((copy, primary.Id));
+        }
+        return (shown, hidden);
     }
 }

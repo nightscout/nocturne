@@ -17,11 +17,14 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::engine::Rule;
+use nocturne_alerts_core::engine::{OnUnknown, Rule};
+use nocturne_alerts_core::eval::DEFAULT_GLUCOSE_FRESHNESS;
 use nocturne_alerts_core::model::ConditionKind;
+use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::replay::{
     ReplayError, ReplayEventKind, ReplayOptions, ReplayRuleState, ReplayTick, replay,
 };
+use nocturne_alerts_core::truth::Truth;
 
 fn t(minutes: i64) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 5, 12, 0, 0).unwrap() + TimeDelta::minutes(minutes)
@@ -36,10 +39,12 @@ fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
         id: id(n),
         condition_type: kind,
         condition_params: params,
-        confirmation_readings: 1,
         hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,
+        on_unknown: OnUnknown::Hold,
+        glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
+        enabled_at: None,
     }
 }
 
@@ -61,12 +66,30 @@ fn reading(minutes: i64, mgdl: i64) -> ReplayTick {
             ..Default::default()
         },
         suppressed_rule_ids: HashSet::new(),
+        reading: true,
+    }
+}
+
+/// The facts as of `minutes`, with no reading since `reading_at`.
+fn sample(minutes: i64, reading_at: i64, mgdl: i64) -> ReplayTick {
+    ReplayTick {
+        reading: false,
+        at: t(minutes),
+        ..reading(reading_at, mgdl)
     }
 }
 
 fn with_ticks() -> ReplayOptions {
     ReplayOptions {
         include_ticks: true,
+        until: None,
+    }
+}
+
+fn until(minutes: i64) -> ReplayOptions {
+    ReplayOptions {
+        include_ticks: true,
+        until: Some(t(minutes)),
     }
 }
 
@@ -77,6 +100,10 @@ fn kinds(
         .iter()
         .map(|e| ((e.at - t(0)).num_minutes(), e.rule_id, e.kind))
         .collect()
+}
+
+fn instants(events: &[nocturne_alerts_core::replay::ReplayEvent]) -> Vec<TimeDelta> {
+    events.iter().map(|e| e.at - t(0)).collect()
 }
 
 #[test]
@@ -118,22 +145,36 @@ fn a_duplicate_rule_id_is_an_error() {
     assert_eq!(err, ReplayError::DuplicateRuleId(id(1)));
 }
 
+/// The .NET host reads the rule out of this wording (`RustAlertEngineException.ReplayStepLimitRule`).
 #[test]
-fn a_continuous_fire_is_one_event_and_a_clear_resets_the_sustained_timer() {
+fn the_step_limit_error_starts_with_its_rule() {
+    let err = ReplayError::StepLimit {
+        rule_id: id(7),
+        at: t(0),
+    };
+    assert!(
+        err.to_string()
+            .starts_with(&format!("rule {} changes more than ", id(7))),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_continuous_fire_is_one_excursion_and_a_false_child_restarts_the_sustained_run() {
     let sustained = json!({
         "minutes": 10,
         "child": { "type": "threshold", "threshold": below(70) }
     });
     let rules = [rule(1, ConditionKind::Sustained, sustained)];
     let ticks = [
-        reading(0, 60),  // timer set
+        reading(0, 60),  // run starts
         reading(5, 60),  // 5 of 10
-        reading(10, 60), // held: fires
+        reading(10, 60), // held: opens
         reading(15, 60), // continues
-        reading(20, 90), // clears, timer reset
-        reading(25, 60), // timer set again: not a fire
+        reading(20, 90), // hysteresis of 0 minutes, closed by the sweep at once
+        reading(25, 60), // run starts again: not a fire
         reading(30, 60),
-        reading(35, 60), // held again: fires
+        reading(35, 60), // held again: opens
     ];
     let out = replay(&rules, ticks, with_ticks()).unwrap();
 
@@ -141,9 +182,119 @@ fn a_continuous_fire_is_one_event_and_a_clear_resets_the_sustained_timer() {
         kinds(&out.events),
         vec![
             (10, id(1), ReplayEventKind::Fired),
-            (20, id(1), ReplayEventKind::Cleared),
+            (20, id(1), ReplayEventKind::HysteresisStarted),
+            (20, id(1), ReplayEventKind::Closed),
             (35, id(1), ReplayEventKind::Fired),
         ]
+    );
+    assert_eq!(out.events[2].at, t(20) + RESOLUTION);
+}
+
+#[test]
+fn a_hysteresis_window_keeps_a_brief_recovery_inside_one_excursion() {
+    let mut r = rule(1, ConditionKind::Threshold, below(70));
+    r.hysteresis_minutes = 15;
+    let ticks = [
+        reading(0, 60),  // opens
+        reading(5, 80),  // window starts
+        reading(10, 60), // resumes the same excursion
+        reading(15, 80), // window starts again
+        reading(20, 80),
+        reading(25, 80),
+    ];
+    let out = replay(&[r], ticks, until(60)).unwrap();
+
+    assert_eq!(
+        kinds(&out.events),
+        vec![
+            (0, id(1), ReplayEventKind::Fired),
+            (5, id(1), ReplayEventKind::HysteresisStarted),
+            (10, id(1), ReplayEventKind::HysteresisResumed),
+            (15, id(1), ReplayEventKind::HysteresisStarted),
+            (30, id(1), ReplayEventKind::Closed),
+        ]
+    );
+    assert_eq!(
+        out.events[4].at,
+        t(30),
+        "the window closes at its end, between readings"
+    );
+}
+
+#[test]
+fn a_wall_clock_rule_fires_between_readings_where_its_next_change_falls() {
+    let rules = [rule(
+        1,
+        ConditionKind::SignalLoss,
+        json!({ "timeout_minutes": 15 }),
+    )];
+    let out = replay(&rules, [reading(0, 100), reading(40, 100)], until(55)).unwrap();
+
+    assert_eq!(
+        instants(&out.events),
+        vec![
+            TimeDelta::minutes(15),
+            TimeDelta::minutes(40),
+            TimeDelta::minutes(40) + RESOLUTION,
+        ]
+    );
+    assert_eq!(
+        out.events.iter().map(|e| e.kind).collect::<Vec<_>>(),
+        vec![
+            ReplayEventKind::Fired,
+            ReplayEventKind::HysteresisStarted,
+            ReplayEventKind::Closed,
+        ]
+    );
+}
+
+#[test]
+fn without_until_nothing_is_stepped_after_the_last_tick() {
+    let rules = [rule(
+        1,
+        ConditionKind::SignalLoss,
+        json!({ "timeout_minutes": 15 }),
+    )];
+    let out = replay(&rules, [reading(0, 100)], with_ticks()).unwrap();
+    assert!(out.events.is_empty());
+}
+
+#[test]
+fn a_rule_that_reads_only_glucose_waits_for_the_next_reading_as_live_does() {
+    let sustained = json!({
+        "minutes": 10,
+        "child": { "type": "threshold", "threshold": below(70) }
+    });
+    let rules = [rule(1, ConditionKind::Sustained, sustained)];
+    let ticks = [reading(0, 60), sample(10, 0, 60), reading(15, 60)];
+    let out = replay(&rules, ticks, with_ticks()).unwrap();
+
+    assert_eq!(
+        kinds(&out.events),
+        vec![(15, id(1), ReplayEventKind::Fired)],
+        "live evaluates it per reading, so its run completes on the next one"
+    );
+    let ticks = out.ticks.unwrap();
+    assert_eq!(
+        ticks.iter().map(|t| t.at).collect::<Vec<_>>(),
+        vec![t(0), t(15)],
+        "the sample evaluates nothing"
+    );
+}
+
+#[test]
+fn a_sample_evaluates_a_rule_that_reads_another_fact() {
+    let rules = [rule(
+        1,
+        ConditionKind::Iob,
+        json!({ "operator": ">", "value": 3 }),
+    )];
+    let mut later = sample(10, 0, 100);
+    later.context.iob_units = Some(Decimal::from(4));
+    let out = replay(&rules, [reading(0, 100), later], with_ticks()).unwrap();
+    assert_eq!(
+        kinds(&out.events),
+        vec![(10, id(1), ReplayEventKind::Fired)]
     );
 }
 
@@ -173,7 +324,7 @@ fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it_once_until_rea
     assert_eq!(
         ticks[0].rules[0].state,
         Some(ReplayRuleState {
-            met: true,
+            met: Truth::True,
             firing: false
         })
     );
@@ -272,6 +423,7 @@ fn a_tick_with_no_reading_reads_as_fresh_and_a_gap_after_one_reads_as_stale() {
         at: t(minutes),
         context: SensorContext::default(),
         suppressed_rule_ids: HashSet::new(),
+        reading: false,
     };
     let stale = |minutes| ReplayTick {
         at: t(minutes),
@@ -282,6 +434,7 @@ fn a_tick_with_no_reading_reads_as_fresh_and_a_gap_after_one_reads_as_stale() {
             ..Default::default()
         },
         suppressed_rule_ids: HashSet::new(),
+        reading: false,
     };
     let ticks = [empty(0), empty(15), reading(20, 100), stale(30), stale(35)];
     let out = replay(&rules, ticks, with_ticks()).unwrap();

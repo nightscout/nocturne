@@ -1,7 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Xunit;
 
 namespace Nocturne.Connectors.Core.Tests.Services;

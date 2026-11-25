@@ -1,15 +1,15 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Validators.V4;
 
 namespace Nocturne.API.Controllers.V4.Base;
 
 /// <summary>
-/// How a bulk endpoint names what it takes, in the three places a rejection message needs it:
-/// <c>"Bolus data is required"</c>, <c>"limited to 1000 boluses per request"</c>,
-/// <c>"Timestamp must be set on every bolus"</c>.
+/// How a bulk endpoint names what it takes, in the two places a rejection message needs it:
+/// <c>"Bolus data is required"</c> and <c>"limited to 1000 boluses per request"</c>.
 /// </summary>
-public readonly record struct V4BulkNaming(string Subject, string Singular, string Plural);
+public readonly record struct V4BulkNaming(string Subject, string Plural);
 
 /// <summary>
 /// The checks a V4 bulk create-or-update endpoint runs over its payload before it maps or
@@ -65,7 +65,6 @@ public static class V4BulkValidation
     /// <param name="controller">The controller answering the request.</param>
     /// <param name="requests">The payload as bound from the body.</param>
     /// <param name="subject">The payload's name, as it opens the empty-payload message ("Bolus").</param>
-    /// <param name="singular">One item ("bolus").</param>
     /// <param name="plural">Many items ("boluses").</param>
     /// <param name="ct">Cancels the per-item validation.</param>
     /// <returns>The error response to return, or <c>null</c> when the payload is usable.</returns>
@@ -73,7 +72,6 @@ public static class V4BulkValidation
         this ControllerBase controller,
         IReadOnlyList<TRequest>? requests,
         string subject,
-        string singular,
         string plural,
         CancellationToken ct = default)
         where TRequest : IBulkUpsertRequest
@@ -83,8 +81,8 @@ public static class V4BulkValidation
 
         var items = requests!;
 
-        if (items.Any(r => r.Timestamp == default))
-            return controller.Problem(detail: $"Timestamp must be set on every {singular}", statusCode: 400, title: "Bad Request");
+        if (items.Any(r => TimestampRule.IsMissing(r.Timestamp)))
+            return controller.TimestampRequiredProblem();
 
         if (items.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
             return controller.Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");

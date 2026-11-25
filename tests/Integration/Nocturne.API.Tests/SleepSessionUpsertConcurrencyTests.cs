@@ -147,15 +147,15 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             var firstResult = await held.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
             {
                 await using var transaction = await held.Database.BeginTransactionAsync();
-                var result = await first(Repository(new Pinned(held)));
+                var result = await first(Repository(new SuppliedContextFactory(() => held)));
 
-                secondTask = second(Repository(new Pinned(racer)));
-                await WaitUntilBlockedOnALockAsync(racerPid, secondTask);
+                secondTask = second(Repository(new SuppliedContextFactory(() => racer)));
+                await PostgresLockWaits.UntilSessionBlockedAsync(Fixture.AppConnectionString, racerPid, secondTask);
 
                 await transaction.CommitAsync();
                 return result;
             });
-            return (firstResult, await secondTask!.WaitAsync(TimeSpan.FromSeconds(30)));
+            return (firstResult, await secondTask!.WaitAsync(Eventually.DefaultPatience));
         }
         finally
         {
@@ -163,7 +163,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             {
                 try
                 {
-                    await secondTask.WaitAsync(TimeSpan.FromSeconds(30));
+                    await secondTask.WaitAsync(Eventually.DefaultPatience);
                 }
                 catch (Exception ex)
                 {
@@ -173,29 +173,6 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             await held.Database.CloseConnectionAsync();
             await racer.Database.CloseConnectionAsync();
         }
-    }
-
-    private async Task WaitUntilBlockedOnALockAsync(int pid, Task racing)
-    {
-        await using var probe = Fixture.CreateDbContext(Fixture.TenantId);
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (racing.IsCompleted)
-                throw new InvalidOperationException("The second write finished while the first was uncommitted", racing.Exception);
-
-            var blocked = await probe.Database
-                .SqlQuery<bool>($"""
-                    SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = {pid} AND wait_event_type = 'Lock') AS "Value"
-                    """)
-                .SingleAsync();
-            if (blocked)
-                return;
-
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException("The second write never blocked on the first");
     }
 
     private async Task<List<(Guid Id, string? OriginalId, short? SleepScore)>> StoredAsync()
@@ -222,13 +199,4 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         SleepScore = score,
     };
 
-    /// <summary>
-    /// Hands the repository one of the race's contexts on every call. Those come from
-    /// <see cref="TestNocturneDbContextFactory.CreateUndisposed"/>, so the repository's
-    /// <c>await using</c> leaves the held transaction and the racer's connection open.
-    /// </summary>
-    private sealed class Pinned(NocturneDbContext context) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(context);
-    }
 }

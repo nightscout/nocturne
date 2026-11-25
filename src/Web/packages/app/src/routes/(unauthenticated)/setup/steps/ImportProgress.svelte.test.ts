@@ -100,6 +100,7 @@ describe("ImportProgress", () => {
     await expect
       .element(page.getByText(/1 of 2 collections imported/))
       .toHaveClass("text-warning");
+    await expect.element(page.getByTestId("import-progress")).toHaveClass("bg-warning/20");
   });
 
   it("says nothing extra when every collection imported", async () => {
@@ -113,6 +114,7 @@ describe("ImportProgress", () => {
     render(ImportProgress, { voice, jobId: "job-2", onComplete: () => {} });
 
     await expect.element(page.getByText(/collections imported/)).not.toBeInTheDocument();
+    await expect.element(page.getByTestId("import-progress")).toHaveClass("bg-primary/20");
   });
 
   // Migration runs outlive the data they imported, so a tenant that wiped its instance to start
@@ -320,6 +322,7 @@ describe("ImportProgress", () => {
     render(ImportProgress, { voice, jobId: `job-ended-${state}`, onComplete: () => {} });
 
     await expect.element(page.getByText(expected)).toBeVisible();
+    await expect.element(page.getByTestId("import-progress")).toHaveClass("bg-warning/20");
   });
 
   // The summary of what failed has to stay up until it is read; Finish has no way back to it.

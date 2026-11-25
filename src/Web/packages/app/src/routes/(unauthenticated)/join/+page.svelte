@@ -85,7 +85,8 @@
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
         err,
-        "We could not add you to this instance. Try again in a moment."
+        "We could not add you to this instance. Try again in a moment.",
+        { member_invite_own: "You made this invite, so you cannot accept it. Ask another member to invite you." }
       );
     } finally {
       isAccepting = false;
@@ -158,6 +159,14 @@
     }
   }
 
+  // The member is already signed in here, so the step cannot hold the join up: it skips itself
+  // wherever it does not apply.
+  function askForRecoveryEmail() {
+    const params = new URLSearchParams({ next: withWelcome(resolve("")) });
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- a fixed same-origin route
+    return goto(`/join/recovery-email?${params.toString()}`, { replace: true });
+  }
+
   function goHome(joined = false) {
     const home = resolve("");
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved above; the welcome marker only adds a query
@@ -210,7 +219,7 @@
       <Card.Content>
         <RecoveryCodes
           codes={recoveryCodes}
-          onContinue={() => goHome(true)}
+          onContinue={askForRecoveryEmail}
           continueLabel="Continue to Nocturne"
         />
       </Card.Content>

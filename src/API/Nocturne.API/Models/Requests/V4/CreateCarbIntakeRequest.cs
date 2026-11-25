@@ -4,7 +4,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// Request body for creating a new carbohydrate intake record via the V4 API.
 /// </summary>
 /// <seealso cref="Validators.V4.CreateCarbIntakeRequestValidator"/>
-/// <seealso cref="Nocturne.API.Controllers.V4.Treatments.NutritionController"/>
+/// <seealso cref="Nocturne.API.Controllers.V4.Treatments.CarbIntakeController"/>
 public class CreateCarbIntakeRequest : IBulkUpsertRequest
 {
     /// <summary>

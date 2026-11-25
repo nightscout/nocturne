@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo.test",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "references": [{ "path": "../api-client" }],
+  "exclude": ["node_modules", "dist"]
+}

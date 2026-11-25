@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Time.Testing;
+using Nocturne.Infrastructure.Data.Entities;
 using System.Security.Claims;
 using System.Threading;
 using FluentAssertions;
@@ -42,6 +44,8 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
     private static readonly Guid ForeignTenantId = Guid.CreateVersion7();
     private static readonly Guid SubjectId = Guid.CreateVersion7();
     private const string Token = "invite-token";
+    private static readonly FakeTimeProvider Clock = new(new DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero));
+    private static readonly DateTime Now = Clock.GetUtcNow().UtcDateTime;
 
     private sealed class StubHandler(AuthContext context) : IAuthHandler
     {
@@ -78,7 +82,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
             DateTime.UtcNow,
             [],
             [],
-            [Scope.GlucoseRead]);
+            [Scope.GlucoseRead], null);
 
     private sealed record Harness(
         AuthenticationMiddleware Middleware,
@@ -88,7 +92,8 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
     private static Harness Build(
         MemberInviteInfo? inviteForThisTenant,
         bool markEndpoint = true,
-        bool withTokenRouteValue = true)
+        bool withTokenRouteValue = true,
+        DateTime? endedMembershipAt = null)
     {
         var inviteService = new Mock<IMemberInviteService>();
         inviteService
@@ -98,8 +103,23 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddSingleton(inviteService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext($"invite_identity_{Guid.NewGuid()}").AsFactory());
+        var databaseName = $"invite_identity_{Guid.NewGuid()}";
+        if (endedMembershipAt is { } accessEndsAt)
+        {
+            using var seed = TestDbContextFactory.CreateInMemoryContext(databaseName);
+            seed.Subjects.Add(new SubjectEntity { Id = SubjectId, Name = "Dr. Smith", IsActive = true });
+            seed.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = SubjectId, DirectPermissions = [Scope.FullAccess],
+                AccessEndsAt = accessEndsAt,
+            });
+            seed.SaveChanges();
+        }
+
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(databaseName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddSingleton(AccountLinkRoutes.Off);
+        services.AddSingleton<TimeProvider>(Clock);
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };
@@ -159,6 +179,42 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
             "the accept endpoint has to know who is asking, and [Authorize] gates it");
         harness.Context.User.Identity?.IsAuthenticated.Should().BeTrue();
         harness.Context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value.Should().Be(SubjectId.ToString());
+    }
+
+    /// <summary>
+    /// An ended membership is no membership: the member is refused everywhere but where a non-member
+    /// may stand, which is how they accept a new invite and join again.
+    /// </summary>
+    [Fact]
+    public async Task A_member_whose_access_has_ended_is_reduced_to_anonymous()
+    {
+        var harness = Build(Invite(), markEndpoint: false, endedMembershipAt: Now.AddSeconds(-1));
+
+        await harness.Middleware.InvokeAsync(harness.Context);
+
+        harness.Context.GetAuthContext()!.IsAuthenticated.Should().BeFalse();
+        harness.Context.User.Identity?.IsAuthenticated.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_member_whose_access_has_ended_stays_identifiable_on_an_invite_to_join_again()
+    {
+        var harness = Build(Invite(), endedMembershipAt: Now.AddSeconds(-1));
+
+        await harness.Middleware.InvokeAsync(harness.Context);
+
+        harness.Context.GetAuthContext()!.Should().BeEquivalentTo(new { IsAuthenticated = true, SubjectId = (Guid?)SubjectId });
+        harness.Context.GetGrantedScopes().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_member_whose_end_is_still_ahead_keeps_their_session()
+    {
+        var harness = Build(Invite(), markEndpoint: false, endedMembershipAt: Now.AddSeconds(1));
+
+        await harness.Middleware.InvokeAsync(harness.Context);
+
+        harness.Context.GetAuthContext()!.IsAuthenticated.Should().BeTrue();
     }
 
     /// <summary>

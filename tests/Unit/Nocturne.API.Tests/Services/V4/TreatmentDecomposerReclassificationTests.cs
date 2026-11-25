@@ -1,28 +1,17 @@
-using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -48,6 +37,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly Mock<IStateSpanService> _stateSpans = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
     private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly RecordingRecordChangeSubscriber _published = new();
     private readonly StatementRecorder _statements = new();
 
     public TreatmentDecomposerReclassificationTests()
@@ -85,40 +75,16 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         else
         {
             StateSpanMapper.UpdateEntity(entity, span);
+            (entity.EndTimestamp, entity.SupersededById) = (span.EndTimestamp, null);
         }
 
         _context.SaveChanges();
         _context.Entry(entity).State = EntityState.Detached;
     }
 
-    private TreatmentDecomposer Decomposer()
-    {
-        var foods = new Mock<ITreatmentFoodService>();
-        foods
-            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        return new TreatmentDecomposer(
-            _factory, new DecomposedTreatmentKeys(_factory),
-            new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
-            new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
-            new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
-            new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),
-            new DeviceEventRepository(_factory, _dedup, _audit, NullLogger<DeviceEventRepository>.Instance),
-            new BolusCalculationRepository(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance),
-            _stateSpans.Object,
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            foods.Object,
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            _audit,
-            NullLogger<TreatmentDecomposer>.Instance,
-            legacyReads: _legacyReads);
-    }
+    private TreatmentDecomposer Decomposer() =>
+        TreatmentDecomposerDoubles.Stored(
+            _factory, _dedup, _audit, stateSpans: _stateSpans.Object, changes: _legacyReads.AsRecordChanges(_published));
 
     private Task DecomposeAsync(Treatment treatment) => Decomposer().DecomposeOneAsync(treatment, WriteOrigin.Live);
 
@@ -227,6 +193,25 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         spans[pointsAtFirst.Id].SupersededById.Should().BeNull("a live span no longer points at a deleted one");
         (await _context.MutationAuditLog.CountAsync()).Should().Be(0, "the drop is system-attributed");
         _legacyReads.Models.Should().Contain(typeof(StateSpan));
+    }
+
+    /// <summary>A dropped site change is announced, so a site-age rule waiting on it is evaluated.</summary>
+    [Theory]
+    [InlineData("Note", typeof(Nocturne.Core.Models.V4.Note))]
+    [InlineData("Site Change", typeof(Nocturne.Core.Models.V4.DeviceEvent))]
+    public async Task A_reclassification_announces_the_types_it_dropped_once_naming_no_record(string eventType, Type dropped)
+    {
+        await DecomposeAsync(new Treatment
+        {
+            Id = "aaps-1", EventType = eventType, Mills = At, Notes = "Rhys (110%,1h)", EnteredBy = "openaps://AndroidAPS",
+        });
+        _published.Batches.Clear();
+
+        await DecomposeAsync(new Treatment { Id = "aaps-1", EventType = "Correction Bolus", Mills = At, Insulin = 1 });
+
+        _published.Batches.Should().ContainSingle(batch =>
+            batch.Changes.Any(c => c.RecordType == dropped) && batch.Changes.All(c => !c.HasRecords),
+            "the dropped record is announced by type, apart from the bolus the repository announces itself");
     }
 
     [Fact]

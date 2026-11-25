@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Entry } from "#lib/websocket/types.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 import { clockGlucoseSourceOf } from "./realtime-store.svelte";
 
 const MILLS = Date.UTC(2026, 11, 31, 14, 5);

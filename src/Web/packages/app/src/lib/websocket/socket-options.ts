@@ -1,5 +1,14 @@
 import type { WebSocketConfig } from "./types";
 
+/** How every browser socket to the bridge times out and reconnects. */
+export const BROWSER_SOCKET_TIMING = {
+  reconnectAttempts: Infinity,
+  reconnectDelay: 5000,
+  maxReconnectDelay: 30000,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+} satisfies Partial<WebSocketConfig>;
+
 /** The `auth` callback Socket.IO invokes before each (re)connect handshake. */
 export type SocketAuthProvider = (
   cb: (data: Record<string, unknown>) => void
@@ -16,6 +25,11 @@ export type SocketAuthProvider = (
  * the dashboard renders as "Connection Error" — while REST backfill quietly
  * keeps the data current, which is what makes the fault so confusing to report.
  * The bridge serves both transports.
+ *
+ * A socket on another namespace gets a connection of its own (`forceNew`). With
+ * the default multiplexing it would share the tenant socket's transport, and
+ * the bridge ends an admission by closing the transport, so one namespace's
+ * refusal would drop the other's socket too.
  *
  * Extracted from the client so the transport policy can be tested against a
  * real server rather than asserted on an object literal.
@@ -34,5 +48,6 @@ export function realtimeSocketOptions(
     reconnectionDelayMax: config.maxReconnectDelay,
     randomizationFactor: 0.5,
     auth,
+    ...(config.namespace ? { forceNew: true } : {}),
   };
 }

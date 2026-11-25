@@ -1,15 +1,19 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { FormError } from "#lib/forms/index.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { stepDown } from "#lib/api/generated/memberInvites.generated.remote.js";
   import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
   import { familyRoleChoices } from "../(guided)/sharing/audiences.svelte";
 
+  const handedOff = $derived(page.data.isHandedOffSession === true);
   const rolesQuery = getRoles();
   const caretaker = $derived(
     familyRoleChoices(rolesQuery.current ?? []).find(
@@ -30,6 +34,7 @@
       // Setup is for owners only, so it is not theirs any more.
       await goto(resolve(""));
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       confirming = false;
       error = describeSubmitError(err, "We could not change your role.");
     } finally {
@@ -52,10 +57,14 @@
         <span class="text-xs text-muted-foreground">{caretaker.description}</span>
       {/if}
     </div>
-    <div class="flex items-center gap-3">
-      <FormError issues={error} />
-      <Button variant="outline" onclick={() => (confirming = true)}>Step down</Button>
-    </div>
+    {#if handedOff}
+      <SignInGate reason="Sign in again to step down." />
+    {:else}
+      <div class="flex items-center gap-3">
+        <FormError issues={error} />
+        <Button variant="outline" onclick={() => (confirming = true)}>Step down</Button>
+      </div>
+    {/if}
   </div>
 </Card.Root>
 

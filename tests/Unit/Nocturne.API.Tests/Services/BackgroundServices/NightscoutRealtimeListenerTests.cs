@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
@@ -350,6 +351,113 @@ public class NightscoutRealtimeListenerTests
         logger.Entries.Should().NotContain(e => e.Message.Contains("Failed to connect Socket.IO"));
     }
 
+    /// <summary>
+    /// The connect cap runs on the injected clock: an instance that accepts the connection and never
+    /// answers is given up on when fake time passes the cap, however little real time has gone by.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UnresponsiveInstance_GivesUpWhenTheClockPassesTheCap()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        using var silent = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        silent.Start();
+        var port = ((System.Net.IPEndPoint)silent.LocalEndpoint).Port;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = $"http://127.0.0.1:{port}",
+        };
+
+        var clock = new FakeTimeProvider();
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, clock)
+        {
+            ConnectTimeout = TimeSpan.FromHours(1),
+        };
+
+        var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+        using var accepted = await silent.AcceptTcpClientAsync().WaitAsync(Eventually.DefaultPatience);
+        Assert.False(start.IsCompleted);
+
+        clock.Advance(TimeSpan.FromHours(1));
+        await start.WaitAsync(Eventually.DefaultPatience);
+
+        logger.Entries.Should().Contain(e => e.Message.Contains("Failed to connect Socket.IO"));
+        Assert.Empty(SocketClients(sut));
+    }
+
+    /// <summary>
+    /// A site behind a proxy that admits only a secret path serves Socket.IO under that path. The
+    /// handshake has to ask there, carrying the URL's query, or it reaches nothing that answers.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_SiteUnderASubPath_HandshakesUnderThatPath()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        using var site = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        site.Start();
+        var port = ((System.Net.IPEndPoint)site.LocalEndpoint).Port;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = $"http://127.0.0.1:{port}/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123&key=a+b%2Bc",
+        };
+
+        var clock = new FakeTimeProvider();
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), new ListLogger<NightscoutConnectorBackgroundService>(), clock)
+        {
+            ConnectTimeout = TimeSpan.FromHours(1),
+        };
+
+        var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+        using var accepted = await site.AcceptTcpClientAsync().WaitAsync(Eventually.DefaultPatience);
+        using var reader = new StreamReader(accepted.GetStream());
+        var requestLine = await reader.ReadLineAsync().WaitAsync(Eventually.DefaultPatience);
+
+        clock.Advance(TimeSpan.FromHours(1));
+        await start.WaitAsync(Eventually.DefaultPatience);
+
+        requestLine.Should().StartWith("GET /AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io/");
+        requestLine.Should().Contain("&token=reader-abc123&key=a+b%2Bc ",
+            "the handshake carries the query exactly as the reads send it, a + included");
+        NightscoutAddress.Resolve(config.Url).For("api/v1/status")
+            .Should().EndWith("?token=reader-abc123&key=a+b%2Bc");
+    }
+
+    [Fact]
+    public void AuthorizeMessage_WithNoSecretOrToken_SendsNeither()
+    {
+        var message = NightscoutConnectorBackgroundService.AuthorizeMessage("", null);
+
+        message.Should().NotContainKey("secret", "a hash of an empty secret is a wrong secret");
+        message.Should().NotContainKey("token");
+        message.Should().Contain("client", "web");
+    }
+
+    [Fact]
+    public void AuthorizeMessage_WithASecretAndAToken_SendsTheSecretsHashAndTheToken()
+    {
+        var message = NightscoutConnectorBackgroundService.AuthorizeMessage("secret", "reader-abc123");
+
+        message.Should().Contain("secret", NightscoutConnectorService.ApiSecretHeaderValue("secret")!);
+        message.Should().Contain("token", "reader-abc123");
+    }
+
+    [Fact]
+    public void NewClient_ForASiteUnderASubPath_DialsTheOriginWithTheSitesSocketPath()
+    {
+        using var client = NightscoutConnectorBackgroundService.NewClient(
+            NightscoutAddress.Resolve("https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123"),
+            new ServiceCollection().AddHttpClient().BuildServiceProvider().GetRequiredService<IHttpClientFactory>());
+
+        client.Options.Path.TrimEnd('/').Should().Be("/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io");
+        client.Options.Query!["token"].Should().Be("reader-abc123");
+    }
+
     #region Helpers
 
     /// <summary>
@@ -380,6 +488,7 @@ public class NightscoutRealtimeListenerTests
 
         db.AddToServices(services);
         services.AddActiveTenantSnapshot();
+        services.AddHttpClient();
 
         services.AddScoped<ITenantAccessor, Nocturne.API.Multitenancy.HttpContextTenantAccessor>();
 

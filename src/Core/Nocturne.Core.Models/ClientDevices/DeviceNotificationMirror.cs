@@ -22,12 +22,35 @@ public class DeviceNotificationMirror
 
     /// <summary>
     /// Whether an in-app notification should mirror to devices: never an alert (those go via
-    /// device_action), and only when it's worth interrupting — urgency <see cref="NotificationUrgency.Warn"/>+
+    /// device_action), never one whose title or subtitle is a label key (see <see cref="IsLabelKey"/>),
+    /// and only when it's worth interrupting: urgency <see cref="NotificationUrgency.Warn"/>+
     /// or an <see cref="NotificationCategory.Alert"/>/<see cref="NotificationCategory.ActionRequired"/> category.
     /// Bare informational notifications are not mirrored.
     /// </summary>
     public static bool Qualifies(InAppNotificationDto notification)
         => notification.Type != AlertFiringType
+           && !IsLabelKey(notification.Title)
+           && !IsLabelKey(notification.Subtitle)
            && (notification.Urgency >= NotificationUrgency.Warn
                || notification.Category is NotificationCategory.Alert or NotificationCategory.ActionRequired);
+
+    /// <summary>
+    /// Whether <paramref name="text"/> is a label key: lowercase letters, digits and underscores
+    /// only, starting with a letter. The desktop app has no translations, so it must not show one.
+    /// Text of the same shape (one lowercase word, snake_case) is skipped as well, on purpose: a skipped
+    /// toast still shows in the web app, and a leaked key does not read.
+    /// </summary>
+    public static bool IsLabelKey(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || text[0] is < 'a' or > 'z')
+            return false;
+
+        foreach (var c in text)
+        {
+            if (c is not ((>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
+                return false;
+        }
+
+        return true;
+    }
 }

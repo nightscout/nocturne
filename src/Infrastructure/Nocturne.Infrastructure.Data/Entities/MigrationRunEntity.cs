@@ -37,7 +37,7 @@ public class MigrationRunEntity
     public string Mode { get; set; } = "Api";
 
     /// <summary>
-    /// Human-readable source description shown in job history (URL or database name)
+    /// Human-readable source description shown in job history: the masked Nightscout URL, or the database name
     /// </summary>
     [Column("source_description")]
     [MaxLength(512)]
@@ -112,6 +112,41 @@ public class MigrationRunEntity
     /// </summary>
     [Column("source_alarm_settings", TypeName = "jsonb")]
     public string? SourceAlarmSettings { get; set; }
+
+    /// <summary>
+    /// Where a live run resumes and what it has counted so far, as the importer's own JSON. Written
+    /// before each page a run reads, so a run whose process died goes on from the page it was on.
+    /// </summary>
+    [Column("checkpoint", TypeName = "jsonb")]
+    public string? Checkpoint { get; set; }
+
+    /// <summary>
+    /// The run's request, source credentials included, encrypted with the instance key. Held only
+    /// while the run is live, for the process that resumes it; null once the run has ended.
+    /// </summary>
+    [Column("request_encrypted")]
+    public string? RequestEncrypted { get; set; }
+
+    /// <summary>
+    /// Counts the writes to this row. A holder writes only over the revision it last wrote, so one
+    /// that lost the run to another process cannot put an older checkpoint back.
+    /// </summary>
+    [Column("revision")]
+    public int Revision { get; set; }
+
+    /// <summary>
+    /// The subject who started the run, stamped as the maker of every token it adopts; null for a run
+    /// started before runs recorded one, which adopts with no maker.
+    /// </summary>
+    [Column("started_by_subject_id")]
+    public Guid? StartedBySubjectId { get; set; }
+
+    /// <summary>
+    /// When the starter's access ends, read once at start and the expiry of every token the run
+    /// adopts. A later end only lowers it (<see cref="Repositories.MemberCreations.CapAsync"/>).
+    /// </summary>
+    [Column("starter_access_ends_at")]
+    public DateTime? StarterAccessEndsAt { get; set; }
 
     /// <summary>
     /// Navigation property for the migration source

@@ -23,8 +23,23 @@ vi.mock("#lib/websocket/websocket-client.svelte.js", () => ({
     disconnect() {}
   },
 }));
+// A query double: awaiting it answers with what it last fetched, as a cached SvelteKit
+// query does, and only `refresh` asks the server again.
+const forecast = vi.hoisted(() => ({ fetches: 0 }));
 vi.mock("#lib/api/predictions.remote.js", () => ({
-  getPredictions: vi.fn(async () => null),
+  getPredictions: vi.fn(() => {
+    if (forecast.fetches === 0) forecast.fetches = 1;
+    const query = {
+      refresh: async () => {
+        forecast.fetches++;
+      },
+      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve(
+          forecast.fetches > 0 ? { eventualBg: forecast.fetches } : null
+        ).then(resolve, reject),
+    };
+    return query;
+  }),
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
@@ -33,13 +48,11 @@ import { flushSync } from "svelte";
 import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 import { getChartData } from "#lib/api/chart-data.remote.js";
 import { getPredictions, getPredictionStatus } from "#lib/api/predictions.remote.js";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 import type { Entry } from "#lib/websocket/types.js";
 import Harness from "./chart-data-engine-harness.test.svelte";
-import type {
-  ChartDataEngine,
-  ChartDataEngineOptions,
-} from "./chart-data-engine.svelte";
+import type { ChartDataView } from "@nocturne/charts";
+import type { ChartDataEngineOptions } from "./chart-data-engine.svelte";
 
 // The server half of the merge is deliberately empty, so every point the engine
 // produces came from the realtime store and the window under test is the only
@@ -70,12 +83,12 @@ const entries = [
 ];
 
 async function glucoseOf(options: ChartDataEngineOptions) {
-  let engine!: ChartDataEngine;
+  let engine!: ChartDataView;
   render(Harness, {
     props: {
       entries,
       options,
-      onengine: (e: ChartDataEngine) => (engine = e),
+      onengine: (e: ChartDataView) => (engine = e),
     },
   });
 
@@ -112,7 +125,7 @@ describe("chart data engine — realtime merge window", () => {
     const from = Date.now() - 5 * HOUR;
     const to = Date.now() - 1 * HOUR;
 
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     render(Harness, {
       props: {
         entries: [
@@ -125,7 +138,7 @@ describe("chart data engine — realtime merge window", () => {
           enablePredictions: false,
           dateRange: { from: new Date(from), to: new Date(to) },
         },
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
       },
     });
     await vi.waitFor(() => expect(engine.serverChartData).not.toBeNull());
@@ -148,13 +161,13 @@ describe("chart data engine — realtime glucose source", () => {
     options: ChartDataEngineOptions = sidebar,
     onstore?: (store: RealtimeStore) => void
   ) {
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     vi.mocked(getChartData).mockClear();
     render(Harness, {
       props: {
         entries,
         options,
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
         onstore,
       },
     });
@@ -272,6 +285,59 @@ describe("chart data engine — predictions", () => {
 
     await vi.waitFor(() => expect(getPredictions).toHaveBeenCalledTimes(1));
   });
+
+  it("fetches the forecast afresh when a newer reading arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(getPredictionStatus).mockImplementation((() => new Promise(() => {})) as never);
+      forecast.fetches = 0;
+      const withReading = (minutesAgo: number) =>
+        transformChartData({ glucoseData: [{ time: Date.now() - minutesAgo * MINUTE, sgv: 120 }] } as never);
+      vi.mocked(getChartData).mockImplementation((() => {
+        const result = Promise.resolve(withReading(1)) as Promise<typeof served> & {
+          refresh: () => Promise<void>;
+        };
+        result.refresh = () => result.then(() => undefined);
+        return result;
+      }) as never);
+
+      let engine!: ChartDataView;
+      let store!: RealtimeStore;
+      render(Harness, {
+        props: {
+          entries: [],
+          options: { focusHours: 3, initialChartData: withReading(6) },
+          onengine: (e: ChartDataView) => (engine = e),
+          onstore: (s: RealtimeStore) => {
+            store = s;
+            s.isReady = false;
+            s.deviceStatuses = [];
+          },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      store.isReady = true;
+      flushSync();
+      await vi.advanceTimersByTimeAsync(0);
+      const first = engine.predictionData?.eventualBg;
+
+      store.deviceStatuses = [{ _id: "loop-cycle" }] as never;
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(first).toBeDefined();
+      expect(engine.predictionData?.eventualBg).toBeGreaterThan(first!);
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(getChartData).mockReset();
+      vi.mocked(getChartData).mockImplementation((() => {
+        const result = Promise.resolve(served) as Promise<typeof served> & {
+          refresh: () => Promise<void>;
+        };
+        result.refresh = () => result.then(() => undefined);
+        return result;
+      }) as never);
+    }
+  });
 });
 
 describe("chart data engine — refused fetch", () => {
@@ -287,12 +353,12 @@ describe("chart data engine — refused fetch", () => {
     }
     vi.mocked(getChartData).mockRejectedValueOnce(refused);
 
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     render(Harness, {
       props: {
         entries: [],
         options: { focusHours: 3, enablePredictions: false },
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
       },
     });
 
@@ -310,12 +376,12 @@ describe("chart data engine — refused fetch", () => {
     }
     vi.mocked(getChartData).mockRejectedValueOnce(refused);
 
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     render(Harness, {
       props: {
         entries: [],
         options: { focusHours: 3, enablePredictions: false },
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
       },
     });
 
@@ -356,13 +422,13 @@ describe("chart data engine — SSR data refresh", () => {
     vi.useFakeTimers();
     vi.mocked(getChartData).mockReset();
     vi.mocked(getChartData).mockImplementation((() => resolving(boluslike(1))) as never);
-    let engine!: ChartDataEngine;
+    let engine!: ChartDataView;
     let store!: Store;
     render(Harness, {
       props: {
         entries: [],
         options,
-        onengine: (e: ChartDataEngine) => (engine = e),
+        onengine: (e: ChartDataView) => (engine = e),
         // The store is a process-wide singleton, so reset what earlier tests left on it
         // before the engine is created.
         onstore: (s: Store) => {

@@ -61,8 +61,8 @@
 </script>
 
 {#snippet item()}
-  <span class={labelClasses}>{label}</span>
-  <span class="flex items-center gap-1 text-sm font-medium tabular-nums {valueTone[level]}">
+  <span class={labelClasses} data-pill-label>{label}</span>
+  <span class="flex items-center gap-1 text-sm font-medium tabular-nums {valueTone[level]}" data-pill-value>
     {#if level === "warn" || level === "urgent"}
       <TriangleAlert class="size-3.5" aria-hidden="true" />
       <span class="sr-only">{level === "urgent" ? "Urgent:" : "Warning:"}</span>
@@ -77,7 +77,7 @@
 
 {#if showPopover && info.length > 0}
   <Popover.Root bind:open={popoverOpen}>
-    <Popover.Trigger class={pillClasses}>
+    <Popover.Trigger class={pillClasses} data-pill>
       {@render item()}
     </Popover.Trigger>
     <Popover.Content class="w-80 p-0" align="center" side="bottom">
@@ -123,7 +123,7 @@
     </Popover.Content>
   </Popover.Root>
 {:else}
-  <div class={pillClasses}>
+  <div class={pillClasses} data-pill>
     {@render item()}
   </div>
 {/if}

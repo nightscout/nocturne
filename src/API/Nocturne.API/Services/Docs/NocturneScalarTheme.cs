@@ -14,6 +14,7 @@ public static class NocturneScalarTheme
 {
     internal const string ThemeResource = "Nocturne.API.ScalarTheme.theme.css";
     internal const string NocturneThemeResource = "Nocturne.API.ScalarTheme.nocturne-theme.css";
+    internal const string ChartsThemeResource = "Nocturne.API.ScalarTheme.charts-theme.css";
 
     /// <summary>
     /// Composes the theme CSS. A missing resource contributes nothing, leaving
@@ -24,6 +25,7 @@ public static class NocturneScalarTheme
         var sb = new StringBuilder();
         sb.AppendLine(ReadAndAdapt(ThemeResource));
         sb.AppendLine(ReadAndAdapt(NocturneThemeResource));
+        sb.AppendLine(ReadAndAdapt(ChartsThemeResource));
         sb.AppendLine(ScalarMapping);
         return sb.ToString();
     }

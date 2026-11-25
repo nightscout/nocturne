@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Core.Models.V4;
 
@@ -23,6 +25,8 @@ public readonly record struct TandemBasalSpans(List<TempBasal> Spans, DateTime? 
 /// </summary>
 public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TandemConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
@@ -32,7 +36,7 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
     ///     never fetched — see <see cref="TandemBasalSpans.UnclosedFrom"/>.
     /// </param>
     public TandemBasalSpans Map(
-        IEnumerable<TandemPumpEvent> events, DateTime? fetchedThroughUtc, bool ignoreZeroUnitBasal, DateTime now)
+        IEnumerable<TandemPumpEvent> events, DateTime? fetchedThroughUtc, bool ignoreZeroUnitBasal)
     {
         var ordered = events
             .Select(ev => (Event: ev, Start: _time.ToUtc(ev.RawTimestampSeconds)))
@@ -59,18 +63,14 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
 
             records.Add(new TempBasal
             {
-                Id = Guid.CreateVersion7(),
                 StartTimestamp = start,
                 EndTimestamp = end > start ? end : null,
-                UtcOffset = _time.OffsetMinutes,
+                UtcOffset = _time.OffsetMinutesAt(start),
                 Device = TandemMapHelpers.Source,
-                DataSource = TandemMapHelpers.Source,
-                LegacyId = $"tandem_basal_{ev.SeqNum}",
+                LegacyId = LegacyIds.Of("basal", ev.SeqNum),
                 PumpRecordId = ev.SeqNum.ToString(),
                 Rate = rate,
                 Origin = MapOrigin(ev.EnumName("Commanded Rate Source")),
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 

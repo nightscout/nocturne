@@ -19,7 +19,6 @@
           }
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -31,7 +30,6 @@
         "direction": "BELOW",
         "value": 70
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -42,7 +40,6 @@
       "condition_params": {
         "bucket": "FALLING_FAST"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -55,7 +52,6 @@
           1
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -68,7 +64,6 @@
           "Monday"
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -81,7 +76,6 @@
           "LOW"
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -93,7 +87,6 @@
         "mode": "suspended",
         "is_active": true
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -105,7 +98,6 @@
         "category": 4,
         "is_active": true
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -125,7 +117,6 @@
           }
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -137,7 +128,6 @@
         "direction": "below",
         "Value": 70
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -150,7 +140,6 @@
         "to": "23:59",
         "timezone": "ETC/GMT-2"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -163,7 +152,6 @@
         "to": "23:59",
         "timezone": "AUS Eastern Standard Time"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -183,7 +171,6 @@
           }
         ]
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

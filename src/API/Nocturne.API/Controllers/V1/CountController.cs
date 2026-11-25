@@ -17,9 +17,11 @@ using Nocturne.Core.Contracts.DeviceStatuses;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Count controller that provides 1:1 compatibility with Nightscout count endpoints.
-/// Implements the /api/v1/count/* endpoints from the legacy JavaScript implementation.
+/// Nightscout count: returns how many documents in a collection match a query, such as entries or treatments.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/count/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="IDeviceStatusService"/>
@@ -29,6 +31,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
+[ErrorEnvelope]
 public class CountController : ControllerBase
 {
     /// <summary>
@@ -105,34 +108,13 @@ public class CountController : ControllerBase
             "Count entries endpoint requested with find: {Find}, type: {Type} from {RemoteIpAddress}",
             find,
             type,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
-        {
-            var count = await _entryService.CountEntriesAsync(find, type, cancellationToken);
+        var count = await _entryService.CountEntriesAsync(find, type, cancellationToken);
 
-            _logger.LogDebug("Found {Count} entries matching criteria", count);
-            return LegacyCountResult.For(count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error counting entries with find: {Find}, type: {Type}",
-                find,
-                type
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error while counting entries",
-                    type = "internal",
-                }
-            );
-        }
+        _logger.LogDebug("Found {Count} entries matching criteria", count);
+        return LegacyCountResult.For(count);
     }
 
     /// <summary>
@@ -155,30 +137,14 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count treatments endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
-        {
-            var count = await _treatmentService.CountTreatmentsAsync(
-                LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
+        var count = await _treatmentService.CountTreatmentsAsync(
+            LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
 
-            _logger.LogDebug("Found {Count} treatments matching criteria", count);
-            return LegacyCountResult.For(count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error counting treatments with find: {Find}", find);
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error while counting treatments",
-                    type = "internal",
-                }
-            );
-        }
+        _logger.LogDebug("Found {Count} treatments matching criteria", count);
+        return LegacyCountResult.For(count);
     }
 
     /// <summary>
@@ -201,31 +167,15 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count device status endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
-        {
-            var count = await _deviceStatuses.CountDeviceStatusesAsync(
-                FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow())),
-                cancellationToken);
+        var count = await _deviceStatuses.CountDeviceStatusesAsync(
+            FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow())),
+            cancellationToken);
 
-            _logger.LogDebug("Found {Count} device status entries matching criteria", count);
-            return LegacyCountResult.For(count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error counting device status with find: {Find}", find);
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error while counting device status",
-                    type = "internal",
-                }
-            );
-        }
+        _logger.LogDebug("Found {Count} device status entries matching criteria", count);
+        return LegacyCountResult.For(count);
     }
 
     /// <summary>
@@ -244,6 +194,7 @@ public class CountController : ControllerBase
     /// <c>IActivityService</c>.
     /// </remarks>
     [HttpGet("activity/where")]
+    [ScopeDecidedBy(typeof(ActivityReadScopeGuard))]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     public async Task<ActionResult<LegacyCountResult[]>> CountActivity(
@@ -257,33 +208,17 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count activity endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
-        {
-            var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
-            if (LegacyFindQueryString.IsUnreadableQueryString(activityFind))
-                return BadRequest(new { status = 400, message = UnreadableFindMessage, type = "client" });
+        var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+        if (LegacyFindQueryString.IsUnreadableQueryString(activityFind))
+            return BadRequest(new { status = 400, message = UnreadableFindMessage, type = "client" });
 
-            var count = await _activityService.CountActivitiesAsync(activityFind, cancellationToken);
+        var count = await _activityService.CountActivitiesAsync(activityFind, cancellationToken);
 
-            _logger.LogDebug("Found {Count} activity entries matching criteria", count);
-            return LegacyCountResult.For(count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error counting activity with find: {Find}", find);
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error while counting activity",
-                    type = "internal",
-                }
-            );
-        }
+        _logger.LogDebug("Found {Count} activity entries matching criteria", count);
+        return LegacyCountResult.For(count);
     }
 
     /// <summary>
@@ -302,6 +237,8 @@ public class CountController : ControllerBase
     /// for another. <c>activity</c> merges four categories and keeps the AND below.
     /// </remarks>
     [HttpGet("{storage}/where")]
+    [ScopeDecidedBy(typeof(ActivityReadScopeGuard))]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
     [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [ProducesResponseType(400)]
@@ -339,84 +276,62 @@ public class CountController : ControllerBase
             storage,
             find,
             type,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        long count;
+        switch (storage.ToLowerInvariant())
         {
-            long count;
-            switch (storage.ToLowerInvariant())
-            {
-                case "entries":
-                    count = await _entryService.CountEntriesAsync(
-                        LegacyFindQueryString.Resolve(HttpContext?.Request, find),
-                        type,
-                        cancellationToken
-                    );
-                    break;
-                case "treatments":
-                    count = await _treatmentService.CountTreatmentsAsync(
-                        LegacyFindDateWindow.Apply(
-                            LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow()),
-                        cancellationToken);
-                    break;
-                case "devicestatus":
-                    count = await _deviceStatuses.CountDeviceStatusesAsync(
-                        FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(
-                            LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow())),
-                        cancellationToken);
-                    break;
-                case "profile":
-                    count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);
-                    break;
-                case "food":
-                    var foodFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
-                    if (Food.FindRefusal(FindQuery.Parse(foodFind)) is { } foodRefusal)
-                        return BadRequest(new { status = 400, message = foodRefusal, type = "client" });
+            case "entries":
+                count = await _entryService.CountEntriesAsync(
+                    LegacyFindQueryString.Resolve(HttpContext?.Request, find),
+                    type,
+                    cancellationToken
+                );
+                break;
+            case "treatments":
+                count = await _treatmentService.CountTreatmentsAsync(
+                    LegacyFindDateWindow.Apply(
+                        LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow()),
+                    cancellationToken);
+                break;
+            case "devicestatus":
+                count = await _deviceStatuses.CountDeviceStatusesAsync(
+                    FindQuery.ParseDeviceStatus(LegacyFindDateWindow.Apply(
+                        LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow())),
+                    cancellationToken);
+                break;
+            case "profile":
+                count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);
+                break;
+            case "food":
+                var foodFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+                if (Food.FindRefusal(FindQuery.Parse(foodFind)) is { } foodRefusal)
+                    return BadRequest(new { status = 400, message = foodRefusal, type = "client" });
 
-                    count = await _foodRepository.CountFoodAsync(foodFind, type, cancellationToken);
-                    break;
-                case "activity":
-                    var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
-                    if (LegacyFindQueryString.IsUnreadableQueryString(activityFind))
-                        return BadRequest(new { status = 400, message = UnreadableFindMessage, type = "client" });
+                count = await _foodRepository.CountFoodAsync(foodFind, type, cancellationToken);
+                break;
+            case "activity":
+                var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+                if (LegacyFindQueryString.IsUnreadableQueryString(activityFind))
+                    return BadRequest(new { status = 400, message = UnreadableFindMessage, type = "client" });
 
-                    count = await _activityService.CountActivitiesAsync(activityFind, cancellationToken);
-                    break;
-                default:
-                    // This shouldn't happen due to validation above, but just in case
-                    return BadRequest(
-                        new
-                        {
-                            status = 400,
-                            message = $"Unsupported storage type: {storage}",
-                            type = "client",
-                        }
-                    );
-            }
-
-            _logger.LogDebug("Found {Count} {Storage} records matching criteria", count, storage);
-            return LegacyCountResult.For(count);
+                count = await _activityService.CountActivitiesAsync(activityFind, cancellationToken);
+                break;
+            default:
+                // This shouldn't happen due to validation above, but just in case
+                return BadRequest(
+                    new
+                    {
+                        status = 400,
+                        message = $"Unsupported storage type: {storage}",
+                        type = "client",
+                    }
+                );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error counting {Storage} with find: {Find}, type: {Type}",
-                storage,
-                find,
-                type
-            );
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = $"Internal server error while counting {storage}",
-                    type = "internal",
-                }
-            );
-        }
+
+        _logger.LogDebug("Found {Count} {Storage} records matching criteria", count, storage);
+        return LegacyCountResult.For(count);
     }
 }
 

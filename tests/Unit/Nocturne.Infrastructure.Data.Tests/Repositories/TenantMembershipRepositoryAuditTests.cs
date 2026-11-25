@@ -54,7 +54,10 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     }
 
     private TenantMembershipRepository Repository(IAuditContext? actor) =>
-        new(new TestNocturneDbContextFactory(Context(actor)));
+        new(new TestNocturneDbContextFactory(Context(actor)), AccountLinkRoutes.Off);
+
+    private Task<TenantRoleUpdate> EditViewerAsync(IAuditContext actor, TenantRoleEdit edit) =>
+        TeamWrites.EditRoleAsync(new TestNocturneDbContextFactory(Context(actor)), _tenant, _viewer, edit, editorSubjectId: null, Now);
 
     private async Task SeedMemberAsync()
     {
@@ -230,15 +233,77 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
 
         await Repository(new TestAuditActor { AuthType = "None" }).AddMemberAsync(
             new NewTenantMember(_tenant, _subject, [_viewer], [Scope.DevicesRead],
-                CreatedFromInviteId: invite, MadeBy: MembershipMadeBy.Member),
+                CreatedFromInviteId: invite, MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Direct, By = null },
             CancellationToken.None);
 
         var rows = await RowsAsync();
-        rows.Should().HaveCount(2).And.OnlyContain(a =>
+        rows.Should().HaveCount(3).And.OnlyContain(a =>
             a.ActorSubjectId == _subject && a.ActorCredential == null && a.TargetSubjectId == _subject);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
+            $$"""{"kind":"tenant","how":"direct","invite":"{{invite}}"}""",
             $$"""{"role":"viewer","kind":"tenant","invite":"{{invite}}"}""",
             $$"""{"permission":"devices.read","kind":"tenant","invite":"{{invite}}"}""");
+    }
+
+    [Fact]
+    public async Task EditingARolesPermissionsAuditsTheGainedAndLostOnTheRoleWithTheActor()
+    {
+        var changed = new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.DevicesRead]);
+
+        await EditViewerAsync(new TestAuditActor { SubjectId = _actor }, changed);
+
+        var row = (await RowsAsync()).Should().ContainSingle().Subject;
+        row.EventType.Should().Be(AuthAuditEventType.RolePermissionsChanged);
+        row.ActorSubjectId.Should().Be(_actor);
+        row.TargetSubjectId.Should().BeNull();
+        row.TenantId.Should().Be(_tenant);
+        row.DetailsJson.Should().Be(
+            $$"""{"role_id":"{{_viewer}}","role":"viewer","gained":["devices.read","treatments.read"],"lost":["glucose.read"],"kind":"tenant"}""");
+    }
+
+    [Fact]
+    public async Task EditingARoleWithoutChangingItsPermissionsAuditsNothing()
+    {
+        await EditViewerAsync(
+            new TestAuditActor { SubjectId = _actor }, new TenantRoleEdit("Renamed", "renamed", "described", [Scope.GlucoseRead]));
+
+        (await RowsAsync()).Should().BeEmpty();
+        await using var db = _db.CreateContext(_tenant);
+        (await db.TenantRoles.AsNoTracking().SingleAsync(r => r.Id == _viewer)).Name.Should().Be("Renamed");
+    }
+
+    [Fact]
+    public async Task ReorderingARolesPermissionsAuditsNothing()
+    {
+        await using (var db = _db.CreateContext(_tenant))
+        {
+            (await db.TenantRoles.SingleAsync(r => r.Id == _viewer)).Permissions = [Scope.GlucoseRead, Scope.TreatmentsRead];
+            await db.SaveChangesAsync();
+        }
+
+        await EditViewerAsync(
+            new TestAuditActor { SubjectId = _actor }, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.GlucoseRead]));
+
+        (await RowsAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARoleEditThatIsRolledBackLeavesNoAuditRow()
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(
+            new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
+
+        var act = () => unit.CommitAsync(async token =>
+        {
+            await TenantMembershipRepository.LockRoleEditAsync(
+                unit, _tenant, _viewer, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.DevicesRead]), editorSubjectId: null, Now, token);
+            throw new InvalidOperationException("the rest of the unit failed");
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        (await RowsAsync()).Should().BeEmpty();
+        await using var db = _db.CreateContext(_tenant);
+        (await db.TenantRoles.AsNoTracking().SingleAsync(r => r.Id == _viewer)).Permissions.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -258,7 +323,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        await Repository(new TestAuditActor { SubjectId = _actor }).DeleteRoleAsync(_tenant, _viewer, CancellationToken.None);
+        await Repository(new TestAuditActor { SubjectId = _actor }).DeleteRoleAsync(_tenant, _viewer, Now, CancellationToken.None);
 
         var rows = await RowsAsync();
         rows.Select(a => a.TargetSubjectId).Should().BeEquivalentTo([(Guid?)_subject, other]);
@@ -271,14 +336,17 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     {
         await SeedMemberAsync();
 
-        await Repository(new TestAuditActor { SubjectId = _actor })
-            .RemoveMemberUnlessLastOwnerAsync(_tenant, _member, CancellationToken.None);
+        await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+            new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), AccountLinkRoutes.Off,
+            _tenant, _member, MembershipEndHow.Removed, Now, CancellationToken.None);
 
         var rows = await RowsAsync();
-        rows.Should().OnlyContain(a => a.EventType == AuthAuditEventType.RoleRemoved && a.TargetSubjectId == _subject);
+        rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)
+            && a.TargetSubjectId == _subject);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
             """{"role":"viewer","kind":"tenant"}""",
-            """{"permission":"glucose.read","kind":"tenant"}""");
+            """{"permission":"glucose.read","kind":"tenant"}""",
+            """{"kind":"tenant","how":"removed"}""");
     }
 
     [Fact]
@@ -290,11 +358,12 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
             .RemoveMembershipsOfSubjectAsync(_subject, CancellationToken.None);
 
         var rows = await RowsAsync();
-        rows.Should().OnlyContain(a => a.EventType == AuthAuditEventType.RoleRemoved
+        rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)
             && a.TargetSubjectId == _subject && a.TenantId == _tenant);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
             """{"role":"viewer","kind":"tenant"}""",
-            """{"permission":"glucose.read","kind":"tenant"}""");
+            """{"permission":"glucose.read","kind":"tenant"}""",
+            """{"kind":"tenant","how":"system"}""");
     }
 
     [Fact]
@@ -303,7 +372,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
         await SeedMemberAsync();
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(
             new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
-        var repository = new TenantMembershipRepository(unit);
+        var repository = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         await unit.CommitAsync(async token =>
         {
@@ -321,7 +390,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
         await SeedMemberAsync();
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(
             new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
-        var repository = new TenantMembershipRepository(unit);
+        var repository = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         var act = () => unit.CommitAsync(async token =>
         {

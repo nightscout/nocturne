@@ -8,7 +8,7 @@ public static class CareLinkDeviceStatusMapper
 {
     private const string GuardianFamily = "Guardian";
 
-    public static DeviceStatus? Map(CareLinkData? data, DateTime now)
+    public static DeviceStatus? Map(CareLinkData? data)
     {
         if (data == null)
             return null;
@@ -30,7 +30,6 @@ public static class CareLinkDeviceStatusMapper
             Id = Guid.CreateVersion7().ToString(),
             Mills = mills,
             Device = deviceName,
-            CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
         };
 
         if (isGuardian)
@@ -81,6 +80,8 @@ public static class CareLinkDeviceStatusMapper
                 Manufacturer = "Medtronic",
                 Model = sensorModel,
                 SensorState = data.SensorState,
+                CalibrationStatus = data.CalibStatus,
+                SessionTimeRemaining = SensorLifeRemainingMinutes(data.SensorDurationMinutes),
                 TransmitterBattery = data.GstBatteryLevel,
             };
         }
@@ -90,6 +91,9 @@ public static class CareLinkDeviceStatusMapper
             conduitInRange = data.ConduitInRange,
             conduitMedicalDeviceInRange = data.ConduitMedicalDeviceInRange,
             conduitSensorInRange = data.ConduitSensorInRange,
+            conduitBatteryStatus = data.ConduitBatteryStatus,
+            pumpCommunicationState = data.PumpCommunicationState,
+            gstCommunicationState = data.GstCommunicationState,
             sensorState = data.SensorState,
         };
 
@@ -135,23 +139,30 @@ public static class CareLinkDeviceStatusMapper
     }
 
     /// <summary>
-    /// Captures the pump's firmware/hardware/software revisions as extended pump data so they
-    /// surface on the pump snapshot. Returns null when the device reports no version information.
+    /// Pump readings with no typed home on <see cref="PumpStatus"/> (firmware, hardware and
+    /// software revisions, reservoir fill as a percent), kept as extended data so they reach the
+    /// pump snapshot. Returns null when the pump reports none of them.
     /// </summary>
     private static Dictionary<string, object>? BuildPumpExtended(CareLinkData data)
     {
-        var info = data.MedicalDeviceInformation;
-        if (info == null)
-            return null;
-
         var extended = new Dictionary<string, object>();
-        if (!string.IsNullOrEmpty(info.FirmwareRevision))
+        var info = data.MedicalDeviceInformation;
+        if (!string.IsNullOrEmpty(info?.FirmwareRevision))
             extended["firmwareRevision"] = info.FirmwareRevision;
-        if (!string.IsNullOrEmpty(info.HardwareRevision))
+        if (!string.IsNullOrEmpty(info?.HardwareRevision))
             extended["hardwareRevision"] = info.HardwareRevision;
-        if (!string.IsNullOrEmpty(info.SoftwareRevision))
+        if (!string.IsNullOrEmpty(info?.SoftwareRevision))
             extended["softwareRevision"] = info.SoftwareRevision;
+        if (data.ReservoirLevelPercent is { } reservoirPercent)
+            extended["reservoirLevelPercent"] = reservoirPercent;
 
         return extended.Count > 0 ? extended : null;
     }
+
+    /// <summary>
+    /// CareLink fills a count it does not know with the largest value of its field, 65535 for
+    /// minutes, so that and anything negative read as no reading.
+    /// </summary>
+    private static int? SensorLifeRemainingMinutes(int? minutes) =>
+        minutes is >= 0 and < ushort.MaxValue ? minutes : null;
 }

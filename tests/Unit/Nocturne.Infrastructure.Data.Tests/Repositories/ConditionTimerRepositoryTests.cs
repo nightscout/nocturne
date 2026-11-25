@@ -30,7 +30,12 @@ public class ConditionTimerRepositoryTests : IDisposable
     }
 
     private async Task<DateTime?> FirstTrueAsync(Guid ruleId, string path) =>
-        (await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None)).TryGetValue(path, out var at)
+        (await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None)).FirstTrue.TryGetValue(path, out var at)
+            ? at
+            : null;
+
+    private async Task<DateTime?> NotTrueAsync(Guid ruleId, string path) =>
+        (await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None)).NotTrue.TryGetValue(path, out var at)
             ? at
             : null;
 
@@ -41,7 +46,8 @@ public class ConditionTimerRepositoryTests : IDisposable
 
         var result = await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None);
 
-        result.Should().BeEmpty();
+        result.FirstTrue.Should().BeEmpty();
+        result.NotTrue.Should().BeEmpty();
     }
 
     [Fact]
@@ -77,17 +83,80 @@ public class ConditionTimerRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Clear_removes_only_the_targeted_path()
+    public async Task SetNotTrue_ends_only_the_targeted_path_s_run_and_records_its_instant()
     {
         var ruleId = Guid.NewGuid();
         var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        var notTrue = at.AddMinutes(5);
         await _repository.SetFirstTrueAsync(ruleId, "a", at, CancellationToken.None);
         await _repository.SetFirstTrueAsync(ruleId, "b", at, CancellationToken.None);
 
-        await _repository.ClearAsync(ruleId, "a", CancellationToken.None);
+        await _repository.SetNotTrueAsync(ruleId, "a", notTrue, CancellationToken.None);
 
         (await FirstTrueAsync(ruleId, "a")).Should().BeNull();
+        (await NotTrueAsync(ruleId, "a")).Should().Be(notTrue);
         (await FirstTrueAsync(ruleId, "b")).Should().NotBeNull();
+        (await NotTrueAsync(ruleId, "b")).Should().BeNull();
+    }
+
+    /// <summary>
+    /// The image before not-true instants existed reads <c>alert_condition_timers</c> as
+    /// <c>path → first_true_at</c> and takes every row for a run. After this image records a
+    /// not-true path, that read still finds exactly the runs, each with its instant.
+    /// </summary>
+    [Fact]
+    public async Task The_previous_image_s_read_of_the_timers_table_finds_only_runs()
+    {
+        var ruleId = Guid.NewGuid();
+        var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.SetFirstTrueAsync(ruleId, "ran", at, CancellationToken.None);
+        await _repository.SetFirstTrueAsync(ruleId, "ended", at, CancellationToken.None);
+        await _repository.SetNotTrueAsync(ruleId, "ended", at.AddMinutes(5), CancellationToken.None);
+        await _repository.SetNotTrueAsync(ruleId, "never", at.AddMinutes(5), CancellationToken.None);
+
+        var previousImageRead = await _context.AlertConditionTimers
+            .AsNoTracking()
+            .Where(t => t.AlertRuleId == ruleId)
+            .Select(t => new { t.ConditionPath, t.FirstTrueAt })
+            .ToDictionaryAsync(r => r.ConditionPath, r => r.FirstTrueAt);
+
+        previousImageRead.Should().Equal(new Dictionary<string, DateTime> { ["ran"] = at });
+    }
+
+    [Fact]
+    public async Task A_run_the_previous_image_started_over_a_not_true_row_reads_as_a_run()
+    {
+        var ruleId = Guid.NewGuid();
+        var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.SetNotTrueAsync(ruleId, "a", at, CancellationToken.None);
+        _context.AlertConditionTimers.Add(new AlertConditionTimerEntity
+        {
+            TenantId = TenantId,
+            AlertRuleId = ruleId,
+            ConditionPath = "a",
+            FirstTrueAt = at.AddMinutes(1),
+        });
+        await _context.SaveChangesAsync();
+
+        var timers = await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None);
+
+        timers.FirstTrue.Should().Equal(new Dictionary<string, DateTime> { ["a"] = at.AddMinutes(1) });
+        timers.NotTrue.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SetFirstTrue_after_SetNotTrue_replaces_the_not_true_row_with_a_run()
+    {
+        var ruleId = Guid.NewGuid();
+        var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.SetNotTrueAsync(ruleId, "a", at, CancellationToken.None);
+
+        await _repository.SetFirstTrueAsync(ruleId, "a", at.AddMinutes(1), CancellationToken.None);
+
+        (await FirstTrueAsync(ruleId, "a")).Should().Be(at.AddMinutes(1));
+        (await NotTrueAsync(ruleId, "a")).Should().BeNull();
+        (await _context.AlertConditionTimers.CountAsync()).Should().Be(1);
+        (await _context.AlertConditionNotTrue.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -100,9 +169,13 @@ public class ConditionTimerRepositoryTests : IDisposable
         await _repository.SetFirstTrueAsync(ruleId, "b", at, CancellationToken.None);
         await _repository.SetFirstTrueAsync(ruleId, "c", at, CancellationToken.None);
         await _repository.SetFirstTrueAsync(otherRuleId, "a", at, CancellationToken.None);
+        await _repository.SetNotTrueAsync(ruleId, "d", at, CancellationToken.None);
+        await _repository.SetNotTrueAsync(ruleId, "e", at, CancellationToken.None);
 
-        await _repository.PruneToPathsAsync(ruleId, new[] { "b", "c" }, CancellationToken.None);
+        await _repository.PruneToPathsAsync(ruleId, new[] { "b", "c", "e" }, CancellationToken.None);
 
+        (await NotTrueAsync(ruleId, "d")).Should().BeNull();
+        (await NotTrueAsync(ruleId, "e")).Should().Be(at);
         (await FirstTrueAsync(ruleId, "a")).Should().BeNull();
         (await FirstTrueAsync(ruleId, "b")).Should().NotBeNull();
         (await FirstTrueAsync(ruleId, "c")).Should().NotBeNull();

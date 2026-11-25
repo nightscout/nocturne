@@ -110,12 +110,12 @@ public class DemoModeConfiguration
     public int TempBasalDurationMinutes { get; set; } = 10;
 
     /// <summary>
-    /// Whether to clear existing demo data on service startup.
+    /// Clears and regenerates the demo data on every start, even when the existing data is fresh.
     /// </summary>
-    public bool ClearOnStartup { get; set; } = true;
+    public bool ClearOnStartup { get; set; }
 
     /// <summary>
-    /// Whether to regenerate historical data on service startup.
+    /// Regenerates the demo data on every start, even when the existing data is fresh.
     /// </summary>
-    public bool RegenerateOnStartup { get; set; } = true;
+    public bool RegenerateOnStartup { get; set; }
 }

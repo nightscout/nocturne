@@ -6,7 +6,7 @@ import type {
   TrackerRealtimeAction,
   InAppNotificationDto,
   SyncPhase,
-} from '#lib/api/generated/nocturne-api-client.js';
+} from '@nocturne/api-client';
 
 // Re-export API client types for convenience
 export type { Entry, Treatment };
@@ -30,6 +30,10 @@ export type WebSocketConnectionStatus =
 // WebSocket client configuration
 export interface WebSocketConfig {
   url: string;
+  /** The bridge namespace the socket joins, such as `/overview`; the tenant namespace when absent. */
+  namespace?: string;
+  /** The path of the BFF route that mints this namespace's handshake ticket; `/realtime/ticket` when absent. */
+  ticketPath?: string;
   /** The host has no realtime feed, so the client never asks for a ticket or opens a socket. */
   disabled?: boolean;
   reconnectAttempts: number;
@@ -157,6 +161,9 @@ export interface WebSocketEventHandlers {
 
   // Sync progress events
   syncProgress: (event: SyncProgressEvent) => void;
+
+  /** A tenant the `/overview` socket follows changed. The ping carries nothing worth reading. */
+  overviewUpdate: () => void;
 }
 
 // Error types

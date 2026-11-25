@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -12,6 +13,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class SystemEventRepository : ISystemEventRepository
 {
+    private const int MaxUpsertAttempts = 3;
+
     private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
@@ -56,11 +59,7 @@ public class SystemEventRepository : ISystemEventRepository
         if (!string.IsNullOrEmpty(source))
             query = query.Where(e => e.Source == source);
 
-        if (from.HasValue)
-            query = query.Where(e => e.Mills >= from.Value);
-
-        if (to.HasValue)
-            query = query.Where(e => e.Mills <= to.Value);
+        query = query.InWindow(e => e.Mills, from, to);
 
         var entities = await query
             .OrderByDescending(e => e.Mills)
@@ -69,6 +68,18 @@ public class SystemEventRepository : ISystemEventRepository
             .ToListAsync(cancellationToken);
 
         return entities.Select(SystemEventMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SystemEvent>> GetInRangeAsync(long from, long to, int limit, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.SystemEvents.AsNoTracking()
+            .Where(e => e.Mills >= from && e.Mills < to)
+            .OrderBy(e => e.Mills).ThenBy(e => e.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return [.. entities.Select(SystemEventMapper.ToDomainModel)];
     }
 
     /// <summary>
@@ -130,23 +141,43 @@ public class SystemEventRepository : ISystemEventRepository
         if (events.Count == 0)
             return [];
 
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SaveBatchAsync(events, cancellationToken);
+            }
+            catch (DbUpdateException ex) when (attempt < MaxUpsertAttempts && ex.IsUniqueViolation())
+            {
+                // A concurrent upsert committed one of these keys between the read and the save, and the
+                // save wrote nothing. The next attempt reads its row and updates it.
+            }
+        }
+    }
+
+    private async Task<List<SystemEvent>> SaveBatchAsync(
+        IReadOnlyList<SystemEvent> events,
+        CancellationToken cancellationToken)
+    {
         await using var db = await _contexts.CreateAsync(cancellationToken);
 
         var originalIds = events
             .Select(e => e.OriginalId)
-            .Where(id => !string.IsNullOrEmpty(id))
+            .OfType<string>()
+            .Where(id => id.Length > 0)
             .Distinct()
             .ToList();
         var existingRows = originalIds.Count == 0
             ? []
             : await db.SystemEvents
-                .Where(e => originalIds.Contains(e.OriginalId))
+                .Where(e => originalIds.Contains(e.OriginalId!))
                 .ToListAsync(cancellationToken);
+        var hidden = await HiddenRowsAsync(db, originalIds, existingRows, cancellationToken);
+        existingRows.AddRange(hidden);
         var existingByOriginalId = existingRows
-            .GroupBy(e => e.OriginalId!)
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(e => e.OriginalId!);
 
-        var written = new List<SystemEventEntity>(events.Count);
+        var written = new List<(SystemEventEntity Row, SystemEvent Sent, bool Hidden)>(events.Count);
         foreach (var systemEvent in events)
         {
             var hasOriginalId = !string.IsNullOrEmpty(systemEvent.OriginalId);
@@ -162,12 +193,43 @@ public class SystemEventRepository : ISystemEventRepository
                     existingByOriginalId[systemEvent.OriginalId!] = entity;
             }
 
-            written.Add(entity);
+            written.Add((entity, systemEvent, hidden.Contains(entity)));
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        if (hidden.Count == 0)
+            await db.SaveChangesAsync(cancellationToken);
+        else
+            await db.WriteWithHistoryClampLiftedAsync(async token => await db.SaveChangesAsync(token), cancellationToken);
 
-        return written.Select(SystemEventMapper.ToDomainModel).ToList();
+        return written.Select(w => w.Hidden
+            ? SystemEventMapper.ToDomainModel(w.Row, createdAt: w.Sent.CreatedAt)
+            : SystemEventMapper.ToDomainModel(w.Row)).ToList();
+    }
+
+    /// <summary>
+    /// The rows of <paramref name="originalIds"/> the unique <c>(tenant, original_id)</c> index holds that
+    /// a history-clamped writer cannot see, tracked for the update the writer's event makes of them. The
+    /// index spans the whole tenant, so an insert beside one fails with 23505 however the clamp reads. The
+    /// event overwrites every field the answer carries, so the answer is the writer's own event
+    /// (<see cref="SystemEventMapper.ToDomainModel(SystemEventEntity, DateTime?)"/>) and reveals nothing the
+    /// clamp hides.
+    /// </summary>
+    private static async Task<List<SystemEventEntity>> HiddenRowsAsync(
+        NocturneDbContext db,
+        List<string> originalIds,
+        List<SystemEventEntity> visible,
+        CancellationToken cancellationToken)
+    {
+        if (!db.HistoryClamped)
+            return [];
+
+        var unseen = originalIds.Except(visible.Select(e => e.OriginalId!)).ToList();
+        if (unseen.Count == 0)
+            return [];
+
+        return await db.WriteWithHistoryClampLiftedAsync(
+            token => db.SystemEvents.Where(e => unseen.Contains(e.OriginalId!)).ToListAsync(token),
+            cancellationToken);
     }
 
     /// <summary>

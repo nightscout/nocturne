@@ -48,7 +48,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
                 {
                     flagged += await AuditTenantAsync(alerts, validator, tenantId, stoppingToken);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
                 {
                     _logger.LogError(ex, "Error auditing alert rule conditions for tenant {TenantId}", tenantId);
                 }
@@ -60,7 +60,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
                     "{Count} enabled alert rule(s) have conditions that cannot be evaluated", flagged);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "Error auditing alert rule conditions");
         }

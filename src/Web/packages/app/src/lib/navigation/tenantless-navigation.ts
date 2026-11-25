@@ -20,6 +20,19 @@ export const TENANTLESS_NAV_HREFS: readonly string[] = [
   // Passkeys, authenticators, linked identities, sessions and avatar — all keyed on the subject,
   // none carrying a tenant column.
   "/settings/account",
+  // A team belongs to the person, not to a tenant.
+  "/settings/teams",
+];
+
+/**
+ * Routes the whole-path list cannot name: one team's page, and the pages a team's manager link, staff
+ * link and access link open.
+ */
+const TENANTLESS_ROUTE_PATTERNS: readonly RegExp[] = [
+  /^\/settings\/teams\/[^/]+$/,
+  /^\/teams\/join$/,
+  /^\/teams\/join-staff$/,
+  /^\/teams\/access$/,
 ];
 
 interface NavLike {
@@ -47,5 +60,8 @@ export function filterTenantlessNav<T extends NavLike>(items: readonly T[]): T[]
 
 /** Whether a pathname is reachable on a tenantless host. */
 export function isTenantlessRoute(pathname: string): boolean {
-  return TENANTLESS_NAV_HREFS.includes(pathname);
+  return (
+    TENANTLESS_NAV_HREFS.includes(pathname) ||
+    TENANTLESS_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))
+  );
 }

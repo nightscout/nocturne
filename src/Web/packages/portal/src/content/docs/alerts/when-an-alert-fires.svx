@@ -29,7 +29,7 @@ responds, build that as its own rule; see
 
 ## How an alert ends
 
-An alert ends in one of four ways:
+An alert ends in one of five ways:
 
 | How | When |
 |-----|------|
@@ -37,12 +37,15 @@ An alert ends in one of four ways:
 | **Auto-resolve** | The rule's auto-resolve condition becomes true. See below. |
 | **Closed by hand** | Someone closes it from the app. |
 | **The rule is switched off** | Switching a rule off closes its open alert. |
+| **Its data is missing for 24 hours** | A rule set to **Wait** keeps its alert open while the data it needs is missing. After 24 hours of missing data, the alert closes, even if its condition can still be true, and the rule's channels get one message that says so. See [While a rule waits](/docs/alerts/building-rules#while-a-rule-waits). |
 
 Once it has ended, the rule can fire again, and the next time is a new alert,
 sent again to every channel. A glucose level that hovers on the line can
 therefore alert, end and alert again a few readings apart. If that happens, a
 "for at least" setting on the rule (see
-[Conditions that must last](/docs/alerts/sustained)) is the usual fix.
+[Conditions that must last](/docs/alerts/sustained)) is the usual fix. A
+[clear margin](/docs/alerts/building-rules#clear-margin) on the condition is
+another: the open alert then ends only some distance past the line.
 
 ## Auto-resolve
 
@@ -136,7 +139,7 @@ disturb**.
 While Do not disturb is on:
 
 - **Critical** rules still reach you, always.
-- Rules with **Allow through Do not disturb** ticked still reach you.
+- Rules with **Also alert during Do Not Disturb** ticked still reach you.
 - Every other alert still **fires** and is recorded in history as silenced by
   Do not disturb. It is just not sent.
 
@@ -148,7 +151,7 @@ something that is neither, is only held back by Do not disturb for everything.
 
   Overnight is when people are least likely to notice a low on their own. If you
   use quiet hours, make sure the rules that matter most at night are Critical, or
-  have **Allow through Do not disturb** ticked.
+  have **Also alert during Do Not Disturb** ticked.
 
 </Callout>
 

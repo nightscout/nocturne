@@ -51,6 +51,8 @@ interface Situation {
   cookies?: Record<string, string>;
   /** What the backup sign-in prompt endpoint answers; a number rejects with that HTTP status. */
   backupSignInPrompt?: { show: boolean } | number;
+  /** What the recovery email prompt endpoint answers; a number rejects with that HTTP status. */
+  recoveryEmailPrompt?: { show: boolean; hasAddress?: boolean } | number;
   /** The caller's tenant memberships; a number rejects with that HTTP status. */
   myTenants?: { slug: string; displayName?: string }[] | number;
 }
@@ -125,6 +127,13 @@ async function runLoad(situation: Situation) {
           backupSignInPromptReads++;
           apiCalls.push("prompt");
           const answer = situation.backupSignInPrompt ?? { show: false };
+          if (typeof answer === "number") throw { status: answer };
+          return answer;
+        },
+      },
+      recoveryEmailPrompt: {
+        getRecoveryEmailPrompt: async () => {
+          const answer = situation.recoveryEmailPrompt ?? { show: false };
           if (typeof answer === "number") throw { status: answer };
           return answer;
         },
@@ -717,6 +726,39 @@ describe("(authenticated) layout load: backup sign-in prompt", () => {
   });
 });
 
+describe("(authenticated) layout load: recovery email reminder", () => {
+  const tenant = { status: { status: "ok", tenantSlug: "sam" }, authStatus: { onboardingCompleted: true } };
+
+  it("hands the backend's answer to the layout", async () => {
+    const data = await runLoad({
+      host: `sam.${BASE}`,
+      ...tenant,
+      recoveryEmailPrompt: { show: true, hasAddress: true },
+    });
+
+    expect(data).toMatchObject({ showRecoveryEmailPrompt: true, recoveryEmailHasAddress: true });
+  });
+
+  it("waits for the backup sign-in prompt so one banner shows", async () => {
+    const data = await runLoad({
+      host: `sam.${BASE}`,
+      ...tenant,
+      backupSignInPrompt: { show: true },
+      recoveryEmailPrompt: { show: true },
+    });
+
+    expect(data).toMatchObject({ showBackupSignInPrompt: true, showRecoveryEmailPrompt: false });
+  });
+
+  it("hides the reminder rather than failing the shell when the read fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const data = await runLoad({ host: `sam.${BASE}`, ...tenant, recoveryEmailPrompt: 500 });
+
+    expect(data).toMatchObject({ showRecoveryEmailPrompt: false });
+  });
+});
+
 describe("(authenticated) layout load: the tenant switcher targets", () => {
   const tenantHost = {
     host: `acme.${BASE}`,
@@ -756,5 +798,31 @@ describe("(authenticated) layout load: the tenant switcher targets", () => {
     const data = await loadedData({ ...tenantHost, myTenants: 500 });
 
     expect(data.tenantTargets).toEqual([]);
+  });
+});
+
+describe("(authenticated) layout load: the sidebar's open state", () => {
+  const tenant = {
+    host: `sam.${BASE}`,
+    status: { status: "ok", tenantSlug: "sam" },
+    authStatus: { onboardingCompleted: true },
+  } as const;
+
+  it("opens the sidebar for a browser that never collapsed it", async () => {
+    const data = await runLoad(tenant);
+
+    expect(data).toMatchObject({ sidebarOpen: true });
+  });
+
+  it("keeps the sidebar collapsed for a browser that collapsed it", async () => {
+    const data = await runLoad({ ...tenant, cookies: { "sidebar:state": "false" } });
+
+    expect(data).toMatchObject({ sidebarOpen: false });
+  });
+
+  it("opens the sidebar for a browser that reopened it", async () => {
+    const data = await runLoad({ ...tenant, cookies: { "sidebar:state": "true" } });
+
+    expect(data).toMatchObject({ sidebarOpen: true });
   });
 });

@@ -73,13 +73,7 @@ public class TestNocturneDbContext : NocturneDbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Remove the global query filters that reference PostgreSQL-specific functions
-        // (set_config / current_setting) which don't work with SQLite.
-        modelBuilder.Entity<TestAuditableEntity>(e =>
-        {
-            e.ClearQueryFilters();
-            e.Property(x => x.DeletedAt).IsRequired(false);
-        });
+        modelBuilder.Entity<TestAuditableEntity>(e => e.Property(x => x.DeletedAt).IsRequired(false));
 
         modelBuilder.Entity<TestSensorGlucoseEntity>(e => e.ClearQueryFilters());
 
@@ -644,6 +638,15 @@ public class MutationAuditInterceptorTests : IDisposable
     {
         typeof(SettingsEntity).GetProperty(property)!
             .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_saved_reports_spec_is_redacted_since_it_carries_the_builders_state()
+    {
+        typeof(ReportSpecEntity).GetProperty(nameof(ReportSpecEntity.Spec))!
+            .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeTrue();
+        typeof(ReportSpecEntity).GetProperty(nameof(ReportSpecEntity.Name))!
+            .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeFalse("the name stays in the audit, as it was");
     }
 
     [Fact]

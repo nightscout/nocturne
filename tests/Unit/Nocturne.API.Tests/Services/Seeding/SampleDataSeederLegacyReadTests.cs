@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Seeding;
 using Nocturne.API.Tests.TestDoubles;
@@ -84,14 +85,14 @@ public class SampleDataSeederLegacyReadTests : IDisposable
         return new SampleDataSeeder(
             tenant.Object,
             contexts,
-            new SubjectRepository(contexts),
+            new SubjectRepository(contexts, AccountLinkRoutes.Off),
             entries.Object,
             treatments.Object,
             sleep.Object,
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
-            new AlertRuleRepository(contexts),
+            new AlertRuleRepository(contexts, _time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,
@@ -102,9 +103,9 @@ public class SampleDataSeederLegacyReadTests : IDisposable
             new StateSpanRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<StateSpanRepository>.Instance, _written),
             new ProfileActivationRepository(
-                contexts, audit, NullLogger<ProfileActivationRepository>.Instance, legacyReads: _written),
+                contexts, audit, NullLogger<ProfileActivationRepository>.Instance, changes: _written.AsRecordChanges()),
             new TempBasalRepository(
-                contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, legacyReads: _written),
+                contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, changes: _written.AsRecordChanges()),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

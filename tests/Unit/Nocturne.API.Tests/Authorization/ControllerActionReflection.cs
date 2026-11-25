@@ -31,6 +31,15 @@ internal static class ControllerActionReflection
                         && m.GetCustomAttributes().OfType<IActionHttpMethodProvider>().Any());
 
     /// <summary>
+    /// Every action the API assembly declares on a controller, with or without an HTTP verb attribute.
+    /// </summary>
+    public static IEnumerable<MethodInfo> GetDeclaredActions(Type controller) =>
+        controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => !m.IsSpecialName
+                        && m.DeclaringType!.Assembly == ApiAssembly
+                        && m.GetCustomAttribute<NonActionAttribute>() is null);
+
+    /// <summary>
     /// The absolute routes an action answers on, with a leading slash and no trailing one.
     /// </summary>
     /// <remarks>Attribute routing only; the API declares no conventional routes.</remarks>
@@ -79,6 +88,27 @@ internal static class ControllerActionReflection
     public static bool DeniesTheDemoSubject(MethodInfo action, Type controller) =>
         action.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null
         || controller.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null;
+
+    /// <summary>
+    /// Whether the action or its controller names what admits a caller: the scope it requires
+    /// (<see cref="RequireScopeAttribute"/>, <see cref="RequireDeclaredWriteScopeAttribute"/>), the
+    /// guard that decides it (<see cref="ScopeDecidedByAttribute"/>), or a credential that is not a
+    /// scope: anonymous, a permission such as [RequireSuperuser], the instance key, or the
+    /// platform-admin role.
+    /// </summary>
+    public static bool DeclaresAdmission(MethodInfo action, Type controller) =>
+        action.GetCustomAttributes<ScopeDecidedByAttribute>().Any()
+        || NamesAdmission(action.GetCustomAttributes(inherit: true))
+        || NamesAdmission(controller.GetCustomAttributes(inherit: true));
+
+    private static bool NamesAdmission(IEnumerable<object> attributes) =>
+        attributes.Any(a => a is IAllowAnonymous
+                            or RequireScopeAttribute
+                            or RequireDeclaredWriteScopeAttribute
+                            or RequirePermissionAttribute
+                            or RequireInstanceKeyAuthAttribute
+                            || a is AuthorizeAttribute { Roles: { } roles }
+                                && roles.Contains("platform_admin", StringComparison.Ordinal));
 
     private static bool HasGate(IEnumerable<object> attributes) =>
         attributes.Any(a => a is IAuthorizeData

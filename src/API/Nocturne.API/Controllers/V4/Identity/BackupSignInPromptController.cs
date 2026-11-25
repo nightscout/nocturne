@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Nocturne.API.Extensions;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.CoachMarks;
 using Nocturne.Core.Models.Authorization;
@@ -9,7 +9,8 @@ using Nocturne.Core.Models.CoachMarks;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Says whether the caller should be prompted to add a backup way to sign in.
+/// Whether the signed-in account should be prompted to add a backup way to sign in. A caller
+/// can read the answer for its own account.
 /// </summary>
 /// <remarks>
 /// Never shown to platform-access operators or service credentials, whose subject is not the
@@ -44,9 +45,7 @@ public class BackupSignInPromptController : ControllerBase
     public async Task<ActionResult<BackupSignInPromptResponse>> GetBackupSignInPrompt(
         CancellationToken cancellationToken)
     {
-        var auth = HttpContext.GetAuthContext();
-        if (auth?.SubjectId is not { } subjectId
-            || auth.AuthType is AuthType.PlatformAccess or AuthType.ApiKey or AuthType.InstanceKey)
+        if (OwnAccountCaller.SubjectId(HttpContext) is not { } subjectId)
             return Ok(new BackupSignInPromptResponse());
 
         if (!await _subjectService.HasSingleSignInMethodAsync(subjectId))

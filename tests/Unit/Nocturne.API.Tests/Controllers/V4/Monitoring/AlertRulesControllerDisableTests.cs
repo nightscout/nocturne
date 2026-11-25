@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
@@ -39,12 +40,13 @@ public class AlertRulesControllerDisableTests
         Mock<IExcursionTracker> Tracker,
         Mock<IExcursionResolutionHandler> Handler,
         Func<bool> RuleExistedAtClose)> CreateAsync(
-        bool enabled, string? managedBy = null, IReadOnlyList<Guid>? referencing = null)
+        bool enabled,
+        string? managedBy = null,
+        IReadOnlyList<Guid>? referencing = null,
+        TimeProvider? time = null,
+        string? database = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var db = Context(database ?? Guid.NewGuid().ToString());
         db.AlertRules.Add(new AlertRuleEntity
         {
             Id = RuleId,
@@ -80,20 +82,30 @@ public class AlertRulesControllerDisableTests
 
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(db)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
-            new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(db), time ?? TimeProvider.System),
             MockTenantAccessor.Create(db.TenantId).Object,
             referenceService.Object,
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(tracker.Object, handler.Object),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Rearms.Unannounced(),
+            new AlertRuleRetirement(tracker.Object, handler.Object, Mock.Of<IUnevaluableRuleNotice>()),
+            Mock.Of<ILogger<AlertRulesController>>(), time ?? TimeProvider.System);
 
         return (controller, excursionId, tracker, handler, () => ruleExistedAtClose);
+    }
+
+    private static NocturneDbContext Context(string database) =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>().UseInMemoryDatabase(database).Options) { TenantId = Tenant };
+
+    private static async Task<AlertRuleEntity> StoredAsync(string database)
+    {
+        await using var db = Context(database);
+        return await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId);
     }
 
     private static UpdateAlertRuleRequest Request(bool enabled) => new()
@@ -148,6 +160,47 @@ public class AlertRulesControllerDisableTests
         await controller.ToggleRule(RuleId, CancellationToken.None);
 
         VerifyNothingClosed(tracker, handler);
+    }
+
+    [Fact]
+    public async Task Toggling_a_disabled_rule_on_reports_when_it_was_enabled()
+    {
+        var (controller, _, _, _, _) = await CreateAsync(enabled: false);
+
+        var result = await controller.ToggleRule(RuleId, CancellationToken.None);
+
+        var response = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<AlertRuleResponse>().Subject;
+        response.IsEnabled.Should().BeTrue();
+        response.EnabledAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task Toggling_a_disabled_rule_on_stamps_the_injected_clocks_time()
+    {
+        var at = new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
+        var database = Guid.NewGuid().ToString();
+        var (controller, _, _, _, _) = await CreateAsync(enabled: false, time: new FakeTimeProvider(at), database: database);
+
+        await controller.ToggleRule(RuleId, CancellationToken.None);
+
+        var stored = await StoredAsync(database);
+        stored.EnabledAt.Should().Be(at.UtcDateTime);
+        stored.UpdatedAt.Should().Be(at.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task Updating_a_disabled_rule_to_enabled_stamps_the_injected_clocks_time()
+    {
+        var at = new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
+        var database = Guid.NewGuid().ToString();
+        var (controller, _, _, _, _) = await CreateAsync(enabled: false, time: new FakeTimeProvider(at), database: database);
+
+        await controller.UpdateRule(RuleId, Request(enabled: true), CancellationToken.None);
+
+        var stored = await StoredAsync(database);
+        stored.EnabledAt.Should().Be(at.UtcDateTime);
+        stored.UpdatedAt.Should().Be(at.UtcDateTime);
     }
 
     [Fact]

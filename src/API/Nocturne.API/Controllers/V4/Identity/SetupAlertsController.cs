@@ -10,8 +10,9 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The setup hub's Alerts item: starter alert rules, where they send, and a test alert the owner
-/// confirms arrived. Owner-only, like the rest of the hub.
+/// The alerts step of setup. A caller can create starter alert rules, choose where they send, send
+/// a test alert, confirm that it arrived, and choose another member for urgent low alerts. Only the
+/// owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
@@ -26,11 +27,11 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
     [ProducesResponseType(typeof(AlertSetupStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<AlertSetupStatus>> GetAlertSetup(CancellationToken ct) =>
-        Owner() is { } caller ? Ok(await alerts.GetAsync(caller, ct)) : Forbid();
+        HttpContext.GetSubjectId() is { } caller ? Ok(await alerts.GetAsync(caller, ct)) : Forbid();
 
     /// <summary>Creates or updates the starter rules and where they send.</summary>
     [DenyDemoSubject]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.AlertsReadWrite)]
     [HttpPut]
     [RemoteCommand(Invalidates = ["GetAlertSetup", "SetupHub_GetSetupHub"])]
     [ProducesResponseType(typeof(AlertSetupStatus), StatusCodes.Status200OK)]
@@ -39,11 +40,11 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public Task<ActionResult<AlertSetupStatus>> SaveAlertSetup(
         [FromBody] SaveAlertSetupRequest request, CancellationToken ct) =>
-        Run(caller => alerts.SaveAsync(caller, request, ct));
+        Run(caller => alerts.SaveAsync(caller, HttpContext.CallerAccessEndsAt(), request, ct));
 
     /// <summary>Sends a test alert where the starter rules send.</summary>
     [DenyDemoSubject]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.AlertsReadWrite)]
     [HttpPost("test")]
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertSetupTest), StatusCodes.Status200OK)]
@@ -63,7 +64,7 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
 
     /// <summary>Records that the test alert arrived, which is what finishes the item.</summary>
     [DenyDemoSubject]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.AlertsReadWrite)]
     [HttpPost("test/{instanceId:guid}/received")]
     [RemoteCommand(Invalidates = ["GetAlertSetup", "SetupHub_GetSetupHub"])]
     [ProducesResponseType(typeof(AlertSetupStatus), StatusCodes.Status200OK)]
@@ -76,7 +77,7 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
 
     /// <summary>Also sends urgent low alerts to another member, or stops.</summary>
     [DenyDemoSubject]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.AlertsReadWrite)]
     [HttpPut("urgent-low-recipients/{subjectId:guid}")]
     [RemoteCommand(Invalidates = ["GetAlertSetup"])]
     [ProducesResponseType(typeof(AlertSetupStatus), StatusCodes.Status200OK)]
@@ -87,12 +88,9 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
         Guid subjectId, [FromBody] SetUrgentLowRecipientRequest request, CancellationToken ct) =>
         Run(caller => alerts.SetUrgentLowRecipientAsync(caller, subjectId, request.Alerted, ct));
 
-    private Guid? Owner() =>
-        HttpContext.HasScope(Scope.FullAccess) ? HttpContext.GetSubjectId() : null;
-
     private async Task<ActionResult<T>> Run<T>(Func<Guid, Task<T>> action)
     {
-        if (Owner() is not { } caller)
+        if (HttpContext.GetSubjectId() is not { } caller)
             return Forbid();
 
         try

@@ -11,7 +11,7 @@
     ConnectionKind,
     ConnectionStatus,
     type Connection,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { Item } from "#lib/components/ui/item/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { formatNumber } from "#lib/utils/formatting.js";
@@ -64,6 +64,8 @@
           Sends to Nocturne
         {:else if connection.direction === ConnectionDirection.Fetches}
           Nocturne fetches
+        {:else if connection.direction === ConnectionDirection.Imports}
+          Imported from a file
         {:else}
           No records in the last {windowDays} days
         {/if}
@@ -85,7 +87,7 @@
             fallback={hasOwnCredential ? "Never" : undefined}
           />
         {/if}
-        {#if isConnector}
+        {#if connection.direction === ConnectionDirection.Fetches}
           <ConnectionTime
             label="Last sync"
             at={connection.lastSyncAt}

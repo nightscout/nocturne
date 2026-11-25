@@ -12,9 +12,13 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Tenant-scoped chat identity link management. Backed by the global
-/// ChatIdentityDirectory table via <see cref="ChatIdentityService"/>.
+/// Chat accounts linked to the tenant, such as Discord or Telegram users. A caller can list the
+/// links, look up a pending link by its token, claim a link, set the default link, update a link
+/// and delete a link.
 /// </summary>
+/// <remarks>
+/// Backed by the global ChatIdentityDirectory table via <see cref="ChatIdentityService"/>.
+/// </remarks>
 /// <seealso cref="ChatIdentityService"/>
 /// <seealso cref="ITenantAccessor"/>
 [ApiController]
@@ -120,6 +124,7 @@ public class ChatIdentityController : ControllerBase
     /// 500.
     /// </remarks>
     [HttpPost("links/claim")]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -127,6 +132,9 @@ public class ChatIdentityController : ControllerBase
     public async Task<ActionResult<ChatIdentityLinkResponse>> ClaimLink(
         [FromBody] ClaimChatIdentityLinkRequest body, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var userId = GetUserIdOrThrow();
         try

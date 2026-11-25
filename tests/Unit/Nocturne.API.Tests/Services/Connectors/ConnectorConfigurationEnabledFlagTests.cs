@@ -41,7 +41,7 @@ public class ConnectorConfigurationEnabledFlagTests : IDisposable
 
         _service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
@@ -49,6 +49,7 @@ public class ConnectorConfigurationEnabledFlagTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [],
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

@@ -4,7 +4,7 @@ import { page as appPage } from "$app/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reactiveFields } from "#lib/test-stubs/reactive-fields.svelte.js";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+import { WidgetId } from "@nocturne/api-client";
 import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
 import type {
   BasalPillData,
@@ -30,6 +30,7 @@ const store = reactiveFields({
   legacyFallbacks: [] as unknown[],
   pillsData: { cob: null, basal: null, iob: null, loop: null } as Record<string, unknown>,
   currentReservoir: null as number | null,
+  currentLinkBatteryVoltage: null as number | null,
   isReady: false,
 });
 

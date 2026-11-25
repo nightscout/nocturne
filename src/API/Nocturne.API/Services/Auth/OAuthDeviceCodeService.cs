@@ -1,5 +1,9 @@
 using System.Security.Cryptography;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -25,7 +29,9 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private readonly IOAuthTokenRepository _tokens;
     private readonly IJwtService _jwtService;
     private readonly IOAuthClientService _clientService;
-    private readonly IOAuthGrantService _grantService;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly GrantConsentService _consent;
+    private readonly TimeProvider _time;
     private readonly ILogger<OAuthDeviceCodeService> _logger;
 
     /// <summary>
@@ -34,20 +40,26 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <param name="tokens">The stored device codes.</param>
     /// <param name="jwtService">Used to generate and hash the opaque device code value.</param>
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
-    /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
+    /// <param name="contexts">Opens the unit of work an approval writes its grant and its decision on.</param>
+    /// <param name="consent">Writes the grant an approval creates or widens.</param>
+    /// <param name="time">Clock for device-code expiration and decisions.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthDeviceCodeService(
         IOAuthTokenRepository tokens,
         IJwtService jwtService,
         IOAuthClientService clientService,
-        IOAuthGrantService grantService,
+        INocturneDbContextFactory contexts,
+        GrantConsentService consent,
+        TimeProvider time,
         ILogger<OAuthDeviceCodeService> logger
     )
     {
         _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
         _jwtService = jwtService;
         _clientService = clientService;
-        _grantService = grantService;
+        _contexts = contexts;
+        _consent = consent;
+        _time = time;
         _logger = logger;
     }
 
@@ -102,7 +114,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
                 deviceCodeHash,
                 normalizedUserCode,
                 scopesList,
-                DateTime.UtcNow.AddMinutes(DeviceCodeExpirationMinutes),
+                _time.GetUtcNow().UtcDateTime.AddMinutes(DeviceCodeExpirationMinutes),
                 DefaultPollingInterval),
             ct);
 
@@ -233,22 +245,46 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        var grant = await _grantService.CreateOrUpdateGrantAsync(
-            client.Id,
-            subjectId,
-            scopes,
-            limitTo24Hours: limitTo24Hours,
-            approvedByDeviceCode: true,
-            ct: ct
-        );
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var codes = new OAuthTokenRepository(unit);
+        StagedGrantConsent consent;
+        try
+        {
+            consent = await unit.CommitAsync(
+                async token =>
+                {
+                    var staged = await _consent.StageAsync(
+                        unit,
+                        client.Id,
+                        subjectId,
+                        scopes,
+                        limitTo24Hours: limitTo24Hours,
+                        approvedByDeviceCode: true,
+                        ct: token);
+                    if (staged is null)
+                        throw new RefusedCommitException<ApprovalRefusal>(ApprovalRefusal.NotAMember);
 
-        if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct))
+                    if (!await codes.ApproveDeviceCodeAsync(entity.Id, subjectId, staged.Grant.Id, _time.GetUtcNow().UtcDateTime, token))
+                        throw new RefusedCommitException<ApprovalRefusal>(ApprovalRefusal.NoLongerPending);
+                    return staged;
+                },
+                verifySucceeded: async (staged, token) =>
+                    (await codes.FindDeviceCodeByUserCodeAsync(normalized, token))?.GrantId == staged.Grant.Id,
+                ct: ct);
+        }
+        catch (RefusedCommitException<ApprovalRefusal> refused)
         {
             _logger.LogWarning(
-                "Cannot approve device code {UserCode}: it was deleted before the approval was stored",
-                normalized);
+                "Cannot approve device code {UserCode}: {Refusal}",
+                normalized,
+                refused.Refusal == ApprovalRefusal.NotAMember
+                    ? "the approver holds no membership of the tenant"
+                    : "it is no longer pending");
             return false;
         }
+
+        _consent.LogCommitted(consent);
+        var grant = consent.Grant;
 
         _logger.LogInformation(
             "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}, created grant {GrantId} of type {GrantType}",
@@ -299,10 +335,10 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        if (!await _tokens.DenyDeviceCodeAsync(entity.Id, DateTime.UtcNow, ct))
+        if (!await _tokens.DenyDeviceCodeAsync(entity.Id, _time.GetUtcNow().UtcDateTime, ct))
         {
             _logger.LogWarning(
-                "Cannot deny device code {UserCode}: it was deleted before the denial was stored",
+                "Cannot deny device code {UserCode}: it is no longer pending",
                 normalized);
             return false;
         }
@@ -316,7 +352,13 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         return true;
     }
 
-    private static bool IsExpired(DeviceCodeRecord code) => DateTime.UtcNow >= code.ExpiresAt;
+    private enum ApprovalRefusal
+    {
+        NoLongerPending,
+        NotAMember,
+    }
+
+    private bool IsExpired(DeviceCodeRecord code) => code.ExpiresAt <= _time.GetUtcNow().UtcDateTime;
 
     /// <summary>
     /// Normalises a user code by stripping hyphens and spaces and converting to uppercase.

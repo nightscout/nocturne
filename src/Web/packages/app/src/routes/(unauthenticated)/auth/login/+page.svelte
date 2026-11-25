@@ -1,6 +1,8 @@
 <script lang="ts">
   import * as Card from "#lib/components/ui/card/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import { Artwork } from "water-ui";
@@ -8,6 +10,7 @@
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "#lib/api/generated/index.js";
   import { page } from "$app/state";
+  import { clearMemberStorage } from "#lib/stores/member-storage.js";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
   import { resolve } from "$app/paths";
@@ -27,6 +30,7 @@
   // Check if tenant allows access requests
   const authStatusQuery = getAuthStatus();
   const allowAccessRequests = $derived(authStatusQuery.current?.allowAccessRequests ?? false);
+  const emailRecoveryOffered = $derived(authStatusQuery.current?.emailRecoveryOffered ?? false);
 
   let showRequestDialog = $state(false);
 
@@ -42,11 +46,17 @@
   // Resolved once by the root layout; here it decides which sign-in methods can work at all.
   const tenantless = $derived(page.data.tenantless === true);
 
-  // Redirect if already authenticated
+  // The API sends a refused provider sign-in back here with the reason it was refused.
+  const notAMember = $derived(page.url.searchParams.get("reason") === "not_a_member");
+
+  // Redirect if already authenticated. A session that ended while the browser was closed lands
+  // here, so once the server says nobody is signed in, what the browser kept for a member goes.
   $effect(() => {
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
       void goToReturnUrl(returnUrl, { replace: true });
+    } else if (currentAuth && !currentAuth.isAuthenticated && !currentAuth.unreadable) {
+      clearMemberStorage();
     }
   });
 </script>
@@ -80,6 +90,21 @@
         </Card.Description>
       {/if}
     </Card.Header>
+
+    {#if notAMember}
+      <div class="px-6 pb-4" data-testid="sign-in-refused">
+        <Alert.Root variant="destructive">
+          <AlertTriangle class="h-4 w-4" />
+          <Alert.Description>
+            {#if tenantless}
+              Nocturne has no account for that sign-in. To get an account, use an invite link.
+            {:else}
+              You are not a member of this site. Ask the site owner for access.
+            {/if}
+          </Alert.Description>
+        </Alert.Root>
+      </div>
+    {/if}
 
     {#if showGuestCode}
       <Card.Content data-testid="login-guest-code"><GuestCodeForm returnUrl={returnUrl} /></Card.Content>
@@ -158,19 +183,29 @@
             >privacy policy</a>
           </p>
         </div>
+        {#if !authStatusQuery.loading}
         <div class="text-center text-xs text-muted-foreground">
           <p>
-            Having trouble signing in? 
+            {#if emailRecoveryOffered}
+              <a
+                href={resolve('auth/recovery/email')}
+                class="underline hover:text-foreground"
+                data-testid="cant-sign-in-link"
+              >Cannot sign in?</a>
+            {:else}
+              Having trouble signing in? 
 
-            <a
-              href={resolve('auth/help')}
-              class="underline hover:text-foreground"
-            >Get help</a>
+              <a
+                href={resolve('auth/help')}
+                class="underline hover:text-foreground"
+              >Get help</a>
+            {/if}
           </p>
         </div>
+        {/if}
       </Card.Footer>
     {/if}
   </Card.Root>
 </div>
 
-<RequestMembershipDialog bind:open={showRequestDialog} {returnUrl} />
+<RequestMembershipDialog bind:open={showRequestDialog} />

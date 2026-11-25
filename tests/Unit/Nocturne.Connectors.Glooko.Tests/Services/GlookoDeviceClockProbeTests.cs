@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -160,6 +161,7 @@ public class GlookoDeviceClockProbeTests
                 UseV3Api = false,
                 SyncGlucose = true,
             };
+            Publisher.SetupGet(p => p.State).Returns(new InMemoryConnectorStateStore());
             var service = new GlookoConnectorService(
                 new HttpClient(Handler),
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
@@ -167,10 +169,9 @@ public class GlookoDeviceClockProbeTests
                 Mock.Of<IRetryDelayStrategy>(),
                 new StaticGlookoTokenProvider(),
                 Publisher.Object,
-                mealMatchingService: null,
+                mealMatchLinker: null,
                 timezoneTimelineService: Timeline.Object,
                 deviceClockService: DeviceClock.Object,
-                cursorStore: new FakeCursorStore(),
                 timeProvider: new FakeTimeProvider(Instant),
                 endpointPause: TimeSpan.Zero);
 

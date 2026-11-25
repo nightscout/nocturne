@@ -37,7 +37,7 @@ public static class LibreTimestampParser
 
         if (DateTime.TryParse(
                 value,
-                CultureInfo.CurrentCulture,
+                CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal | DateTimeStyles.AllowWhiteSpaces,
                 out parsed))
             return parsed;

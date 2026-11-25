@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
@@ -23,8 +24,8 @@ public class AlertRulesReadScopeTests
     [InlineData(nameof(AlertRulesController.GetRule))]
     public void CredentialWithoutAlertsRead_IsRefused(string action)
     {
-        Evaluate(action, authenticated: true, [Scope.GlucoseRead]).Should().BeOfType<ForbidResult>();
-        Evaluate(action, authenticated: true, SeedRoleScopes(RoleSeeds.Viewer)).Should().BeOfType<ForbidResult>();
+        Evaluate(action, authenticated: true, [Scope.GlucoseRead]).Should().BeOfType<ScopeForbiddenResult>();
+        Evaluate(action, authenticated: true, SeedRoleScopes(RoleSeeds.Viewer)).Should().BeOfType<ScopeForbiddenResult>();
         Evaluate(action, authenticated: false, [.. Scope.PublicShareScopes]).Should().BeOfType<ForbidResult>();
     }
 

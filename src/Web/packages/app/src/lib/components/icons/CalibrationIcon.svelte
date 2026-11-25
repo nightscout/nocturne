@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { IconProps } from "./types";
+  import type { IconProps } from "@nocturne/charts/core";
 
   let { size = 24, color = "currentColor", class: className = "", ...rest }: IconProps = $props();
 </script>

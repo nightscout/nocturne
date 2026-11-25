@@ -155,16 +155,49 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         };
     }
 
+    private static readonly HashSet<SyncDataType> PerTypeTreatments =
+    [
+        SyncDataType.ManualBG, SyncDataType.Boluses, SyncDataType.CarbIntake,
+        SyncDataType.BolusCalculations, SyncDataType.Notes, SyncDataType.DeviceEvents,
+    ];
+
+    /// <summary>
+    ///     Each active type's point on an open-ended run, a treatment type's its own; an explicit range
+    ///     reads none. Glucose resumes from its point only on a scheduled run
+    ///     (<see cref="BaseConnectorService{TConfig}.GlucoseFromAsync"/>).
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config)
+    {
+        if (request.To is not null)
+            yield break;
+
+        foreach (var type in ResolveActiveTypes(request, config))
+        {
+            if (type == SyncDataType.Glucose && request.Resume.Scheduled)
+                yield return ResumeFamily.Glucose;
+            else if (PerTypeTreatments.Contains(type))
+                yield return ResumeKey.Of(type);
+            else if (type == SyncDataType.StateSpans)
+                yield return ResumeFamily.StateSpans;
+            else if (type == SyncDataType.DeviceStatus)
+                yield return ResumeFamily.DeviceStatus;
+            else if (type == SyncDataType.Activity)
+                yield return ResumeFamily.Activity;
+        }
+    }
+
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         NocturneRemoteConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        // Both entry points converge here, and this is the only one of them holding the run's own
-        // configuration — the background one authenticates through the parameterless overload above,
-        // which has none.
+        // The credential check answers with its own result, which EnsureAuthenticatedAsync cannot
+        // carry, so it runs here, where both entry points converge.
         if (await AuthenticateWithConfigAsync(config, cancellationToken) is { } refused)
             return refused;
+
+        await SignedInAsync(config, cancellationToken);
 
         var result = new SyncResult { Success = true };
 
@@ -174,16 +207,13 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // ResumeFrom from the request and its own resume point, because each is fetched from its
         // own endpoint. An explicit range (request.To set, as a cursor reset sends) bypasses the
         // catch-up bounds entirely.
-        //
-        // Each bound is resolved inside the loop's error boundary, so a watermark the publisher
-        // cannot answer fails only the type whose bound it was.
         var openEnded = request.To is null;
 
-        async Task<DateTime?> BoundAsync(SyncDataType type, Func<Task<DateTime?>> resumePoint) =>
-            openEnded ? ResumeFrom(request, await ResumePointAsync(type.ToString(), await resumePoint())) : request.From;
+        async Task<DateTime?> BoundAsync(SyncDataType type, Func<DateTime?> resumePoint) =>
+            openEnded ? ResumeFrom(request.From, await ResumePointAsync(type.ToString(), resumePoint(), cancellationToken)) : request.From;
 
         Task<DateTime?> TreatmentFromAsync(SyncDataType type) =>
-            BoundAsync(type, () => CalculateTreatmentSinceTimestampAsync(config, type));
+            BoundAsync(type, () => request.Resume.Point(type));
 
         Task CrawlV4Async<T>(
             SyncDataType type, string endpoint, DateTime? from)
@@ -192,7 +222,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                 (pageFrom, pageTo) => FetchPagesAsync<T>(endpoint, pageFrom, pageTo, config, cancellationToken),
                 r => r.Timestamp,
                 page => PublishByRouteAsync(ImportHelper.PrepareForImport(page), config, cancellationToken),
-                config, result);
+                config, result, cancellationToken);
 
         foreach (var type in activeTypes)
         {
@@ -202,17 +232,17 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             {
                 await (type switch
                 {
-                    SyncDataType.Glucose => CrawlV4Async<SensorGlucose>(type, NocturneRemoteConstants.SensorGlucose, await GlucoseFromAsync(request, type.ToString())),
+                    SyncDataType.Glucose => CrawlV4Async<SensorGlucose>(type, NocturneRemoteConstants.SensorGlucose, await GlucoseFromAsync(request, type.ToString(), cancellationToken)),
                     SyncDataType.ManualBG => CrawlV4Async<BGCheck>(type, NocturneRemoteConstants.BGChecks, await TreatmentFromAsync(type)),
                     SyncDataType.Boluses => CrawlV4Async<Bolus>(type, NocturneRemoteConstants.Boluses, await TreatmentFromAsync(type)),
                     SyncDataType.CarbIntake => CrawlV4Async<CarbIntake>(type, NocturneRemoteConstants.CarbIntake, await TreatmentFromAsync(type)),
                     SyncDataType.BolusCalculations => CrawlV4Async<BolusCalculation>(type, NocturneRemoteConstants.BolusCalculations, await TreatmentFromAsync(type)),
                     SyncDataType.Notes => CrawlV4Async<Note>(type, NocturneRemoteConstants.Notes, await TreatmentFromAsync(type)),
                     SyncDataType.DeviceEvents => CrawlV4Async<DeviceEvent>(type, NocturneRemoteConstants.DeviceEvents, await TreatmentFromAsync(type)),
-                    SyncDataType.StateSpans => SyncStateSpansAsync(await BoundAsync(type, () => CalculateStateSpanSinceTimestampAsync(config)), request.To, config, result, activeTypes, cancellationToken),
+                    SyncDataType.StateSpans => SyncStateSpansAsync(await BoundAsync(type, () => request.Resume.Point(ResumeFamily.StateSpans)), request.To, config, result, activeTypes, cancellationToken),
                     SyncDataType.Profiles => SyncProfilesAsync(config, result, activeTypes, cancellationToken),
-                    SyncDataType.DeviceStatus => SyncDeviceStatusAsync(await BoundAsync(type, () => CalculateDeviceStatusCatchUpSinceAsync(config)), request.To, config, result, cancellationToken),
-                    SyncDataType.Activity => SyncActivityAsync(await BoundAsync(type, () => CalculateActivityCatchUpSinceAsync(config)), request.To, config, result, cancellationToken),
+                    SyncDataType.DeviceStatus => SyncDeviceStatusAsync(await BoundAsync(type, () => request.Resume.Point(ResumeFamily.DeviceStatus)), request.To, config, result, cancellationToken),
+                    SyncDataType.Activity => SyncActivityAsync(await BoundAsync(type, () => request.Resume.Point(ResumeFamily.Activity)), request.To, config, result, cancellationToken),
                     SyncDataType.Food => SyncFoodAsync(config, result, activeTypes, cancellationToken),
                     _ => Task.CompletedTask
                 });
@@ -236,10 +266,11 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         Func<T, DateTime?> timeOf,
         Func<List<T>, Task<bool>> publish,
         NocturneRemoteConnectorConfiguration config,
-        SyncResult result)
+        SyncResult result,
+        CancellationToken cancellationToken)
     {
         var outcome = await CrawlAndPublishAsync(
-            type.ToString(), from, to, pages, timeOf, page => publish(page.ToList()), config.MaxCount);
+            type.ToString(), from, to, pages, timeOf, page => publish(page.ToList()), config.MaxCount, cancellationToken);
 
         RecordPublishOutcome(result, type, outcome.Count, outcome.Success);
         return outcome;
@@ -253,7 +284,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             (pageFrom, pageTo) => FetchPagesAsync<StateSpan>(NocturneRemoteConstants.StateSpans, pageFrom, pageTo, config, ct),
             s => s.StartTimestamp,
             page => PublishByRouteAsync(page, config, ct),
-            config, result);
+            config, result, ct);
 
         // A crawl that resumed below its bound replayed spans there, so the activations reach as far.
         var activationsFrom = spans.Oldest < from ? spans.Oldest : from;
@@ -335,7 +366,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             (pageFrom, pageTo) => FetchV1DeviceStatusPagesAsync(pageFrom, pageTo, config, ct),
             DeviceStatusTime,
             page => PublishByRouteAsync(page, config, ct),
-            config, result);
+            config, result, ct);
 
     /// <remarks>
     ///     A remote that predates the activity window ignores its bounds and answers newest first from
@@ -350,7 +381,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             (pageFrom, pageTo) => FetchPagesAsync<Activity>(NocturneRemoteConstants.Activity, pageFrom, pageTo, config, ct, ActivityTime),
             ActivityTime,
             page => PublishByRouteAsync(page, config, ct),
-            config, result);
+            config, result, ct);
 
     private static DateTime? ActivityTime(Activity activity) =>
         activity.Mills > 0 ? activity.Mills.ToUtcDateTime() : null;

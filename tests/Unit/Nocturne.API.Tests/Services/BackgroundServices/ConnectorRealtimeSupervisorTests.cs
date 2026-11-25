@@ -2,13 +2,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Jobs;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
 public class ConnectorRealtimeSupervisorTests
 {
-    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
-
     /// <summary>
     /// Listeners start when the host does, and every supervision interval after that the pass runs
     /// again, which is what replaces a listener that has died.
@@ -23,14 +22,14 @@ public class ConnectorRealtimeSupervisorTests
         await sut.StartAsync(default);
         try
         {
-            await poller.WaitForStartsAsync(1).WaitAsync(Wait);
+            await poller.WaitForStartsAsync(1);
 
             clock.Advance(ConnectorRealtimeSupervisor.SupervisionInterval - TimeSpan.FromSeconds(1));
             await Task.Delay(100);
             poller.Starts.Should().Be(1, "the pass is not repeated inside the interval");
 
             clock.Advance(TimeSpan.FromSeconds(1));
-            await poller.WaitForStartsAsync(2).WaitAsync(Wait);
+            await poller.WaitForStartsAsync(2);
         }
         finally
         {
@@ -59,7 +58,7 @@ public class ConnectorRealtimeSupervisorTests
 
         await sut.StartAsync(default);
 
-        await sut.ExecuteTask!.WaitAsync(Wait);
+        await sut.ExecuteTask!.WaitAsync(Eventually.DefaultPatience);
         await sut.StopAsync(default);
     }
 
@@ -104,10 +103,7 @@ public class ConnectorRealtimeSupervisorTests
             return Task.CompletedTask;
         }
 
-        public async Task WaitForStartsAsync(int count)
-        {
-            while (Starts < count)
-                await Task.Delay(10);
-        }
+        public Task WaitForStartsAsync(int count) =>
+            Eventually.UntilAsync($"{count} listener starts", () => Starts >= count);
     }
 }

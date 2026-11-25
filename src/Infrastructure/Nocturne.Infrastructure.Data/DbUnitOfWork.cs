@@ -46,8 +46,9 @@ public sealed class DbUnitOfWork : IAsyncDisposable
         new(await contexts.CreatePlatformAsync(ct));
 
     /// <summary>
-    /// Takes ownership of <paramref name="context"/>, for a test that runs a writer on a context it
-    /// built by hand. Disposing the unit disposes it.
+    /// Takes ownership of <paramref name="context"/>, for a writer run on a context built by hand: a
+    /// test's, or the startup membership check's under the migrator role
+    /// (<see cref="Services.MembershipReasons.ReconcileAsync"/>). Disposing the unit disposes it.
     /// </summary>
     internal static DbUnitOfWork Own(NocturneDbContext context) => new(context);
 
@@ -69,6 +70,15 @@ public sealed class DbUnitOfWork : IAsyncDisposable
     /// <inheritdoc cref="CommitAsync{T}"/>
     public Task CommitAsync(Func<CancellationToken, Task> work, CancellationToken ct = default) =>
         Context.ExecuteInTransactionAsync(work, ct);
+
+    /// <summary>
+    /// Holds the subject's row <c>FOR KEY SHARE</c> to the commit
+    /// (<see cref="TenantOwnerLock.LockSubjectRowSharedAsync"/>): what a unit that may insert a row naming
+    /// the subject takes before any lock <see cref="MembershipLock"/> orders. Called inside the work.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public Task LockSubjectRowSharedAsync(Guid subjectId, CancellationToken ct) =>
+        Context.LockSubjectRowSharedAsync(subjectId, ct);
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() => Context.DisposeAsync();

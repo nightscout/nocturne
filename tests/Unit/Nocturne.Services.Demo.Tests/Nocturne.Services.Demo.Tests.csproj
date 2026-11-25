@@ -22,5 +22,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\Services\Nocturne.Services.Demo\Nocturne.Services.Demo.csproj" />
+        <ProjectReference Include="..\..\Shared\Nocturne.Tests.Shared\Nocturne.Tests.Shared.csproj" />
     </ItemGroup>
 </Project>

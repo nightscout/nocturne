@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { appChartContext } from "./app-chart-context.svelte";
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
   import {
@@ -8,20 +9,10 @@
     SystemEventType,
   } from "#lib/api/index.js";
   import MarkCounter from "./MarkCounter.test.svelte";
-  import BolusMarker from "./markers/BolusMarker.svelte";
-  import CarbMarker from "./markers/CarbMarker.svelte";
-  import DeviceEventMarker from "./markers/DeviceEventMarker.svelte";
-  import SystemEventMarker from "./markers/SystemEventMarker.svelte";
-  import TrackerExpirationMarker from "./markers/TrackerExpirationMarker.svelte";
-  import BasalInjectionMarker from "./markers/BasalInjectionMarker.svelte";
-  import BasalTrack from "./tracks/BasalTrack.svelte";
-  import { partialEngine, setGlucoseChartContext } from "./chart-context.svelte";
-  import { computeTrackLayout } from "./engine/track-layout";
-  import type { GlucoseChartContext } from "./chart-context.svelte";
-  import type {
-    ChartBasalPoint,
-    DisplayTempBasalSpan,
-  } from "./engine/chart-data-engine.svelte";
+  import { BolusMarker, CarbMarker, DeviceEventMarker, SystemEventMarker, TrackerExpirationMarker, BasalInjectionMarker, BasalTrack } from "@nocturne/charts";
+  import { partialView, setGlucoseChartContext } from "@nocturne/charts";
+  import { computeTrackLayout } from "@nocturne/charts/core";
+  import type { ChartBasalPoint, DisplayTempBasalSpan } from "@nocturne/charts";
 
   interface Props {
     counter: { marks: number; components: number };
@@ -81,8 +72,8 @@
 
   const staleBasalData = $derived({ start: at(0), end: at(n) });
 
-  // Minimal ChartDataEngine stub — BasalTrack reads only these fields.
-  const engineStub = partialEngine({
+  // Minimal ChartDataView stub — BasalTrack reads only these fields.
+  const engineStub = partialView({
     get basalData() {
       return basalData;
     },
@@ -109,14 +100,14 @@
     ),
   );
 
-  const ctx: GlucoseChartContext = {
-    get engine() {
+  const ctx = appChartContext({
+    get view() {
       return engineStub;
     },
     get layout() {
       return layout;
     },
-  };
+  });
   setGlucoseChartContext(ctx);
 
   const xDomain = $derived<[Date, Date]>([at(0), at(n)]);

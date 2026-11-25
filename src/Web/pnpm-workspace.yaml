@@ -25,7 +25,7 @@ onlyBuiltDependencies:
 # bits-ui's Command reads its root ref on a tick scheduled while the palette tears down, when
 # Svelte answers the destroyed binding with an internal Symbol; the upstream guard is `if (!node)`,
 # so it calls querySelectorAll on the Symbol and rejects. The patch narrows the guard to Element.
-# Unfixed upstream as of 2.19.3; drop the patch once bits-ui guards it.
+# Unfixed upstream as of 2.22.0; drop the patch once bits-ui guards it.
 # SignalR 8.0.17 throws from onclose when a transport closes before start resumes.
 # Cover both Node CJS and bundler ESM entry points; remove after an upstream fix.
 # layerchart spreads options that are not attributes onto the elements it renders: a data-mode
@@ -37,8 +37,9 @@ onlyBuiltDependencies:
 # always on. Drop with the release that carries sveltejs/svelte#19100.
 patchedDependencies:
   "@microsoft/signalr@8.0.17": patches/@microsoft__signalr@8.0.17.patch
-  "bits-ui@2.18.1": patches/bits-ui@2.18.1.patch
+  "bits-ui@2.18.2": patches/bits-ui@2.18.2.patch
   "layerchart@2.9.1": patches/layerchart@2.9.1.patch
+  pofile@1.1.4: patches/pofile@1.1.4.patch
   "svelte@5.57.2": patches/svelte@5.57.2.patch
 
 # Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
@@ -47,7 +48,7 @@ overrides:
   # copies side by side (this tree had 5.45.2, 5.50.0 and 5.55.5 at once), and svelte's `Snippet`
   # is branded with a `unique symbol` declared per copy. Two copies in one type-check program
   # therefore make every snippet-to-snippet assignment fail with "Two different types with this
-  # name exist, but they are unrelated" — 20 such errors in glucose-chart's dialogs alone, and the
+  # name exist, but they are unrelated" — 20 such errors in one package's dialogs alone, and the
   # same trap for anything consuming these packages by path. One copy, one brand.
   svelte: "5.57.2"
 

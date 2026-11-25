@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Frozen;
 using System.Text.Json;
 using Nocturne.API.Configuration;
@@ -379,8 +380,8 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             ProjectUploaderData(ds, uploader);
         }
 
-        // Project override data
-        if (overrideSpan != null)
+        // A status stored before its override object was kept has only the span to rebuild it from.
+        if (ds.Override is null && overrideSpan != null)
         {
             ProjectOverrideData(ds, overrideSpan);
         }
@@ -407,7 +408,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             SrvCreated = createdAt.ToMills(),
             // Nightscout clients place a status on the timeline by created_at, so it is the event
             // time; the server clock is srvCreated.
-            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             UtcOffset = utcOffset,
             Device = device ?? string.Empty,
         };
@@ -435,6 +436,9 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
                 RecommendedBolus = aps.RecommendedBolus,
             };
         }
+
+        if (!string.IsNullOrEmpty(aps.OverrideJson))
+            ds.Override = DeserializeOrNull<OverrideStatus>(aps.OverrideJson, logger);
     }
 
     private static void ProjectOpenApsData(DeviceStatus ds, ApsSnapshot aps, ILogger? logger = null)
@@ -459,6 +463,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
 
         // COB on the OpenAps status level
         ds.OpenAps.Cob = aps.Cob;
+        UploadedExtras.RestoreOpenAps(ds.OpenAps, aps.AdditionalProperties);
     }
 
     private static void ProjectPumpData(DeviceStatus ds, PumpSnapshot pump)
@@ -470,6 +475,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Reservoir = pump.Reservoir,
             ReservoirDisplayOverride = pump.ReservoirDisplay,
             Clock = pump.Clock,
+            PumpMode = pump.PumpMode,
             Battery = (pump.BatteryPercent.HasValue || pump.BatteryVoltage.HasValue)
                 ? new PumpBattery { Percent = pump.BatteryPercent, Voltage = pump.BatteryVoltage }
                 : null,
@@ -479,10 +485,8 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Iob = (pump.Iob.HasValue || pump.BolusIob.HasValue)
                 ? new PumpIob { Iob = pump.Iob, BolusIob = pump.BolusIob }
                 : null,
-            Extended = pump.AdditionalProperties?.ToDictionary(
-                kvp => kvp.Key,
-                kvp => kvp.Value ?? (object)string.Empty),
         };
+        UploadedExtras.RestorePump(ds.Pump, pump.AdditionalProperties);
     }
 
     private static void ProjectUploaderData(DeviceStatus ds, UploaderSnapshot uploaderSnapshot)
@@ -495,18 +499,21 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
             Name = uploaderSnapshot.Name,
             Type = uploaderSnapshot.Type,
             IsCharging = uploaderSnapshot.IsCharging,
+            ExtensionData = uploaderSnapshot.AdditionalProperties?.ToDictionary(
+                kvp => kvp.Key,
+                kvp => JsonSerializer.SerializeToElement(kvp.Value)),
         };
 
         ds.IsCharging = uploaderSnapshot.IsCharging;
     }
 
-    private static void ProjectOverrideData(DeviceStatus ds, StateSpan overrideSpan)
+    internal static void ProjectOverrideData(DeviceStatus ds, StateSpan overrideSpan)
     {
         ds.Override = new OverrideStatus
         {
             // The span contains the status time. IsActive would say whether it has ended since.
             Active = true,
-            Timestamp = overrideSpan.StartTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Timestamp = overrideSpan.StartTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
         };
 
         if (overrideSpan.Metadata != null)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PermissionAtom } from "#lib/api/generated/nocturne-api-client.js";
+import { PermissionAtom } from "@nocturne/api-client";
 import { permissionGroups } from "./permission-categories.svelte";
 
 const knownAtoms = new Set<string>(Object.values(PermissionAtom));

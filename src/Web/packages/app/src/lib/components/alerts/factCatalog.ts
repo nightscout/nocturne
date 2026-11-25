@@ -65,6 +65,7 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "threshold", group: "glucose", icon: "droplet" },
 	{ kind: "glucose_bucket", group: "glucose", icon: "chart-line" },
 	{ kind: "predicted", group: "glucose", icon: "trending-up" },
+	{ kind: "eventual_glucose", group: "glucose", icon: "trending-up" },
 	{ kind: "rate_of_change", group: "glucose", icon: "trending-up" },
 	{ kind: "trend", group: "glucose", icon: "trending-up" },
 	{ kind: "staleness", group: "glucose", icon: "alert-triangle" },
@@ -76,6 +77,7 @@ export const LEAF_FACTS: readonly FactDef[] = [
 
 	// Carbs
 	{ kind: "cob", group: "carbs", icon: "apple" },
+	{ kind: "carbs_required", group: "carbs", icon: "apple" },
 	{ kind: "time_since_last_carb", group: "carbs", icon: "clock" },
 	{ kind: "time_since_last_bolus", group: "insulin", icon: "clock" },
 
@@ -86,9 +88,11 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "tracker_age", group: "device", icon: "timer" },
 	{ kind: "pump_battery", group: "device", icon: "battery" },
 	{ kind: "uploader_battery", group: "device", icon: "smartphone" },
+	{ kind: "transmitter_battery", group: "device", icon: "battery-low" },
 	{ kind: "loop_stale", group: "device", icon: "wifi-off" },
 	{ kind: "loop_enaction_stale", group: "device", icon: "rotate-ccw" },
 	{ kind: "signal_loss", group: "device", icon: "wifi-off" },
+	{ kind: "sensor_state", group: "device", icon: "activity" },
 
 	// Behaviour
 	{ kind: "pump_suspended", group: "behaviour", icon: "pause-circle" },

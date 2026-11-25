@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -28,7 +29,7 @@ public class CredentialRepositoryTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant);
         using var db = _db.CreateContext();
-        db.Subjects.Add(new SubjectEntity { Id = _holder, Name = "Holder", Username = "holder", Email = "h@x.example" });
+        db.Subjects.Add(new SubjectEntity { Id = _holder, Name = "Holder", Username = "holder" });
         db.Subjects.Add(new SubjectEntity { Id = _stranger, Name = "Stranger" });
         db.Subjects.Add(new SubjectEntity { Id = _system, Name = "Public", IsSystemSubject = true });
         db.SaveChanges();
@@ -62,6 +63,47 @@ public class CredentialRepositoryTests : IDisposable
         (await Passkeys().CountAsync(_holder, CancellationToken.None)).Should().Be(2);
         (await Passkeys().GetCredentialIdsAsync(_holder, CancellationToken.None)).Should().BeEquivalentTo([new byte[] { 1, 2 }, new byte[] { 3, 4 }]);
         (await Passkeys().ListAsync(_holder, CancellationToken.None)).Select(c => c.Id).Should().Equal(newer, older);
+    }
+
+    [Fact]
+    public async Task APasskeyHolderIsTheRecordASubjectReadReturnsRoleless()
+    {
+        var holder = Guid.CreateVersion7();
+        await using (var db = _db.CreateContext())
+        {
+            var full = new SubjectEntity
+            {
+                Id = holder,
+                Name = "Full",
+                Username = "full",
+                Notes = "notes",
+                IsActive = true,
+                IsDemoSubject = true,
+                IsPlatformAdmin = true,
+                ApprovalStatus = "approved",
+                AccessRequestMessage = "let me in",
+                PreferredLanguage = "fr",
+                Preferences = "{\"a\":1}",
+                AvatarUrl = "https://example.test/a.png",
+                LastLoginAt = Now.AddDays(-1),
+            };
+            full.SetEmail("full@example.test");
+            full.ConfirmEmail("full@example.test", Now.AddDays(-2));
+            db.Subjects.Add(full);
+            await db.SaveChangesAsync();
+        }
+        await Passkeys().CreateAsync(Passkey(holder, [8, 8]), CancellationToken.None);
+        var subjectRead = await new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext()), AccountLinkRoutes.Off)
+            .GetAsync(holder, CancellationToken.None);
+
+        var stored = await Passkeys().FindByCredentialIdAsync([8, 8], CancellationToken.None);
+        var listed = (await Passkeys().ListHoldersAsync(CancellationToken.None)).Single(h => h.Subject.Id == holder);
+
+        subjectRead!.EmailConfirmedAt.Should().NotBeNull();
+        stored!.Holder.Should().BeEquivalentTo(subjectRead, o => o.Excluding(r => r.Roles));
+        listed.Subject.Should().BeEquivalentTo(subjectRead, o => o.Excluding(r => r.Roles));
+        stored.Holder.Roles.Should().BeEmpty();
+        listed.Subject.Roles.Should().BeEmpty();
     }
 
     [Fact]

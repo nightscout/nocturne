@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
 
@@ -67,7 +68,7 @@ public class CorrelationService : ICorrelationService
             return string.Empty;
         }
 
-        var correlationId = $"INT-{_time.GetUtcNow():yyyyMMdd-HHmmss}-{Guid.CreateVersion7():N}";
+        var correlationId = $"INT-{_time.GetUtcNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}-{Guid.CreateVersion7():N}";
 
         _logger.LogDebug("Generated correlation ID: {CorrelationId}", correlationId);
 

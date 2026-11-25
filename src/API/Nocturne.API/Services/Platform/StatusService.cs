@@ -1,10 +1,8 @@
-using System.Data.Common;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
@@ -510,11 +508,7 @@ public class StatusService : IStatusService
             var rules = await _alertRepository.GetEnabledRulesAsync(ct);
             return (_thresholdClassifier.ResolveThresholds(rules), false);
         }
-        catch (DbException ex)
-        {
-            _logger.LogWarning(ex, "Failed to read alert rules for status thresholds; using the defaults");
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogWarning(ex, "Failed to read alert rules for status thresholds; using the defaults");
         }
@@ -717,7 +711,7 @@ public class StatusService : IStatusService
             Subject =
                 authContext.SubjectId?.ToString() ?? authContext.SubjectName ?? authContext.Email,
             Roles =
-                authContext.Roles?.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                authContext.Roles?.Distinct(StringComparer.Ordinal).ToList()
                 ?? new List<string>(),
         };
     }

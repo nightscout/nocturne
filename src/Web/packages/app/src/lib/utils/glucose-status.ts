@@ -3,10 +3,7 @@
  * never re-derive status from mg/dL values on the frontend.
  */
 
-import {
-  GlucoseStatus,
-  type TenantOverviewItem,
-} from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import {
   glucoseStatusTileVariant,
   type GlucoseTileVariant,
@@ -51,28 +48,4 @@ export function getGlucoseTileVariant(
   status: GlucoseStatus | undefined
 ): GlucoseTileVariant {
   return lookup(tileVariants, status);
-}
-
-/** Presentational rank only — not a domain ordering. */
-export const glucoseStatusSortOrder: Record<GlucoseStatus, number> = {
-  [GlucoseStatus.UrgentLow]: 0,
-  [GlucoseStatus.UrgentHigh]: 1,
-  [GlucoseStatus.Low]: 2,
-  [GlucoseStatus.High]: 3,
-  [GlucoseStatus.Stale]: 4,
-  [GlucoseStatus.InRange]: 5,
-  [GlucoseStatus.Unknown]: 6,
-};
-
-export function sortTenantsByUrgency(
-  tenants: TenantOverviewItem[]
-): TenantOverviewItem[] {
-  return [...tenants].sort((a, b) => {
-    const rankA = lookup(glucoseStatusSortOrder, a.status);
-    const rankB = lookup(glucoseStatusSortOrder, b.status);
-    if (rankA !== rankB) return rankA - rankB;
-    return (a.displayName || a.slug || "").localeCompare(
-      b.displayName || b.slug || ""
-    );
-  });
 }

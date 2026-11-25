@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AutoUpdateMode } from "#lib/api/generated/nocturne-api-client.js";
+  import { AutoUpdateMode } from "@nocturne/api-client";
   import { formatDayTime } from "#lib/utils/formatting.js";
 
   interface Props {

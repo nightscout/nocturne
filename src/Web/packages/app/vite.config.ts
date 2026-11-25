@@ -38,7 +38,7 @@ const reactAliases = {
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
 import { wuchale } from 'wuchale/vite'
-import { privateDevCatalogue } from './wuchale.dev.js'
+import { privateDevCatalogue, WUCHALE_CONFIG_PATH } from './wuchale.dev.js'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -55,7 +55,9 @@ export default defineConfig(({ mode }) => {
       // RangeCalendar throw "Unknown date type" (reports filter, date pickers).
       // tailwind-variants is installed once per tailwindcss peer; tailwind-merge
       // is listed so a workspace pin drifting again still bundles one copy.
-      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants"],
+      // layerchart keys its chart context per copy, so a track from @nocturne/charts inside the
+      // app's <Chart> (or the reverse) would read a fallback context from a second copy.
+      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants", "layerchart"],
     },
     ssr: {
       // Bundle the Resend adapter (and its React deps) into the SSR output so
@@ -104,7 +106,7 @@ export default defineConfig(({ mode }) => {
       localesDir: '../../locales',  // Path to .po files
     }),
       privateDevCatalogue('app'),
-      wuchale(),
+      wuchale({ configPath: WUCHALE_CONFIG_PATH }),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {
         name: "websocket-bridge",
@@ -188,7 +190,16 @@ export default defineConfig(({ mode }) => {
         ],
       },
       watch: {
-        ignored: ["**/node_modules/**", "**/.git/**"],
+        // Wuchale rewrites its proxies and loaders, unchanged, on every extraction; seen by the
+        // watcher, each rewrite is another SSR page reload. The compiled catalogues stay watched:
+        // a new string reaches the page only through their change events.
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/locales/.wuchale/*.proxy*.js",
+          "**/locales/data.js",
+          "**/locales/*.loader*.js",
+        ],
         usePolling: false,
       },
       fs: {

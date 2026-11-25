@@ -29,6 +29,7 @@ public class GuestSessionHandler : IAuthHandler
     private readonly IDataProtector _protector;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly GuestSessionCacheService _sessionCache;
+    private readonly TimeProvider _time;
     private readonly ILogger<GuestSessionHandler> _logger;
 
     /// <summary>
@@ -38,11 +39,13 @@ public class GuestSessionHandler : IAuthHandler
         IDataProtectionProvider dataProtectionProvider,
         IServiceScopeFactory scopeFactory,
         GuestSessionCacheService sessionCache,
+        TimeProvider time,
         ILogger<GuestSessionHandler> logger)
     {
         _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
         _scopeFactory = scopeFactory;
         _sessionCache = sessionCache;
+        _time = time;
         _logger = logger;
     }
 
@@ -82,8 +85,10 @@ public class GuestSessionHandler : IAuthHandler
             return AuthResult.Failure(InvalidSessionError);
         }
 
-        // Check cache first, then validate against the database
-        if (!_sessionCache.TryGet(tenantCtx.TenantId, grantId, out var session))
+        // A cached session past its own expiry is a miss, so expiry and a cap end a session at the
+        // stated time rather than at the end of the cache lifetime.
+        if (!_sessionCache.TryGet(tenantCtx.TenantId, grantId, out var session)
+            || OAuthGrantState.IsExpiredAt(session?.ExpiresAt, _time.GetUtcNow().UtcDateTime))
         {
             using var scope = _scopeFactory.CreateScope();
 

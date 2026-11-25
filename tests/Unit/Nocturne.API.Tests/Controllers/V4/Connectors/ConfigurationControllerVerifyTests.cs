@@ -224,7 +224,7 @@ public class ConfigurationControllerVerifyTests
     }
 
     [Fact]
-    public void VerifyCredentials_RequiresTenantSettingsScopeAndIsRateLimited()
+    public void VerifyCredentials_RequiresConnectorsReadWriteAndIsRateLimited()
     {
         var method = typeof(ConfigurationController)
             .GetMethod(nameof(ConfigurationController.VerifyCredentials));
@@ -233,7 +233,7 @@ public class ConfigurationControllerVerifyTests
         var scope = method!.GetCustomAttribute<Nocturne.API.Attributes.RequireScopeAttribute>();
         Assert.NotNull(scope);
         Assert.Contains(
-            Nocturne.Core.Models.Authorization.Scope.TenantSettings,
+            Nocturne.Core.Models.Authorization.Scope.ConnectorsReadWrite,
             scope!.RequiredScopes);
         var rateLimit = method.GetCustomAttribute<
             Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>();

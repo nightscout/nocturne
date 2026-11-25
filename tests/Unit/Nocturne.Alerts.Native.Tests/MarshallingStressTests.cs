@@ -55,7 +55,8 @@ public class MarshallingStressTests
             ["latest_timestamp"] = "2026-01-05T12:00:00Z",
         });
 
-        var response = RustAlertEngine.Evaluate(rule, context, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
+        var response = RustAlertEngine.Evaluate(
+            rule, context, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc), includeLeaves: true);
 
         var result = JsonNode.Parse(response.Result!.Value.GetRawText())!;
         // threshold below is strict (latest < value): leaves 0..100 are false, 101..399 true.
@@ -106,7 +107,8 @@ public class MarshallingStressTests
             },
         });
 
-        var response = RustAlertEngine.Evaluate(rule, context, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
+        var response = RustAlertEngine.Evaluate(
+            rule, context, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc), includeLeaves: true);
 
         var result = JsonNode.Parse(response.Result!.Value.GetRawText())!;
         result["root"]!.GetValue<bool>().Should().BeTrue("the non-ASCII state string must survive the round trip intact");
@@ -261,7 +263,7 @@ public class MarshallingStressTests
         first.Timers.Should().ContainKey("sustained")
             .WhoseValue.Should().Be(new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
         first.Tracker!.State.Should().Be("idle");
-        first.Tracker.NextExcursionOrdinal.Should().Be(1);
+        first.Tracker.LastExcursionOrdinal.Should().BeNull();
 
         var second = RustAlertEngine.Evaluate(
             rule, context, new DateTime(2026, 1, 5, 12, 10, 0, DateTimeKind.Utc), first.Timers, first.Tracker);
@@ -269,7 +271,7 @@ public class MarshallingStressTests
         JsonNode.Parse(second.Result!.Value.GetRawText())!["root"]!.GetValue<bool>().Should().BeTrue();
         second.Tracker!.State.Should().Be("active");
         second.Tracker.ActiveExcursionOrdinal.Should().Be(1);
-        second.Tracker.NextExcursionOrdinal.Should().Be(2);
+        second.Tracker.LastExcursionOrdinal.Should().Be(1);
         second.Tracker.UpdatedAt.Should().Be(new DateTime(2026, 1, 5, 12, 10, 0, DateTimeKind.Utc));
     }
 }

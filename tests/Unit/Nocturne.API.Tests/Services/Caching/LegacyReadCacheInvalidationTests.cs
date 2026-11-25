@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.API.Extensions;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Treatments;
@@ -104,16 +103,21 @@ public class LegacyReadCacheInvalidationTests : IDisposable
     public async Task The_api_registrations_give_a_repository_the_port_that_clears_the_cache()
     {
         var services = new ServiceCollection().AddDomainServices().AddV4Infrastructure();
+        Nocturne.Infrastructure.Data.Extensions.ServiceCollectionExtensions.AddV4Repositories(services);
         services.Should().ContainSingle(d => d.ServiceType == typeof(ILegacyReadCacheInvalidation))
             .Which.ImplementationType.Should().Be<LegacyReadCacheInvalidation>();
+        Nocturne.Infrastructure.Data.Extensions.ServiceCollectionExtensions.AddDataServices(new ServiceCollection())
+            .Should().ContainSingle(d => d.ServiceType == typeof(IRecordChangePublisher))
+            .Which.ImplementationType.Should().Be<RecordChangePublisher>();
 
         var cache = new Mock<ITenantCache>();
-        services.RemoveAll<IV4RecordBroadcaster<Bolus>>();
         services
             .AddLogging()
             .AddSingleton<INocturneDbContextFactory>(new TestNocturneDbContextFactory(_context))
             .AddSingleton(Mock.Of<IDuplicateLinker>())
+            .AddScoped<IRecordChangePublisher, RecordChangePublisher>()
             .AddSingleton<IAuditContext>(new SystemAuditContext())
+            .AddSingleton(TimeProvider.System)
             .AddSingleton(cache.Object);
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -291,6 +295,7 @@ public class LegacyReadCacheInvalidationTests : IDisposable
             .AddSingleton(Mock.Of<IDuplicateLinker>())
             .AddSingleton<IAuditContext>(new SystemAuditContext())
             .AddSingleton<ILegacyReadCacheInvalidation>(_written)
+            .AddSingleton(_written.AsRecordChanges())
             .BuildServiceProvider();
 
     /// <summary>The concrete repository of <paramref name="model"/>, built as DI builds it.</summary>

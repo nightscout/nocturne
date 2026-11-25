@@ -6,7 +6,7 @@
 import { query } from "$app/server";
 import { z } from "zod";
 import { getDashboardChartData } from "#lib/api/generated/chartDatas.generated.remote.js";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 
 const chartDataSchema = z.object({
   startTime: z.number(),

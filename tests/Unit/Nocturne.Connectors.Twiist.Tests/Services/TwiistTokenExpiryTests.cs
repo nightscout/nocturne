@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Twiist.Tests.Services;
 
@@ -34,28 +34,19 @@ public class TwiistTokenExpiryTests
 
     private static TwiistAuthTokenProvider ProviderFor(TimeProvider clock)
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenant = ResolvedTenant.Accessor();
 
         return new TwiistAuthTokenProvider(
-            new HttpClient(new LoginHandler()),
+            new HttpClient(LoginHandler()),
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<TwiistConnectorConfiguration>(null, null, null),
-            tenant.Object,
+            tenant,
             NullLogger<TwiistAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             clock);
     }
 
-    private sealed class LoginHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    "{\"AuthenticationResult\":{\"AccessToken\":\"access-token-1\",\"RefreshToken\":\"refresh-token-1\"}}")
-            });
-    }
+    private static FakeHttpHandler LoginHandler() => new FakeHttpHandler(_ => FakeHttpHandler.Status(
+        HttpStatusCode.OK,
+        "{\"AuthenticationResult\":{\"AccessToken\":\"access-token-1\",\"RefreshToken\":\"refresh-token-1\"}}"));
 }

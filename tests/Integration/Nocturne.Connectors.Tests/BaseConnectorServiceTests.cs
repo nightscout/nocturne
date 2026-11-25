@@ -110,8 +110,6 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
     protected override string ConnectorSource => "test-connector";
     public override string ServiceName => "Test Connector";
 
-    public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
-
     // This double only exercises the publish path, never a sync run.
     protected override Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,

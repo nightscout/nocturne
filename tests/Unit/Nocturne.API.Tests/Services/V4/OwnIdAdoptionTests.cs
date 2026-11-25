@@ -1,19 +1,13 @@
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -86,17 +80,15 @@ public class OwnIdAdoptionTests : IDisposable
 
     private IEnumerable<string> Lookups => _calls.Where(c => !c.Contains(".correlations("));
 
-    private EntryDecomposer EntryDecomposer(
-        Mock<ISensorGlucoseRepository> sg, Mock<IMeterGlucoseRepository> mg, Mock<ICalibrationRepository> cal)
+    private static Task DecomposeEntriesAsync(
+        Mock<ISensorGlucoseRepository> sg, Mock<IMeterGlucoseRepository> mg, Mock<ICalibrationRepository> cal,
+        IReadOnlyList<Entry> entries)
     {
         var config = new Mock<IGlucoseProcessingConfigProvider>();
         config.Setup(c => c.GetSourceDefaultsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        return new EntryDecomposer(
-            sg.Object, mg.Object, cal.Object,
-            new GlucoseProcessingResolver(config.Object),
-            Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IAuditContext>(),
-            NullLogger<EntryDecomposer>.Instance);
+        return EntryDecomposerDoubles
+            .Build(sg.Object, mg.Object, cal.Object, glucoseResolver: new GlucoseProcessingResolver(config.Object))
+            .DecomposeBatchAsync(entries, WriteOrigin.Live);
     }
 
     [Fact]
@@ -106,13 +98,13 @@ public class OwnIdAdoptionTests : IDisposable
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
 
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+        await DecomposeEntriesAsync(sg, mg, cal,
         [
             new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = DataSources.NightscoutConnector },
             new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
             new Entry { Id = UuidPrefix, Type = "mbg", Mills = 1_700_000_600_000, Mbg = 140 },
             new Entry { Id = "cal-1", Type = "cal", Mills = 1_700_000_900_000, Slope = 850 },
-        ], WriteOrigin.Live);
+        ]);
 
         Lookups.Should().Equal(
             $"sg.held({Uuid})", $"sg.find({Uuid})", $"sg.adopt({Uuid})",
@@ -127,19 +119,19 @@ public class OwnIdAdoptionTests : IDisposable
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
 
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+        await DecomposeEntriesAsync(sg, mg, cal,
         [
             new Entry { Id = "507f1f77bcf80cd799439011", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
             new Entry { Id = Uuid.ToUpperInvariant(), Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
             new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_450_000, Sgv = 128 },
             new Entry { Id = null, Type = "sgv", Mills = 1_700_000_600_000, Sgv = 130 },
-        ], WriteOrigin.Live);
+        ]);
 
         Lookups.Should().Equal("sg.upsert");
     }
 
-    private (DeviceStatusDecomposer Decomposer, Mock<IApsSnapshotRepository> Aps, Mock<IPumpSnapshotRepository> Pump,
-        Mock<IUploaderSnapshotRepository> Uploader) DeviceStatusDecomposer(string[]? unkeyed = null)
+    private (Mock<IApsSnapshotRepository> Aps, Mock<IPumpSnapshotRepository> Pump, Mock<IUploaderSnapshotRepository> Uploader,
+        Func<IReadOnlyList<DeviceStatus>, string?, Task<DecompositionResult>> Decompose) DeviceStatuses(string[]? unkeyed = null)
     {
         var aps = LegacyKeyed<IApsSnapshotRepository, ApsSnapshot>("aps", unkeyed ?? [Uuid]);
         var pump = LegacyKeyed<IPumpSnapshotRepository, PumpSnapshot>("pump");
@@ -152,12 +144,10 @@ public class OwnIdAdoptionTests : IDisposable
 
         var spans = new Mock<IStateSpanService>();
         spans.BacksWith([]);
-        var decomposer = new DeviceStatusDecomposer(
-            aps.Object, pump.Object, uploader.Object, extras.Object,
-            spans.Object, new UnresolvedDevices(), Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System,
-            NullLogger<DeviceStatusDecomposer>.Instance);
-        return (decomposer, aps, pump, uploader);
+        var decomposer = DeviceStatusDecomposerDoubles.Build(
+            aps.Object, pump.Object, uploader.Object, extras.Object, stateSpans: spans.Object);
+        return (aps, pump, uploader, async (statuses, source) =>
+            await decomposer.DecomposeBatchAsync(statuses, source, WriteOrigin.Live));
     }
 
     private static DeviceStatus Status(string id) => new()
@@ -172,13 +162,13 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatusBatch_GivesTheAnchorsSiblingsItsIdBeforeReadingStoredGroups()
     {
-        var (decomposer, aps, _, _) = DeviceStatusDecomposer();
+        var (aps, _, _, decompose) = DeviceStatuses();
         var correlationId = Guid.CreateVersion7();
         aps.Setup(r => r.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) => _calls.Add($"aps.adopt({string.Join(",", ids)})"))
             .ReturnsAsync([new ApsSnapshot { LegacyId = Uuid, CorrelationId = correlationId }]);
 
-        await decomposer.DecomposeBatchAsync([Status(Uuid), Status("loop_status_42")], source: null, WriteOrigin.Live);
+        await decompose([Status(Uuid), Status("loop_status_42")], null);
 
         _calls.Take(11).Should().Equal(
             $"aps.held({Uuid})", $"pump.held({Uuid})", $"uploader.held({Uuid})", $"aps.find({Uuid})",
@@ -192,9 +182,9 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatus_AdoptsNothingWhenNoStoredStatusCarriesTheId()
     {
-        var (decomposer, _, _, _) = DeviceStatusDecomposer(unkeyed: []);
+        var (_, _, _, decompose) = DeviceStatuses(unkeyed: []);
 
-        await decomposer.DecomposeBatchAsync([Status(UuidPrefix)], source: null, WriteOrigin.Live);
+        await decompose([Status(UuidPrefix)], null);
 
         _calls.Take(10).Should().Equal(
             $"aps.held({UuidPrefix})", $"pump.held({UuidPrefix})", $"uploader.held({UuidPrefix})",
@@ -206,9 +196,9 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatus_TouchesNoTableWhenTheIdCannotNameAStoredRecord()
     {
-        var (decomposer, _, _, _) = DeviceStatusDecomposer();
+        var (_, _, _, decompose) = DeviceStatuses();
 
-        await decomposer.DecomposeBatchAsync([Status("loop_status_42")], source: null, WriteOrigin.Live);
+        await decompose([Status("loop_status_42")], null);
 
         _calls.Should().NotContain(c => c.Contains("adopt") || c.Contains("resolve"));
     }
@@ -228,11 +218,11 @@ public class OwnIdAdoptionTests : IDisposable
         sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
             .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+        await DecomposeEntriesAsync(sg, mg, cal,
         [
             new Entry { Id = UuidPrefix, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
             new Entry { Id = otherPrefix, Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
-        ], WriteOrigin.Live);
+        ]);
 
         written!.Select(r => r.LegacyId).Should().Equal(UuidShapedLegacyId, otherPrefix);
         sg.Verify(r => r.AdoptOwnIdsAsync(
@@ -242,12 +232,12 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatus_DecomposesAPrefixUnderTheUuidLegacyIdItStandsFor()
     {
-        var (decomposer, _, pump, _) = DeviceStatusDecomposer();
+        var (_, pump, _, decompose) = DeviceStatuses();
         pump.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new WireLegacyId(UuidPrefix, UuidShapedLegacyId)]);
         var status = Status(UuidPrefix);
 
-        await decomposer.DecomposeBatchAsync([status], source: null, WriteOrigin.Live);
+        await decompose([status], null);
 
         status.Id.Should().Be(UuidShapedLegacyId);
         _calls.Should().NotContain(c => c.Contains(".adopt("));
@@ -273,12 +263,12 @@ public class OwnIdAdoptionTests : IDisposable
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
             .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
 
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+        await DecomposeEntriesAsync(sg, mg, cal,
         [
             Pulled(new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 }),
             Pulled(new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d1", UpstreamIdentifier = Uuid, Type = "sgv", Mills = 1_700_000_300_000, Sgv = 121 }),
             Pulled(new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d2", UpstreamIdentifier = "trio-7c2d", Type = "sgv", Mills = 1_700_000_600_000, Sgv = 122 }),
-        ], WriteOrigin.Live);
+        ]);
 
         written!.Select(r => r.LegacyId).Should().Equal("dexcom_7f3c2a91", Uuid, "66f0a1b2c3d4e0f6a7b8c9d2");
     }
@@ -286,13 +276,13 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatus_MatchesAPulledCopyByAnIdentifierTheUsersDeletionHolds()
     {
-        var (decomposer, _, _, uploader) = DeviceStatusDecomposer();
+        var (_, _, uploader, decompose) = DeviceStatuses();
         uploader.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { "loop_status_42" });
         var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
         status.UpstreamIdentifier = "loop_status_42";
 
-        await decomposer.DecomposeBatchAsync([status], DataSources.NightscoutConnector, WriteOrigin.Live);
+        await decompose([status], DataSources.NightscoutConnector);
 
         status.Id.Should().Be("loop_status_42");
         _calls.Should().NotContain(c => c.Contains(".adopt(") || c.Contains(".resolve(") || c.Contains(".find("));
@@ -314,7 +304,7 @@ public class OwnIdAdoptionTests : IDisposable
             .ReturnsAsync(new HashSet<string> { "dexcom_7f3c2a91" });
         sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["dexcom_7f3c2a91"]);
+            .ReturnsAsync([new WriteBackSendable("dexcom_7f3c2a91", null, null)]);
         List<SensorGlucose>? written = null;
         sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
@@ -330,7 +320,7 @@ public class OwnIdAdoptionTests : IDisposable
             DataSource = DataSources.NightscoutConnector,
         };
 
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync([echo, pulled], WriteOrigin.Live);
+        await DecomposeEntriesAsync(sg, mg, cal, [echo, pulled]);
 
         echo.Id.Should().Be("dexcom_7f3c2a91");
         written!.Select(r => r.LegacyId).Should().Equal("66f0a1b2c3d4e0f6a7b8c9d1");
@@ -344,11 +334,10 @@ public class OwnIdAdoptionTests : IDisposable
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
         sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["dexcom_7f3c2a91"]);
+            .ReturnsAsync([new WriteBackSendable("dexcom_7f3c2a91", null, null)]);
 
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
-            [new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = "xdrip" }],
-            WriteOrigin.Live);
+        await DecomposeEntriesAsync(sg, mg, cal,
+            [new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = "xdrip" }]);
 
         Lookups.Should().Equal("sg.upsert");
         sg.Verify(r => r.GetLegacyIdsWriteBackMaySendAsync(
@@ -358,16 +347,16 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatus_WritesNothingForAnEchoOfAStatusAnotherSourceStores()
     {
-        var (decomposer, aps, _, _) = DeviceStatusDecomposer();
+        var (aps, _, _, decompose) = DeviceStatuses();
         aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { "loop_status_42" });
         aps.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(["loop_status_42"]);
+            .ReturnsAsync([new WriteBackSendable("loop_status_42", null, null)]);
         var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
         status.UpstreamIdentifier = "loop_status_42";
 
-        var result = await decomposer.DecomposeBatchAsync([status], DataSources.NightscoutConnector, WriteOrigin.Live);
+        var result = await decompose([status], DataSources.NightscoutConnector);
 
         status.Id.Should().Be("loop_status_42");
         result.CreatedRecords.Should().BeEmpty();
@@ -402,9 +391,8 @@ public class OwnIdAdoptionTests : IDisposable
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
             .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
 
-        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
-            [Pulled(new Entry { Id = "5f1a2b3c4d5e6f7a8b9c0d1e", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 131 })],
-            WriteOrigin.Live);
+        await DecomposeEntriesAsync(sg, mg, cal,
+            [Pulled(new Entry { Id = "5f1a2b3c4d5e6f7a8b9c0d1e", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 131 })]);
 
         written!.Select(r => (r.LegacyId, r.Mgdl)).Should().Equal(("5f1a2b3c4d5e6f7a8b9c0d1e", 131d));
     }
@@ -412,7 +400,7 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task DeviceStatus_UpdatesAStatusWriteBackNeverSent()
     {
-        var (decomposer, aps, _, _) = DeviceStatusDecomposer();
+        var (aps, _, _, decompose) = DeviceStatuses();
         aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { "loop_status_42" });
         aps.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
@@ -421,7 +409,7 @@ public class OwnIdAdoptionTests : IDisposable
         var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
         status.UpstreamIdentifier = "loop_status_42";
 
-        await decomposer.DecomposeBatchAsync([status], DataSources.NightscoutConnector, WriteOrigin.Live);
+        await decompose([status], DataSources.NightscoutConnector);
 
         status.Id.Should().Be("loop_status_42");
         _calls.Should().Contain("aps.correlations(loop_status_42)");

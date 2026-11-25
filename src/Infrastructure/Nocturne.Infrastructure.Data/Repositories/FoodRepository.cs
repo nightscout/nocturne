@@ -71,6 +71,19 @@ public class FoodRepository : IFoodRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, Food>> GetFoodsByIdsAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (ids.Count == 0)
+            return new Dictionary<Guid, Food>();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.Foods.AsNoTracking().Where(f => ids.Contains(f.Id)).ToListAsync(cancellationToken);
+        return entities.ToDictionary(e => e.Id, FoodMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
     public async Task<Guid?> ResolveFoodKeyAsync(
         string id,
         CancellationToken cancellationToken = default
@@ -427,10 +440,11 @@ public class FoodRepository : IFoodRepository
 
         if (!string.IsNullOrEmpty(text))
         {
+            var lower = text.ToLowerInvariant();
             query = query.Where(f =>
-                f.Name.Contains(text)
-                || f.Category.Contains(text)
-                || f.Subcategory.Contains(text)
+                f.Name.ToLower().Contains(lower)
+                || f.Category.ToLower().Contains(lower)
+                || f.Subcategory.ToLower().Contains(lower)
             );
         }
 

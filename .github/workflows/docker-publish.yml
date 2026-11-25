@@ -249,7 +249,14 @@ jobs:
       - name: Verify generated API client files
         run: |
           GENERATED_DIR="src/Web/packages/app/src/lib/api/generated"
+          CLIENT_DIR="src/Web/packages/api-client/src"
           MISSING=()
+
+          for f in nocturne-api-client.ts schemas.ts openapi.json; do
+            if [ ! -f "$CLIENT_DIR/$f" ]; then
+              MISSING+=("$f")
+            fi
+          done
 
           # Spot-check a representative set of generated remote files
           for f in passkeys patientRecords chartDatas profiles alerts; do
@@ -259,7 +266,7 @@ jobs:
           done
 
           if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "::error::Missing generated remote files: ${MISSING[*]}"
+            echo "::error::Missing generated files: ${MISSING[*]}"
             ls -la "$GENERATED_DIR/"*.generated.remote.ts 2>/dev/null || echo "No generated remote files found"
             exit 1
           fi
@@ -378,8 +385,8 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Disabled until the workflow token can publish to the @nightscout GitHub Packages scope.
-  # publish-glucose-chart:
+  # Disabled until the workflow token can publish to the @nocturne GitHub Packages scope.
+  # publish-charts:
   #   needs: [dotnet-images, web-image]
   #   runs-on: ubuntu-latest
   #   if: github.ref == 'refs/heads/main'
@@ -395,18 +402,18 @@ jobs:
   #       with:
   #         node-version: ${{ env.NODE_VERSION }}
   #         registry-url: 'https://npm.pkg.github.com'
-  #         scope: '@nightscout'
+  #         scope: '@nocturne'
   #     - name: Install dependencies
   #       run: pnpm install --frozen-lockfile
   #       working-directory: src/Web
-  #     - name: Publish @nightscout/glucose-chart
-  #       working-directory: src/Web/packages/glucose-chart
+  #     - name: Publish @nocturne/charts
+  #       working-directory: src/Web/packages/charts
   #       env:
   #         NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   #       run: |
   #         version=$(node -p "require('./package.json').version")
-  #         if npm view "@nightscout/glucose-chart@${version}" version > /dev/null 2>&1; then
-  #           echo "@nightscout/glucose-chart@${version} already published; skipping."
+  #         if npm view "@nocturne/charts@${version}" version > /dev/null 2>&1; then
+  #           echo "@nocturne/charts@${version} already published; skipping."
   #         else
   #           pnpm publish --access public --no-git-checks
   #         fi

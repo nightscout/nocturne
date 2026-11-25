@@ -23,10 +23,11 @@ public static class DemoSessionLimits
     /// Sized for concurrent real visitors, not for one visitor: the account is shared, so a trimmed
     /// session belongs to someone who has almost certainly left. Reaching the cap displaces the
     /// oldest rather than refusing the newest, because refusing would make the demo unusable for
-    /// everyone as soon as it filled — and displacing costs little, because the access token is a
-    /// self-contained JWT with no revocation check. A visitor whose refresh row is trimmed is not
-    /// signed out mid-page; they lose only their next refresh, at which point the login page signs
-    /// them straight back in.
+    /// everyone as soon as it filled. Displacing costs little, because the access token is a
+    /// self-contained JWT, and a read does not check its session. A visitor whose
+    /// refresh row is trimmed keeps reading until that token expires, but can mint no credential in
+    /// that time, since a credential is minted only for a caller whose session is live; their next
+    /// refresh fails, at which point the login page signs them straight back in.
     /// </remarks>
     public const int MaxLiveSessions = 50;
 }

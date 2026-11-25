@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
@@ -28,9 +28,8 @@ internal static class WritingEntryService
         config.Setup(c => c.GetPreferredProcessingAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync((GlucoseProcessing?)null);
 
-        var decomposer = new EntryDecomposer(
-            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
-            Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
+        var decomposer = EntryDecomposerDoubles.Build(
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object), audit: audit);
 
         return new EntryService(
             Mock.Of<IEntryStore>(), decomposer, Mock.Of<IEntryCache>(), NullLogger<EntryService>.Instance);

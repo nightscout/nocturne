@@ -1,6 +1,7 @@
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Interfaces;
@@ -72,11 +73,31 @@ public interface ITreatmentPublisher
         DateTime to,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="ITreatmentService.GetOpenSpansFromSourceAsync"/>
+    Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(
+        string source,
+        StoredTreatmentKey? after,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The stored id of each live carb intake held under one of <paramref name="legacyIds"/>, keyed by
+    /// legacy id. A legacy id no live row holds is absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(
+        IReadOnlyCollection<string> legacyIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Publishes treatments a source may already have delivered: one never stored is created, and
     /// one the source has changed since it was stored is written again. Nothing the user deleted
     /// comes back.
     /// </summary>
+    /// <remarks>
+    /// A changed override or temporary target is written onto its state span in place, which settles
+    /// the spans around it. One whose span was stored with no fingerprint of the source is taken as
+    /// it stands. A stored profile switch is never written again.
+    /// </remarks>
     /// <returns>How many were written, or null when the write failed.</returns>
     Task<int?> PublishRecentTreatmentsAsync(
         IEnumerable<Treatment> treatments,

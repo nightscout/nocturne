@@ -80,7 +80,7 @@ public class ActivityDecomposerFixedQueryTests : IDisposable
         _contextOpens = 0;
         var decomposer = new ActivityDecomposer(
             new ActivityRecordRepository(new CountingContexts(new TestNocturneDbContextFactory(_context), () => _contextOpens++), TimeProvider.System),
-            _spans.Object, Mock.Of<ISleepService>(), NullLogger<ActivityDecomposer>.Instance);
+            _spans.Object, Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
         await decomposer.DecomposeBatchAsync(activities, WriteOrigin.Live);
         return _spans.Invocations.Count + _contextOpens;
     }

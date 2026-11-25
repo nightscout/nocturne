@@ -212,7 +212,6 @@ public class RecentActivityPublishTests : IDisposable
         Mock.Of<ITenantOwnerResolver>(),
         Mock.Of<ITenantAccessor>(),
         new ActivityDedupRepository(_context.AsFactory()),
-        new ConnectorConfigurationRepository(_context.AsFactory()),
         Mock.Of<IProfileActivationRepository>(),
         new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
         Mock.Of<IAuditContext>(),

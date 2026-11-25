@@ -13,12 +13,15 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
 /// <summary>
-/// The sweep closes a connection whose credential no longer covers what it connected with, and
-/// one connection it cannot check, or cannot close, never stops it checking the rest.
+/// The sweep closes a connection whose credential no longer covers what it connected with, keeps one
+/// it cannot check for a failure of the database until the next sweep, and closes one it cannot
+/// check for any other reason. One connection it cannot check, or cannot close, never stops it
+/// checking the rest.
 /// </summary>
 [Trait("Category", "Unit")]
 public class HubConnectionRevalidatorTests
@@ -145,18 +148,56 @@ public class HubConnectionRevalidatorTests
         connection.Verify(c => c.Abort(), Times.Once);
     }
 
-    [Fact]
-    public async Task A_connection_that_throws_does_not_stop_the_sweep()
+    private Mock<HubCallerContext> TrackedFailing(Exception failure)
     {
-        var throwing = new Mock<HubCallerContext>();
-        throwing.SetupGet(c => c.ConnectionId).Returns("throwing");
-        throwing.SetupGet(c => c.Items).Throws(new InvalidOperationException());
-        _revalidator.Track(throwing.Object);
+        var failing = new Mock<HubCallerContext>();
+        failing.SetupGet(c => c.ConnectionId).Returns("failing");
+        failing.SetupGet(c => c.Items).Throws(failure);
+        _revalidator.Track(failing.Object);
+        return failing;
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task A_connection_whose_check_fails_in_the_database_is_kept_and_the_next_is_still_checked(
+        Exception failure)
+    {
+        var failing = TrackedFailing(failure);
         var next = Tracked("next", Member(false, Scope.GlucoseRead));
 
         await _revalidator.RevalidateAsync(CancellationToken.None);
+        await _revalidator.RevalidateAsync(CancellationToken.None);
 
+        failing.Verify(c => c.Abort(), Times.Never);
+        failing.VerifyGet(c => c.Items, Times.Exactly(2));
         next.Verify(c => c.Abort(), Times.Once);
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task A_connection_whose_check_fails_unexpectedly_is_closed_and_the_next_is_still_checked(
+        Exception failure)
+    {
+        var failing = TrackedFailing(failure);
+        var next = Tracked("next", Member(false, Scope.GlucoseRead));
+
+        await _revalidator.RevalidateAsync(CancellationToken.None);
+        await _revalidator.RevalidateAsync(CancellationToken.None);
+
+        failing.Verify(c => c.Abort(), Times.Once);
+        next.Verify(c => c.Abort(), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_sweep_cancelled_by_its_own_token_stops()
+    {
+        TrackedFailing(new OperationCanceledException());
+        using var stopping = new CancellationTokenSource();
+        stopping.Cancel();
+
+        var sweep = () => _revalidator.RevalidateAsync(stopping.Token);
+
+        await sweep.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]

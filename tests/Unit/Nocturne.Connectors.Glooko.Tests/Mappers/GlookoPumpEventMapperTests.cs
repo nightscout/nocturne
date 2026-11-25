@@ -24,7 +24,7 @@ public class GlookoPumpEventMapperTests
         var timeMapper = new GlookoTimeMapper(config, NullLogger.Instance);
         if (timeline is not null)
             timeMapper.UseTimeline(timeline);
-        return new GlookoPumpEventMapper(ConnectorSource, timeMapper, NullLogger.Instance, TimeProvider.System);
+        return new GlookoPumpEventMapper(ConnectorSource, timeMapper, NullLogger.Instance);
     }
 
     private static GlookoPumpEvent Evt(string? type, string? ts = "2026-03-18T00:03:12.000Z",
@@ -39,7 +39,6 @@ public class GlookoPumpEventMapperTests
         result.EventType.Should().Be(DeviceEventType.ReservoirChange);
         result.SyncIdentifier.Should().Be("glooko_event_abc");
         result.LegacyId.Should().Be("glooko_event_abc");
-        result.DataSource.Should().Be(ConnectorSource);
         result.Notes.Should().Be("reservoir_change");
     }
 

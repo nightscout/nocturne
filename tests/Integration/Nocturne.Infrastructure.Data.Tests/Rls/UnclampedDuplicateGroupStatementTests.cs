@@ -62,8 +62,8 @@ public class UnclampedDuplicateGroupStatementTests : IAsyncLifetime
         await store.Context.RestoreDeletedGroupAsync<NoteEntity>(recent, nameof(Note));
 
         store.Recorder.All.Should().HaveCount(
-            11,
-            "the row, the group lock, two reads of links, the deleted copies, the key check, one batch of updates, "
+            12,
+            "the row, the group read and lock, two reads of links, the deleted copies, the key check, one batch of updates, "
             + "then the repick's link read, lock, primaries and live rows");
         store.ShouldNotTouchTheClamp();
     }

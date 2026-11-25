@@ -9,10 +9,11 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for global MyFitnessPal matching settings.
+/// MyFitnessPal matching settings for the tenant. Read the settings, and save them.
 /// </summary>
 /// <seealso cref="IMyFitnessPalMatchingSettingsService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("MyFitnessPal Settings")]
 [Tags("Profiles")]
 [Route("api/v4/connectors/myfitnesspal/settings")]
 [RequireScope(Scope.TenantSettings)]

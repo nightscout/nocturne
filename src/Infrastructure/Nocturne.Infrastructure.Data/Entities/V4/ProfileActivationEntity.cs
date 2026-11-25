@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -9,12 +10,17 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// </summary>
 [Table("profile_activations")]
 public class ProfileActivationEntity
-    : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IWriteBackTracked
+    : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IUpstreamFingerprinted, IWriteBackSent
 {
     /// <inheritdoc />
     [AuditIgnored]
     [Column("written_live")]
     public bool WrittenLive { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("write_back_sent_fingerprint")]
+    public string? WriteBackSentFingerprint { get; set; }
 
     [Column("end_timestamp")]
     public DateTime? EndTimestamp { get; set; }
@@ -28,7 +34,7 @@ public class ProfileActivationEntity
     public string Origin { get; set; } = null!;
 
     [Column("base_profile_name")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.ProfileName)]
     public string BaseProfileName { get; set; } = null!;
 
     [Column("percentage")]
@@ -62,7 +68,7 @@ public class ProfileActivationEntity
     public string? EndedBy { get; set; }
 
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     [Column("device_id")]

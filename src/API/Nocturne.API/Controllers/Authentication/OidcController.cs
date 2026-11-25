@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -18,8 +19,8 @@ using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 namespace Nocturne.API.Controllers.Authentication;
 
 /// <summary>
-/// Controller for OIDC authentication flows.
-/// Handles login initiation, OAuth callback, logout, session management, and identity linking.
+/// Sign-in with an external OpenID Connect provider. A caller can list the configured providers, sign in,
+/// link and unlink provider identities, refresh the session, log out, and read the current session.
 /// </summary>
 /// <remarks>
 /// This controller orchestrates the full OIDC lifecycle:
@@ -37,6 +38,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// <seealso cref="OidcOptions"/>
 [ApiController]
 [Route("api/auth/oidc")]
+[System.ComponentModel.DisplayName("OIDC Sign-In")]
 [Tags("Authentication")]
 public class OidcController : ControllerBase
 {
@@ -45,6 +47,7 @@ public class OidcController : ControllerBase
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
     private readonly ITenantMemberService _tenantMemberService;
+    private readonly RecoverySession _recoverySession;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcController> _logger;
@@ -58,6 +61,7 @@ public class OidcController : ControllerBase
         ISubjectService subjectService,
         IAuthAuditService auditService,
         ITenantMemberService tenantMemberService,
+        RecoverySession recoverySession,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcController> logger
@@ -68,6 +72,7 @@ public class OidcController : ControllerBase
         _subjectService = subjectService;
         _auditService = auditService;
         _tenantMemberService = tenantMemberService;
+        _recoverySession = recoverySession;
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
         _logger = logger;
@@ -146,7 +151,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Handle OIDC callback from provider.
-    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page, and a missing <c>code</c> or <c>state</c> returns 400.
+    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page with the reason (or back to the tenant-creation or join link the sign-in started from), and a missing <c>code</c> or <c>state</c> returns 400.
     /// </summary>
     /// <param name="code">Authorization code from provider.</param>
     /// <param name="state">State parameter for CSRF verification.</param>
@@ -155,8 +160,8 @@ public class OidcController : ControllerBase
     /// <returns>Redirect to return URL with session cookie set.</returns>
     /// <remarks>
     /// Flow: verifies state cookie against the state parameter, exchanges code for tokens
-    /// via <see cref="IOidcAuthService.HandleCallbackAsync"/>, sets session cookies, and
-    /// logs an <see cref="AuthAuditEventType.Login"/> audit event.
+    /// via <see cref="IOidcAuthService.HandleCallbackAsync"/>, whose <see cref="SignInCompletion"/>
+    /// writes the <see cref="AuthAuditEventType.Login"/> row, then sets the cookies the outcome calls for.
     /// On failure, logs <see cref="AuthAuditEventType.FailedAuth"/> and redirects to the error page.
     /// </remarks>
     /// <response code="302">Redirect to return URL on success, or error page on failure.</response>
@@ -215,21 +220,21 @@ public class OidcController : ControllerBase
             code,
             state,
             expectedState,
-            GetClientIpAddress(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent,
-            currentTenantId
+            currentTenantId,
+            Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]
         );
 
+        // The sign-in outcome reaches here flattened into the result; the outcomes rebuilt from it
+        // below only say which cookies to write.
         if (result.StepUpToken is { } stepUpToken)
         {
             Response.SetTotpStepUpCookie(stepUpToken, _options);
-            SetLastSignInCookie(result.ProviderId);
-
-            // Not a completed login, so not a successful one; the success row is written when the
-            // second factor lands.
-            await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-                detailsJson: JsonSerializer.Serialize(new { method = "oidc", secondFactorPending = true }));
+            await HttpContext.ApplySignInAsync(
+                new SignInOutcome.SecondFactorRequired(
+                    result.SubjectId!.Value, stepUpToken, SignInMethod.Oidc, result.ProviderId),
+                _options);
 
             return Redirect(
                 $"/auth/login?returnUrl={Uri.EscapeDataString(result.ReturnUrl ?? "/")}");
@@ -242,13 +247,15 @@ public class OidcController : ControllerBase
             // when the tenant allows access requests.
             if (result.IsAccessDenied)
             {
-                // CompleteLoginAsync has already logged the denial with the tenant id.
-                await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
-                    ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-                    errorMessage: "not_a_member",
-                    detailsJson: JsonSerializer.Serialize(new { method = "oidc", reason = "not_a_member" }));
+                if (!result.RefusalAudited)
+                {
+                    await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
+                        ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
+                        errorMessage: "not_a_member",
+                        detailsJson: NotAMemberDetails(result));
+                }
 
-                return RedirectToLogin();
+                return RedirectToRefusal(result);
             }
 
             _logger.LogWarning(
@@ -258,7 +265,7 @@ public class OidcController : ControllerBase
             );
 
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: result.ErrorDescription,
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc" }));
 
@@ -268,17 +275,17 @@ public class OidcController : ControllerBase
             );
         }
 
-        // Set session cookies
-        SetSessionCookies(result.Tokens!);
-        SetLastSignInCookie(result.ProviderId);
-
-        await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-            detailsJson: JsonSerializer.Serialize(new { method = "oidc" }));
+        var tokens = result.Tokens!;
+        await HttpContext.ApplySignInAsync(
+            new SignInOutcome.SignedIn(
+                new SessionTokenPair(tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresIn, tokens.SubjectId),
+                result.UsedTrustedDevice,
+                SignInMethod.Oidc,
+                result.ProviderId),
+            _options);
 
         _logger.LogInformation(
-            "OIDC login successful for user {Name} (subject: {SubjectId})",
-            result.UserInfo?.Name,
+            "OIDC login successful for subject {SubjectId}",
             result.Tokens?.SubjectId
         );
 
@@ -306,6 +313,9 @@ public class OidcController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
             return Unauthorized(new { error = "not_authenticated", message = "Authentication required" });
 
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
+
         if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
 
@@ -330,11 +340,71 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Handle the OIDC link callback. Verifies the authorization code against the IdP,
-    /// then attaches the external identity to the currently-authenticated subject.
-    /// Does NOT issue new session cookies.
+    /// Starts linking an identity provider under a recovery session, as that session's one enrolment. Answers the provider's authorisation URL for the browser to open; the provider returns to the link callback.
     /// </summary>
+    /// <remarks>
+    /// A POST, not a GET, because the recovery cookie is SameSite=Lax (<see cref="RecoverySession"/>)
+    /// and rides a cross-site top-level GET: a GET start would let another site begin a link while
+    /// the browser holds an identity-provider session the other site chose.
+    /// </remarks>
+    [HttpPost("recovery/link")]
+    [AllowAnonymous]
+    [AllowDuringSetup]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(OidcRecoveryLinkResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<OidcRecoveryLinkResponse>> StartRecoveryLink([FromBody] OidcRecoveryLinkRequest request)
+    {
+        if (!string.IsNullOrEmpty(request.ReturnUrl) && !_baseDomain.IsValidReturnUrl(request.ReturnUrl))
+            return Problem(detail: "Invalid return URL", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+
+        var subjectId = await _recoverySession.ReadSubjectAsync(HttpContext, HttpContext.RequestAborted);
+        if (subjectId is null)
+            return Problem(detail: "A recovery session is required", statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized");
+
+        OidcAuthorizationRequest authRequest;
+        try
+        {
+            // The slug of the host, not of the resolved tenant: the apex relay sends the callback
+            // to that subdomain, and the apex of a single-tenant install serves no subdomain.
+            authRequest = await _authService.GenerateRecoveryLinkAuthorizationUrlAsync(
+                request.ProviderId, subjectId.Value, request.ReturnUrl,
+                SubdomainParser.Extract(Request.Host.Host, _baseDomain.BaseDomain));
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate a recovery link authorization URL");
+            return Problem(detail: "This provider is not available", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+        }
+
+        SetLinkStateCookie(authRequest.State, authRequest.ExpiresAt);
+        return Ok(new OidcRecoveryLinkResponse { AuthorizationUrl = authRequest.AuthorizationUrl });
+    }
+
+    /// <summary>
+    /// Handle the OIDC link callback. Verifies the authorisation code against the IdP, then attaches the external identity to the currently-authenticated subject, or under a recovery session to that session's subject. Does NOT issue new session cookies.
+    /// </summary>
+    /// <remarks>
+    /// The two kinds of state are not interchangeable: a link state completes only with a signed-in
+    /// session, and a recovery state only with the recovery session it was started under
+    /// (<see cref="OidcAuthService.AttachVerifiedIdentityAsync"/>). A recovery link spends the
+    /// session and then sends the browser through the ordinary sign-in with the provider just
+    /// linked, so the member arrives signed in through that sign-in's own checks, second factor
+    /// included. Its return URL names the identity added, so the page can offer to remove older
+    /// sign-in methods; an identity the account already had was not added and is not named, but
+    /// still ends the session. A refused link, such as an identity already linked to someone else, leaves
+    /// the session usable.
+    /// <para>
+    /// Anonymous and allowed during setup because the recovery session is a cookie, not an auth
+    /// context, and is used most when the site is in recovery mode. The link branch refuses an
+    /// unauthenticated caller in its body.
+    /// </para>
+    /// </remarks>
     [HttpGet("link/callback")]
+    [AllowAnonymous]
+    [AllowDuringSetup]
     [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
@@ -345,12 +415,22 @@ public class OidcController : ControllerBase
         [FromQuery] string? error,
         [FromQuery] string? error_description)
     {
+        if (!string.IsNullOrEmpty(state) && _authService.IsRecoveryState(state))
+            return await RecoveryLinkCallbackAsync(code, state, error, error_description);
+
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
         {
-            // Session expired mid-flow: the link-state cookie is useless without a session, so clear it.
             ClearLinkStateCookie();
             return Redirect("/auth/login?returnUrl=/settings/account");
+        }
+
+        // An ended session's access token still reads as signed in to the login page, which would
+        // send the person straight back to settings, so it is told to sign in again instead.
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+        {
+            ClearLinkStateCookie();
+            return RedirectToError("callback_failed", "Your session has ended. Sign in again.");
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -376,13 +456,13 @@ public class OidcController : ControllerBase
         var result = await _authService.HandleLinkCallbackAsync(
             code, state, expectedState,
             auth.SubjectId.Value,
-            GetClientIpAddress(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent);
 
         if (!result.Success)
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, auth.SubjectId, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: result.ErrorDescription,
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc_link" }));
 
@@ -390,7 +470,7 @@ public class OidcController : ControllerBase
         }
 
         await _auditService.LogAsync(AuthAuditEventType.OidcIdentityLinked, auth.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
             detailsJson: JsonSerializer.Serialize(new { identityId = result.IdentityId }));
 
         _logger.LogInformation(
@@ -401,6 +481,56 @@ public class OidcController : ControllerBase
         var separator = returnUrl.Contains('?') ? '&' : '?';
         return Redirect($"{returnUrl}{separator}linked=success");
     }
+
+    private async Task<IActionResult> RecoveryLinkCallbackAsync(
+        string? code, string state, string? error, string? errorDescription)
+    {
+        ClearLinkStateCookie();
+        if (!string.IsNullOrEmpty(error))
+        {
+            _logger.LogWarning("OIDC provider returned error on recovery link callback: {Error}", error);
+            return RedirectToError(error, errorDescription ?? "Link failed", fromRecovery: true);
+        }
+
+        var expectedState = Request.Cookies[_options.Cookie.LinkStateCookieName];
+        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(expectedState))
+            return RedirectToError("invalid_state", "Link state not found. Start the link again.", fromRecovery: true);
+
+        var enrolment = await _recoverySession.EnrolAsync(
+            HttpContext,
+            (subjectId, _) => _authService.HandleRecoveryLinkCallbackAsync(code, state, expectedState, subjectId),
+            result => result.Success,
+            HttpContext.RequestAborted);
+
+        if (enrolment is not { State: RecoveryEnrolmentState.Enrolled, Result: { } linked, SubjectId: { } subjectId })
+        {
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
+                ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
+                errorMessage: enrolment.Result?.ErrorDescription ?? "recovery_session_required",
+                detailsJson: JsonSerializer.Serialize(new { method = "oidc_recovery_link" }));
+
+            return enrolment.Result is { } refused
+                ? RedirectToError(refused.Error ?? "link_failed", refused.ErrorDescription ?? "Link failed", fromRecovery: true)
+                : RedirectToError("recovery_session_required", "The recovery session has ended. Start again.", fromRecovery: true);
+        }
+
+        await _auditService.LogAsync(AuthAuditEventType.OidcIdentityLinked, subjectId, success: true,
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
+            detailsJson: JsonSerializer.Serialize(new { identityId = linked.IdentityId, method = "recovery" }));
+
+        var returnUrl = linked.ReturnUrl ?? "/";
+        var separator = returnUrl.Contains('?') ? '&' : '?';
+        var signedInUrl = linked.Added
+            ? $"{returnUrl}{separator}{RecoveryLinkedIdentityParameter}={linked.IdentityId}"
+            : returnUrl;
+        return Redirect(
+            $"/api/auth/oidc/login?provider={linked.ProviderId}&returnUrl={Uri.EscapeDataString(signedInUrl)}");
+    }
+
+    /// <summary>
+    /// The query parameter a recovery link's return URL carries the new identity's id in.
+    /// </summary>
+    public const string RecoveryLinkedIdentityParameter = "linkedIdentity";
 
     /// <summary>
     /// List OIDC identities linked to the currently-authenticated subject.
@@ -476,7 +606,7 @@ public class OidcController : ControllerBase
             return this.FactorRemovalRefusal(result, "OIDC identity");
 
         await _auditService.LogAsync(AuthAuditEventType.OidcIdentityUnlinked, auth.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
             detailsJson: JsonSerializer.Serialize(new { identityId }));
 
         _logger.LogInformation(
@@ -517,7 +647,7 @@ public class OidcController : ControllerBase
 
         var result = await _authService.RefreshSessionAsync(
             refreshToken,
-            GetClientIpAddress(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent
         );
 
@@ -538,19 +668,19 @@ public class OidcController : ControllerBase
         SetSessionCookies(result);
 
         await _auditService.LogAsync(AuthAuditEventType.TokenRefreshed, result.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent);
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent);
 
         return Ok(result);
     }
 
     /// <summary>
-    /// Logout and revoke the session. Clears all session cookies and revokes the refresh token if one is present. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
+    /// Logout and end the session. Clears all session cookies and ends the session the presented refresh token belongs to and the session the caller is signed in with. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
     /// </summary>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional).</param>
     /// <returns>A <see cref="LogoutResponse"/> indicating success and an optional provider logout URL.</returns>
     /// <remarks>
     /// Clears all session cookies (access token, refresh token, IsAuthenticated).
-    /// If a refresh token is present, revokes it via <see cref="IOidcAuthService.LogoutAsync"/>.
+    /// Ends the session through <see cref="IOidcAuthService.LogoutAsync"/>.
     /// When <paramref name="providerId"/> is supplied and the provider supports RP-initiated logout,
     /// the response includes a <c>ProviderLogoutUrl</c> for the frontend to redirect to.
     /// </remarks>
@@ -561,23 +691,21 @@ public class OidcController : ControllerBase
     public async Task<ActionResult<LogoutResponse>> Logout([FromQuery] Guid? providerId = null)
     {
         var refreshToken = GetRefreshToken();
+        var authContext = HttpContext.GetAuthContext();
+        var signedIn = authContext is { SubjectId: { } subjectId, SessionId: { Length: > 0 } sessionId }
+            && CallerSessionLiveness.IsSessionCaller(authContext)
+                ? new RefreshTokenSession(subjectId, sessionId)
+                : null;
 
-        OidcLogoutResult result;
-        if (!string.IsNullOrEmpty(refreshToken))
-        {
-            result = await _authService.LogoutAsync(refreshToken, providerId);
-        }
-        else
-        {
-            result = OidcLogoutResult.Succeeded();
-        }
+        var result = string.IsNullOrEmpty(refreshToken) && signedIn is null
+            ? OidcLogoutResult.Succeeded()
+            : await _authService.LogoutAsync(refreshToken, signedIn, providerId);
 
         // Clear session cookies
         ClearSessionCookies();
 
-        var authContext = HttpContext.GetAuthContext();
         await _auditService.LogAsync(AuthAuditEventType.Logout, authContext?.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent);
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent);
 
         _logger.LogInformation("User logged out");
 
@@ -624,7 +752,9 @@ public class OidcController : ControllerBase
     /// <returns>A <see cref="SessionInfo"/> describing the current session state.</returns>
     /// <remarks>
     /// Returns <c>IsAuthenticated = false</c> for unauthenticated requests (does not return 401).
-    /// This allows the frontend to check auth status without triggering redirect logic.
+    /// This allows the frontend to check auth status without triggering redirect logic. A session
+    /// caller that a mint would refuse (<see cref="HttpContextExtensions.IsSessionCallerInactiveAsync"/>)
+    /// reads as not authenticated, so the web offers it the sign-in that the refusal asks for.
     /// </remarks>
     /// <response code="200">Session information (always returns 200).</response>
     [HttpGet("session")]
@@ -635,7 +765,8 @@ public class OidcController : ControllerBase
         [FromServices] ITenantService tenants, CancellationToken ct = default)
     {
         var authContext = HttpContext.GetAuthContext();
-        if (authContext == null || !authContext.IsAuthenticated)
+        if (authContext == null || !authContext.IsAuthenticated
+            || await HttpContext.IsSessionCallerInactiveAsync(ct))
         {
             return Ok(new SessionInfo { IsAuthenticated = false });
         }
@@ -673,6 +804,7 @@ public class OidcController : ControllerBase
                     : null,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
+                IsHandedOff = authContext.IsHandedOff,
                 AvatarUrl = userInfo?.AvatarUrl,
                 Grant = await MyPermissionsController.TryBuildAsync(HttpContext),
             }
@@ -699,10 +831,6 @@ public class OidcController : ControllerBase
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
 
-    private void SetLastSignInCookie(Guid? providerId) =>
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
-
     /// <summary>
     /// Get the refresh token from cookie or request body
     /// </summary>
@@ -720,27 +848,69 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Get the client IP address
-    /// </summary>
-    private string? GetClientIpAddress() =>
-        HttpContext.Connection.RemoteIpAddress?.ToString();
-
-    /// <summary>
     /// Redirect to an error page
     /// </summary>
-    private IActionResult RedirectToError(string error, string description)
+    /// <param name="error">The error code the page maps to its message.</param>
+    /// <param name="description">The fallback description.</param>
+    /// <param name="fromRecovery">
+    /// The failure came from linking a provider under a recovery session. A refused link leaves
+    /// that session usable, so the page offers the way back to it; a refusal carries the same
+    /// codes as an ordinary sign-in, so the code alone cannot tell the page.
+    /// </param>
+    private IActionResult RedirectToError(string error, string description, bool fromRecovery = false)
     {
         var returnUrl =
-            $"/auth/error?error={Uri.EscapeDataString(error)}&description={Uri.EscapeDataString(description)}";
+            $"/auth/error?error={Uri.EscapeDataString(error)}&description={Uri.EscapeDataString(description)}"
+            + (fromRecovery ? "&flow=recovery" : "");
         return Redirect(returnUrl);
     }
 
     /// <summary>
-    /// Redirect to the tenant login page. Used when an authenticated identity is denied because
-    /// it is not a member of the tenant; the login page surfaces the request-membership option
-    /// when the tenant allows access requests.
+    /// Sends back a person whose provider sign-in was refused. A sign-in that started from a
+    /// tenant-creation link or a join link returns to that link, whose page says why it cannot be
+    /// used. Any other goes to the login page with the refusal's reason, which it words for the host,
+    /// and the return URL; the page also surfaces the request-membership option when the tenant
+    /// allows access requests.
     /// </summary>
-    private IActionResult RedirectToLogin() => Redirect("/auth/login");
+    private IActionResult RedirectToRefusal(OidcCallbackResult refused)
+    {
+        var startedFromLink =
+            OidcAuthService.TokenFromReturnUrl(
+                refused.ReturnUrl,
+                ITenantCreationInviteService.StartPath,
+                ITenantCreationInviteService.TokenQueryParameter) != null
+            || OidcAuthService.TokenFromReturnUrl(
+                refused.ReturnUrl,
+                IMemberInviteService.JoinPath,
+                IMemberInviteService.TokenQueryParameter) != null;
+        if (startedFromLink)
+            return Redirect(refused.ReturnUrl!);
+
+        var login = $"/auth/login?reason={Uri.EscapeDataString(refused.Error!)}";
+        return Redirect(string.IsNullOrEmpty(refused.ReturnUrl)
+            ? login
+            : $"{login}&returnUrl={Uri.EscapeDataString(refused.ReturnUrl)}");
+    }
+
+    /// <summary>
+    /// Names the provider always. The person is the row's subject when there is one, else a digest
+    /// of the external identity, so the row never holds the identity itself.
+    /// </summary>
+    internal static string NotAMemberDetails(OidcCallbackResult result) =>
+        result.ExternalIdentityDigest is { } digest
+            ? JsonSerializer.Serialize(new
+            {
+                method = "oidc",
+                reason = "not_a_member",
+                providerId = result.ProviderId,
+                externalIdentityDigest = digest,
+            })
+            : JsonSerializer.Serialize(new
+            {
+                method = "oidc",
+                reason = "not_a_member",
+                providerId = result.ProviderId,
+            });
 
     #endregion
 }
@@ -777,6 +947,20 @@ public class OidcProviderInfo
     /// in which case the button keeps its themed style.
     /// </summary>
     public string? ButtonForegroundColor { get; set; }
+}
+
+/// <summary>The provider a recovery session links, and where to return after signing in with it.</summary>
+public class OidcRecoveryLinkRequest
+{
+    public Guid ProviderId { get; set; }
+
+    public string? ReturnUrl { get; set; }
+}
+
+/// <summary>The provider's authorisation URL, for the browser to open.</summary>
+public class OidcRecoveryLinkResponse
+{
+    public string AuthorizationUrl { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -870,6 +1054,13 @@ public class SessionInfo
     /// for the "platform admin access" indicator in the UI.
     /// </summary>
     public bool IsPlatformAccessGrant { get; set; }
+
+    /// <summary>
+    /// Whether this session was opened from a sign-in link someone else issued. It reads and writes
+    /// the member's data, but managing sign-in methods, credentials and sharing waits until the
+    /// member signs in on it, which the web offers up front.
+    /// </summary>
+    public bool IsHandedOff { get; set; }
 
     /// <summary>
     /// URL to the subject's avatar image

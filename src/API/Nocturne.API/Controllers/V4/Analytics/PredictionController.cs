@@ -10,11 +10,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Controller for glucose forecast predictions.
-/// Supports multiple prediction sources: <c>DeviceStatus</c> (AAPS/Trio/Loop loop data)
-/// or <c>OrefWasm</c> (server-side oref calculation).
+/// Glucose forecast predictions. Callers can read the current forecast, check the status of the
+/// prediction service, and read the therapy profile a device needs to run its own oref forecast.
 /// </summary>
 /// <remarks>
+/// Supports the <c>DeviceStatus</c> source (AAPS, Trio and Loop loop data) and the <c>OrefWasm</c>
+/// source (server-side oref calculation).
 /// The active prediction source is determined at startup from <c>Predictions:Source</c>
 /// in application configuration. If the source is <c>None</c> or no
 /// <see cref="IPredictionService"/> is registered, the endpoint returns <c>404 Not Found</c>
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="GlucosePredictionResponse"/>
 /// <seealso cref="PredictionStatusResponse"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Predictions")]
 [Tags("Analytics")]
 [Route("api/v4/predictions")]
 [Produces("application/json")]
@@ -61,6 +63,7 @@ public class PredictionController : ControllerBase
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 404)]
     [ProducesResponseType(typeof(ProblemDetails), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<GlucosePredictionResponse>> GetPredictions(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
@@ -84,11 +87,6 @@ public class PredictionController : ControllerBase
             // tenant on the default DeviceStatus source. Not a client fault.
             _logger.LogWarning(ex, "No prediction data available");
             return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting predictions");
-            return Problem(detail: "Failed to calculate predictions", statusCode: 500, title: "Internal Server Error");
         }
     }
 
@@ -135,20 +133,13 @@ public class PredictionController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSnapshotResponse), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ProfileSnapshotResponse>> GetProfileSnapshot(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = await _profileSnapshotService.BuildAsync(profileId, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error building profile snapshot for profile: {ProfileId}", profileId ?? "default");
-            return Problem(detail: "Failed to build profile snapshot", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await _profileSnapshotService.BuildAsync(profileId, cancellationToken);
+        return Ok(result);
     }
 }
 

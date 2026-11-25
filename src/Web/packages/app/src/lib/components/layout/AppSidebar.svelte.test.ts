@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { createQueryResource, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { flushIdle, resetIdle } from "#lib/test-stubs/when-idle.js";
+import { chartLineColorMode } from "#lib/stores/appearance-store.svelte.js";
 
 vi.mock("#lib/utils/when-idle.js", () => import("#lib/test-stubs/when-idle.js"));
 
@@ -153,7 +154,7 @@ describe("AppSidebar", () => {
     renderViewingBravo();
 
     await expect.element(page.getByText("Viewing data for")).toBeVisible();
-    await expect.element(link("Tenants")).toBeVisible();
+    await expect.element(link("People")).toBeVisible();
   });
 
   it("offers a single-tenant member no switcher and no Tenants item", async () => {
@@ -168,7 +169,7 @@ describe("AppSidebar", () => {
 
     await expect.element(link("Dashboard")).toBeVisible();
     await expect.element(page.getByText("Viewing data for")).not.toBeInTheDocument();
-    await expect.element(link("Tenants")).not.toBeInTheDocument();
+    await expect.element(link("People")).not.toBeInTheDocument();
   });
 
   it("reads the Do not disturb state the first time the alerts group opens", async () => {
@@ -246,6 +247,22 @@ describe("AppSidebar", () => {
         expect.objectContaining({ dndManualActive: true, dndScheduleEnabled: true }),
       ),
     );
+  });
+
+  it("draws the glucose sparkline in the viewer's line colour mode", async () => {
+    chartLineColorMode.current = "threshold";
+    try {
+      const { container } = render(Harness, {});
+
+      await vi.waitFor(() => {
+        const stopColors = [...container.querySelectorAll("linearGradient stop")].map(
+          (stop) => stop.getAttribute("stop-color")
+        );
+        expect(stopColors).toContain("var(--glucose-in-range)");
+      });
+    } finally {
+      chartLineColorMode.current = "continuous";
+    }
   });
 
   describe("Do not disturb indicator", () => {

@@ -1,111 +1,221 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
 /// <summary>
-/// The sign-in step every token connector runs before it fetches, and the re-authentication it hands
-/// its retry loop on a 401.
+/// The sign-in step every token connector runs before its sync, and the re-authentication the sync
+/// hands its retry loop on a 401.
 /// </summary>
 public class TokenConnectorServiceTests
 {
     [Fact]
-    public async Task ValidToken_SignInRefused_RecordsTheProvidersReasonForTheFailedResult()
+    public async Task Sync_SignInRefused_FailsWithTheProvidersReasonAndNeverRunsTheSync()
     {
         var provider = new ScriptedTokenProvider(refuse: true, tokens: [null]);
         var service = new ProbeService(provider);
 
-        var token = await service.ValidToken();
-        var result = service.Failed();
+        var result = await service.RunAsync();
 
-        token.Should().BeNull();
         provider.SignInFailureReason.Should().Contain("did not accept this sign-in");
         result.Success.Should().BeFalse();
         result.Message.Should().Be(provider.SignInFailureReason);
         result.Errors.Should().ContainSingle().Which.Should().Be(provider.SignInFailureReason);
+        service.SyncRan.Should().BeFalse();
     }
 
     [Fact]
-    public async Task ValidToken_EmptyToken_IsAFailedSignIn()
+    public async Task Sync_EmptyToken_IsAFailedSignInAndNeverRunsTheSync()
     {
         var provider = new ScriptedTokenProvider(refuse: false, tokens: [""]);
         var service = new ProbeService(provider);
 
-        var token = await service.ValidToken();
+        var result = await service.RunAsync();
 
-        token.Should().BeNull();
-        service.Failed().Message.Should().Be(provider.SignInFailureReason);
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be(provider.SignInFailureReason);
+        service.SyncRan.Should().BeFalse();
     }
 
     [Fact]
-    public async Task ValidToken_SignInSucceeds_PassesTheTokenThroughAndRecordsNothing()
+    public async Task Sync_SignInSucceeds_HandsTheSyncTheTokenAfterOneSignIn()
     {
         var provider = new ScriptedTokenProvider(refuse: false, tokens: ["token-1"]);
         var service = new ProbeService(provider);
 
-        var token = await service.ValidToken();
+        var result = await service.RunAsync();
 
-        token.Should().Be("token-1");
-        service.Failed().Message.Should().Be("Authentication failed", "no sign-in failure was recorded");
+        result.Success.Should().BeTrue();
+        service.Failed().Message.Should().Be("Authentication failed");
+        service.TokenSeen.Should().Be("token-1");
+        provider.Acquired.Should().Be(1);
     }
 
     [Fact]
-    public async Task ReauthenticateWith_DropsTheRefusedTokenAndHandsTheCallerANewOne()
+    public async Task Sync_PreparesBeforeTheSignIn()
+    {
+        var provider = new ScriptedTokenProvider(refuse: false, tokens: ["token-1"]);
+        var service = new ProbeService(provider);
+
+        await service.RunAsync();
+
+        service.AcquiredWhenPrepared.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Sync_NoSignInNeeded_SkipsPrepareAndSignInAndRunsTheSync()
+    {
+        var provider = new ScriptedTokenProvider(refuse: false, tokens: []);
+        var service = new ProbeService(provider) { SignIn = false };
+
+        var result = await service.RunAsync();
+
+        result.Success.Should().BeTrue();
+        service.SyncRan.Should().BeTrue();
+        service.AcquiredWhenPrepared.Should().BeNull();
+        provider.Acquired.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Session_NoSignInNeeded_RefusesToYieldATokenOrSignInAgain()
+    {
+        var provider = new ScriptedTokenProvider(refuse: false, tokens: []);
+        var service = new ProbeService(provider) { SignIn = false };
+
+        await service.RunAsync();
+
+        var token = () => service.Session!.Token;
+        var reauthenticate = () => service.Session!.ReauthenticateAsync();
+        token.Should().Throw<InvalidOperationException>();
+        await reauthenticate.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Reauthenticate_DropsTheRefusedTokenAndHandsTheSyncANewOne()
     {
         var provider = new ScriptedTokenProvider(refuse: false, tokens: ["old-token", "new-token"]);
         var service = new ProbeService(provider);
-        var current = await service.ValidToken();
+        await service.RunAsync();
 
-        var reauthenticated = await service.Reauthenticate(t => current = t)();
+        var reauthenticated = await service.Session!.ReauthenticateAsync();
 
         reauthenticated.Should().BeTrue();
-        current.Should().Be("new-token");
+        service.Session.Token.Should().Be("new-token");
         provider.Acquired.Should().Be(2, "the cached token the source refused must not be served again");
     }
 
     [Fact]
-    public async Task ReauthenticateWith_SignInFails_KeepsTheOldTokenAndReportsFailure()
+    public async Task Reauthenticate_SignInFails_KeepsTheOldTokenAndRecordsTheReason()
     {
-        var provider = new ScriptedTokenProvider(refuse: false, tokens: ["old-token", null]);
+        var provider = new ScriptedTokenProvider(refuse: true, tokens: ["old-token", null]);
         var service = new ProbeService(provider);
-        var current = await service.ValidToken();
+        await service.RunAsync();
 
-        var reauthenticated = await service.Reauthenticate(t => current = t)();
+        var reauthenticated = await service.Session!.ReauthenticateAsync();
 
         reauthenticated.Should().BeFalse();
-        current.Should().Be("old-token");
+        service.Session.Token.Should().Be("old-token");
         provider.Acquired.Should().Be(2);
+        service.Failed().Message.Should().Be(provider.SignInFailureReason);
     }
 
-    /// <summary>Exposes the protected steps; never runs a sync.</summary>
-    private sealed class ProbeService(ScriptedTokenProvider provider)
+    [Fact]
+    public async Task ScheduledSync_GlucosePointThatCannotBeRead_FailsBeforeThePrepareAndTheSignIn()
+    {
+        var provider = new ScriptedTokenProvider(refuse: false, tokens: ["token-1"]);
+        var service = new ProbeService(provider, GlucoseReadThat(fails: true).Object) { ResumesFromGlucose = true };
+
+        var result = await service.RunScheduledAsync();
+
+        result.Success.Should().BeFalse();
+        service.AcquiredWhenPrepared.Should().BeNull();
+        provider.Acquired.Should().Be(0);
+        service.SyncRan.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Sync_NoSignInNeeded_ReadsNoResumePoint()
+    {
+        var publisher = GlucoseReadThat(fails: false);
+        var service = new ProbeService(new ScriptedTokenProvider(refuse: false, tokens: []), publisher.Object)
+        {
+            SignIn = false,
+            ResumesFromGlucose = true,
+        };
+
+        var result = await service.RunScheduledAsync();
+
+        result.Success.Should().BeTrue();
+        publisher.Verify(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private static Mock<IConnectorPublisher> GlucoseReadThat(bool fails)
+    {
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        var read = publisher.Setup(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()));
+        if (fails)
+            read.ThrowsAsync(new HttpRequestException("watermark store down"));
+        else
+            read.ReturnsAsync(DateTime.UtcNow);
+        return publisher;
+    }
+
+    /// <summary>Runs the base's gate over a sync that records what it was handed.</summary>
+    private sealed class ProbeService(ScriptedTokenProvider provider, IConnectorPublisher? publisher = null)
         : TokenConnectorService<TestConnectorConfig, ScriptedTokenProvider>(
             new HttpClient(),
             new ConnectorServerResolver<TestConnectorConfig>(null, null, null),
             NullLogger<ProbeService>.Instance,
             new RecordingRetryDelayStrategy(),
-            provider)
+            provider,
+            publisher)
     {
         private readonly TestConnectorConfig _config = new();
+
+        public bool SignIn { get; init; } = true;
+        public bool ResumesFromGlucose { get; init; }
+        public bool SyncRan { get; private set; }
+        public string? TokenSeen { get; private set; }
+        public int? AcquiredWhenPrepared { get; private set; }
+        public TokenSession? Session { get; private set; }
 
         protected override string ConnectorSource => "probe";
         public override string ServiceName => "Probe";
 
-        public Task<string?> ValidToken() => ValidTokenAsync(_config, CancellationToken.None);
+        public Task<SyncResult> RunAsync() => SyncDataAsync(new SyncRequest(), _config, CancellationToken.None);
+
+        public Task<SyncResult> RunScheduledAsync() => SyncDataAsync(_config, CancellationToken.None);
 
         public SyncResult Failed() => AuthenticationFailedResult();
 
-        public Func<Task<bool>> Reauthenticate(Action<string> useToken) =>
-            ReauthenticateWith(_config, useToken, CancellationToken.None);
+        protected override bool NeedsSignIn(SyncRequest request, TestConnectorConfig config) => SignIn;
 
-        protected override Task<SyncResult> PerformSyncInternalAsync(
-            SyncRequest request, TestConnectorConfig config, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TestConnectorConfig config) =>
+            ResumesFromGlucose ? [ResumeFamily.Glucose] : [];
+
+        protected override Task PrepareSignInAsync(TestConnectorConfig config, CancellationToken cancellationToken)
+        {
+            AcquiredWhenPrepared = provider.Acquired;
+            return Task.CompletedTask;
+        }
+
+        protected override Task<SyncResult> SyncWithTokenAsync(
+            SyncRequest request, TestConnectorConfig config, TokenSession session, CancellationToken cancellationToken)
+        {
+            SyncRan = true;
+            Session = session;
+            if (SignIn)
+                TokenSeen = session.Token;
+            return Task.FromResult(new SyncResult { Success = true });
+        }
     }
 
     /// <summary>Hands out <paramref name="tokens"/> in order, one per acquisition.</summary>
@@ -114,7 +224,7 @@ public class TokenConnectorServiceTests
             new HttpClient(),
             new ConnectorTokenCache(),
             new ConnectorServerResolver<TestConnectorConfig>(null, null, null),
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<ScriptedTokenProvider>.Instance,
             new RecordingRetryDelayStrategy())
     {
@@ -133,12 +243,5 @@ public class TokenConnectorServiceTests
                 (token, DateTime.UtcNow.AddHours(1), null));
         }
 
-        private static ITenantAccessor ResolvedTenant()
-        {
-            var accessor = new Mock<ITenantAccessor>();
-            accessor.Setup(a => a.IsResolved).Returns(true);
-            accessor.Setup(a => a.TenantId).Returns(Guid.NewGuid());
-            return accessor.Object;
-        }
     }
 }

@@ -46,12 +46,9 @@ public class ActivityBatchStatementsTests(ApiIntegrationTestFixture fixture, ITe
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
         await DecomposedRows.TruncateAsync(conn, ["heart_rates", "step_counts"]);
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", Fixture.TenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)",
+            ("tid", Fixture.TenantId.ToString()));
 
         var recorder = new StatementRecorder();
         await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -59,7 +56,7 @@ public class ActivityBatchStatementsTests(ApiIntegrationTestFixture fixture, ITe
             .AddInterceptors(recorder)
             .Options) { TenantId = Fixture.TenantId };
         var decomposer = new ActivityDecomposer(
-            new ActivityRecordRepository(new TestNocturneDbContextFactory(context), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(),
+            new ActivityRecordRepository(new TestNocturneDbContextFactory(context), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System,
             NullLogger<ActivityDecomposer>.Instance);
 
         if (resend)

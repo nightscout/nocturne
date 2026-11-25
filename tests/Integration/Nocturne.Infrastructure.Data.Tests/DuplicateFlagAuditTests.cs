@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -8,6 +9,7 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -65,6 +67,35 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         (await MismatchesAsync(other)).Should().HaveCount(6, "the audit reads and writes its own tenant only");
         (await AuditAsync(audited)).Should().BeEmpty();
     }
+
+    /// <summary>
+    /// An audit announces once, after its repairs commit, the types whose flags it repaired, naming no
+    /// record: a repaired flag shows or hides a row, so it moves what reads return.
+    /// </summary>
+    [Fact]
+    public async Task An_audit_announces_the_types_it_repaired_once_and_a_clean_audit_nothing()
+    {
+        var tenant = await SeedTenantAsync();
+        await SeedDriftAsync(tenant);
+        var changes = new RecordingRecordChanges();
+
+        await using (var scope = Scope(tenant))
+            await Announcing(scope, changes).AuditDuplicateFlagsAsync();
+
+        var batch = changes.Batches.Should().ContainSingle().Subject;
+        batch.Changes.Select(c => c.RecordType).Should().BeEquivalentTo(
+            [typeof(Nocturne.Core.Models.V4.SensorGlucose), typeof(Nocturne.Core.Models.V4.Bolus), typeof(Nocturne.Core.Models.StateSpan)]);
+        batch.Changes.Should().OnlyContain(c => !c.HasRecords);
+
+        changes.Clear();
+        await using (var scope = Scope(tenant))
+            (await Announcing(scope, changes).AuditDuplicateFlagsAsync()).Should().BeEmpty();
+        changes.Batches.Should().BeEmpty("a clean audit repaired nothing");
+    }
+
+    private static DuplicateReconciler Announcing(AsyncServiceScope scope, RecordingRecordChanges changes) =>
+        new(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(),
+            NullLogger<DuplicateReconciler>.Instance, changes);
 
     /// <summary>
     /// One save stamps up to a thousand rows with one <c>sys_updated_at</c>, so page boundaries fall
@@ -148,7 +179,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, audit);
 
         await transaction.CommitAsync();
-        var drift = await audit.WaitAsync(TimeSpan.FromSeconds(30));
+        var drift = await audit.WaitAsync(Eventually.DefaultPatience);
 
         drift.Should().BeEquivalentTo(new[] { new DuplicateFlagDrift(RecordType.CarbIntake, 0, 1, 0) });
         (await FlaggedAsync(tenant, "carb_intakes")).Should().Equal(primary.Id);

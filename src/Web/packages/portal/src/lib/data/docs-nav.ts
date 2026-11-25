@@ -112,6 +112,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
             { href: "/docs/reports/steps", label: "Step count" },
             { href: "/docs/reports/heart-rate", label: "Heart rate" },
             { href: "/docs/reports/sleep", label: "Sleep & overnight" },
+            { href: "/docs/reports/custom", label: "Custom reports" },
         ],
     },
     {
@@ -144,6 +145,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         id: "data-sources",
         title: "Data sources",
         items: [
+            { href: "/docs/data-sources/labels", label: "Labels and status" },
             { href: "/docs/data-sources/google-health", label: "Google Health" },
             { href: "/docs/data-sources/oura", label: "Oura" },
         ],

@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "name": "clock-skew-signal-loss-future-reading",
+  "description": "signal_loss opens on an outage; a reading then arrives dated an hour ahead of the clock: the leaf is unknown, the open excursion is held (no hysteresis, no close), clock_anomaly reports last_reading_at an hour ahead, and next_change_at is the instant it comes within 5 minutes; from there it measures: false at 12:55, so the excursion enters hysteresis, and true again once the timeout has passed after the reading's time, which resumes it",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "signal_loss",
+      "condition_params": {
+        "timeout_minutes": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-04-01T11:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 120,
+        "latest_timestamp": "2026-04-01T10:30:00Z",
+        "last_reading_at": "2026-04-01T10:30:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 120,
+        "latest_timestamp": "2026-04-01T13:00:00Z",
+        "latest_received_at": "2026-04-01T12:00:00Z",
+        "last_reading_at": "2026-04-01T13:00:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:55:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 120,
+        "latest_timestamp": "2026-04-01T13:00:00Z",
+        "latest_received_at": "2026-04-01T12:00:00Z",
+        "last_reading_at": "2026-04-01T13:00:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T13:20:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 120,
+        "latest_timestamp": "2026-04-01T13:00:00Z",
+        "latest_received_at": "2026-04-01T12:00:00Z",
+        "last_reading_at": "2026-04-01T13:00:00Z"
+      }
+    }
+  ]
+}

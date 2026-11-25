@@ -1,8 +1,15 @@
+using System.Net;
+using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
+using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
@@ -24,6 +31,7 @@ internal static class AuthContextKeys
     internal const string PermissionTrie = "PermissionTrie";
     internal const string TenantContext = "TenantContext";
     internal const string ShareAccess = "ShareAccess";
+    internal const string GrantCeiling = "GrantCeiling";
 }
 
 /// <summary>
@@ -38,6 +46,20 @@ internal static class AuthContextKeys
 /// </remarks>
 public static class HttpContextExtensions
 {
+    /// <summary>
+    /// The address to record for whoever made this request: what
+    /// <see cref="ClientAddressResolver"/> resolved, falling back to the connection's address for a
+    /// request that did not pass <see cref="ClientAddressMiddleware"/>. Never the unverified header.
+    /// </summary>
+    public static string? GetClientAddress(this HttpContext context) =>
+        (context.Items[ClientAddressItemKey] as IPAddress ?? context.Connection.RemoteIpAddress)
+        ?.ToString();
+
+    private const string ClientAddressItemKey = "ClientAddress";
+
+    internal static void SetClientAddress(this HttpContext context, IPAddress? address) =>
+        context.Items[ClientAddressItemKey] = address;
+
     /// <summary>
     /// Get the new-style authentication context from the request
     /// </summary>
@@ -185,13 +207,62 @@ public static class HttpContextExtensions
 
     /// <summary>
     /// Whether the caller may read only the last 24 hours, per
-    /// <see cref="ICategoryReadContext.IsHistoryClamped"/>. This is the caller's history ceiling:
-    /// whatever the caller mints (an invite, a direct grant, a guest link, an OAuth consent)
-    /// inherits it, and a clamped caller may not lift another member's clamp or give a share
-    /// full history, because either would hand out more history than the caller can read.
+    /// <see cref="ICategoryReadContext.IsHistoryClamped"/>. A credential the caller mints for
+    /// themselves inherits it (<see cref="InheritOwnCredentialHistoryClamp"/>); what they give anyone
+    /// else is bounded by <see cref="CallerGrantCeiling"/> instead.
     /// </summary>
     public static bool IsCallerHistoryClamped(this HttpContext context) =>
         context.RequestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
+
+    /// <summary>
+    /// What the caller may give anyone else: the scopes, end and 24-hour limit of their direct reason
+    /// on the request's tenant, the scopes resolved on the presenting credential as
+    /// <see cref="GetGrantedScopes"/> resolves the sum. Null for a member who holds no direct reason in
+    /// force, who gives nothing (<see cref="CallerAccessFromTeamProblem"/>).
+    /// </summary>
+    /// <remarks>
+    /// A member's access is the sum of their reasons, and a team's reason is the team's and the site
+    /// owner's to control. What a member gives someone else (a role, an invite, another member's
+    /// access, a guest link, the public share, a credential for another subject) would outlive that
+    /// reason and reach other people, so it is bounded by the direct reason alone: a caller whose
+    /// direct reason is limited to the last 24 hours, or ends, gives nothing wider, even while a team
+    /// reason widens their own reading. A credential the caller holds themselves stays bounded by the
+    /// sum, since every request intersects it with the live membership. A caller held to no membership
+    /// (the instance key, platform access, a guest, a non-member) gives from what the request
+    /// resolved, as <see cref="GetGrantedScopes"/>, <see cref="CallerAccessEndsAt"/> and
+    /// <see cref="IsCallerHistoryClamped"/> read it. <see cref="MemberScopeMiddleware"/> records it for
+    /// a member.
+    /// </remarks>
+    public static GrantCeiling? CallerGrantCeiling(this HttpContext context) =>
+        context.Items[AuthContextKeys.GrantCeiling] switch
+        {
+            GrantCeiling ceiling => ceiling,
+            NoDirectReason => null,
+            _ => new GrantCeiling(context.GetGrantedScopes(), context.CallerAccessEndsAt(), context.IsCallerHistoryClamped()),
+        };
+
+    /// <summary>
+    /// What bounds the scopes of a grant the caller edits: everything they hold for their own app, and
+    /// <see cref="CallerGrantCeiling"/> as well for a guest link, which gives another person access.
+    /// </summary>
+    public static GrantScopeBounds GrantScopeBounds(this HttpContext context) =>
+        new(context.GetGrantedScopes(), context.CallerGrantCeiling()?.Scopes);
+
+    /// <summary>Records what the member the request resolved may give: <see cref="CallerGrantCeiling"/>.</summary>
+    internal static void SetGrantCeiling(this HttpContext context, GrantCeiling? ceiling) =>
+        context.Items[AuthContextKeys.GrantCeiling] = ceiling ?? (object)NoDirectReason.Instance;
+
+    private sealed class NoDirectReason
+    {
+        public static readonly NoDirectReason Instance = new();
+    }
+
+    /// <summary>
+    /// The 409 for a caller who holds no direct reason (<see cref="CallerGrantCeiling"/>), returned
+    /// before anything is written.
+    /// </summary>
+    public static ObjectResult CallerAccessFromTeamProblem(this ControllerBase controller) =>
+        controller.ProblemWithCode(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail, StatusCodes.Status409Conflict);
 
     /// <summary>
     /// Clamps every read on the request's services to the last 24 hours, through
@@ -202,11 +273,180 @@ public static class HttpContextExtensions
         context.RequestServices.GetService<ICategoryReadContext>()?.ClampMemberHistory();
 
     /// <summary>
-    /// The history limit something this caller mints carries: the requested limit, or the
-    /// caller's own ceiling (<see cref="IsCallerHistoryClamped"/>).
+    /// The history limit a credential the caller mints for themselves carries: the requested limit,
+    /// or the caller's own (<see cref="IsCallerHistoryClamped"/>).
     /// </summary>
-    public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
+    public static bool InheritOwnCredentialHistoryClamp(this HttpContext context, bool requested) =>
         requested || context.IsCallerHistoryClamped();
+
+    /// <summary>
+    /// The history limit what the caller gives someone else carries: the requested limit, or the
+    /// limit of what the caller may give (<see cref="CallerGrantCeiling"/>).
+    /// </summary>
+    public static bool InheritGivenHistoryClamp(this HttpContext context, bool requested) =>
+        requested || context.CallerGrantCeiling() is not { HistoryClamped: false };
+
+    /// <summary>
+    /// The refusal a caller whose own access ends on a date reads when an action would give someone
+    /// access that lasts longer.
+    /// </summary>
+    public const string AccessEndCeilingDetail =
+        "Your access ends on a date, so you cannot give anyone access that lasts longer than yours.";
+
+    /// <summary>
+    /// The refusal a caller whose own access ends on a date reads on any change to public sharing,
+    /// in either direction: a public link carries no end date, so it could outlast the caller.
+    /// </summary>
+    public const string PublicSharingEndDateDetail =
+        "Your access ends on a date, so you cannot change public sharing.";
+
+    /// <summary>
+    /// The refusal of a change to public sharing by a caller whose access to give ends (403) or who
+    /// holds no direct reason (409, <see cref="CallerGrantCeiling"/>), or null when the caller may go
+    /// on. Checked before anything is written or evicted, so a refusal changes nothing.
+    /// </summary>
+    public static ObjectResult? PublicSharingEndDateRefusal(this ControllerBase controller) =>
+        controller.HttpContext.CallerGrantCeiling() switch
+        {
+            null => controller.CallerAccessFromTeamProblem(),
+            { AccessEndsAt: null } => null,
+            _ => controller.Problem(detail: PublicSharingEndDateDetail, statusCode: StatusCodes.Status403Forbidden),
+        };
+
+    /// <summary>
+    /// When the caller's own membership of the request's tenant ends, read from the membership the
+    /// request authenticated with; null when it does not end or the credential is held to no
+    /// membership (the instance key, platform access). What the caller makes lives as long as this
+    /// (<see cref="CredentialMakerAsync"/>); what they give anyone else is bounded by
+    /// <see cref="CallerGrantCeiling"/> instead.
+    /// </summary>
+    public static DateTime? CallerAccessEndsAt(this HttpContext context) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
+            ? RequestMembership.Of(context, subjectId, tenantId)?.Membership?.Access.AccessEndsAt
+            : null;
+
+    /// <summary>
+    /// Whether the caller may not mint a credential: its subject was read as inactive when the request
+    /// authenticated, or it is a session caller whose session has ended
+    /// (<see cref="CallerSessionLiveness"/>). A session or OAuth access token outlives its subject's
+    /// deactivation, and a session access token outlives its session, by up to its lifetime, so an
+    /// action that mints a credential refuses that caller here and answers it with
+    /// <see cref="ControllerBase.Challenge()"/>, as it answers an anonymous caller, or as the action
+    /// answers a refused request where it has such an answer.
+    /// </summary>
+    public static async Task<bool> IsCallerInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId } auth
+        && (RequestMembership.Of(context, subjectId, tenantId) is { SubjectIsInactive: true }
+            || await HasSessionEndedAsync(context, auth, ct));
+
+    /// <summary>
+    /// <see cref="IsCallerInactiveAsync"/> for a route served without a resolved tenant, where the
+    /// request carries no membership to read it from: the subject's own row is read instead
+    /// (<see cref="ISubjectRepository.GetSignInStateAsync"/>), and the refusal is answered the same way.
+    /// A subject with no row counts as inactive.
+    /// </summary>
+    public static async Task<bool> IsCallerSubjectInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId } auth
+        && (await context.RequestServices.GetRequiredService<ISubjectRepository>()
+                .GetSignInStateAsync(subjectId, ct) is not { IsActive: true }
+            || await HasSessionEndedAsync(context, auth, ct));
+
+    /// <summary>
+    /// Whether the caller signed in with a session that an action minting a credential would refuse:
+    /// <see cref="IsCallerInactiveAsync"/> when the request resolved a tenant, otherwise
+    /// <see cref="IsCallerSubjectInactiveAsync"/>. Every other credential answers false.
+    /// </summary>
+    public static async Task<bool> IsSessionCallerInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { } auth
+        && CallerSessionLiveness.IsSessionCaller(auth)
+        && (auth.TenantId is not null
+            ? await context.IsCallerInactiveAsync(ct)
+            : await context.IsCallerSubjectInactiveAsync(ct));
+
+    private static async Task<bool> HasSessionEndedAsync(HttpContext context, AuthContext auth, CancellationToken ct) =>
+        CallerSessionLiveness.IsSessionCaller(auth)
+        && await context.RequestServices.GetRequiredService<CallerSessionLiveness>().HasEndedAsync(auth, ct);
+
+    /// <summary>
+    /// The maker a device credential this caller creates is stamped with, or null when no subject is
+    /// authenticated. Its end is the earlier of the caller's own access end
+    /// (<see cref="CallerAccessEndsAt"/>) and the expiry of the grant the request presented, so a
+    /// credential cannot make one that outlasts itself. A presented grant that a member made for
+    /// another subject, a device credential, passes its maker on, so the member stays the one whose
+    /// end date and removal reach what it makes.
+    /// </summary>
+    public static async Task<CredentialMaker?> CredentialMakerAsync(this HttpContext context, CancellationToken ct)
+    {
+        if (context.GetAuthContext() is not { SubjectId: { } subjectId } auth)
+            return null;
+
+        var accessEndsAt = context.CallerAccessEndsAt();
+        if (auth is not { TokenId: { } grantId, TenantId: { } tenantId }
+            || await context.RequestServices.GetRequiredService<IOAuthGrantRepository>()
+                .GetStateAsync(tenantId, grantId, ct) is not { } presented)
+            return new CredentialMaker(subjectId, accessEndsAt);
+
+        var endsAt = Earlier(accessEndsAt, presented.ExpiresAt);
+        return presented.CreatedBySubjectId is { } maker && maker != subjectId
+            ? new CredentialMaker(maker, endsAt)
+            : new CredentialMaker(subjectId, endsAt);
+    }
+
+    /// <summary>The earlier of two ends, where null is no end.</summary>
+    internal static DateTime? Earlier(DateTime? first, DateTime? second) =>
+        first is { } a && second is { } b ? (a < b ? a : b) : first ?? second;
+
+    /// <summary>
+    /// Whether the caller may remove the expiry of a device credential, so it outlasts the member who
+    /// set it up: an interactive session (<see cref="RequireInteractiveSessionAttribute"/>) of a caller
+    /// who may give the managing of members and whose access to give does not end
+    /// (<see cref="CallerGrantCeiling"/>). The keep endpoint and the connections list's <c>CanKeep</c>
+    /// both read this.
+    /// </summary>
+    public static bool MayKeepDeviceCredentials(this HttpContext context) =>
+        !RequireInteractiveSessionAttribute.Refuses(context)
+        && context.CallerGrantCeiling() is { AccessEndsAt: null } ceiling
+        && Scope.Satisfies(ceiling.Scopes, Scope.MembersManage);
+
+    /// <summary>
+    /// The refusal a caller whose own access ends reads when they try to keep a device credential.
+    /// </summary>
+    public const string KeepDeviceCredentialEndDateDetail =
+        "Your access ends on a date, so you cannot keep a connection after the date it stops.";
+
+    /// <summary>The end a membership this caller creates carries: the requested one, or the end of what the caller may give (<see cref="CallerGrantCeiling"/>).</summary>
+    public static DateTime? InheritAccessEnd(this HttpContext context, DateTime? requested) =>
+        requested ?? context.CallerGrantCeiling()?.AccessEndsAt;
+
+    /// <summary>
+    /// Whether <paramref name="requested"/> would outlast the caller's access to give
+    /// (<see cref="CallerGrantCeiling"/>): later than its end, or no end at all, for a caller whose
+    /// access to give ends; always, for a caller who gives nothing.
+    /// </summary>
+    public static bool OutlastsCallerAccess(this HttpContext context, DateTime? requested) =>
+        context.CallerGrantCeiling() is not { } ceiling || MembershipLiveness.Outlasts(ceiling.AccessEndsAt, requested);
+
+    /// <summary>The refusal a caller whose access ends reads on a member whose access outlasts the caller's.</summary>
+    public const string MemberOutlastsCallerDetail = "This member's access lasts longer than yours.";
+
+    /// <summary>The refusal a caller whose access ends reads on an invite that would give access that outlasts the caller's.</summary>
+    public const string InviteOutlastsCallerDetail = "This invite gives access that lasts longer than yours.";
+
+    /// <summary>The refusal a caller whose access ends reads on a role held by a member whose access outlasts the caller's.</summary>
+    public const string RoleHeldPastCallerDetail = "A member whose access lasts longer than yours has this role.";
+
+    /// <summary>The refusal a caller whose access ends reads on a role a live invite gives, where the invite's access outlasts the caller's.</summary>
+    public const string RoleInvitedPastCallerDetail = "An invite that gives access longer than yours uses this role.";
+
+    /// <summary>
+    /// The 403 for a change to a member whose access ends at <paramref name="memberEnd"/>, or null
+    /// when the caller may go on (<see cref="OutlastsCallerAccess"/>). Checked before anything is
+    /// written or evicted, so a refusal changes nothing.
+    /// </summary>
+    public static ObjectResult? MemberOutlastsCallerRefusal(this ControllerBase controller, DateTime? memberEnd) =>
+        controller.HttpContext.OutlastsCallerAccess(memberEnd)
+            ? controller.Problem(detail: MemberOutlastsCallerDetail, statusCode: StatusCodes.Status403Forbidden)
+            : null;
 
     private const string ReaderItemKey = "TenantReader";
 

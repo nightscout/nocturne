@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
@@ -7,23 +8,25 @@ namespace Nocturne.Connectors.Tidepool.Mappers;
 
 public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TidepoolConnectorConfiguration>();
+
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public IEnumerable<SensorGlucose> MapBgValues(TidepoolBgValue[]? bgValues, DateTime now)
+    public IEnumerable<SensorGlucose> MapBgValues(TidepoolBgValue[]? bgValues)
     {
         if (bgValues == null || bgValues.Length == 0) return [];
 
         return ConnectorFaults.NonNullRecords(bgValues, _logger, _connectorSource, "Tidepool BG value")
             .Where(bg => bg.Value > 0 && bg.Time.HasValue)
-            .Select(bg => ConvertBgValue(bg, now))
+            .Select(bg => ConvertBgValue(bg))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .OrderBy(sg => sg.Mills)
             .ToList();
     }
 
-    private SensorGlucose? ConvertBgValue(TidepoolBgValue bgValue, DateTime now)
+    private SensorGlucose? ConvertBgValue(TidepoolBgValue bgValue)
     {
         try
         {
@@ -34,14 +37,10 @@ public class TidepoolSensorGlucoseMapper(ILogger logger, string connectorSource)
 
             return new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                LegacyId = $"tidepool_{bgValue.Id}",
+                LegacyId = LegacyIds.Of(bgValue.Id),
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 Mgdl = mgdl,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))

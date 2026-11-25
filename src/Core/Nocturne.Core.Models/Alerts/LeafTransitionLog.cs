@@ -16,5 +16,9 @@ public sealed record LeafTransitionLog(int LeafId, IReadOnlyList<LeafTransitionP
 /// A single (timestamp, value) pair within a <see cref="LeafTransitionLog"/>.
 /// </summary>
 /// <param name="AtMs">Replay tick instant in Unix milliseconds.</param>
-/// <param name="Value">Leaf truth at that tick.</param>
-public sealed record LeafTransitionPoint(long AtMs, bool Value);
+/// <param name="Value">Leaf truth at that tick; false when <paramref name="Unknown"/>.</param>
+/// <param name="Unknown">
+/// The leaf was unknown at that tick: a fact it compares was missing
+/// (docs/alerts/engine-semantics.md §2.4).
+/// </param>
+public sealed record LeafTransitionPoint(long AtMs, bool Value, bool Unknown = false);

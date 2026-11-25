@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
@@ -121,7 +122,7 @@ public static class DemoDeviceLifecycle
     {
         EventType = change.EventType,
         Mills = change.TimestampUtc.ToMills(),
-        Created_at = change.TimestampUtc.ToString("o"),
+        Created_at = change.TimestampUtc.ToString("o", CultureInfo.InvariantCulture),
         EnteredBy = "demo-user",
         DataSource = dataSource,
     };

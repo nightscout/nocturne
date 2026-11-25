@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Eversense.Tests.Services;
 
@@ -78,15 +78,13 @@ public class EversenseAuthTokenProviderRetryTests
 
     private static EversenseAuthTokenProvider ProviderFor(EversenseTokenHandler handler, TimeProvider clock)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         return new EversenseAuthTokenProvider(
             new HttpClient(handler),
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<EversenseAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             clock);
@@ -100,9 +98,7 @@ public class EversenseAuthTokenProviderRetryTests
     {
         using var httpClient = new HttpClient(handler);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -111,7 +107,7 @@ public class EversenseAuthTokenProviderRetryTests
             httpClient,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<EversenseAuthTokenProvider>.Instance,
             retryDelay.Object);
 

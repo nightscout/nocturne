@@ -195,13 +195,17 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         await scheduler.EnrolAsync(default);
         clock.Advance(AlertSweepJob.Interval);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (sweep.Runs.Count < 6)
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the sweeps must not wait for the stuck connectors");
-            await scheduler.PollAsync(default);
-            await Task.Delay(20);
-        }
+        await Eventually.UntilAsync(
+            "every sweep to run without waiting for the stuck connectors",
+            async () =>
+            {
+                if (sweep.Runs.Count >= 6)
+                    return true;
+
+                await scheduler.PollAsync(default);
+                return false;
+            },
+            step: TimeSpan.FromMilliseconds(20));
 
         (first.Started + second.Started).Should().Be(8, "every connector together holds the group's cap");
         gate.SetResult();
@@ -250,11 +254,16 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddSingleton<TimeProvider>(clock);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IInAppNotificationRepository, InAppNotificationRepository>();
         services.AddScoped(_ => Mock.Of<ISignalRBroadcastService>());
+        services.AddScoped(_ => Mock.Of<Nocturne.API.Services.Alerts.IUnevaluableRuleNotice>());
+        services.AddScoped(_ => Nocturne.API.Tests.Services.Alerts.NoHeldRules.Notice());
+        services.AddScoped(_ => Mock.Of<Nocturne.API.Services.Alerts.IClockAnomalyNotice>());
+        services.AddScoped(_ => Mock.Of<Nocturne.API.Services.Alerts.IAlertChannelNotice>());
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
 

@@ -13,7 +13,6 @@ internal static class MyLifeStateSpanFactory
     /// <param name="rate">U/h.</param>
     internal static TempBasal CreateTempBasal(
         MyLifeEvent ev,
-        DateTime now,
         double rate,
         TempBasalOrigin origin)
     {
@@ -22,7 +21,6 @@ internal static class MyLifeStateSpanFactory
 
         return new TempBasal
         {
-            Id = Guid.CreateVersion7(),
             StartTimestamp = timestamp.UtcDateTime,
             EndTimestamp = null, // Will be set when the next record arrives
             Rate = rate,
@@ -30,10 +28,7 @@ internal static class MyLifeStateSpanFactory
             Origin = origin,
             Device = null,
             App = null,
-            DataSource = DataSources.MyLifeConnector,
             LegacyId = eventKey,
-            CreatedAt = now,
-            ModifiedAt = now,
         };
     }
 }

@@ -1,9 +1,8 @@
-import type { FactSnapshotPoint } from "#lib/api/generated/nocturne-api-client.js";
+import type { FactSnapshotPoint } from "@nocturne/api-client";
 import type { ConditionNode } from "./types";
 import { formatMinutesDuration } from "#lib/utils/duration.js";
-import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
-import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { bg, bgLabel } from "#lib/utils/formatting.js";
+import { ratePerMinuteText } from "./summarizeCondition.svelte";
 
 /**
  * Sparse-time-series lookup over the per-tick numeric fact snapshots emitted by
@@ -74,10 +73,7 @@ export function leafFactBinding(
     case "rate_of_change":
       return {
         factKey: "trend_rate",
-        format: (v) =>
-          glucoseUnits.current === "mmol"
-            ? `${(v / MGDL_PER_MMOL).toFixed(2)} mmol/L/min`
-            : `${v.toFixed(1)} mg/dL/min`,
+        format: ratePerMinuteText,
       };
     case "staleness":
       return { factKey: "staleness_minutes", format: formatMinutesDuration };
@@ -105,6 +101,14 @@ export function leafFactBinding(
         factKey: "uploader_battery_percent",
         format: (v) => `${Math.round(v)}%`,
       };
+    case "transmitter_battery": {
+      const metric = node.transmitter_battery?.metric;
+      if (!metric) return null;
+      return {
+        factKey: `transmitter_${metric}`,
+        format: (v) => (metric === "days" ? `${Math.round(v)}d` : `${Math.round(v)}`),
+      };
+    }
     case "temp_basal":
       // Only the rate metric has a current-value snapshot; percent-of-scheduled
       // would need a separate fact.

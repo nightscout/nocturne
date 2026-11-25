@@ -93,6 +93,19 @@ public class ConnectorRegistrationAttribute(
     public string DataSourceId { get; } = dataSourceId;
 
     /// <summary>
+    ///     What every key <see cref="Utilities.ConnectorLegacyIds"/> builds for this connector starts
+    ///     with. <see cref="DataSourceId"/> unless declared: a connector whose stored keys predate the
+    ///     rule declares the prefix they carry; see <see cref="Utilities.ConnectorLegacyIds"/> for why a key must not change.
+    /// </summary>
+    public string LegacyIdPrefix
+    {
+        get => _legacyIdPrefix ?? DataSourceId;
+        set => _legacyIdPrefix = value;
+    }
+
+    private string? _legacyIdPrefix;
+
+    /// <summary>
     ///     Icon identifier for the connector in the UI (e.g., "libre", "dexcom", "glooko")
     /// </summary>
     public string Icon { get; } = icon;
@@ -127,6 +140,17 @@ public class ConnectorRegistrationAttribute(
     ///     Whether the connector supports manual sync triggers.
     /// </summary>
     public bool SupportsManualSync { get; set; } = true;
+
+    /// <summary>
+    ///     The connector has no sync: its data arrives as a file the user imports.
+    /// </summary>
+    public bool IsImport { get; set; }
+
+    /// <summary>
+    ///     What a purge of this connector's data that keeps it from being imported again clears of
+    ///     the connector's state. A purge that allows re-import clears both slots of every connector.
+    /// </summary>
+    public ConnectorStateSlots KeptOutPurgeClears { get; set; } = ConnectorStateSlots.Resume;
 
     /// <summary>
     ///     Supported data types for this connector.

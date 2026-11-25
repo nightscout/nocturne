@@ -1,5 +1,6 @@
 using System.Runtime.ExceptionServices;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Treatments;
@@ -9,6 +10,9 @@ internal sealed class TreatmentDecomposition : GroupedDecomposition
 {
     private readonly Dictionary<int, Exception> _rejected = [];
     private readonly HashSet<int> _wroteNothing = [];
+    private readonly HashSet<int> _invalidated = [];
+    private readonly HashSet<Treatment> _keyedToServed = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<int> _upstreamEdits = [];
 
     /// <summary>
     /// The treatments refused for their data, by batch index, with the refusal: a
@@ -29,8 +33,34 @@ internal sealed class TreatmentDecomposition : GroupedDecomposition
             ExceptionDispatchInfo.Capture(refusal).Throw();
     }
 
-    /// <summary>Marks a treatment that writes nothing of its own: one Nocturne does not store, or one held by a temp basal.</summary>
+    /// <summary>
+    /// Marks a treatment that writes nothing of its own: one Nocturne does not store, one held by a temp
+    /// basal, or one uploaded with <c>isValid: false</c>, which leaves nothing live.
+    /// </summary>
     internal void WritesNothing(int index) => _wroteNothing.Add(index);
+
+    /// <summary>Marks a pulled treatment applied as an upstream edit of a record write-back sent.</summary>
+    internal void AppliesUpstreamEdit(int index) => _upstreamEdits.Add(index);
+
+    /// <summary>Whether the treatment at <paramref name="index"/> was applied as an upstream edit of a record write-back sent.</summary>
+    public bool IsUpstreamEdit(int index) => _upstreamEdits.Contains(index) && !_rejected.ContainsKey(index);
+
+    /// <summary>
+    /// The treatments, by batch index, uploaded with <c>isValid: false</c> under the id of a live
+    /// treatment, which they deleted.
+    /// </summary>
+    public IReadOnlyCollection<int> Invalidated => _invalidated;
+
+    internal void Invalidate(int index) => _invalidated.Add(index);
+
+    /// <summary>
+    /// Marks treatments the client sent under the id reads serve a stored treatment by, which now carry
+    /// that treatment's upsert key (<see cref="LegacyTreatmentStore.KeyToServedAsync"/>): the client
+    /// named the stored treatment, whatever its key looks like.
+    /// </summary>
+    internal void KeyedToServed(IEnumerable<Treatment> treatments) => _keyedToServed.UnionWith(treatments);
+
+    internal bool IsKeyedToServed(Treatment treatment) => _keyedToServed.Contains(treatment);
 
     /// <summary>
     /// What the treatment at <paramref name="index"/> leaves stored, as a decomposition of its own: the

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Contracts.Alerts;
@@ -7,7 +6,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -33,7 +31,8 @@ public interface ITrackerAlertRuleSyncService
     /// Creates the managed alert rules of <paramref name="definitionId"/>, a definition that has
     /// none yet, on the caller's <paramref name="unit"/> and inside its transaction, so the rules
     /// commit with the definition. Having no rules, it retires none, so nothing is closed
-    /// before the caller commits.
+    /// before the caller commits. The caller has them evaluated once it commits
+    /// (<see cref="AlertRuleRearm.Committed"/>).
     /// </summary>
     /// <exception cref="InvalidOperationException">The definition already has managed rules.</exception>
     Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default);
@@ -55,6 +54,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private readonly AlertRuleRetirement _retirement;
     private readonly TimeProvider _time;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
     public TrackerAlertRuleSyncService(
@@ -64,7 +64,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         AlertRuleRearm rearm,
         AlertRuleRetirement retirement,
         TimeProvider timeProvider,
-        ILogger<TrackerAlertRuleSyncService> logger)
+        ILogger<TrackerAlertRuleSyncService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _contextFactory = contextFactory;
         _scopeClassifier = scopeClassifier;
@@ -73,6 +74,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         _retirement = retirement;
         _time = timeProvider;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     /// <summary>The <see cref="AlertRuleRecord.ManagedBy"/> tag for a tracker definition's rules.</summary>
@@ -97,12 +99,10 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
     private async Task SyncAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct)
     {
-        var db = unit.Context;
-        var tenantId = db.TenantId;
+        var tenantId = unit.Context.TenantId;
+        var trackers = new TrackerRepository(unit, _time);
 
-        var definition = await db.TrackerDefinitions
-            .Include(d => d.NotificationThresholds)
-            .FirstOrDefaultAsync(d => d.Id == definitionId, ct);
+        var definition = await trackers.GetDefinitionByIdAsync(definitionId, ct);
         if (definition is null)
         {
             _logger.LogWarning("Tracker definition {DefinitionId} not found; skipping rule sync", definitionId);
@@ -117,7 +117,15 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             && !(definition.LowReservoirUnits is not null && TrackerCoverage.HoldsInsulin(definition)))
             return;
 
-        var recipient = await InAppRecipientOfAsync(new TenantMembershipRepository(unit), tenantId, definition, ct);
+        var recipient = await InAppRecipientOfAsync(new TenantMembershipRepository(unit, _linkRoute), tenantId, definition, _time.GetUtcNow().UtcDateTime, ct);
+
+        // The rule each threshold is delivered by, staged on the unit as it is decided.
+        var ruleOf = definition.NotificationThresholds.ToDictionary(t => t.Id, t => t.AlertRuleId);
+        async Task LinkAsync(TrackerNotificationThreshold threshold, Guid ruleId)
+        {
+            ruleOf[threshold.Id] = ruleId;
+            await trackers.LinkThresholdRuleAsync(threshold.Id, ruleId, ct);
+        }
 
         // The threshold editor replaces the whole threshold list (new row ids), which
         // clears the AlertRuleId links. Adopt orphaned managed rules so a threshold keeps
@@ -144,17 +152,17 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
         foreach (var (threshold, minutes) in pending)
         {
-            if (threshold.AlertRuleId is not null || minutes is null) continue;
+            if (ruleOf[threshold.Id] is not null || minutes is null) continue;
             var index = adoptable.FindIndex(a => a.Minutes == minutes);
             if (index < 0) continue;
-            threshold.AlertRuleId = adoptable[index].Rule.Rule.Id;
+            await LinkAsync(threshold, adoptable[index].Rule.Rule.Id);
             adoptable.RemoveAt(index);
         }
         foreach (var (threshold, minutes) in pending.OrderBy(p => p.Minutes))
         {
-            if (threshold.AlertRuleId is not null || minutes is null) continue;
+            if (ruleOf[threshold.Id] is not null || minutes is null) continue;
             if (adoptable.Count == 0) break;
-            threshold.AlertRuleId = adoptable[0].Rule.Rule.Id;
+            await LinkAsync(threshold, adoptable[0].Rule.Rule.Id);
             adoptable.RemoveAt(0);
         }
 
@@ -167,7 +175,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             {
                 // A negative threshold without a lifespan can never fire. Leave any previously
                 // synced rule in place untouched.
-                if (threshold.AlertRuleId is { } existingId) keptRuleIds.Add(existingId);
+                if (ruleOf[threshold.Id] is { } existingId) keptRuleIds.Add(existingId);
                 continue;
             }
 
@@ -182,7 +190,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             var severity = MapSeverity(threshold.Urgency);
             var scopeClass = _scopeClassifier.Classify(AlertConditionType.TrackerAge, conditionParams);
 
-            if (threshold.AlertRuleId is { } ruleId && managedRules.TryGetValue(ruleId, out var rule))
+            if (ruleOf[threshold.Id] is { } ruleId && managedRules.TryGetValue(ruleId, out var rule))
             {
                 var same = rule.Rule.ConditionType == AlertConditionType.TrackerAge
                     && ConditionTreeEquality.Same(rule.Rule.ConditionParams, conditionParams);
@@ -204,8 +212,9 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 var createdId = await rules.CreateAsync(
                     ManagedRule(name, threshold.Description, AlertConditionType.TrackerAge, conditionParams, scopeClass, severity, tag, recipient),
                     ct);
-                threshold.AlertRuleId = createdId;
+                await LinkAsync(threshold, createdId);
                 keptRuleIds.Add(createdId);
+                changed.Add(createdId);
             }
         }
 
@@ -295,8 +304,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
     /// <summary>
     /// Synthesises the single reservoir-level rule for a definition that holds insulin
-    /// (<see cref="TrackerCoverage.HoldsInsulin(TrackerDefinitionEntity)"/>) with
-    /// <see cref="TrackerDefinitionEntity.LowReservoirUnits"/> set. The rule is
+    /// (<see cref="TrackerCoverage.HoldsInsulin(TrackerDefinition)"/>) with
+    /// <see cref="TrackerDefinition.LowReservoirUnits"/> set. The rule is
     /// identified within the definition's managed set by its Reservoir condition type
     /// (there is at most one), so edits adopt the existing rule and preserve user edits
     /// exactly like the tracker_age rules. When the units are cleared — or the definition
@@ -305,7 +314,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// </summary>
     private async Task SyncReservoirLevelRuleAsync(
         IAlertRuleRepository rules,
-        TrackerDefinitionEntity definition,
+        TrackerDefinition definition,
         string recipient,
         string tag,
         IReadOnlyDictionary<Guid, AlertRuleRecord> managedRules,
@@ -340,9 +349,11 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             return;
         }
 
-        keptRuleIds.Add(await rules.CreateAsync(
+        var createdId = await rules.CreateAsync(
             ManagedRule(name, null, AlertConditionType.Reservoir, conditionParams, scopeClass, severity, tag, recipient),
-            ct));
+            ct);
+        keptRuleIds.Add(createdId);
+        changed.Add(createdId);
     }
 
     /// <summary>
@@ -362,7 +373,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             name, description, conditionType, conditionParams, scopeClass, severity,
             IsEnabled: true, SortOrder: 0, AllowThroughDnd: false,
             AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
-        [new AlertRuleChannelWrite(ChannelType.InApp, recipient)],
+        [new AlertRuleChannelWrite(ChannelType.InApp, recipient, AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null)],
         ManagedBy: tag);
 
     /// <summary>
@@ -372,9 +383,9 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// the tenant has neither, which delivery records as failed.
     /// </summary>
     private static async Task<string> InAppRecipientOfAsync(
-        ITenantMembershipRepository members, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
+        ITenantMembershipRepository members, Guid tenantId, TrackerDefinition definition, DateTime now, CancellationToken ct)
     {
-        var recipient = await InAppRecipients.ResolveAsync(members, tenantId, definition.CreatedBy, ct)
+        var recipient = await InAppRecipients.ResolveAsync(members, tenantId, definition.CreatedBy, now, ct)
             ?? await InAppRecipients.EarliestOwnerAsync(members, tenantId, ct);
         return recipient?.ToString() ?? string.Empty;
     }
@@ -401,7 +412,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     }
 
     private static string ThresholdLabel(
-        TrackerDefinitionEntity definition, TrackerNotificationThresholdEntity threshold)
+        TrackerDefinition definition, TrackerNotificationThreshold threshold)
     {
         if (!string.IsNullOrWhiteSpace(threshold.Description))
             return threshold.Description;

@@ -10,10 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const app = dirname(dirname(fileURLToPath(import.meta.url)));
 
-const generatedClient = join(
-  app,
-  "src/lib/api/generated/nocturne-api-client.ts"
-);
+const generatedClient = join(app, "../api-client/src/nocturne-api-client.ts");
 if (!existsSync(generatedClient)) {
   console.error(
     "The generated API client is missing. Build the API once from the repo root:\n" +

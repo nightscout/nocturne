@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
@@ -33,8 +34,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Connectors;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
@@ -45,13 +48,11 @@ public class GoogleHealthTests : IDisposable
     public void Dispose() => _httpClients.ForEach(client => client.Dispose());
 
     [Theory]
-    [InlineData("[]")]
-    [InlineData("\"invalid\"")]
-    [InlineData("42")]
-    [InlineData("{\"Phase\":\"invalid\"}")]
-    [InlineData("{\"WorkerOwned\":\"invalid\"}")]
-    [InlineData("{\"PagesRead\":{}}")]
-    public async Task Invalid_persisted_progress_does_not_block_status(string progress)
+    [InlineData("invalid")]
+    [InlineData("")]
+    [InlineData("999")]
+    [InlineData("Reading")]
+    public async Task Invalid_persisted_progress_does_not_block_status(string phase)
     {
         await using var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
@@ -61,19 +62,17 @@ public class GoogleHealthTests : IDisposable
         db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "invalid-progress", DisplayName = "Synthetic", IsActive = true });
         await db.SaveChangesAsync();
         db.TenantId = tenantId;
-        db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+        db.GoogleHealthWork.Add(new GoogleHealthWorkEntity
         {
-            Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-            SyncCursorsJson = "{\"googleHealthProgress\":" + progress + "}"
+            TenantId = tenantId, ProgressPhase = phase, ProgressTotalDataTypes = 1, ProgressWorkerOwned = true
         });
         await db.SaveChangesAsync();
         var services = new ServiceCollection();
         services.AddSingleton(db.AsFactory());
-        services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddSingleton(Mock.Of<ITenantAccessor>());
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
-        services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();
+        services.AddScoped<IGoogleHealthWorkStore, GoogleHealthWorkRepository>();
         using var provider = services.BuildServiceProvider();
         var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System);
         Assert.Null(await coordinator.ProgressAsync(tenantId, default));
@@ -367,7 +366,7 @@ public class GoogleHealthTests : IDisposable
         Assert.True(await coordinator.StartQueuedAsync(tenantId, default));
         await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3);
 
-        var progress = Assert.IsType<GoogleHealthCoordinator.SyncProgress>(await coordinator.ProgressAsync(tenantId, default));
+        var progress = Assert.IsType<GoogleHealthSyncProgress>(await coordinator.ProgressAsync(tenantId, default));
         Assert.Equal((GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3),
             (progress.Phase, progress.DataType, progress.CompletedDataTypes,
                 progress.TotalDataTypes, progress.PagesRead));
@@ -384,8 +383,8 @@ public class GoogleHealthTests : IDisposable
         try
         {
             await coordinator.ReportAsync(tenant, GoogleHealthSyncPhase.Reading);
-            Assert.False(await coordinator.QueueAsync(tenant, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
-            await coordinator.ReportAsync(tenant, GoogleHealthSyncPhase.Integrating).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(await coordinator.QueueAsync(tenant, 4, default).WaitAsync(Eventually.DefaultPatience));
+            await coordinator.ReportAsync(tenant, GoogleHealthSyncPhase.Integrating).WaitAsync(Eventually.DefaultPatience);
             Assert.Equal(GoogleHealthSyncPhase.Integrating, (await coordinator.ProgressAsync(tenant, default))!.Phase);
         }
         finally { await operation!.DisposeAsync(); }
@@ -476,13 +475,12 @@ public class GoogleHealthTests : IDisposable
     }
 
     [Theory]
-    [InlineData("{invalid")]
-    [InlineData("null")]
-    [InlineData("[]")]
+    [InlineData("{}")]
+    [InlineData("[{\"dataType\":7}]")]
     [InlineData("\"legacy\"")]
     [InlineData("true")]
     [InlineData("42")]
-    public async Task Malformed_runtime_cursor_keeps_valid_connection_status(string runtimeState)
+    public async Task Malformed_scan_keeps_valid_connection_status(string inventory)
     {
         var store = new TestConnectorStore();
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
@@ -492,8 +490,8 @@ public class GoogleHealthTests : IDisposable
         secrets["refreshToken"] = "refresh";
         secrets["grantedScopes"] = GoogleHealthClient.MetricsScope;
         secrets["clientId"] = Platform().ClientId;
-        await store.Configurations.SaveSecretsAsync("GoogleHealth", secrets);
-        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, runtimeState));
+        await store.Configurations.SaveSecretsAsync("GoogleHealth", secrets, modifiedBy: null, saver: null);
+        store.State.Vendor[GoogleHealthState.Inventory] = JsonNode.Parse(inventory)!;
         var status = await service.StatusAsync(default);
         Assert.True(status.Configured);
         Assert.True(status.Connected);
@@ -512,12 +510,11 @@ public class GoogleHealthTests : IDisposable
               "clientId":"synthetic.apps.googleusercontent.com",
               "callbackUrl":"https://example.test:8450/settings/connectors/google-health/callback",
               "syncBodyWeight":true,
-              "historyDays":7,
-              "backfillCursorDate":"2025-06-01T00:00:00Z",
-              "backfillFloorDate":"2020-01-01T00:00:00Z",
-              "backfillComplete":false
+              "historyDays":7
             }
             """);
+        store.State.Resume[GoogleHealthState.BackfillCursor] = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Resume[GoogleHealthState.BackfillFloor] = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
 
         var status = await service.StatusAsync(default);
@@ -568,35 +565,56 @@ public class GoogleHealthTests : IDisposable
         var options = Options();
         var subject = Guid.NewGuid();
         await service.SaveAsync(options, subject, default);
-        const string resume = """{"lastSyncedTo":"2026-09-01T00:00:00Z","backfillCursorDate":"2020-01-01","backfillFloorDate":"2020-01-01","backfillComplete":true,"backfillChunkDays":7}""";
-        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, resume));
+        var watermark = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        var finished = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Resume[GoogleHealthState.LastSyncedTo] = watermark;
+        store.State.Resume[GoogleHealthState.BackfillCursor] = finished;
+        store.State.Resume[GoogleHealthState.BackfillFloor] = finished;
+        store.State.Vendor[GoogleHealthState.BackfillChunkDays] = 7;
         await service.SaveAsync(options, subject, default);
-        Assert.Equal(resume, (await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
+        Assert.Equal(3, store.State.Resume.Count);
+        Assert.True(store.State.Vendor.ContainsKey(GoogleHealthState.BackfillChunkDays));
+        Assert.True((await service.StatusAsync(default)).BackfillComplete);
         options.ImportFrom = DateTimeOffset.Parse("2019-01-01T00:00:00Z");
         await service.SaveAsync(options, subject, default);
-        using var restarted = JsonDocument.Parse((await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid!);
-        Assert.Equal("2026-09-01T00:00:00Z", restarted.RootElement.GetProperty("lastSyncedTo").GetString());
-        Assert.False(restarted.RootElement.TryGetProperty("backfillComplete", out _));
+        Assert.Equal(watermark, Assert.Single(store.State.Resume, pair => pair.Key == GoogleHealthState.LastSyncedTo).Value);
+        Assert.Single(store.State.Resume);
+        Assert.False(store.State.Vendor.ContainsKey(GoogleHealthState.BackfillChunkDays));
+        Assert.False((await service.StatusAsync(default)).BackfillComplete);
     }
 
-    [Theory]
-    [InlineData("{invalid")]
-    [InlineData("null")]
-    [InlineData("[]")]
-    [InlineData("\"legacy\"")]
-    [InlineData("true")]
-    [InlineData("42")]
-    public async Task Saving_import_settings_repairs_unreadable_runtime_state(string runtimeState)
+    [Fact]
+    public async Task Changing_the_selected_types_forgets_the_live_watermark_too()
     {
         var store = new TestConnectorStore();
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
         var options = Options();
         var subject = Guid.NewGuid();
         await service.SaveAsync(options, subject, default);
-        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, runtimeState));
+        store.State.Resume[GoogleHealthState.LastSyncedTo] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Vendor[GoogleHealthState.Inventory] = new JsonArray();
+        options.DataTypes = ["weight", "steps"];
+        await service.SaveAsync(options, subject, default);
+        Assert.Empty(store.State.Resume);
+        Assert.True(store.State.Vendor.ContainsKey(GoogleHealthState.Inventory));
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"legacy\"")]
+    [InlineData("true")]
+    [InlineData("1.5")]
+    public async Task Saving_import_settings_repairs_an_unreadable_retry_window(string chunkDays)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var options = Options();
+        var subject = Guid.NewGuid();
+        await service.SaveAsync(options, subject, default);
+        store.State.Vendor[GoogleHealthState.BackfillChunkDays] = JsonNode.Parse(chunkDays)!;
         options.ImportFrom = DateTimeOffset.Parse("2019-01-01T00:00:00Z");
         await service.SaveAsync(options, subject, default);
-        Assert.Equal("{}", (await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
+        Assert.Empty(store.State.Vendor);
         Assert.Equal(options.ImportFrom, (await service.StatusAsync(default)).ImportFrom);
     }
 
@@ -724,8 +742,9 @@ public class GoogleHealthTests : IDisposable
         };
         await writer.WriteAsync([], [session], 25, default);
         var store = new TestConnectorStore();
-        store.SetConfiguration("""{"lastSyncedTo":"2026-09-01T00:00:00Z","backfillComplete":true,"dataTypes":["sleep"]}""");
-        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, "{}"));
+        store.SetConfiguration("""{"dataTypes":["sleep"]}""");
+        store.State.Resume[GoogleHealthState.LastSyncedTo] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Vendor[GoogleHealthState.BackfillChunkDays] = 7;
         IConnectorDataPurge purge = Service(store, new StubHandler(_ => Json("{}")), tenantId, writer: writer);
         Assert.Equal(GoogleHealthConnectorService.ConnectorName, purge.ConnectorName);
 
@@ -740,25 +759,28 @@ public class GoogleHealthTests : IDisposable
         Assert.Equal("Google Fit", (await db.SleepSessions.AsNoTracking().SingleAsync()).SourceApp);
         await writer.WriteAsync([], [session], 25, default);
         Assert.Equal(allowReimport, await db.SleepSessions.AsNoTracking().AnyAsync(value => value.SourceApp == "Google Health"));
-        Assert.Equal(!allowReimport, store.Configuration.TryGetProperty("lastSyncedTo", out _));
-        Assert.Equal(!allowReimport, store.Configuration.TryGetProperty("backfillComplete", out _));
-        Assert.Equal(allowReimport ? null : "{}", (await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
+        Assert.True(store.State.Resume.ContainsKey(GoogleHealthState.LastSyncedTo));
+        Assert.True(store.State.Vendor.ContainsKey(GoogleHealthState.BackfillChunkDays));
     }
 
     [Fact]
     public async Task Purging_a_disconnected_account_removes_all_resume_state_and_preserves_import_settings()
     {
         var store = new TestConnectorStore();
-        store.SetConfiguration("""{"enabled":false,"lastSyncedTo":"2026-09-01T00:00:00Z","backfillCursorDate":"2026-01-01","backfillFloorDate":"2020-01-01","backfillComplete":true,"backfillChunkDays":7,"syncIntervalMinutes":30,"importFrom":"2020-01-01T00:00:00Z","dataTypes":["steps"]}""");
-        await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string> { ["accountKey"] = "previous-account" });
+        store.SetConfiguration("""{"enabled":false,"syncIntervalMinutes":30,"importFrom":"2020-01-01T00:00:00Z","dataTypes":["steps"]}""");
+        store.State.Resume[GoogleHealthState.LastSyncedTo] = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Resume[GoogleHealthState.BackfillCursor] = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Resume[GoogleHealthState.BackfillFloor] = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        store.State.Vendor[GoogleHealthState.BackfillChunkDays] = 7;
+        store.State.Vendor[GoogleHealthState.Inventory] = new JsonArray();
+        await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string> { ["accountKey"] = "previous-account" }, modifiedBy: null, saver: null);
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
 
         await service.PurgeAsync(Guid.NewGuid(), default);
 
-        foreach (var key in new[] { "lastSyncedTo", "backfillCursorDate", "backfillFloorDate", "backfillComplete", "backfillChunkDays" })
-            Assert.False(store.Configuration.TryGetProperty(key, out _));
+        Assert.Empty(store.State.Resume);
+        Assert.Empty(store.State.Vendor);
         Assert.False(store.Secrets.ContainsKey("accountKey"));
-        Assert.Null((await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
         Assert.Equal("2020-01-01T00:00:00Z", store.Configuration.GetProperty("importFrom").GetString());
         Assert.Equal("steps", store.Configuration.GetProperty("dataTypes")[0].GetString());
         Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
@@ -1388,7 +1410,7 @@ public class GoogleHealthTests : IDisposable
         {
             ["refreshToken"] = "refresh",
             ["clientSecret"] = "tenant-secret"
-        });
+        }, modifiedBy: null, saver: null);
 
         await service.DisconnectAsync(Guid.NewGuid(), default);
         if (purge) await service.PurgeAsync(Guid.NewGuid(), default);
@@ -1444,11 +1466,11 @@ public class GoogleHealthTests : IDisposable
         var service = Service(store, handler, Guid.NewGuid());
         await ConnectAsync(service);
         await service.PreviewAsync(Guid.NewGuid(), default);
-        Assert.Contains("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))!.LastGuid);
+        Assert.True(store.State.Vendor.ContainsKey(GoogleHealthState.Inventory));
 
         await service.DisconnectAsync(Guid.NewGuid(), default);
 
-        Assert.DoesNotContain("inventory", (await store.Cursors.GetAsync("GoogleHealth", "health", default))?.LastGuid ?? "");
+        Assert.False(store.State.Vendor.ContainsKey(GoogleHealthState.Inventory));
         Assert.All(SupportedTypes(await service.StatusAsync(default)),
             type => Assert.Equal(GoogleHealthTypeState.NotScanned, type.State));
     }
@@ -1756,6 +1778,8 @@ public class GoogleHealthTests : IDisposable
     [Fact]
     public async Task Disconnect_interrupts_preview_and_survives_browser_cancellation_before_google_revocation()
     {
+        // Every step waits on a signal; this only fails a hang, and a CI runner collecting coverage across
+        // the unit assemblies at once can stall the thread pool for seconds.
         var scanning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var revoking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseRevoke = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1780,10 +1804,10 @@ public class GoogleHealthTests : IDisposable
         var store = new TestConnectorStore();
         var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var tenant = Guid.NewGuid();
-        var service = Service(store, handler, tenant, coordinator);
+        var service = Service(store, handler, tenant, coordinator, revokeTimeout: Eventually.DefaultPatience);
         await ConnectAsync(service);
         var preview = service.PreviewAsync(Guid.NewGuid(), default);
-        await scanning.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await scanning.Task.WaitAsync(Eventually.DefaultPatience);
         using var browser = new CancellationTokenSource();
         var disconnect = service.DisconnectAsync(Guid.NewGuid(), browser.Token);
         browser.Cancel();
@@ -1791,8 +1815,8 @@ public class GoogleHealthTests : IDisposable
         var requestId = (await coordinator.DisconnectRequestAsync(tenant, default))!.RequestId;
         try
         {
-            await revoking.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await scanCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await revoking.Task.WaitAsync(Eventually.DefaultPatience);
+            await scanCancelled.Task.WaitAsync(Eventually.DefaultPatience);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preview);
             var status = await service.StatusAsync(default);
             Assert.False(status.Connected);
@@ -1801,14 +1825,76 @@ public class GoogleHealthTests : IDisposable
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PreviewAsync(Guid.NewGuid(), default));
         }
         finally { releaseRevoke.TrySetResult(); }
-        await disconnect.WaitAsync(TimeSpan.FromSeconds(5));
-        await recoveredDisconnect.WaitAsync(TimeSpan.FromSeconds(5));
+        await disconnect.WaitAsync(Eventually.DefaultPatience);
+        await recoveredDisconnect.WaitAsync(Eventually.DefaultPatience);
         Assert.False((await service.StatusAsync(default)).IsDisconnecting);
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
         Assert.True(store.Secrets.ContainsKey("accountKey"));
         await ConnectAsync(service);
         await service.ResumeDisconnectAsync(Guid.NewGuid(), requestId);
         Assert.True((await service.StatusAsync(default)).Connected);
+    }
+
+    [Fact]
+    public async Task A_disconnect_whose_revocation_outlasts_the_timeout_advises_revoking_in_google()
+    {
+        var time = new FakeTimeProvider();
+        var revoking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncHandler(async (request, ct) =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/token": return Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}""");
+                case "/v1/userinfo": return Json("""{"sub":"account"}""");
+                case "/revoke":
+                    revoking.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return Json("{}");
+                default: return Json("{}");
+            }
+        });
+        var service = Service(new TestConnectorStore(), handler, Guid.NewGuid(), time: time, revokeTimeout: TimeSpan.FromMinutes(5));
+        await ConnectAsync(service);
+
+        var disconnect = service.DisconnectAsync(Guid.NewGuid(), default);
+        await revoking.Task.WaitAsync(Eventually.DefaultPatience);
+        Assert.False(disconnect.IsCompleted);
+        time.Advance(TimeSpan.FromMinutes(5));
+        await disconnect.WaitAsync(Eventually.DefaultPatience);
+
+        var status = await service.StatusAsync(default);
+        Assert.False(status.Connected);
+        Assert.Equal("revoke_in_google", status.ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_preview_that_outlasts_its_timeout_reports_google_unavailable()
+    {
+        var time = new FakeTimeProvider();
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncHandler(async (request, ct) =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/token": return Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}""");
+                case "/v1/userinfo": return Json("""{"sub":"account"}""");
+                default:
+                    reading.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return Json("{}");
+            }
+        });
+        var service = Service(new TestConnectorStore(), handler, Guid.NewGuid(), time: time);
+        await ConnectAsync(service);
+
+        var preview = service.PreviewAsync(Guid.NewGuid(), default);
+        await reading.Task.WaitAsync(Eventually.DefaultPatience);
+        Assert.False(preview.IsCompleted);
+        time.Advance(TimeSpan.FromMinutes(3));
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => preview.WaitAsync(Eventually.DefaultPatience));
+        Assert.Equal("google_unavailable", error.Message);
+        Assert.Equal("preview_timeout", error.Stage);
     }
 
     private sealed class ThrowingTokenCache(Func<Exception> failure) : IConnectorTokenCache
@@ -1836,7 +1922,8 @@ public class GoogleHealthTests : IDisposable
         IGoogleHealthReadingWriter? writer = null,
         Nocturne.Core.Models.V4.BiologicalSex? sex = null,
         IGoogleHealthGrantHolders? holders = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        TimeSpan? revokeTimeout = null)
     {
         var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
@@ -1861,11 +1948,11 @@ public class GoogleHealthTests : IDisposable
             oauth,
             new GoogleHealthSessionStore(store.Configurations, oauth,
                 holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions,
-                NullLogger<GoogleHealthSessionStore>.Instance),
+                NullLogger<GoogleHealthSessionStore>.Instance, time ?? TimeProvider.System, revokeTimeout),
             store.Configurations,
             store.Loader,
             tenant.Object,
-            store.Cursors,
+            store.State,
             patientRecords.Object,
             platformOptions,
             OAuthState,
@@ -1907,18 +1994,10 @@ public class GoogleHealthTests : IDisposable
         public bool FailActivationWrite { get; set; }
         public async Task<bool> EnabledAsync() => (await Loader.LoadForTenantAsync(default)).Enabled;
 
-        private ConnectorSyncCursor? runtimeCursor;
-        public IConnectorSyncCursorStore Cursors { get; }
+        public InMemoryConnectorStateStore State { get; } = new();
 
         public TestConnectorStore()
         {
-            var cursors = new Mock<IConnectorSyncCursorStore>();
-            cursors.Setup(store => store.GetAsync("GoogleHealth", "health", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => runtimeCursor);
-            cursors.Setup(store => store.SetAsync("GoogleHealth", "health", It.IsAny<ConnectorSyncCursor>(), It.IsAny<CancellationToken>()))
-                .Callback<string, string, ConnectorSyncCursor, CancellationToken>((_, _, value, _) => runtimeCursor = value)
-                .Returns(Task.CompletedTask);
-            Cursors = cursors.Object;
             var configurations = new Mock<IConnectorConfigurationService>();
             configurations.Setup(value => value.GetConfigurationAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
@@ -1955,11 +2034,11 @@ public class GoogleHealthTests : IDisposable
                 if (invalidatesCaches) OnSave?.Invoke();
             }
             configurations.Setup(value => value.SaveSecretsAsync(
-                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>(
-                    (_, values, _, ct) => RecordSecrets(values, ct, invalidatesCaches: true))
-                .Returns(Task.CompletedTask);
+                .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?, CancellationToken>(
+                    (_, values, _, _, ct) => RecordSecrets(values, ct, invalidatesCaches: true))
+                .ReturnsAsync(new ConnectorSecretsSaveResult());
             configurations.Setup(value => value.SaveRuntimeSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
                 .Callback<string, Dictionary<string, string>, CancellationToken>(
@@ -2010,7 +2089,6 @@ public class GoogleHealthTests : IDisposable
         {
             configuration?.Dispose();
             configuration = JsonDocument.Parse(value);
-            runtimeCursor = new(null, value);
             response = new ConnectorConfigurationResponse
             {
                 ConnectorName = "GoogleHealth",

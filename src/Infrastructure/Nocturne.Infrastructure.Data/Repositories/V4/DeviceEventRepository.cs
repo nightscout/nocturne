@@ -31,19 +31,17 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="linker">Links committed inserts into their duplicate groups.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
+    /// <param name="changes">Optional; null tells no one of a write.</param>
     /// <param name="reactor">Optional domain reaction to live creates and deletes — the tracker trigger.
     /// Null when the repository is constructed without DI, in which case writes simply run no reaction.</param>
-    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public DeviceEventRepository(
         INocturneDbContextFactory contextFactory,
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,
-        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
-        IDeviceEventReactor? reactor = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null,
+        IDeviceEventReactor? reactor = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
         _reactor = reactor;
     }
@@ -112,6 +110,21 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetOfTypesAsync(
+        DateTime from, DateTime to, IReadOnlyCollection<DeviceEventType> eventTypes, int limit, CancellationToken ct = default)
+    {
+        var types = eventTypes.Select(t => t.ToString()).ToList();
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceEvents.AsNoTracking()
+            .Where(e => types.Contains(e.EventType) && e.Timestamp >= from && e.Timestamp < to)
+            .ExcludeDuplicates()
+            .InObservationOrder(descending: false)
+            .Take(limit)
+            .ToListAsync(ct);
+        return [.. entities.Select(DeviceEventMapper.ToDomainModel)];
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceEvent>> GetIncludingDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -155,6 +168,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single registered patient device.</param>
+    /// <param name="eventTypes">Optional filter restricting results to events of any of these types.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of device events.</returns>
     public async Task<IEnumerable<DeviceEvent>> GetAsync(
@@ -166,15 +180,47 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         int offset = 0,
         bool descending = true,
         Guid? patientDeviceId = null,
+        IReadOnlyCollection<DeviceEventType>? eventTypes = null,
         CancellationToken ct = default
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await PagedRead(
             ctx.DeviceEvents.AsNoTracking(), from, to, device, source, limit, offset, descending,
-            query => patientDeviceId.HasValue ? query.Where(e => e.PatientDeviceId == patientDeviceId.Value) : query)
+            query => WithAttribution(query, patientDeviceId, eventTypes))
             .ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        IReadOnlyCollection<DeviceEventType>? eventTypes,
+        CancellationToken ct = default
+    )
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await Matching(
+            ctx.DeviceEvents.AsNoTracking(), from, to, device, source,
+            query => WithAttribution(query, patientDeviceId, eventTypes))
+            .CountAsync(ct);
+    }
+
+    private static IQueryable<DeviceEventEntity> WithAttribution(
+        IQueryable<DeviceEventEntity> query, Guid? patientDeviceId, IReadOnlyCollection<DeviceEventType>? eventTypes)
+    {
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+        if (eventTypes is { Count: > 0 })
+        {
+            var names = eventTypes.Select(t => t.ToString()).ToList();
+            query = query.Where(e => names.Contains(e.EventType));
+        }
+        return query;
     }
 
     /// <summary>

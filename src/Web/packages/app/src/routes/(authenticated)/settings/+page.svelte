@@ -15,6 +15,7 @@
     visibleSettingsGroups({
       grantedScopes: page.data.effectivePermissions ?? [],
       isPlatformAdmin: data.isPlatformAdmin ?? false,
+      refusedAsDemoSubject: page.data.refusedAsDemoSubject ?? false,
     })
   );
 </script>

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "name": "clock-skew-glucose-freshness",
+  "description": "on the first tick the reading has an arrival, the host's own instant: an hour ahead it is fresh and judged, with no clock_anomaly; the later ticks have no arrival, so freshness runs from the reading's timestamp: an hour ahead it is unknown and clock_anomaly reports latest_timestamp, 3 minutes ahead it is fresh",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "above",
+        "value": 180
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-04-01T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T13:00:00Z",
+        "latest_received_at": "2026-04-01T13:00:00Z",
+        "last_reading_at": "2026-04-01T13:00:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:05:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T13:05:00Z",
+        "last_reading_at": "2026-04-01T13:05:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:10:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T12:13:00Z",
+        "last_reading_at": "2026-04-01T12:13:00Z"
+      }
+    }
+  ]
+}

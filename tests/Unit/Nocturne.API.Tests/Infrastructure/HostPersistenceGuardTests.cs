@@ -83,12 +83,13 @@ public class HostPersistenceGuardTests
                     "static helper over the alert read's own context that names the members who saw an alarm from their subject rows"),
             ]),
         new("tenants and memberships (#3102)",
-            ["TenantEntity", "TenantMemberEntity", "TenantRoleEntity", "TenantMemberRoleEntity", "MembershipRequestEntity",
-                "OidcProviderEntity", "RoleEntity", "TenantDemoConfigEntity"],
+            ["TenantEntity", "TenantMemberEntity", "TenantRoleEntity", "TenantMemberRoleEntity", "TenantMemberReasonEntity",
+                "TenantMemberReasonRoleEntity", "MembershipRequestEntity", "OidcProviderEntity", "RoleEntity", "TenantDemoConfigEntity"],
             // Roles is not listed: ".Roles" is also a member of AuthContext, the Nightscout Subject, the
             // token claims and TenantMemberDto, so the global role catalogue is guarded by its entity type
             // alone, and a bare "db.Roles" query that names no RoleEntity is the one shape the scan misses.
-            ["Tenants", "TenantMembers", "TenantRoles", "TenantMemberRoles", "MembershipRequests", "OidcProviders", "TenantDemoConfigs"],
+            ["Tenants", "TenantMembers", "TenantRoles", "TenantMemberRoles", "TenantMemberReasons", "TenantMemberReasonRoles",
+                "MembershipRequests", "OidcProviders", "TenantDemoConfigs"],
             [
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
                     "dev-only whole-schema snapshot export and restore of a tenant, its roles and memberships alongside every other table",
@@ -129,6 +130,9 @@ public class HostPersistenceGuardTests
                 new("src/API/Nocturne.API/Filters/ReadAccessLogWriter.cs",
                     "host-side writer that queues read access log rows and saves them in batches after the request ends",
                     CoversMembers: true),
+                new("src/API/Nocturne.API/Reports/ReportReadAudit.cs",
+                    "host-side writer that builds the read access log row of a custom report run for the queue",
+                    CoversMembers: true),
             ]),
         new("sleep sessions (#3348)",
             ["SleepSessionEntity", "SleepStageEntity", "SleepBiometricSampleEntity"],
@@ -149,6 +153,10 @@ public class HostPersistenceGuardTests
         new("Google Health grant holders (#3348)",
             ["GoogleHealthGrantHolderEntity"],
             ["GoogleHealthGrantHolders"],
+            []),
+        new("trackers (#3570)",
+            ["TrackerDefinitionEntity", "TrackerInstanceEntity", "TrackerPresetEntity", "TrackerNotificationThresholdEntity"],
+            ["TrackerDefinitions", "TrackerInstances", "TrackerPresets", "TrackerNotificationThresholds"],
             []),
     ];
 

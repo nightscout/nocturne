@@ -53,6 +53,7 @@ internal sealed class DeviceStatusService(
     {
         var announce = origin == WriteOrigin.Live;
         var result = new DeviceStatusDecomposition();
+        var named = announce ? await ReadInvalidatedAsync(statuses, cancellationToken) : null;
         IReadOnlyList<DeviceStatus> served = [];
         try
         {
@@ -61,10 +62,16 @@ internal sealed class DeviceStatusService(
         finally
         {
             if (announce)
+            {
                 served = await AnnounceCreatedAsync(statuses, result.Wrote, source);
+                await AnnounceInvalidatedAsync(result.Invalidated, named!);
+            }
         }
 
-        return new BulkWrite<DeviceStatus>(announce ? served : statuses, result.SkippedDeleted);
+        return new BulkWrite<DeviceStatus>(announce ? served : statuses, result.SkippedDeleted)
+        {
+            Invalidated = [.. statuses.Where(result.Invalidated.Contains)],
+        };
     }
 
     public async Task<DecompositionResult> ImportDeviceStatusesAsync(
@@ -154,6 +161,36 @@ internal sealed class DeviceStatusService(
         }
 
         return served;
+    }
+
+    /// <summary>
+    /// The stored status each status sent with <c>isValid: false</c> names, read before the batch
+    /// deletes it, as its delete announces it.
+    /// </summary>
+    private async Task<Dictionary<DeviceStatus, DeviceStatus>> ReadInvalidatedAsync(
+        IReadOnlyList<DeviceStatus> statuses, CancellationToken cancellationToken)
+    {
+        var named = new Dictionary<DeviceStatus, DeviceStatus>(ReferenceEqualityComparer.Instance);
+        foreach (var status in statuses.Where(s => s.IsValid == false && !string.IsNullOrEmpty(s.Id)))
+        {
+            if (await store.GetByIdAsync(status.Id!, cancellationToken) is { } stored)
+                named[status] = stored;
+        }
+
+        return named;
+    }
+
+    private async Task AnnounceInvalidatedAsync(
+        IReadOnlySet<DeviceStatus> invalidated, Dictionary<DeviceStatus, DeviceStatus> named)
+    {
+        foreach (var status in invalidated)
+        {
+            if (!named.TryGetValue(status, out var deleted))
+                continue;
+            deleted.IsValid = false;
+            await sideEffects.OnDeletedAsync(CollectionName, deleted, cancellationToken: CancellationToken.None);
+            await events.OnDeletedAsync(deleted, CancellationToken.None);
+        }
     }
 
     /// <returns>

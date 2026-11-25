@@ -18,6 +18,7 @@
   import Server from "@lucide/svelte/icons/server";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import Smartphone from "@lucide/svelte/icons/smartphone";
+  import X from "@lucide/svelte/icons/x";
   import QRCode from "qrcode";
   import type { PageData } from "./$types";
   import {
@@ -40,25 +41,34 @@
   } from "#lib/api/generated/totps.generated.remote.js";
   import LinkedOidcIdentities from "#lib/components/settings/LinkedOidcIdentities.svelte";
   import ActiveSessions from "#lib/components/settings/ActiveSessions.svelte";
+  import TrustedDevices from "#lib/components/settings/TrustedDevices.svelte";
+  import RecoveryEmailSection from "#lib/components/settings/RecoveryEmailSection.svelte";
   import UserProfileCard from "#lib/components/account/UserProfileCard.svelte";
   import SecurityCredentialCard from "#lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "#lib/components/account/TotpSetupDialog.svelte";
   import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import {
     describePasskeyError,
     parseCeremonyOptions,
   } from "#lib/components/auth/passkey-errors.js";
-  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { describeSubmitError, errorStatus, isSignInRequired } from "#lib/forms/submit-error.js";
   import {
     describeTotpSetupError,
     describeTotpSetupStartError,
   } from "#lib/components/account/totp-errors.js";
+  import {
+    readRecoveredMethod,
+    withoutRecoveredMethod,
+  } from "#lib/components/auth/recovered-method.js";
   import { page } from "$app/state";
-  import { invalidateAll } from "$app/navigation";
+  import { invalidateAll, replaceState } from "$app/navigation";
+  import { onMount } from "svelte";
 
   const { data }: { data: PageData } = $props();
 
   const user = $derived(data.user);
+  const handedOff = $derived(data.isHandedOffSession === true);
 
   // ============================================================================
   // Security State
@@ -118,6 +128,16 @@
   const isSecurityLoading = $derived(credentialsQuery.loading);
   const canRemovePasskey = $derived(primaryAuthFactorCount > 1);
 
+  // A recovery lands here with the method it added in the address; the address is cleaned once read.
+  let recovered = $state(readRecoveredMethod(page.url));
+  const passkeyMarked = $derived(
+    recovered?.passkeyId !== undefined && credentials.some((c) => c.id === recovered?.passkeyId)
+  );
+  onMount(() => {
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current path with the recovery parameters removed
+    if (recovered) replaceState(withoutRecoveredMethod(page.url), page.state);
+  });
+
   // Handle ?linked= query param from OIDC link flow return
   $effect(() => {
     const linked = page.url.searchParams.get("linked");
@@ -173,7 +193,11 @@
     }
   }
 
-  /** Finish registration, persisting the entered label (or none, when skipped). */
+  /**
+   * Finish registration, persisting the entered label (or none, when skipped). The challenge is
+   * spent by the first attempt, so a failed attempt closes the dialog and a retry starts again
+   * from "Add passkey".
+   */
   async function completePasskeyRegistration() {
     if (!pendingPasskey || isSavingPasskey) return;
     isSavingPasskey = true;
@@ -185,15 +209,19 @@
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
       }).updates(credentialsQuery);
-      showLabelDialog = false;
-      pendingPasskey = null;
-      newPasskeyLabel = "";
       successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
       void invalidateAll();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to register passkey.");
+      const notAdded = "Nocturne did not add the passkey. To try again, select Add passkey.";
+      const status = errorStatus(err);
+      const answersItself = status === 401 || status === 429 || isSignInRequired(err);
+      const refused = status !== undefined && status >= 400 && status < 500;
+      errorMessage = refused && !answersItself ? notAdded : describeSubmitError(err, notAdded);
     } finally {
+      showLabelDialog = false;
+      pendingPasskey = null;
+      newPasskeyLabel = "";
       isSavingPasskey = false;
     }
   }
@@ -370,6 +398,41 @@
       </div>
     </div>
 
+    {#if recovered && !isSecurityLoading}
+      <div
+        class="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-3"
+        role="status"
+        data-testid="recovered-notice"
+      >
+        <Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div class="flex-1 space-y-1 text-sm">
+          {#if passkeyMarked}
+            <p class="font-medium">You are back in your account.</p>
+            <p class="text-muted-foreground">
+              The passkey you just added is marked "Added just now". Remove any older sign-in
+              method you no longer have, such as the passkey on a lost phone. Nothing is removed
+              unless you remove it.
+            </p>
+          {:else}
+            <p class="font-medium">Check your sign-in methods.</p>
+            <p class="text-muted-foreground">
+              Remove any sign-in method you no longer have, such as the passkey on a lost phone.
+              Nothing is removed unless you remove it.
+            </p>
+          {/if}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="shrink-0"
+          aria-label="Dismiss"
+          onclick={() => (recovered = null)}
+        >
+          <X class="h-4 w-4" />
+        </Button>
+      </div>
+    {/if}
+
     <!-- User Profile Card -->
     <UserProfileCard {user} />
 
@@ -393,6 +456,9 @@
         </Card.Content>
       </Card.Root>
     {:else}
+      {#if handedOff}
+        <SignInGate reason="Sign in again to add or remove sign-in methods, see trusted devices, or make new recovery codes." />
+      {/if}
       <!-- Section 1: Registered Passkeys -->
       <SecurityCredentialCard
         title="Passkeys"
@@ -408,14 +474,20 @@
         isAdding={isRegistering}
         isRemoving={isRemoving !== null}
         removingId={isRemoving ?? undefined}
+        justAddedId={recovered?.passkeyId}
         canRemove={canRemovePasskey}
         maxCredentials={maxPasskeys}
+        readOnly={handedOff}
         onAdd={handleAddPasskey}
         onRemove={(cred) => confirmRemovePasskey(cred)}
       />
 
       <!-- Section 1b: Linked OIDC identities -->
-      <LinkedOidcIdentities {primaryAuthFactorCount} />
+      <LinkedOidcIdentities
+        {primaryAuthFactorCount}
+        justAddedId={recovered?.identityId}
+        readOnly={handedOff}
+      />
 
       <!-- Section 2: Authenticator Apps -->
       <SecurityCredentialCard
@@ -434,9 +506,21 @@
         removingId={totpRemovingId ?? undefined}
         canRemove={true}
         maxCredentials={maxTotpCredentials}
+        readOnly={handedOff}
         onAdd={handleStartTotpSetup}
         onRemove={(cred) => confirmRemoveTotp(cred)}
       />
+
+      <!-- A device is trusted in place of the authenticator code, so without an authenticator
+           there is nothing to list. Listing them is the person's own sign-in's to do. -->
+      {#if totpCredentials.length > 0 && !handedOff}
+        <TrustedDevices />
+      {/if}
+
+      <!-- Not rendered where this site cannot send the confirming email, and the tenantless host has no site to send for. -->
+      {#if page.data.tenantless !== true}
+        <RecoveryEmailSection />
+      {/if}
 
       <!-- Section 3: Recovery Codes -->
       <Card.Root>
@@ -485,6 +569,7 @@
             </div>
           {/if}
 
+          {#if !handedOff}
           <Separator />
 
           <Button
@@ -501,6 +586,7 @@
               ? "Regenerate recovery codes"
               : "Generate recovery codes"}
           </Button>
+          {/if}
         </Card.Content>
       </Card.Root>
 
@@ -703,7 +789,7 @@
       <Dialog.Description>
         Are you sure you want to remove "{totpRemoveTarget?.label ??
           "Unnamed authenticator"}"? You will no longer be able to sign in with
-        this authenticator app.
+        this authenticator app. This also removes your trusted devices.
       </Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>

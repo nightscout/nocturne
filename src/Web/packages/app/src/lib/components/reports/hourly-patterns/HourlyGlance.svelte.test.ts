@@ -5,7 +5,7 @@ import {
   HourlyComparison,
   type HourlyPattern,
   type HourlyPatterns,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import HourlyGlance from "./HourlyGlance.svelte";
 
 const hour = (h: number, inRange: number): HourlyPattern => ({

@@ -1,13 +1,9 @@
 using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using Moq;
-using Nocturne.API.Services.V4;
-using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
@@ -15,18 +11,11 @@ using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -83,14 +72,14 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     [InlineData(true)]
     public async Task A_meal_bolus_with_a_preBolus_comes_back_as_its_one_carb_intake(bool edited)
     {
-        var decomposer = Treatments();
+        var decomposer = TreatmentDecomposerDoubles.Stored(_factory, _dedup, _audit);
         var treatment = Treatment("Meal Bolus", insulin: 2, carbs: 30, preBolus: 15);
         await decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
 
         await WriteBackAsync(treatment, edited);
         _upstream.Documents.Select(d => (d["created_at"]!.GetValue<string>(), d["carbs"]?.GetValue<double>()))
             .Should().BeEquivalentTo([(BolusTime, (double?)null), ("2026-09-30T10:15:00.000Z", 30d)]);
-        await PullBackAsync(decomposer);
+        await decomposer.DecomposeBatchAsync(PulledBack(), WriteOrigin.Live);
 
         var carbs = await _context.CarbIntakes.AsNoTracking().SingleAsync();
         carbs.Carbs.Should().Be(30);
@@ -101,7 +90,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     [Fact]
     public async Task An_edit_of_a_treatment_an_earlier_write_back_split_comes_back_as_its_one_carb_intake()
     {
-        var decomposer = Treatments();
+        var decomposer = TreatmentDecomposerDoubles.Stored(_factory, _dedup, _audit);
         await decomposer.DecomposeOneAsync(Treatment("Meal Bolus", insulin: 2, carbs: 30, preBolus: 15), WriteOrigin.Live);
         _upstream.Post(JsonNode.Parse($$"""
             [{"_id":"{{Key}}","identifier":"{{Key}}","eventType":"Meal Bolus","created_at":"{{BolusTime}}","carbs":30,"insulin":2,"preBolus":15}]
@@ -111,7 +100,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
         var edited = Treatment("Meal Bolus", insulin: 2, carbs: 35, preBolus: 15);
         await decomposer.DecomposeOneAsync(edited, WriteOrigin.Live);
         await WriteBackAsync(edited, edited: true);
-        await PullBackAsync(decomposer);
+        await decomposer.DecomposeBatchAsync(PulledBack(), WriteOrigin.Live);
 
         var carbs = await _context.CarbIntakes.AsNoTracking().SingleAsync();
         carbs.Carbs.Should().Be(35);
@@ -121,13 +110,13 @@ public class PreBolusWriteBackPullBackTests : IDisposable
     [Fact]
     public async Task A_pulled_back_bolus_wizard_with_a_preBolus_is_an_echo_and_keeps_its_preBolus()
     {
-        var decomposer = Treatments();
+        var decomposer = TreatmentDecomposerDoubles.Stored(_factory, _dedup, _audit);
         var treatment = Treatment("Bolus Wizard", insulin: 3, carbs: 45, preBolus: 20);
         await decomposer.DecomposeOneAsync(treatment, WriteOrigin.Live);
         (await _context.BolusCalculations.AsNoTracking().SingleAsync()).PreBolus.Should().Be(20);
 
         await WriteBackAsync(treatment, edited: true);
-        await PullBackAsync(decomposer);
+        await decomposer.DecomposeBatchAsync(PulledBack(), WriteOrigin.Live);
 
         var calculation = await _context.BolusCalculations.AsNoTracking().SingleAsync();
         calculation.CarbInput.Should().Be(45);
@@ -151,6 +140,7 @@ public class PreBolusWriteBackPullBackTests : IDisposable
             new HttpClient(_upstream),
             loader.Object,
             new NightscoutCircuitBreaker(new FakeTimeProvider()),
+            Mock.Of<IWriteBackSentRecords>(),
             NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
         if (edited)
@@ -159,39 +149,11 @@ public class PreBolusWriteBackPullBackTests : IDisposable
             await sink.OnCreatedAsync([treatment]);
     }
 
-    private async Task PullBackAsync(TreatmentDecomposer decomposer)
+    private Treatment[] PulledBack()
     {
         var pulled = JsonSerializer.Deserialize<Treatment[]>(_upstream.Served(), JsonDefaults.CaseInsensitive)!;
         foreach (var treatment in pulled)
             treatment.DataSource = DataSources.NightscoutConnector;
-        await decomposer.DecomposeBatchAsync(pulled, WriteOrigin.Live);
-    }
-
-    private TreatmentDecomposer Treatments()
-    {
-        var foods = new Mock<ITreatmentFoodService>();
-        foods
-            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        return new TreatmentDecomposer(
-            _factory, new DecomposedTreatmentKeys(_factory),
-            new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
-            new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
-            new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
-            new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),
-            new DeviceEventRepository(_factory, _dedup, _audit, NullLogger<DeviceEventRepository>.Instance),
-            new BolusCalculationRepository(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            foods.Object,
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            _audit,
-            NullLogger<TreatmentDecomposer>.Instance);
+        return pulled;
     }
 }

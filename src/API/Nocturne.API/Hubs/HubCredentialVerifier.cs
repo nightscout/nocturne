@@ -49,7 +49,9 @@ public sealed record OverviewGrant(
 /// <summary>
 /// Proves hub credentials again from server-side state: the tenant still exists and is active, the
 /// grant or guest link is live, the subject is active, a session login still has a session, and the
-/// membership still exists. Scopes and the history clamp are recomputed as <see cref="Middleware.MemberScopeMiddleware"/> does.
+/// membership still exists and has not ended, for every credential that belongs to a subject, as
+/// <see cref="Middleware.AuthenticationMiddleware"/> holds it over HTTP. Scopes and the history
+/// clamp are recomputed as <see cref="Middleware.MemberScopeMiddleware"/> does.
 /// </summary>
 /// <remarks>
 /// One instance serves one sweep, and memoizes every lookup for it, so connections that share a
@@ -142,7 +144,7 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
 
             case AuthType.PlatformAccess:
                 return source.SubjectId is { } admin
-                       && await SubjectAsync(admin) is { IsActive: true, IsPlatformAdmin: true }
+                       && await SubjectAsync(admin) is { IsActivePlatformAdmin: true }
                        && (source.ExpiresAt is null || source.ExpiresAt > timeProvider.GetUtcNow())
                        && !(source.GrantId is { } jti && await IsTokenRevokedAsync(jti))
                     ? granted
@@ -188,12 +190,7 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
         }
 
         if (await MembershipAsync(subjectId, tenant.TenantId) is not { } membership)
-        {
-            // An api-secret grant needs no membership; MemberScopeMiddleware keeps its own scopes.
-            return source.AuthType is AuthType.ApiKey
-                ? granted with { Scopes = credentialScopes, HistoryClamped = credentialLimit }
-                : null;
-        }
+            return null;
 
         return granted with
         {

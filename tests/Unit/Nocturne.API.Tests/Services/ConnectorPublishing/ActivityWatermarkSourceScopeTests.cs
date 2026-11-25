@@ -133,7 +133,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IDataEventSink<Activity>>(),
             new ActivityDecomposer(
-                new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), stateSpanRepository, sleepService, NullLogger<ActivityDecomposer>.Instance),
+                new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), stateSpanRepository, sleepService, TimeProvider.System, NullLogger<ActivityDecomposer>.Instance),
             heartRateService,
             stepCountService,
             NullLogger<ActivityService>.Instance);
@@ -152,7 +152,6 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             new ActivityDedupRepository(_context.AsFactory()),
-            new ConnectorConfigurationRepository(_context.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),

@@ -78,7 +78,7 @@ export function registerAlertCommands(bot: Chat) {
         result = await getApi().alerts.acknowledgeAsLinkedMember(link.id, {
           platform: event.adapter.name,
           platformUserId: event.user.userId,
-          excursionId,
+          excursionId: excursionId ?? undefined,
           acknowledgedBy,
         });
       } catch (err) {

@@ -46,6 +46,7 @@ public interface IMemberInviteService
         Guid createdBySubjectId,
         IEnumerable<string> granterPermissions,
         List<Guid> roleIds,
+        DateTime? accessEndsAt,
         List<string>? directPermissions = null,
         string? label = null,
         int expiresInDays = 7,
@@ -101,10 +102,24 @@ public record MemberInviteResult(
 /// <summary>
 /// Detailed view of an invite, including its current validity state and usage history.
 /// </summary>
+/// <param name="CreatedByName">The display name of the member who made the invite; empty when they have none.</param>
+/// <param name="IsValid">
+/// Whether the invite can be accepted: unexpired, unrevoked, under its cap and made by a subject who is a
+/// member in force.
+/// </param>
+/// <param name="IsRevoked">
+/// Whether the invite was revoked, or its maker is no longer a member in force, so it reads as the
+/// revoked invite an accept refuses.
+/// </param>
 /// <param name="RoleNames">Names of the invite's roles that still exist.</param>
 /// <param name="Permissions">
 /// What accepting the invite grants: the permissions of <paramref name="RoleNames"/> unioned with
 /// the direct permissions, as a member's effective permissions are.
+/// </param>
+/// <param name="AccessEndsAt">When the membership the invite creates ends, in UTC; null when it does not.</param>
+/// <param name="OutlastsCaller">
+/// Whether the caller the invite was read for has an end date and the access the invite gives
+/// outlasts it, so the caller may not revoke it. Always false when read for no caller.
 /// </param>
 public record MemberInviteInfo(
     Guid Id,
@@ -124,7 +139,9 @@ public record MemberInviteInfo(
     DateTime CreatedAt,
     List<InviteUsageInfo> UsedBy,
     List<string> RoleNames,
-    List<string> Permissions);
+    List<string> Permissions,
+    DateTime? AccessEndsAt,
+    bool OutlastsCaller = false);
 
 /// <summary>
 /// What the holder of an invite link is shown before joining. Anonymous, so it carries only what
@@ -143,6 +160,7 @@ public record MemberInviteInfo(
 /// See <see cref="Nocturne.Core.Models.Authorization.Scope.IsViewOnlyForRecordsAndAccess"/>.
 /// </param>
 /// <param name="Viewer">Where the caller stands relative to the invite.</param>
+/// <param name="AccessEndsAt">When the membership the invite creates ends, in UTC; null when it does not.</param>
 public record JoinInviteInfo(
     string TenantName,
     string CreatedByName,
@@ -152,14 +170,18 @@ public record JoinInviteInfo(
     DateTime ExpiresAt,
     bool GrantsAccess,
     bool IsViewOnlyForRecordsAndAccess,
-    InviteViewer? Viewer);
+    InviteViewer? Viewer,
+    DateTime? AccessEndsAt);
 
 /// <summary>
 /// Where the caller of the join page's invite lookup stands relative to the invite.
 /// </summary>
 /// <param name="SubjectId">The signed-in caller's subject, or null when nobody is signed in.</param>
 /// <param name="Name">The signed-in caller's display name.</param>
-/// <param name="IsMember">Whether that subject already belongs to the invite's tenant.</param>
+/// <param name="IsMember">
+/// Whether that subject was already let in to the invite's tenant directly, which the invite would repeat.
+/// Access through a team alone is not, so a team's staff member can still accept.
+/// </param>
 public record InviteViewer(
     Guid? SubjectId,
     string? Name,

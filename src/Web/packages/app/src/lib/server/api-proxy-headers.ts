@@ -4,6 +4,26 @@ import {
   CLIENT_IP_SIGNATURE_HEADER,
 } from "#lib/server/client-address.js";
 
+const HOP_BY_HOP_HEADERS = [
+  "Connection",
+  "Keep-Alive",
+  "Proxy-Connection",
+  "TE",
+  "Transfer-Encoding",
+  "Upgrade",
+];
+
+/** RFC 9110 section 7.6.1. */
+function stripHopByHop(headers: Headers): void {
+  const named = (headers.get("Connection") ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  for (const name of [...HOP_BY_HOP_HEADERS, ...named]) {
+    headers.delete(name);
+  }
+}
+
 /** The subset of SvelteKit's Cookies the proxy reads. */
 export interface ProxyCookieReader {
   get(name: string): string | undefined;
@@ -42,6 +62,11 @@ export function buildProxyHeaders({
 }: ProxyHeaderInput): Headers {
   const headers = new Headers(requestHeaders);
 
+  stripHopByHop(headers);
+  // The body is buffered: fetch sets its own length, and an Expect has nothing left to wait for.
+  headers.delete("Content-Length");
+  headers.delete("Expect");
+
   if (effectiveHost) {
     headers.set("X-Forwarded-Host", effectiveHost);
   }
@@ -78,5 +103,17 @@ export function buildProxyHeaders({
     headers.set("Cookie", forwarded.join("; "));
   }
 
+  return headers;
+}
+
+/**
+ * Headers for the response the proxy hands back to the browser. fetch has already decoded the
+ * body, so the encoding and length the API sent no longer describe it.
+ */
+export function buildProxyResponseHeaders(upstream: Headers): Headers {
+  const headers = new Headers(upstream);
+  stripHopByHop(headers);
+  headers.delete("Content-Encoding");
+  headers.delete("Content-Length");
   return headers;
 }

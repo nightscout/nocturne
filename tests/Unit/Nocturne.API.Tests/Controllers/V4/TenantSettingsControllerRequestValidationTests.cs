@@ -230,6 +230,7 @@ public class TenantSettingsControllerRequestValidationTests
                     services.AddSingleton<INocturneDbContextFactory>(sp =>
                         sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
                     services.AddTransient<ISubjectRepository, SubjectRepository>();
+                    services.AddSingleton(AccountLinkRoutes.Off);
                     services.Configure<RouteOptions>(o => o.SuppressCheckForUnhandledSecurityMetadata = true);
                     services.AddControllers().ConfigureApplicationPartManager(manager =>
                     {

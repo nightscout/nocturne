@@ -69,10 +69,8 @@ export const saveConfiguration = command(
 ## Step 2: Rebuild to Generate
 
 ```bash
-dotnet build                              # Full pipeline
-dotnet build -t:GenerateClient ...        # NSwag only
-pnpm run generate-api                     # All three stages from Web root
-pnpm run generate-remote-functions        # Stage 3 only (if openapi.json is current)
+dotnet build                              # Full pipeline, when the public surface changed
+pnpm run generate-api                     # Force all three stages, from the Web root
 ```
 
 Output lands in `src/Web/packages/app/src/lib/api/generated/`. **Never edit generated files.**

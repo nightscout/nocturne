@@ -31,7 +31,7 @@ public class AuditContextMiddleware
             mutableContext.AuthType = authContext?.AuthType.ToString();
             mutableContext.TokenId = authContext?.TokenId;
             mutableContext.CredentialFingerprint = authContext?.CredentialFingerprint;
-            mutableContext.IpAddress = httpContext.Connection.RemoteIpAddress?.ToString();
+            mutableContext.IpAddress = httpContext.GetClientAddress();
             mutableContext.UserAgent = httpContext.Request.Headers.UserAgent.ToString();
             mutableContext.TraceId = httpContext.TraceIdentifier;
             mutableContext.Endpoint =

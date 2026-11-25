@@ -6,6 +6,7 @@ using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.ClientDevices;
 
@@ -243,6 +244,7 @@ public class ClientDeviceService : IClientDeviceService
             .Include(e => e.AlertRule)
                 .ThenInclude(r => r!.Channels)
             .Include(e => e.Instances)
+            .OfCondition(includeTest: true)
             .Where(e => (e.EndedAt == null || e.EndedAt > now)
                 && e.AlertRule!.IsEnabled
                 && e.AlertRule.Channels.Any(c =>

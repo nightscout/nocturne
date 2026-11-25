@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.FreeStyle.Tests.Services;
 
@@ -34,28 +34,19 @@ public class LibreLinkTokenExpiryTests
 
     private static LibreLinkAuthTokenProvider ProviderFor(TimeProvider clock)
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenant = ResolvedTenant.Accessor();
 
         return new LibreLinkAuthTokenProvider(
-            new HttpClient(new LoginHandler()),
+            new HttpClient(LoginHandler()),
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(
                 null, null, LibreLinkUpConstants.Endpoints.Eu),
-            tenant.Object,
+            tenant,
             NullLogger<LibreLinkAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             clock);
     }
 
-    private sealed class LoginHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("{\"status\":0,\"data\":{\"authTicket\":{\"token\":\"ticket-1\"}}}")
-            });
-    }
+    private static FakeHttpHandler LoginHandler() => new FakeHttpHandler(_ => FakeHttpHandler.Status(
+        HttpStatusCode.OK, "{\"status\":0,\"data\":{\"authTicket\":{\"token\":\"ticket-1\"}}}"));
 }

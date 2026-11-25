@@ -10,10 +10,12 @@ using System.Text.Json;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// V2 Properties controller providing client properties and settings endpoints.
-/// Implements the legacy /api/v2/properties endpoints with 1:1 backwards compatibility.
+/// Nightscout properties: client properties and settings, such as IOB, COB, basal rates and sensor ages. A client
+/// can read all properties, or one property by path.
 /// </summary>
 /// <remarks>
+/// Implements the legacy /api/v2/properties endpoints with 1:1 backwards compatibility.
+///
 /// Both actions require only <c>glucose.read</c>, while the assembled response carries values
 /// derived from other categories: IOB and COB from boluses and carbs (treatments), basal rates and
 /// ratios from the active profile (therapy), and cannula/sensor/insulin ages from device data.
@@ -32,23 +34,18 @@ namespace Nocturne.API.Controllers.V2;
 [Produces("application/json")]
 [ClientPropertyName("v2Properties")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class PropertiesController : ControllerBase
 {
     private readonly IPropertiesService _propertiesService;
-    private readonly ILogger<PropertiesController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PropertiesController"/>.
     /// </summary>
     /// <param name="propertiesService">Service for assembling client properties and plugin data.</param>
-    /// <param name="logger">Logger instance.</param>
-    public PropertiesController(
-        IPropertiesService propertiesService,
-        ILogger<PropertiesController> logger
-    )
+    public PropertiesController(IPropertiesService propertiesService)
     {
         _propertiesService = propertiesService;
-        _logger = logger;
     }
 
     /// <summary>
@@ -69,26 +66,18 @@ public class PropertiesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var properties = await _propertiesService.GetAllPropertiesAsync(cancellationToken);
+        var properties = await _propertiesService.GetAllPropertiesAsync(cancellationToken);
 
-            if (pretty)
-            {
-                var prettyJson = JsonSerializer.Serialize(
-                    properties,
-                    new JsonSerializerOptions { WriteIndented = true }
-                );
-                return Content(prettyJson, "application/json");
-            }
-
-            return Ok(properties);
-        }
-        catch (Exception ex)
+        if (pretty)
         {
-            _logger.LogError(ex, "Error getting all properties");
-            return StatusCode(500, new { error = "Internal server error" });
+            var prettyJson = JsonSerializer.Serialize(
+                properties,
+                new JsonSerializerOptions { WriteIndented = true }
+            );
+            return Content(prettyJson, "application/json");
         }
+
+        return Ok(properties);
     }
 
     /// <summary>
@@ -113,54 +102,42 @@ public class PropertiesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        if (string.IsNullOrWhiteSpace(propertyPath))
         {
-            if (string.IsNullOrWhiteSpace(propertyPath))
-            {
-                return BadRequest(new { error = "Property path cannot be empty" });
-            }
-
-            // Split the path by commas and filter out empty segments
-            var segments = propertyPath
-                .Split('/')
-                .Where(segment => !string.IsNullOrEmpty(segment))
-                .ToList();
-
-            if (!segments.Any())
-            {
-                return BadRequest(new { error = "No valid property names provided" });
-            }
-
-            // If there's only one segment, split by comma for multiple properties
-            var propertyNames =
-                segments.Count == 1
-                    ? segments[0].Split(',').Where(name => !string.IsNullOrWhiteSpace(name))
-                    : segments;
-
-            var properties = await _propertiesService.GetPropertiesAsync(
-                propertyNames,
-                cancellationToken
-            );
-
-            if (pretty)
-            {
-                var prettyJson = JsonSerializer.Serialize(
-                    properties,
-                    new JsonSerializerOptions { WriteIndented = true }
-                );
-                return Content(prettyJson, "application/json");
-            }
-
-            return Ok(properties);
+            return BadRequest(new { error = "Property path cannot be empty" });
         }
-        catch (Exception ex)
+
+        // Split the path by commas and filter out empty segments
+        var segments = propertyPath
+            .Split('/')
+            .Where(segment => !string.IsNullOrEmpty(segment))
+            .ToList();
+
+        if (!segments.Any())
         {
-            _logger.LogError(
-                ex,
-                "Error getting specific properties for path: {PropertyPath}",
-                propertyPath
-            );
-            return StatusCode(500, new { error = "Internal server error" });
+            return BadRequest(new { error = "No valid property names provided" });
         }
+
+        // If there's only one segment, split by comma for multiple properties
+        var propertyNames =
+            segments.Count == 1
+                ? segments[0].Split(',').Where(name => !string.IsNullOrWhiteSpace(name))
+                : segments;
+
+        var properties = await _propertiesService.GetPropertiesAsync(
+            propertyNames,
+            cancellationToken
+        );
+
+        if (pretty)
+        {
+            var prettyJson = JsonSerializer.Serialize(
+                properties,
+                new JsonSerializerOptions { WriteIndented = true }
+            );
+            return Content(prettyJson, "application/json");
+        }
+
+        return Ok(properties);
     }
 }

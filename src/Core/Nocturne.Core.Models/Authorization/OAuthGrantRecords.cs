@@ -22,13 +22,24 @@ public sealed record NewOAuthGrant(
 /// site's master <c>api-secret</c> or one of its per-subject access tokens. At least one of the
 /// three hashes is required.
 /// </summary>
+/// <param name="CreatedBySubjectId">The member who adopted it; null for a system write.</param>
+/// <param name="ExpiresAt">When it stops authenticating; null when it does not.</param>
 public sealed record AdoptedLegacyCredential(
     Guid SubjectId,
     string Label,
     IReadOnlyList<string> Scopes,
     string? TokenHash = null,
     string? LegacySecretHash = null,
-    string? LegacyTokenDigest = null);
+    string? LegacyTokenDigest = null,
+    Guid? CreatedBySubjectId = null,
+    DateTime? ExpiresAt = null);
+
+/// <summary>
+/// The member who makes a device credential, a grant held by the tenant's device subject, and when
+/// their own access ends. The credential expires then, so it stops when they do; a member whose
+/// access does not end makes one with no expiry.
+/// </summary>
+public sealed record CredentialMaker(Guid SubjectId, DateTime? AccessEndsAt);
 
 /// <summary>The client a grant was made for.</summary>
 /// <param name="SoftwareId">The identifier the app's publisher registers every install under.</param>
@@ -91,11 +102,22 @@ public sealed record OAuthGrantEdit(
 public sealed record GrantPresentation(string? IpAddress, string? UserAgent);
 
 /// <summary>What decides whether a token minted from a grant still authorizes, and what it carries.</summary>
+/// <param name="CreatedBySubjectId">The member who made the grant for its subject, a device credential's maker.</param>
 public sealed record OAuthGrantState(
     DateTime? RevokedAt,
     DateTime? ExpiresAt,
     IReadOnlyList<string> Scopes,
-    bool LimitTo24Hours);
+    bool LimitTo24Hours,
+    Guid? CreatedBySubjectId)
+{
+    public static bool IsExpiredAt(DateTime? expiresAt, DateTime now) => expiresAt <= now;
+
+    /// <summary>
+    /// Whether the grant authorizes at <paramref name="now"/>: not revoked, and open-ended or short of
+    /// its expiry, the rule <see cref="OAuthGrantRecord.IsLiveDirectGrantAt"/> applies to a direct grant.
+    /// </summary>
+    public bool IsLiveAt(DateTime now) => RevokedAt is null && !IsExpiredAt(ExpiresAt, now);
+}
 
 /// <summary>
 /// The credential a direct grant is looked up by. A hash is compared whole; a digest by prefix,

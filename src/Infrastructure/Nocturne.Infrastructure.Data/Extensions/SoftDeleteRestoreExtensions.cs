@@ -149,7 +149,10 @@ public static class SoftDeleteRestoreExtensions
     /// Every restored row is saved through the change tracker, so each gets its own audit row and a
     /// fresh <c>SysUpdatedAt</c>. A co-deleted copy the caller's history clamp hides is restored as
     /// well, read and saved by id with the clamp lifted after the rest are saved
-    /// (<see cref="DuplicateGroupPrimaries.SaveHiddenAsync{TEntity}"/>), and is not given back.
+    /// (<see cref="DuplicateGroupPrimaries.SaveHiddenAsync{TEntity}"/>), and is not given back. A
+    /// restored state span ends the spans it supersedes again, and is ended at its own successor
+    /// (<see cref="StateSpanSupersessionExtensions.SupersedeByArrivedAsync"/>); the rows given back carry
+    /// the ends written.
     /// </remarks>
     /// <param name="ctx">The context the restore writes through.</param>
     /// <param name="pick">Loads the rows to restore, tracked, and the ids refused for a key clash.</param>
@@ -164,6 +167,7 @@ public static class SoftDeleteRestoreExtensions
         => ctx.ExecuteInTransactionAsync(async token =>
         {
             var (restoring, conflicts) = await pick(token);
+            await ctx.PlanForEachArrayAsync(restoring.Count, token);
             var dedup = DuplicateGroupPrimaries.RecordTypeOf<TEntity>();
 
             List<TEntity> copies = [];
@@ -187,6 +191,10 @@ public static class SoftDeleteRestoreExtensions
             await ctx.SaveRestoreAsync(recordType, token);
             List<Guid> restoredIds = [.. restoring.Concat(copies).Concat(hidden).Select(ctx.IdOf)];
             await ctx.RestoreHiddenAsync(hidden, recordType, token);
+            if (typeof(TEntity) == typeof(StateSpanEntity))
+                ctx.AcceptWrittenEnds(
+                    await ctx.SupersedeByArrivedAsync(restoredIds, asGiven: false, token),
+                    restoring.Concat(copies).OfType<StateSpanEntity>());
 
             IReadOnlyList<Guid> promoted = dedup is { } restoredType && restoring.Count > 0
                 ? await DuplicateGroupPrimaries.RepointHeadlessGroupsAsync(

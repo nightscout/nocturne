@@ -11,6 +11,12 @@ namespace Nocturne.Alerts.Corpus;
 /// </summary>
 public static class JsonNodeDiff
 {
+    /// <summary>
+    /// A field a snapshot pins only by carrying it: snapshots written before the engine reported
+    /// it omit it, and the corpus is frozen.
+    /// </summary>
+    private const string PinnedOnlyWhenPresent = "next_change_at";
+
     /// <param name="actualName">Label for the left side in diff messages (e.g. "csharp", "ffi").</param>
     public static void Compare(JsonNode? actual, JsonNode? expected, string path, string actualName, List<string> failures)
     {
@@ -32,6 +38,8 @@ public static class JsonNodeDiff
                     var inExpected = e.TryGetPropertyValue(key, out var ev);
                     if (inActual && inExpected)
                         Compare(av, ev, childPath, actualName, failures);
+                    else if (inActual && key == PinnedOnlyWhenPresent)
+                        continue;
                     else if (inActual)
                         failures.Add($"{childPath}: unexpected field in {actualName} (value = {Render(av)})");
                     else

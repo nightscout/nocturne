@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
@@ -41,6 +42,7 @@ internal static class DataHubTestHarness
         services.AddDbContextFactory<NocturneDbContext>(
             options => options.UseInMemoryDatabase($"DataHubTestHarness_{Guid.NewGuid()}"));
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddSingleton(entryService);
         services.AddSingleton(treatmentService);
         services.AddSingleton(deviceStatusService);

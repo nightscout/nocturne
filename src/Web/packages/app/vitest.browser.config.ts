@@ -18,8 +18,10 @@ export default defineConfig({
   // `entries` makes the dep optimizer crawl every test file before the run. Left to discover deps
   // as files load, it re-bundles mid-run and reloads the browser, and a test file whose import was
   // in flight then fails with "Failed to fetch dynamically imported module". Each
-  // @lucide/svelte/icons/* path is its own dep, so it is excluded rather than pre-bundled.
-  optimizeDeps: { exclude: ["runed/kit", "sveltekit-search-params", "@lucide/svelte"], entries: ["src/**/*.svelte.test.ts"] },
+  // @lucide/svelte/icons/* path is its own dep, so it is excluded rather than pre-bundled. The crawl
+  // also reaches the report image renderer behind its remote function, whose canvas is a native
+  // Node addon the bundler cannot load; the tests mock that remote function.
+  optimizeDeps: { exclude: ["runed/kit", "sveltekit-search-params", "@lucide/svelte", "@napi-rs/canvas"], entries: ["src/**/*.svelte.test.ts"] },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],

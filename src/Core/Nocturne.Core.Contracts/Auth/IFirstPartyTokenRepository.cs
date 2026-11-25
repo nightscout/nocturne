@@ -73,4 +73,5 @@ public record RefreshTokenRecord(
     DateTime? RevokedAt,
     string? RevokedReason,
     Guid? ReplacedByTokenId,
-    DateTime? LastUsedAt);
+    DateTime? LastUsedAt,
+    Guid? LoginCodeId = null);

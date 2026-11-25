@@ -1,6 +1,6 @@
 <script lang="ts">
   import { toggled } from "#lib/utils/collections.js";
-  import { formatDayTime } from "#lib/utils/formatting.js";
+  import { formatDayTime, formatList, formatMediumDate } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -26,12 +26,25 @@
     setShareLinkFullHistory,
     setShareLinkScopes,
   } from "#lib/api/generated/shareLinks.generated.remote.js";
-  import { categoriesIn, formatList } from "./data-categories";
+  import { categoriesIn } from "./data-categories";
+  import { accessEndDate } from "./access-end";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { FormError } from "#lib/forms/index.js";
 
-  let { onEnabled }: { onEnabled?: () => void } = $props();
+  let {
+    onEnabled,
+    signInRequired = false,
+  }: {
+    onEnabled?: () => void;
+    /**
+     * The session started from a sign-in link. Making, showing or changing the link is the
+     * person's own sign-in's to do, so those controls give way to it; turning access off stays.
+     */
+    signInRequired?: boolean;
+  } = $props();
 
   const canManageSharing = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
@@ -68,6 +81,15 @@
    */
   let revealSucceeded = $state<boolean | null>(null);
 
+  const loadFailed = $derived(share == null && !!shareQuery?.error);
+  const callerAccessEndsAt = $derived(share?.callerAccessEndsAt);
+  const locked = $derived(!!callerAccessEndsAt);
+  const lockedDate = $derived(
+    callerAccessEndsAt ? formatMediumDate(accessEndDate(callerAccessEndsAt)) : "",
+  );
+  const lockedId = "public-access-locked";
+  const lockedDescribedBy = $derived(locked ? lockedId : undefined);
+
   const redactedUrl = $derived(share?.redactedUrl ?? null);
   const canReveal = $derived(revealSucceeded ?? share?.canReveal ?? false);
   /** Whether there is a link to show or copy at all, as opposed to only to regenerate. */
@@ -98,6 +120,7 @@
         revealSucceeded = null;
       }
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(
         err,
         on
@@ -117,6 +140,7 @@
     try {
       await mint(rotateShareLink);
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not regenerate the link. Try again.");
     } finally {
       busy = false;
@@ -144,6 +168,7 @@
       revealSucceeded = link.canReveal ?? revealedUrl != null;
       return revealedUrl;
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not show the link. Try again.");
       return null;
     } finally {
@@ -167,6 +192,7 @@
     try {
       await setShareLinkScopes({ scopes: list });
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not update what is shared. Try again.");
     } finally {
       // Hold the optimistic value until every concurrent toggle settles, then fall back to
@@ -182,6 +208,7 @@
     try {
       await setShareLinkFullHistory({ fullHistory: fh });
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not update the time window. Try again.");
     } finally {
       pendingFullHistory = null;
@@ -223,18 +250,44 @@
           need no account and no invite. Choose carefully what they can see.
         </p>
       </div>
+      {#if !signInRequired || enabled}
       <Switch
         data-testid="public-access-toggle"
         checked={enabled}
-        disabled={busy}
+        disabled={busy || locked || !share}
         onCheckedChange={(v: boolean) => setEnabled(v)}
         aria-label="Public access"
+        aria-describedby={lockedDescribedBy}
       />
+      {/if}
     </div>
+
+    {#if locked}
+      <p
+        id={lockedId}
+        data-testid="public-access-locked"
+        class="mx-5 mb-2 text-sm text-muted-foreground @md:mx-6"
+      >
+        Your access ends on {lockedDate}, so you cannot change public sharing.
+      </p>
+    {/if}
 
     <FormError issues={errorMessage} focusOnShow class="mx-5 mb-2 @md:mx-6" />
 
-    {#if enabled}
+    {#if signInRequired}
+      <div class="border-t border-border px-5 py-5 @md:px-6">
+        <SignInGate reason="Sign in again to make a public link, show it, or change what it shares." />
+      </div>
+    {:else if !share}
+      {#if loadFailed}
+        <div class="space-y-2 border-t border-border px-5 py-4 @md:px-6">
+          <p class="text-sm text-muted-foreground">The public access settings did not load.</p>
+          <Button variant="outline" size="sm" onclick={() => shareQuery?.refresh()}>
+            Try again
+          </Button>
+        </div>
+      {/if}
+    {:else if enabled}
       <div class="space-y-6 border-t border-border px-5 py-5 @md:px-6">
         <!-- Link row -->
         <div class="space-y-2">
@@ -293,7 +346,8 @@
               <Button
                 variant="ghost"
                 class="shrink-0"
-                disabled={busy}
+                disabled={busy || locked}
+                aria-describedby={lockedDescribedBy}
                 onclick={() => (confirmingRotate = true)}
               >
                 <RefreshCw class="mr-1.5 h-4 w-4" />
@@ -313,7 +367,7 @@
                 <Button variant="ghost" size="sm" onclick={() => (confirmingRotate = false)}>
                   Cancel
                 </Button>
-                <Button variant="default" size="sm" disabled={busy} onclick={regenerate}>
+                <Button variant="default" size="sm" disabled={busy || locked} onclick={regenerate}>
                   {#if busy}
                     <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   {/if}
@@ -350,9 +404,13 @@
               {@const on = scopes.includes(cat.scope)}
               {@const ScopeIcon = cat.icon}
               <label
-                class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors {on
+                class="flex items-center gap-3 rounded-lg border p-3 transition-colors {locked
+                  ? ''
+                  : 'cursor-pointer'} {on
                   ? 'border-success/40 bg-success/5'
-                  : 'border-border bg-background hover:border-muted-foreground/40'}"
+                  : locked
+                    ? 'border-border bg-background'
+                    : 'border-border bg-background hover:border-muted-foreground/40'}"
               >
                 <div
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {on
@@ -365,7 +423,13 @@
                   <div class="text-sm font-medium">{cat.name}</div>
                   <div class="truncate text-xs text-muted-foreground">{cat.description}</div>
                 </div>
-                <Switch checked={on} onCheckedChange={() => toggleScope(cat.scope)} aria-label={cat.name} />
+                <Switch
+                  checked={on}
+                  disabled={locked}
+                  onCheckedChange={() => toggleScope(cat.scope)}
+                  aria-label={cat.name}
+                  aria-describedby={lockedDescribedBy}
+                />
               </label>
             {/each}
           </div>
@@ -385,11 +449,15 @@
             size="xs"
             class="shrink-0"
             data-testid="public-access-window"
+            disabled={locked}
+            aria-describedby={lockedDescribedBy}
             value={fullHistory ? "all" : "24h"}
             onValueChange={(v: string) => v && setWindow(v === "all")}
           >
-            <ToggleGroup.Item value="all">All history</ToggleGroup.Item>
-            <ToggleGroup.Item value="24h">
+            <ToggleGroup.Item value="all" aria-describedby={lockedDescribedBy}>
+              All history
+            </ToggleGroup.Item>
+            <ToggleGroup.Item value="24h" aria-describedby={lockedDescribedBy}>
               <Clock class="h-3 w-3" />
               Last 24 hours
             </ToggleGroup.Item>

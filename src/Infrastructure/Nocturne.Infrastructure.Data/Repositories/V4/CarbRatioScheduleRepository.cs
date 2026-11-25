@@ -21,8 +21,8 @@ public class CarbRatioScheduleRepository : ProfileScopedRepositoryBase<CarbRatio
     /// Initializes a new instance of the <see cref="CarbRatioScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CarbRatioScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CarbRatioScheduleRepository> logger, IV4RecordBroadcaster<CarbRatioSchedule>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
+    public CarbRatioScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CarbRatioScheduleRepository> logger, IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

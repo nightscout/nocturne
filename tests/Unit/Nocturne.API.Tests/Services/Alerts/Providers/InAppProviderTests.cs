@@ -5,6 +5,7 @@ using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.ClientDevices;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts.Providers;
@@ -115,6 +116,43 @@ public class InAppProviderTests
             It.IsAny<ResolutionConditions?>(),
             It.IsAny<Dictionary<string, object>?>(),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_UnevaluableNotice_IsNotMirroredToDevices()
+    {
+        string? type = null, title = null, subtitle = null;
+        NotificationCategory? category = null;
+        NotificationUrgency? urgency = null;
+        _notification
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, NotificationCategory?, NotificationUrgency?, string?, string?, string?, string?,
+                List<NotificationActionDto>?, ResolutionConditions?, Dictionary<string, object>?, CancellationToken>(
+                (_, t, ti, c, u, _, _, s, _, _, _, _, _) =>
+                {
+                    (type, title, category, urgency, subtitle) = (t, ti, c, u, s);
+                })
+            .ReturnsAsync(new InAppNotificationDto());
+
+        await _sut.SendAsync(
+            Recipient,
+            MakePayload(AlertRuleSeverity.Critical) with { Kind = AlertPayloadKind.Unevaluable },
+            CancellationToken.None);
+
+        type.Should().Be(InAppProvider.UnevaluableNotificationType);
+        DeviceNotificationMirror.Qualifies(new InAppNotificationDto
+        {
+            Type = type!,
+            Title = title!,
+            Subtitle = subtitle,
+            Category = category!.Value,
+            Urgency = urgency!.Value,
+        }).Should().BeFalse("its subtitle is a label key the desktop cannot resolve");
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -12,9 +13,13 @@ namespace Nocturne.Infrastructure.Data.Services.Deduplication;
 /// <summary>
 /// Keeps the current tenant's duplicate groups right after insert-time linking: merges the groups it
 /// left apart, moves misplaced state span primaries, prunes groups that never gained a second record,
-/// and audits the stored duplicate flags against the links.
+/// and audits the stored duplicate flags against the links. A reconcile batch and an audit announce the
+/// types whose shown copy they changed once their changes commit (<see cref="RepickAnnouncement"/>).
 /// </summary>
-public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILogger<DuplicateReconciler> logger)
+public sealed class DuplicateReconciler(
+    INocturneDbContextFactory contexts,
+    ILogger<DuplicateReconciler> logger,
+    IRecordChangePublisher? changes = null)
     : IDuplicateReconciler
 {
     /// <summary>
@@ -197,20 +202,31 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     {
         await using var db = await contexts.CreateAsync(ct);
         var drift = new List<DuplicateFlagDrift>();
-        foreach (var recordType in DeduplicatedRecordTypes)
+        var repickedTypes = new HashSet<RecordType>();
+        try
         {
-            int flagged = 0, unflagged = 0, repaired = 0;
-            await foreach (var page in DuplicateGroupPrimaries.DisagreeingPagesAsync(db, recordType, pageSize, ct))
+            foreach (var recordType in DeduplicatedRecordTypes)
             {
-                flagged += page.Count(r => r.IsDuplicate);
-                unflagged += page.Count(r => !r.IsDuplicate);
-                var ids = page.Select(r => r.Id).ToArray();
-                repaired += await UnderWriteLockAsync(
-                    db, token => DuplicateGroupPrimaries.RepairFlagsAsync(db, recordType, ids, token), ct);
-            }
+                int flagged = 0, unflagged = 0, repaired = 0;
+                await foreach (var page in DuplicateGroupPrimaries.DisagreeingPagesAsync(db, recordType, pageSize, ct))
+                {
+                    flagged += page.Count(r => r.IsDuplicate);
+                    unflagged += page.Count(r => !r.IsDuplicate);
+                    var ids = page.Select(r => r.Id).ToArray();
+                    var pageRepaired = await UnderWriteLockAsync(
+                        db, token => DuplicateGroupPrimaries.RepairFlagsAsync(db, recordType, ids, token), ct);
+                    repaired += pageRepaired;
+                    if (pageRepaired > 0)
+                        repickedTypes.Add(recordType);
+                }
 
-            if (flagged + unflagged > 0)
-                drift.Add(new DuplicateFlagDrift(recordType, flagged, unflagged, repaired));
+                if (flagged + unflagged > 0)
+                    drift.Add(new DuplicateFlagDrift(recordType, flagged, unflagged, repaired));
+            }
+        }
+        finally
+        {
+            await RepickAnnouncement.PublishAsync(changes, repickedTypes);
         }
 
         return drift;
@@ -450,9 +466,19 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         if (primaries.Count < 2)
             return 0;
 
-        // 2. Load criteria + deleted status for the primary record ids.
-        var primaryIds = primaries.Select(p => p.RecordId).ToHashSet();
-        var info = await LoadRecordInfoAsync(db, recordType, primaryIds, ct);
+        // The source guards read whole roots, so a chain through a connector copy cannot carry two
+        // records of one uploader into one group. Keyed by root and merged on each union.
+        var rootMembers = wideEligible || TracksTightSources(recordType)
+            ? await LoadGroupMembersAsync(
+                db, recordTypeStr, primaries.Select(p => p.CanonicalId).Distinct().ToList(), unlinked, ct)
+            : null;
+
+        // 2. Load criteria + deleted status for the primary record ids, and for every member the
+        //    source guards read.
+        var infoIds = primaries.Select(p => p.RecordId).ToHashSet();
+        if (rootMembers is not null)
+            infoIds.UnionWith(rootMembers.Values.SelectMany(members => members).Select(m => m.RecordId));
+        var info = await LoadRecordInfoAsync(db, recordType, infoIds, ct);
 
         // 3. Sorted sliding-window union-find over primaries by canonical id.
         var parent = new Dictionary<Guid, Guid>();
@@ -471,35 +497,29 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         {
             var ra = Find(a);
             var rb = Find(b);
-            if (!ra.Equals(rb))
-                parent[ra] = rb;
+            if (ra.Equals(rb))
+                return;
+            parent[ra] = rb;
+            if (rootMembers is not null && rootMembers.Remove(ra, out var moved))
+            {
+                if (rootMembers.TryGetValue(rb, out var kept))
+                    kept.AddRange(moved);
+                else
+                    rootMembers[rb] = moved;
+            }
         }
 
         foreach (var p in primaries)
             parent[p.CanonicalId] = p.CanonicalId;
 
-        // The tight pass applies RefusesTightJoin to whole roots, so a chain through a connector
-        // copy cannot carry two records of one uploader into one group. Keyed by root and merged on
-        // each union.
-        Dictionary<Guid, HashSet<string>>? tightRootSources = null;
-        if (TracksTightSources(recordType))
+        bool TightUnionRefused(Guid ra, Guid rb)
         {
-            tightRootSources = await LoadGroupSourcesAsync(
-                db,
-                recordTypeStr, primaries.Select(p => p.CanonicalId).Distinct().ToList(), unlinked, ct);
-        }
-
-        bool TightUnionRefused(Guid a, Guid b)
-        {
-            if (tightRootSources is null)
+            if (rootMembers?.GetValueOrDefault(ra) is not { } membersA
+                || rootMembers.GetValueOrDefault(rb) is not { } membersB)
                 return false;
-            var sourcesA = tightRootSources.GetValueOrDefault(Find(a));
-            var sourcesB = tightRootSources.GetValueOrDefault(Find(b));
-            if (sourcesA is null || sourcesB is null)
-                return false;
-            foreach (var source in sourcesA)
+            foreach (var b in membersB)
             {
-                if (RefusesTightJoin(recordType, source, sourcesB))
+                if (RefusesTightJoin(recordType, b, membersA, info))
                     return true;
             }
 
@@ -510,16 +530,8 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         {
             var ra = Find(a);
             var rb = Find(b);
-            if (ra.Equals(rb) || TightUnionRefused(ra, rb))
-                return;
-            Union(ra, rb);
-            if (tightRootSources is not null && tightRootSources.Remove(ra, out var moved))
-            {
-                if (tightRootSources.TryGetValue(rb, out var kept))
-                    kept.UnionWith(moved);
-                else
-                    tightRootSources[rb] = moved;
-            }
+            if (!ra.Equals(rb) && !TightUnionRefused(ra, rb))
+                Union(ra, rb);
         }
 
         for (int i = 0; i < primaries.Count; i++)
@@ -538,8 +550,9 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
 
         // 3b. Wide pass, mirroring the insert path: groups the tight pass left apart may still be
         // one event once two connectors' clocks have drifted. A pair merges only on exact values,
-        // only when each group's sole wide candidate is the other, and only when the two groups
-        // share no data source. Anything ambiguous is left as separate groups.
+        // only when each group's sole wide candidate is the other, and only when no member of either
+        // group holds its source against the other (HoldsSourceAgainst). Anything ambiguous is left
+        // as separate groups.
         if (wideEligible)
         {
             var widePartners = new Dictionary<Guid, WidePartner>();
@@ -635,34 +648,14 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
 
             if (widePartners.Count > 0)
             {
-                // Only roots that actually have a wide partner need their sources; the rest of the
-                // loaded primaries were read as evidence for the ambiguity count, nothing more.
-                // Roots holding a candidate canonical are tracked at the same time: a candidate-
-                // bounded pass may only merge pairs it owns.
-                var partneredPrimaries = primaries
-                    .Where(p => widePartners.ContainsKey(Find(p.CanonicalId)))
-                    .ToList();
+                // A candidate-bounded pass may only merge pairs it owns.
+                var candidateRoots = primaries
+                    .Where(p => candidateCanonicalIds?.Contains(p.CanonicalId) == true)
+                    .Select(p => Find(p.CanonicalId))
+                    .ToHashSet();
 
-                var sourcesByCanonical = await LoadGroupSourcesAsync(
-                    db,
-                    recordTypeStr, partneredPrimaries.Select(p => p.CanonicalId).Distinct().ToList(), unlinked, ct);
-                var sourcesByRoot = new Dictionary<Guid, HashSet<string>>();
-                var candidateRoots = new HashSet<Guid>();
-                foreach (var p in partneredPrimaries)
-                {
-                    var root = Find(p.CanonicalId);
-                    if (!sourcesByRoot.TryGetValue(root, out var rootSources))
-                    {
-                        rootSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        sourcesByRoot[root] = rootSources;
-                    }
-
-                    if (sourcesByCanonical.TryGetValue(p.CanonicalId, out var canonicalSources))
-                        rootSources.UnionWith(canonicalSources);
-
-                    if (candidateCanonicalIds?.Contains(p.CanonicalId) == true)
-                        candidateRoots.Add(root);
-                }
+                bool HoldsASourceAgainst(List<GroupMember> members, List<GroupMember> others) =>
+                    members.Any(m => HoldsSourceAgainst(others, m, info));
 
                 var mergedOffsets = new List<long>();
                 foreach (var (root, known) in widePartners)
@@ -697,11 +690,18 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
                     if (boundaryRoots.Contains(root) || boundaryRoots.Contains(partner))
                         continue;
 
-                    if (!sourcesByRoot.TryGetValue(root, out var rootSources)
-                        || !sourcesByRoot.TryGetValue(partner, out var partnerSources)
-                        || !CanEstablishCrossSource(rootSources)
+                    if (rootMembers is null
+                        || !rootMembers.TryGetValue(root, out var membersOfRoot)
+                        || !rootMembers.TryGetValue(partner, out var membersOfPartner))
+                    {
+                        continue;
+                    }
+
+                    var rootSources = membersOfRoot.Select(m => m.DataSource).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var partnerSources = membersOfPartner.Select(m => m.DataSource).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    if (!CanEstablishCrossSource(rootSources)
                         || !CanEstablishCrossSource(partnerSources)
-                        || rootSources.Overlaps(partnerSources))
+                        || HoldsASourceAgainst(membersOfRoot, membersOfPartner))
                     {
                         continue;
                     }
@@ -861,7 +861,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
 
         for (var batchNo = 0; batchNo < maxBatches; batchNo++)
         {
-            (int Merged, bool Drained)? batch;
+            ReconciledBatch? batch;
             try
             {
                 batch = await db.ExecuteInTransactionAsync(
@@ -880,6 +880,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             if (batch is not { } step)
                 break;
 
+            await RepickAnnouncement.PublishAsync(changes, step.Repicked);
             merged += step.Merged;
             if (step.Drained)
                 return new ReconcileResult(merged, true);
@@ -897,7 +898,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     /// The skipped batch as <see cref="ReconcileNextBatchAsync"/> reports one, or null when the
     /// failure stands.
     /// </returns>
-    private async Task<(int Merged, bool Drained)?> RecordFailedBatchAsync(
+    private async Task<ReconciledBatch?> RecordFailedBatchAsync(
         NocturneDbContext db,
         int batchSize,
         DateTime horizon,
@@ -932,17 +933,14 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             db.TenantId, string.Join(",", batch.Select(l => l.RecordType).Distinct()),
             cursor.CreatedAt, cursor.Id, last.SysCreatedAt, last.Id, attempts);
         await SetCursorAsync(db, new ReconcileCursor(last.SysCreatedAt, last.Id), ct);
-        return (0, batch.Count < batchSize);
+        return new ReconciledBatch(0, batch.Count < batchSize, []);
     }
 
     /// <summary>
     /// Reconciles the batch after the tenant's cursor and advances it.
     /// </summary>
-    /// <returns>
-    /// The groups merged and whether the batch drained everything up to <paramref name="horizon"/>,
-    /// or null when another transaction holds the tenant's merge lock.
-    /// </returns>
-    private async Task<(int Merged, bool Drained)?> ReconcileNextBatchAsync(
+    /// <returns>The batch, or null when another transaction holds the tenant's merge lock.</returns>
+    private async Task<ReconciledBatch?> ReconcileNextBatchAsync(
         NocturneDbContext db,
         int batchSize,
         DateTime horizon,
@@ -954,9 +952,10 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         var cursor = await GetCursorAsync(db, ct);
         var batch = await LinksAfter(db, cursor, horizon).Take(batchSize).ToListAsync(ct);
         if (batch.Count == 0)
-            return (0, true);
+            return new ReconciledBatch(0, true, []);
 
         var merged = 0;
+        var repicked = new List<RecordType>();
         foreach (var group in batch.GroupBy(l => l.RecordType))
         {
             if (ParseRecordType(group.Key, logger) is not { } type)
@@ -968,7 +967,10 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             try
             {
                 // GroupsMerged is the reduction in group count (k canonicals -> 1 == k-1), matching MergeDuplicateGroupsAsync.
-                merged += await MergeDuplicateGroupsAsync(db, type, candidateCanonicalIds, ct);
+                var typeMerged = await MergeDuplicateGroupsAsync(db, type, candidateCanonicalIds, ct);
+                merged += typeMerged;
+                if (typeMerged > 0)
+                    repicked.Add(type);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -982,8 +984,14 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         var last = batch[^1];
         await SetCursorAsync(db, new ReconcileCursor(last.SysCreatedAt, last.Id), ct);
 
-        return (merged, batch.Count < batchSize);
+        return new ReconciledBatch(merged, batch.Count < batchSize, repicked);
     }
+
+    /// <summary>
+    /// One reconcile batch: the groups it merged, whether it drained everything up to the horizon, and
+    /// the record types it merged groups of.
+    /// </summary>
+    private readonly record struct ReconciledBatch(int Merged, bool Drained, IReadOnlyList<RecordType> Repicked);
 
     /// <inheritdoc />
     /// <remarks>

@@ -46,11 +46,11 @@ public class SetupHubServiceTests
     private static SetupHubService ServiceOver(NocturneDbContext db)
     {
         var factory = new TestNocturneDbContextFactory(db);
-        return new(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new ISetupHubItem[]
+        return new(factory, new TenantRepository(factory), new TenantMembershipRepository(factory, AccountLinkRoutes.Off), new ISetupHubItem[]
         {
             // Registered out of order on purpose: the key decides the hub order.
-            new AboutItem(factory), new SharingItem(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
-            DevicesItemOver(db), new AlertsItem(factory, new TenantRepository(factory), new AlertRuleRepository(factory)), new ConnectDataItem(factory, new ConnectorConfigurationRepository(factory)),
+            new AboutItem(factory), new SharingItem(factory, new TenantRepository(factory), new TenantMembershipRepository(factory, AccountLinkRoutes.Off), new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
+            DevicesItemOver(db), new AlertsItem(factory, new TenantRepository(factory), new AlertRuleRepository(factory, TimeProvider.System)), new ConnectDataItem(factory, new ConnectorConfigurationRepository(factory)),
         });
     }
 
@@ -226,11 +226,12 @@ public class SetupHubServiceTests
         hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Open);
     }
 
-    private void AddMember(bool system = false)
+    private Guid AddMember(bool system = false)
     {
         var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = system ? "Public" : "Person", IsSystemSubject = system };
         _db.Subjects.Add(subject);
         _db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = subject.Id });
+        return subject.Id;
     }
 
     private void AddGrant(string grantType, DateTime? expiresAt = null, DateTime? revokedAt = null) =>
@@ -240,10 +241,11 @@ public class SetupHubServiceTests
             ExpiresAt = expiresAt, RevokedAt = revokedAt,
         });
 
-    private void AddInvite(DateTime expiresAt, DateTime? revokedAt = null, int useCount = 0) =>
+    /// <summary>An invite <paramref name="maker"/> made; one is live only while its maker is a member in force.</summary>
+    private void AddInvite(Guid maker, DateTime expiresAt, DateTime? revokedAt = null, int useCount = 0) =>
         _db.MemberInvites.Add(new MemberInviteEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, TokenHash = "hash", ExpiresAt = expiresAt,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, CreatedBySubjectId = maker, TokenHash = "hash", ExpiresAt = expiresAt,
             RevokedAt = revokedAt, MaxUses = 1, UseCount = useCount,
         });
 
@@ -267,9 +269,9 @@ public class SetupHubServiceTests
     {
         var past = DateTime.UtcNow.AddHours(-1);
         var future = DateTime.UtcNow.AddDays(7);
-        AddMember();
-        AddInvite(future, revokedAt: past);
-        AddInvite(past);
+        var maker = AddMember();
+        AddInvite(maker, future, revokedAt: past);
+        AddInvite(maker, past);
         AddGrant(OAuthGrantTypes.Guest, expiresAt: past);
         AddGrant(OAuthGrantTypes.Guest, expiresAt: future, revokedAt: past);
         await _db.SaveChangesAsync();
@@ -282,11 +284,11 @@ public class SetupHubServiceTests
     {
         var expiry = new DateTimeOffset(2026, 10, 29, 3, 0, 0, TimeSpan.Zero);
         var clock = new FakeTimeProvider(expiry.AddTicks(-1));
-        AddMember();
-        AddInvite(expiry.UtcDateTime);
+        var maker = AddMember();
+        AddInvite(maker, expiry.UtcDateTime);
         AddGrant(OAuthGrantTypes.Guest, expiresAt: expiry.UtcDateTime);
         await _db.SaveChangesAsync();
-        var item = new SharingItem(new TestNocturneDbContextFactory(_db), new TenantRepository(new TestNocturneDbContextFactory(_db)), new TenantMembershipRepository(new TestNocturneDbContextFactory(_db)), new MemberInviteRepository(new TestNocturneDbContextFactory(_db)), new OAuthGrantRepository(new TestNocturneDbContextFactory(_db)), clock);
+        var item = new SharingItem(new TestNocturneDbContextFactory(_db), new TenantRepository(new TestNocturneDbContextFactory(_db)), new TenantMembershipRepository(new TestNocturneDbContextFactory(_db), AccountLinkRoutes.Off), new MemberInviteRepository(new TestNocturneDbContextFactory(_db)), new OAuthGrantRepository(new TestNocturneDbContextFactory(_db)), clock);
 
         (await item.WorksAsync(CancellationToken.None)).Should().BeTrue();
 
@@ -303,11 +305,11 @@ public class SetupHubServiceTests
     [InlineData("second member")]
     public async Task Sharing_IsDone_OnceAnyoneElseIsLetIn(string how)
     {
-        AddMember();
+        var maker = AddMember();
         switch (how)
         {
-            case "invite": AddInvite(DateTime.UtcNow.AddDays(7)); break;
-            case "accepted invite": AddInvite(DateTime.UtcNow.AddHours(-1), useCount: 1); break;
+            case "invite": AddInvite(maker, DateTime.UtcNow.AddDays(7)); break;
+            case "accepted invite": AddInvite(maker, DateTime.UtcNow.AddHours(-1), useCount: 1); break;
             case "guest link": AddGrant(OAuthGrantTypes.Guest, expiresAt: DateTime.UtcNow.AddHours(48)); break;
             case "follower": AddGrant(OAuthGrantTypes.Follower); break;
             case "public link": _db.Tenants.Single(t => t.Id == TenantId).ShareToken = "digest"; break;
@@ -371,8 +373,8 @@ public class SetupHubServiceTests
     public async Task Sharing_ForAHelper_StaysOpenWithAnInviteTheRecipientHasNotAccepted()
     {
         Answer(PatientRelationship.Helper);
-        AddPerson("Helper", owner: true);
-        AddInvite(DateTime.UtcNow.AddDays(7));
+        var helper = AddPerson("Helper", owner: true);
+        AddInvite(helper, DateTime.UtcNow.AddDays(7));
         AddGrant(OAuthGrantTypes.Guest, expiresAt: DateTime.UtcNow.AddHours(48));
         await _db.SaveChangesAsync();
 

@@ -8,13 +8,34 @@ namespace Nocturne.Core.Contracts.Treatments;
 /// against a re-upload and by whom, the moving of a source's records from a client id to a server id,
 /// and the upstream fingerprints a source's rows carry.
 /// </summary>
-public interface IDecomposedTreatmentKeys
+public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
 {
     /// <summary>
     /// The ids among <paramref name="legacyIds"/> a re-upload would find stored, from any source, and of
     /// those the ones held only by a record the user deleted.
     /// </summary>
     Task<HeldLegacyIds> GetHeldLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>The ids among <paramref name="legacyIds"/> a deleted row is stored under, whoever deleted it.</summary>
+    Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// The legacy ids of the live temp basals, profile activations, and override and temporary target
+    /// spans that kept <c>isValid: false</c>. Only a record written before such an upload was stored
+    /// deleted keeps it.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetLiveInvalidLegacyIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Stores <paramref name="records"/> and <paramref name="spans"/> as rows already deleted, in one
+    /// save: nothing reads them live, and nothing a live write sets off (deduplication, a change
+    /// broadcast, the settling of the records around them) runs for them. The delete is attributed as
+    /// the scope's audit actor attributes it.
+    /// </summary>
+    Task StoreDeletedAsync(
+        IReadOnlyCollection<Models.V4.IV4Record> records, IReadOnlyCollection<StateSpan> spans,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Moves <paramref name="source"/>'s records under each client id onto one of its
@@ -32,7 +53,7 @@ public interface IDecomposedTreatmentKeys
     /// The upstream fingerprint of each of <paramref name="source"/>'s rows under
     /// <paramref name="legacyIds"/>, by legacy id. An id with no such row is absent.
     /// </summary>
-    Task<IReadOnlyDictionary<string, IReadOnlyList<string?>>> GetFingerprintsFromSourceAsync(
+    Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
         string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
@@ -42,6 +63,11 @@ public interface IDecomposedTreatmentKeys
     Task StampUnfingerprintedAsync(
         string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct = default);
 }
+
+/// <summary>The upstream fingerprint one stored row carries.</summary>
+/// <param name="Fingerprint">The fingerprint, or <c>null</c> when the row carries none.</param>
+/// <param name="OnSpan">Whether the row is the state span of an override or a temporary target.</param>
+public readonly record struct StoredFingerprint(string? Fingerprint, bool OnSpan);
 
 /// <param name="Held">Every id a re-upload would find stored.</param>
 /// <param name="DeletedByUser">The ids in <paramref name="Held"/> held only by a record the user deleted.</param>

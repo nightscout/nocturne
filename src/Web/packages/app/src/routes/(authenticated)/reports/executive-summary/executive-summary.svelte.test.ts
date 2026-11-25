@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, expect, it, vi } from "vitest";
-import { TargetStatus, type GlycemicVariability } from "#lib/api/generated/nocturne-api-client.js";
+import { TargetStatus, type GlycemicVariability } from "@nocturne/api-client";
 import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
 import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 

@@ -194,7 +194,7 @@ public class ActivityControllerScopeTests
 
     private static void Denied(object? result)
     {
-        var denied = result.Should().BeOfType<ObjectResult>().Subject;
+        var denied = result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         denied.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         denied.Value.Should().BeOfType<ProblemDetails>();
     }

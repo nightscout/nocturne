@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -10,8 +11,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
 /// Integration tests for TenantSetupMiddleware which returns 503 when the tenant
-/// has no passkey credentials (setup required) or has orphaned subjects without
-/// passkeys or OIDC identities (recovery mode).
+/// has no passkey credentials (setup required) or is in recovery mode
+/// (<see cref="Nocturne.Core.Models.Identity.SetupGate.RecoveryMode"/>).
 /// </summary>
 [Collection(ApiIntegrationShards.Two)]
 [Trait("Category", "Integration")]
@@ -85,31 +86,34 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
         Log($"API accessible with passkey, status: {response.StatusCode}");
     }
 
-    [Fact]
-    public async Task OrphanedSubject_Returns503RecoveryMode()
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task AStuckMemberStopsTheSiteOnlyWhenNoMemberAdministratorCanSignIn(
+        bool signedInMemberAdministers, bool recoveryMode)
     {
-        // Arrange - seed one subject WITH passkey, another WITHOUT passkey (and no OIDC)
         var connStr = await GetPostgresConnectionStringAsync();
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
         await DeleteAllPasskeysForTenantAsync(conn, _tenantId);
 
-        var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Passkey User");
-        await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, _tenantId, "Orphaned User");
+        var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
+            conn, _tenantId, "Passkey User", signedInMemberAdministers ? null : [Scope.GlucoseRead]);
+        await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(
+            conn, _tenantId, "Stuck User", signedInMemberAdministers ? [Scope.GlucoseRead] : null);
 
-        // Act
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, accessToken);
         var response = await client.GetAsync("/api/v1/entries/current");
 
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-        var content = await response.Content.ReadAsStringAsync();
-        var body = JsonSerializer.Deserialize<JsonElement>(content);
-        body.GetProperty("error").GetString().Should().Be("recovery_mode_active");
-        body.GetProperty("setupRequired").GetBoolean().Should().BeFalse();
-        body.GetProperty("recoveryMode").GetBoolean().Should().BeTrue();
-        Log("503 recovery_mode_active returned as expected");
+        (response.StatusCode == HttpStatusCode.ServiceUnavailable).Should().Be(recoveryMode);
+        if (recoveryMode)
+        {
+            var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+            body.GetProperty("error").GetString().Should().Be("recovery_mode_active");
+            body.GetProperty("setupRequired").GetBoolean().Should().BeFalse();
+            body.GetProperty("recoveryMode").GetBoolean().Should().BeTrue();
+        }
     }
 
     [Fact]
@@ -140,14 +144,11 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
 
     private static async Task DeleteAllPasskeysForTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             DELETE FROM passkey_credentials
             WHERE subject_id IN (
                 SELECT subject_id FROM tenant_members WHERE tenant_id = @tenantId
             );
-            """;
-        cmd.Parameters.AddWithValue("tenantId", tenantId);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenantId", tenantId));
     }
 }

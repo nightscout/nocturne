@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
-using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Models.Responses;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.SetupHub;
@@ -33,8 +34,17 @@ public enum AlertThresholdSource
 /// <param name="Kind">Which starter alert the rule is.</param>
 /// <param name="RuleId">Null until the starter rules are first saved.</param>
 /// <param name="IsEnabled">Whether the rule is on; before the rules are saved, whether it starts on.</param>
-/// <param name="Threshold">In <see cref="AlertSetupStatus.GlucoseUnits"/>; null for <see cref="StarterAlertKind.NoReadings"/>.</param>
-public record StarterAlertRule(StarterAlertKind Kind, Guid? RuleId, bool IsEnabled, decimal? Threshold);
+/// <param name="Threshold">
+/// In <see cref="AlertSetupStatus.GlucoseUnits"/>; null for <see cref="StarterAlertKind.NoReadings"/> and when
+/// <paramref name="SetInRuleEditor"/>.
+/// </param>
+/// <param name="SetInRuleEditor">
+/// The rule editor made the saved rule into more than a glucose threshold with a number, such as a limit read from
+/// a target or a condition held for a time. The setup step has no level to offer for it, a level sent for it is
+/// ignored, and a save leaves its conditions and resolve condition as they are.
+/// </param>
+public record StarterAlertRule(
+    StarterAlertKind Kind, Guid? RuleId, bool IsEnabled, decimal? Threshold, bool SetInRuleEditor = false);
 
 /// <summary>A member of the tenant other than the caller, who can also be sent urgent low alerts.</summary>
 public record AlertSetupMember(Guid SubjectId, string Name, bool AlertedToUrgentLows);

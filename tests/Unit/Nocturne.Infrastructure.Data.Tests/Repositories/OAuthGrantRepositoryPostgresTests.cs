@@ -4,7 +4,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -38,17 +37,15 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create(scope));
-    }
+    private NocturneDbContext Context(Guid tenant) => Context(tenant, null);
 
-    private NocturneDbContext Context(Guid tenant) =>
+    private NocturneDbContext Context(Guid tenant, StatementRecorder? recorder) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
                 maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor())
+            .AddInterceptors(recorder is null
+                ? [new TenantConnectionInterceptor()]
+                : [new TenantConnectionInterceptor(), recorder])
             .Options) { TenantId = tenant };
 
     private sealed record Seeded(Guid Tenant, Guid Subject, Guid Grant, string TokenHash);
@@ -82,7 +79,7 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
         }
 
         var hash = $"{slug}-{tenant:N}";
-        var grant = await new OAuthGrantRepository(new Factory(Context, tenant)).CreateAsync(
+        var grant = await new OAuthGrantRepository(new SuppliedContextFactory(() => Context(tenant))).CreateAsync(
             new NewOAuthGrant(null, subject, OAuthGrantTypes.Direct, [Scope.GlucoseRead], slug, hash, null, null, false),
             CancellationToken.None);
         return new Seeded(tenant, subject, grant, hash);
@@ -93,8 +90,8 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
     {
         var a = await SeedTenantAsync("a");
         var b = await SeedTenantAsync("b");
-        var readingAsB = new OAuthGrantRepository(new Factory(Context, b.Tenant));
-        var readingAsNoOne = new OAuthGrantRepository(new Factory(Context, Guid.Empty));
+        var readingAsB = new OAuthGrantRepository(new SuppliedContextFactory(() => Context(b.Tenant)));
+        var readingAsNoOne = new OAuthGrantRepository(new SuppliedContextFactory(() => Context(Guid.Empty)));
 
         var found = await readingAsB.FindLiveDirectGrantAsync(
             a.Tenant, new DirectGrantLookup.ByTokenHash([a.TokenHash]), Now, CancellationToken.None);
@@ -110,13 +107,42 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
     }
 
     [Fact]
+    public async Task PinnedToATenant_FindsNoGrantOfAnInactiveSubjectInTheSameSingleStatement()
+    {
+        var a = await SeedTenantAsync("inactive");
+        var recorder = new StatementRecorder();
+        var grants = new OAuthGrantRepository(new SuppliedContextFactory(() => Context(Guid.Empty, recorder)));
+        var lookup = new DirectGrantLookup.ByTokenHash([a.TokenHash]);
+
+        (await grants.FindLiveDirectGrantAsync(a.Tenant, lookup, Now, CancellationToken.None)).Should().NotBeNull();
+        recorder.Count("SELECT").Should().Be(1);
+
+        await SetActiveAsync(a.Subject, false);
+        recorder.Clear();
+
+        (await grants.FindLiveDirectGrantAsync(a.Tenant, lookup, Now, CancellationToken.None)).Should().BeNull();
+        recorder.Count("SELECT").Should().Be(1);
+    }
+
+    private async Task SetActiveAsync(Guid subject, bool isActive)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE subjects SET is_active = @active WHERE id = @id";
+        cmd.Parameters.Add(new NpgsqlParameter("@active", isActive));
+        cmd.Parameters.Add(new NpgsqlParameter("@id", subject));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
     public async Task ARevokeOnAPinnedUnit_LandsTheGrantWithItsTokens()
     {
         var a = await SeedTenantAsync("c");
-        var token = await new OAuthTokenRepository(new Factory(Context, a.Tenant)).StoreRefreshTokenAsync(
+        var token = await new OAuthTokenRepository(new SuppliedContextFactory(() => Context(a.Tenant))).StoreRefreshTokenAsync(
             new NewOAuthRefreshToken(a.Tenant, a.Grant, "c-token", Now.AddDays(90)), CancellationToken.None);
 
-        await using (var unit = await DbUnitOfWork.OpenForTenantAsync(new Factory(Context, Guid.Empty), a.Tenant))
+        await using (var unit = await DbUnitOfWork.OpenForTenantAsync(new SuppliedContextFactory(() => Context(Guid.Empty)), a.Tenant))
         {
             await unit.CommitAsync(async ct =>
             {

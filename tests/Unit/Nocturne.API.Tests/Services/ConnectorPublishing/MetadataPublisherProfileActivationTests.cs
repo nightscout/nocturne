@@ -57,7 +57,6 @@ public sealed class MetadataPublisherProfileActivationTests : IDisposable
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             new ActivityDedupRepository(_context.AsFactory()),
-            new ConnectorConfigurationRepository(_context.AsFactory()),
             ProfileActivationTestDeps.Repository(_context),
             ProfileActivationTestDeps.Writer(_context),
             Mock.Of<IAuditContext>(),

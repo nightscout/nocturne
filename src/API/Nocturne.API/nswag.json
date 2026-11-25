@@ -45,7 +45,7 @@
       "configureClass": null,
       "configureMethod": null,
       "useNuGetCache": false,
-      "output": "../../Web/packages/app/src/lib/api/generated/openapi.json",
+      "output": "../../Web/packages/api-client/src/openapi.json",
       "outputType": "OpenApi3"
     }
   },
@@ -110,7 +110,7 @@
       "operationNameGenerator": "MultipleClientsFromOperationId",
       "serviceHost": null,
       "serviceSchemes": null,
-      "output": "../../Web/packages/app/src/lib/api/generated/nocturne-api-client.ts"
+      "output": "../../Web/packages/api-client/src/nocturne-api-client.ts"
     }
   }
 }

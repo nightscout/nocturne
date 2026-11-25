@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Nocturne.Core.Models;
 
@@ -136,7 +137,7 @@ public static class ActivityStateSpanMapper
             Notes = MetadataString(session, "notes"),
             Name = MetadataString(session, "name"),
             EnteredBy = MetadataString(session, "enteredBy") ?? session.SourceApp ?? "nocturne",
-            CreatedAt = session.CreatedAt?.ToString("o"),
+            CreatedAt = session.CreatedAt?.ToString("o", CultureInfo.InvariantCulture),
         };
     }
 
@@ -150,13 +151,7 @@ public static class ActivityStateSpanMapper
         if (session.Metadata is null || !session.Metadata.TryGetValue(key, out var value))
             return null;
 
-        return value switch
-        {
-            string s => s,
-            JsonElement { ValueKind: JsonValueKind.String } e => e.GetString(),
-            null => null,
-            _ => value.ToString(),
-        };
+        return KeptField.LenientString(value);
     }
 
     /// <summary>
@@ -359,19 +354,8 @@ public static class ActivityStateSpanMapper
     /// <summary>
     /// Safely extracts a string value from metadata
     /// </summary>
-    private static string? GetMetadataString(Dictionary<string, object> metadata, string key)
-    {
-        if (!metadata.TryGetValue(key, out var value))
-            return null;
-
-        return value switch
-        {
-            string s => s,
-            System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.String =>
-                je.GetString(),
-            _ => value?.ToString()
-        };
-    }
+    private static string? GetMetadataString(Dictionary<string, object> metadata, string key) =>
+        metadata.TryGetValue(key, out var value) ? KeptField.LenientString(value) : null;
 
     /// <summary>
     /// Safely extracts a double value from metadata

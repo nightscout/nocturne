@@ -19,13 +19,20 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Drives the user-driven ("manual-paste") CareLink sign-in. The user opens the returned authorize URL,
-/// signs in and solves the CAPTCHA in their own browser, then pastes the resulting code back. The server
-/// exchanges it (PKCE) for a refresh token and stores it as the connector secret. This is the only viable
-/// interactive flow: headless login is CAPTCHA-blocked, and Medtronic's Auth0 client only allows the
-/// <c>com.medtronic.carepartner:/sso</c> custom-scheme redirect, so no web callback can receive the code.
+/// Connects a CareLink account by pasting a sign-in code. Start a connection to get an authorize URL.
+/// Open that URL, sign in, then complete the connection with the code it returns. A desktop token can
+/// also be issued.
 /// </summary>
+/// <remarks>
+/// The user opens the returned authorize URL, signs in and solves the CAPTCHA in their own browser,
+/// then pastes the resulting code back. The server exchanges it (PKCE) for a refresh token and stores
+/// it as the connector secret. This is the only viable interactive flow: headless login is
+/// CAPTCHA-blocked, and Medtronic's Auth0 client only allows the <c>com.medtronic.carepartner:/sso</c>
+/// custom-scheme redirect, so no web callback can receive the code.
+/// </remarks>
 [ApiController]
+[System.ComponentModel.DisplayName("CareLink Connect")]
+[Tags("Connectors")]
 [Route("api/v4/connectors/carelink/connect")]
 [Authorize]
 // Completing this flow writes the signed-in CareLink username and country into the tenant's
@@ -91,6 +98,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// The client opens <c>AuthorizeUrl</c> in a new tab.
     /// </summary>
     [HttpPost("start")]
+    [ScopeDecidedBy(typeof(CareLinkConnectController), nameof(CanConfigureConnectors))]
     [RemoteCommand]
     [ProducesResponseType(typeof(CareLinkConnectStartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -99,7 +107,7 @@ public partial class CareLinkConnectController : ControllerBase
         [FromBody] CareLinkConnectStartRequest request, CancellationToken ct)
     {
         if (!CanConfigureConnectors())
-            return Forbid();
+            return this.ForbiddenForScope(Scope.TenantSettings);
 
         var server = string.IsNullOrWhiteSpace(request.Server) ? "EU" : request.Server.Trim().ToUpperInvariant();
         if (server != "EU" && server != "US")
@@ -127,6 +135,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// connector secret. Returns the discovered username/country for auto-filling the config form.
     /// </summary>
     [HttpPost("complete")]
+    [ScopeDecidedBy(typeof(CareLinkConnectController), nameof(CanConfigureConnectors))]
     [RemoteCommand(Invalidates = ["Configuration_GetConfiguration", "Configuration_GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(CareLinkConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -135,7 +144,7 @@ public partial class CareLinkConnectController : ControllerBase
         [FromBody] CareLinkConnectCompleteRequest request, CancellationToken ct)
     {
         if (!CanConfigureConnectors())
-            return Forbid();
+            return this.ForbiddenForScope(Scope.TenantSettings);
 
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { message = "Both code and state are required." });
@@ -165,7 +174,7 @@ public partial class CareLinkConnectController : ControllerBase
         if (!string.IsNullOrEmpty(result.Audience))
             secrets["audience"] = result.Audience;
 
-        await _configService.SaveSecretsAsync(ConnectorName, secrets, User.Identity?.Name ?? "carelink-connect", ct);
+        await _configService.SaveSecretsAsync(ConnectorName, secrets, User.Identity?.Name ?? "carelink-connect", saver: null, ct);
 
         // Best-effort: auto-fill username/country from the profile so setup is one click.
         string? username = null, country = null;
@@ -204,12 +213,15 @@ public partial class CareLinkConnectController : ControllerBase
     [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(CareLinkDesktopTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public ActionResult<CareLinkDesktopTokenResponse> DesktopToken()
+    public async Task<ActionResult<CareLinkDesktopTokenResponse>> DesktopToken(CancellationToken ct)
     {
         var auth = HttpContext.GetAuthContext();
         var tenantId = _tenantAccessor.Context?.TenantId;
         if (auth is not { IsAuthenticated: true, SubjectId: not null } || tenantId is null)
             return Unauthorized();
+
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
 
         var subjectId = auth.SubjectId ?? throw new InvalidOperationException("Authenticated subject id is required.");
 
@@ -242,10 +254,12 @@ public partial class CareLinkConnectController : ControllerBase
     /// <summary>
     /// Whether the caller may sign a CareLink account into this tenant. The flow stores a refresh
     /// token as the connector secret and writes the signed-in account into the connector
-    /// configuration, so it takes the same <see cref="Scope.TenantSettings"/> as the
-    /// rest of the connector configuration surface — or a desktop link token, whose scope resolves
+    /// configuration. It is a browser ceremony for the person who administers the tenant, so it takes
+    /// <see cref="Scope.TenantSettings"/> and not a connector scope an app can be given; or a desktop
+    /// link token, whose scope resolves
     /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
-    /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
+    /// <see cref="DesktopToken"/> mints only for an active caller whose session is live and that
+    /// already held the permission.
     /// </summary>
     private bool CanConfigureConnectors() =>
         Scope.Satisfies(

@@ -40,10 +40,78 @@ public class TreatmentReadServiceFindFilterTests
 
     private void SetupProjection(params Treatment[] treatments)
     {
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(treatments);
+        _projection.SetupWindowRead(treatments, range => !range.IncludeDeleted);
+    }
+
+    private void SetupProjectionIncludingDeleted(params Treatment[] treatments)
+    {
+        _projection.SetupWindowRead(treatments, range => range.IncludeDeleted);
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidFalse_ReturnsTheDeletedTreatmentsAndNoLiveOne()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "live", Mills = 3000, EventType = "Meal Bolus" },
+            new Treatment { Id = "deleted", Mills = 2000, EventType = "Meal Bolus", IsValid = false },
+            new Treatment { Id = "deleted-older", Mills = 1000, EventType = "Note", IsValid = false });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=false", Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("deleted", "deleted-older");
+        result.Should().OnlyContain(t => t.IsValid == false);
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidFalse_PagesOverTheMatchingTreatments()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "newest-deleted", Mills = 3000, IsValid = false },
+            new Treatment { Id = "live", Mills = 2000 },
+            new Treatment { Id = "older-deleted", Mills = 1000, IsValid = false });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=false", Count = 1, Skip = 1 });
+
+        result.Should().ContainSingle().Which.Id.Should().Be("older-deleted");
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidTrue_ReturnsNoDeletedTreatment()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "deleted", Mills = 3000, IsValid = false },
+            new Treatment { Id = "stored-valid", Mills = 2000, IsValid = true },
+            new Treatment { Id = "unmarked", Mills = 1000 });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=true", Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("stored-valid");
+    }
+
+    [Fact]
+    public async Task CountAsync_IsValidFalse_CountsTheDeletedTreatmentsTheListReturns()
+    {
+        SetupProjectionIncludingDeleted(
+            new Treatment { Id = "live", Mills = 3000 },
+            new Treatment { Id = "deleted", Mills = 2000, IsValid = false },
+            new Treatment { Id = "deleted-older", Mills = 1000, IsValid = false });
+
+        var count = await _service.CountAsync("find[isValid]=false");
+        var listed = await _service.QueryAsync(new TreatmentQuery { Find = "find[isValid]=false", Count = 10 });
+
+        count.Should().Be(2);
+        listed.Should().HaveCount((int)count);
+    }
+
+    [Fact]
+    public async Task QueryAsync_FindThatDoesNotNameIsValid_ReadsLiveTreatmentsOnly()
+    {
+        SetupProjection(new Treatment { Id = "live", Mills = 3000, EventType = "Meal Bolus" });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[eventType]=Meal Bolus", Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("live");
+        _projection.VerifyWindowRead(range => range.IncludeDeleted, Times.Never());
     }
 
     [Fact]
@@ -76,11 +144,9 @@ public class TreatmentReadServiceFindFilterTests
             new Treatment { Id = "3", Mills = 3000, EventType = "Site Change" },
             new Treatment { Id = "4", Mills = 2000, EventType = "Site Change" },
         };
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long? _, long? _, int limit, bool _, CancellationToken _) =>
-                all.OrderBy(t => t.Mills).Take(limit).ToList());
+        _projection.SetupWindowRead(
+            range => all.OrderBy(t => t.Mills).Take(range.Limit).ToList(),
+            range => !range.Descending);
 
         var result = await _service.QueryAsync(new TreatmentQuery
         {
@@ -140,9 +206,9 @@ public class TreatmentReadServiceFindFilterTests
         });
 
         result.Should().ContainSingle();
-        _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(from, to, 10, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        _projection.VerifyWindowRead(
+            range => range.From == from.ToUtcDateTime() && range.To == to.ToUtcDateTime() && range.Limit == 10,
+            Times.Once());
     }
 
     [Fact]
@@ -160,9 +226,9 @@ public class TreatmentReadServiceFindFilterTests
         });
 
         result.Should().ContainSingle().Which.Id.Should().Be("1");
-        _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(from, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        _projection.VerifyWindowRead(
+            range => range.From == from.ToUtcDateTime() && range.To is null,
+            Times.Once());
     }
 
     [Fact]
@@ -179,12 +245,8 @@ public class TreatmentReadServiceFindFilterTests
             .Append(new Treatment { Id = "match-2", Mills = 50, EventType = "Site Change" })
             .ToList();
 
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 100, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(firstPage);
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 400, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(secondPage);
+        _projection.SetupWindowRead(firstPage, range => range is { From: null, To: null, Limit: 100 });
+        _projection.SetupWindowRead(secondPage, range => range is { From: null, To: null, Limit: 400 });
 
         var result = await _service.QueryAsync(new TreatmentQuery
         {
@@ -193,9 +255,7 @@ public class TreatmentReadServiceFindFilterTests
         });
 
         result.Select(t => t.Id).Should().Equal("match-1", "match-2");
-        _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(null, null, 400, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        _projection.VerifyWindowRead(range => range is { From: null, To: null, Limit: 400 }, Times.Once());
     }
 
     [Fact]

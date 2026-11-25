@@ -50,7 +50,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = DeviceStatusExtrasMapper.ToEntity(model);
-        if ((await ctx.GetBlockingCorrelationIdsAsync([entity.CorrelationId], ct)).Held.Count > 0)
+        if ((await BlockingCorrelationIdsAsync(ctx, [entity.CorrelationId], ct)).Held.Count > 0)
             throw new RecreationBlockedException(nameof(DeviceStatusExtras), $"correlation id '{entity.CorrelationId}'");
 
         ctx.DeviceStatusExtras.Add(entity);
@@ -107,8 +107,8 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId),
-            _auditContext, $"correlation_id={correlationId}", ct);
+            ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId), _auditContext,
+            $"correlation_id={correlationId}", ct);
     }
 
     /// <inheritdoc />
@@ -149,7 +149,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             token => ctx.InsertUnblockedAsync(
                 entities,
                 e => e.CorrelationId,
-                (correlationIds, t) => ctx.GetBlockingCorrelationIdsAsync(correlationIds, t),
+                (correlationIds, t) => BlockingCorrelationIdsAsync(ctx, correlationIds, t),
                 token),
             (attempt, token) => ctx.AnyLandedAsync(attempt.Inserted, token),
             ct: ct);
@@ -158,4 +158,13 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         return new BulkWrite<DeviceStatusExtras>(
             inserted.Select(DeviceStatusExtrasMapper.ToDomainModel).ToList(), skippedDeleted);
     }
+
+    /// <summary>
+    /// <see cref="SoftDeleteDedupExtensions.GetBlockingCorrelationIdsAsync(NocturneDbContext, HashSet{Guid}, CancellationToken)"/>
+    /// with the history clamp lifted: a stored row the clamp hides holds its group's extras off a re-send as
+    /// a shown one does. The check only decides whether to insert, and returns no row.
+    /// </summary>
+    private static Task<RecreationBlocks<Guid>> BlockingCorrelationIdsAsync(
+        NocturneDbContext ctx, HashSet<Guid> correlationIds, CancellationToken ct) =>
+        ctx.WriteWithHistoryClampLiftedAsync(token => ctx.GetBlockingCorrelationIdsAsync(correlationIds, token), ct);
 }

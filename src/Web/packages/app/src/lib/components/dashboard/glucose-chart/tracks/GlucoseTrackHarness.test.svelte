@@ -1,13 +1,11 @@
 <script lang="ts">
+  import { appChartContext } from "../app-chart-context.svelte";
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
-  import GlucoseTrack from "./GlucoseTrack.svelte";
-  import { partialEngine, setGlucoseChartContext } from "../chart-context.svelte";
-  import { computeTrackLayout } from "../engine/track-layout";
-  import type { GlucoseChartContext } from "../chart-context.svelte";
-  import type {
-    GlucosePoint,
-  } from "../engine/chart-data-engine.svelte";
+  import { GlucoseTrack } from "@nocturne/charts";
+  import { partialView, setGlucoseChartContext } from "@nocturne/charts";
+  import { computeTrackLayout } from "@nocturne/charts/core";
+  import type { GlucosePoint } from "@nocturne/charts";
 
   interface Props {
     glucoseData?: GlucosePoint[];
@@ -65,10 +63,10 @@
     targetHigh: null,
   };
 
-  // Minimal stub of ChartDataEngine — GlucoseTrack only reads `glucoseData`
+  // Minimal stub of ChartDataView — GlucoseTrack only reads `glucoseData`
   // and `thresholds` from the engine (other fields like `width`/`height` come
   // from layerchart's own context, not the engine).
-  const engineStub = partialEngine({
+  const engineStub = partialView({
     get glucoseData() {
       return glucoseData;
     },
@@ -86,14 +84,14 @@
     ),
   );
 
-  const ctx: GlucoseChartContext = {
-    get engine() {
+  const ctx = appChartContext({
+    get view() {
       return engineStub;
     },
     get layout() {
       return layout;
     },
-  };
+  });
   setGlucoseChartContext(ctx);
 
   const xDomain = $derived<[Date, Date]>([

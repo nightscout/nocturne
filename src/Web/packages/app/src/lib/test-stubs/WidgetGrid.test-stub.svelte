@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import type { WidgetId } from "@nocturne/api-client";
 
   let { widgets }: { widgets: WidgetId[]; maxWidgets?: number } = $props();
 </script>

@@ -18,25 +18,33 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Internal API for connector configuration management.
-/// This endpoint is intended for internal use by connectors via mTLS authentication.
-/// In the initial implementation, it uses standard API authentication.
+/// Connector configuration. Read a connector's settings, schema and effective values, update them,
+/// store its secrets, verify it, and turn it on or off. Deleting a connector's configuration
+/// removes its settings and secrets.
 /// </summary>
+/// <remarks>
+/// Uses standard API authentication; every action except the schema needs <c>connectors.read</c>
+/// to read or <c>connectors.readwrite</c> to change. <c>tenant.settings</c> satisfies both, and the
+/// built-in Caretaker role holds <c>connectors.readwrite</c>. A caller without <c>tenant.settings</c>
+/// is held to <see cref="DelegatedConfigurationGuard"/> and makes no credential from a saved secret
+/// (<see cref="ConnectorSecretSaver.MayAdopt"/>).
+/// </remarks>
 /// <seealso cref="IConnectorConfigurationService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Connector Configuration")]
 [Tags("Connectors")]
 [Route("api/v4/connectors/config")]
 [Authorize]
 // Connector configuration names the host the server will fetch from, and connector status
-// reports what happened, so these endpoints let their caller aim a request from inside the
-// deployment's network and read the result. That is a tenant owner's business, not an anonymous
-// visitor's: the demo's account is shared and obtainable without signing up. A permission gate
-// would not do — the demo member holds tenant.settings.
+// reports what happened, so these endpoints let their caller aim a request at any host the server
+// can reach (link-local addresses excepted) and read the result. That is for a member who sets up
+// the site's data sources, not an anonymous visitor: the demo's account is shared and obtainable
+// without signing up. A permission gate would not do — the demo member holds tenant.settings.
 [DenyDemoSubject]
-// Reading or changing a connector's configuration is tenant administration, so every action but
-// the schema — which describes a connector's declared fields and holds no tenant state — requires
-// tenant.settings. Repeated per action rather than declared on the class because the schema route
-// is [AllowAnonymous], and an authorization filter on the class would run for it regardless.
+// Every action but the schema, which describes a connector's declared fields and holds no tenant
+// state, requires a connector scope. Repeated per action rather than declared on the class because
+// the schema route is [AllowAnonymous], and an authorization filter on the class would run for it
+// regardless.
 public class ConfigurationController : ControllerBase
 {
     private readonly IConnectorConfigurationService _configService;
@@ -57,14 +65,15 @@ public class ConfigurationController : ControllerBase
 
     /// <summary>
     /// Gets the configuration for a specific connector.
-    /// Returns runtime configuration only (secrets are not included).
+    /// Returns runtime configuration only (secrets are not included), with each address masked
+    /// (<see cref="ConnectorAddresses"/>).
     /// </summary>
     /// <param name="connectorName">The connector name (e.g., "Dexcom", "Glooko")</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Configuration response or 404 if not found</returns>
     [HttpGet("{connectorName}")]
     [RemoteQuery]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> GetConfiguration(
@@ -79,8 +88,19 @@ public class ConfigurationController : ControllerBase
             return NotFound(new { message = $"No configuration found for connector '{connectorName}'" });
         }
 
-        return Ok(await WithoutUnusableKeysAsync(connectorName, config, ct));
+        config = await WithoutUnusableKeysAsync(connectorName, config, ct);
+        config.Configuration = (await AddressesAsync(connectorName, ct)).Masked(config.Configuration);
+        if (IsGuarded())
+            config.LockedKeys = await _configService.GetGuardedKeysAsync(connectorName, ct);
+        return Ok(config);
     }
+
+    /// <summary>
+    /// Whether <see cref="DelegatedConfigurationGuard"/> holds the caller: a delegated credential, or
+    /// a caller who may set up data sources but not change the site's settings.
+    /// </summary>
+    private bool IsGuarded() =>
+        RequireInteractiveSessionAttribute.Refuses(HttpContext) || !HttpContext.HasScope(Scope.TenantSettings);
 
     /// <summary>
     /// Drops the stored keys the connector's configuration type does not bind, and the bound keys
@@ -105,6 +125,19 @@ public class ConfigurationController : ControllerBase
         config.Configuration = JsonDocument.Parse(stored.ToJsonString());
         return config;
     }
+
+    private async Task<ConnectorAddresses> AddressesAsync(string connectorName, CancellationToken ct)
+    {
+        var schema = await _configService.GetSchemaAsync(connectorName, ct);
+        return ConnectorAddresses.Of(schema, RequiredFields(schema.RootElement));
+    }
+
+    private static HashSet<string> RequiredFields(JsonElement schemaRoot) =>
+        schemaRoot.ValueKind == JsonValueKind.Object
+        && schemaRoot.TryGetProperty("required", out var requiredFields)
+        && requiredFields.ValueKind == JsonValueKind.Array
+            ? requiredFields.EnumerateArray().Select(field => field.GetString()).OfType<string>().ToHashSet(StringComparer.Ordinal)
+            : [];
 
     private static string UnbindableMessage(string key, Type type, JsonElement root)
     {
@@ -155,7 +188,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>Dictionary of property names to effective values</returns>
     [HttpGet("{connectorName}/effective")]
     [RemoteQuery]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [ProducesResponseType(typeof(Dictionary<string, object?>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<Dictionary<string, object?>>> GetEffectiveConfiguration(
@@ -179,8 +212,12 @@ public class ConfigurationController : ControllerBase
     /// <summary>
     /// Saves or updates runtime configuration for a connector.
     /// Only properties marked with [RuntimeConfigurable] are accepted.
-    /// Validates the configuration against the connector's schema before saving.
-    /// Refused for Google Health, whose options are saved by the Google Health endpoint.
+    /// Validates the configuration against the connector's schema before saving. An address the
+    /// configuration leaves out keeps its stored value (<see cref="ConnectorAddresses"/>), and the
+    /// saved configuration is returned with each address masked.
+    /// Refused for Google Health, whose options are saved by the Google Health endpoint. A delegated
+    /// credential, and a caller without <c>tenant.settings</c>, is refused the changes
+    /// <see cref="DelegatedConfigurationGuard"/> lists.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="configuration">Configuration values as JSON</param>
@@ -188,9 +225,11 @@ public class ConfigurationController : ControllerBase
     /// <returns>The saved configuration</returns>
     [HttpPut("{connectorName}")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> SaveConfiguration(
         string connectorName,
         [FromBody] JsonDocument configuration,
@@ -205,7 +244,15 @@ public class ConfigurationController : ControllerBase
             return SetsEnabled(configuration) ? RefuseGrantDrivenEnabled() : RefuseGrantDrivenConfiguration();
         }
 
-        // Validate the configuration against the schema
+        if (await _configService.GetBoundKeysAsync(connectorName, ct) is null)
+        {
+            return NotFound(new { message = $"'{connectorName}' is not a connector" });
+        }
+
+        var addresses = await AddressesAsync(connectorName, ct);
+        configuration = addresses.WithStored(
+            configuration, (await _configService.GetConfigurationAsync(connectorName, ct))?.Configuration);
+
         var validationErrors = await ValidateConfigurationAsync(connectorName, configuration, ct);
         if (validationErrors.Count > 0)
         {
@@ -214,9 +261,31 @@ public class ConfigurationController : ControllerBase
             return BadRequest(new { message = "Configuration validation failed", errors = validationErrors });
         }
 
+        if (IsGuarded()
+            && await _configService.GetGuardedRefusalsAsync(connectorName, configuration, ct) is [_, ..] refused)
+        {
+            _logger.LogWarning("Refused a guarded change to {Fields} on connector {ConnectorName}",
+                string.Join(", ", refused), connectorName);
+            if (RequireInteractiveSessionAttribute.IsHandedOff(HttpContext))
+                return RequireInteractiveSessionAttribute.SignInRequired(HttpContext);
+            return this.ProblemWithCode(
+                DelegatedChangeRefusedCode,
+                $"Only a member who can change this site's settings, at their own sign-in, can change {string.Join(", ", refused)}. " +
+                "To use another address, delete the connector and set it up again: it then holds no " +
+                "secret until one is saved.",
+                StatusCodes.Status403Forbidden);
+        }
+
         var result = await _configService.SaveConfigurationAsync(connectorName, configuration, modifiedBy, ct);
+        result.Configuration = addresses.Masked(result.Configuration);
         return Ok(result);
     }
+
+    /// <summary>
+    /// The problem code of a save <see cref="DelegatedConfigurationGuard"/> refuses to a guarded
+    /// caller.
+    /// </summary>
+    public const string DelegatedChangeRefusedCode = "connector_change_needs_own_sign_in";
 
     private static bool IsGrantDrivenConnector(string connectorName) =>
         ConnectorNames.Canonical(connectorName) == ConnectorNames.Canonical(nameof(ConnectSource.GoogleHealth));
@@ -303,16 +372,14 @@ public class ConfigurationController : ControllerBase
             }
         }
 
+        var required = RequiredFields(schemaRoot);
+
         // Validate required fields (skip secrets - they're saved separately)
-        if (schemaRoot.TryGetProperty("required", out var requiredFields))
+        foreach (var fieldName in required)
         {
-            foreach (var requiredField in requiredFields.EnumerateArray())
+            if (!secretFields.Contains(fieldName) && !configRoot.TryGetProperty(fieldName, out _))
             {
-                var fieldName = requiredField.GetString();
-                if (fieldName != null && !secretFields.Contains(fieldName) && !configRoot.TryGetProperty(fieldName, out _))
-                {
-                    errors.Add($"Required field '{fieldName}' is missing");
-                }
+                errors.Add($"Required field '{fieldName}' is missing");
             }
         }
 
@@ -387,7 +454,8 @@ public class ConfigurationController : ControllerBase
                 && configProp.Value.ValueKind == JsonValueKind.String)
             {
                 var candidate = configProp.Value.GetString();
-                if (!IsAcceptableUri(candidate))
+                var clearsOptional = string.IsNullOrWhiteSpace(candidate) && !required.Contains(configProp.Name);
+                if (!clearsOptional && !IsAcceptableUri(candidate))
                 {
                     errors.Add(
                         $"Field '{configProp.Name}' must be an http or https URL " +
@@ -420,9 +488,9 @@ public class ConfigurationController : ControllerBase
     /// <c>ConnectorUrl.TryResolveBase</c>, which the connectors resolve their base URL through.
     /// </para>
     /// <para>
-    /// Embedded credentials are refused because this value is stored in the connector's runtime
-    /// configuration, which <c>GET</c> returns in the clear — the secret fields are the ones kept
-    /// out of that response, and a password smuggled into the URL would bypass that. The check runs
+    /// Embedded credentials are refused because this value is stored unencrypted in the connector's
+    /// runtime configuration. The secret fields are the ones stored encrypted, and a password
+    /// smuggled into the URL would bypass that. The check runs
     /// on the prepended form too, since <c>admin:hunter2@mysite.example</c> only reveals its
     /// userinfo once a scheme is in front of it.
     /// </para>
@@ -441,10 +509,11 @@ public class ConfigurationController : ControllerBase
     /// <param name="connectorName">The connector name</param>
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="ct">Cancellation token</param>
+    /// <returns>Whether a live credential already held a saved Nightscout API secret, and when it stops.</returns>
     [HttpPut("{connectorName}/secrets")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(Scope.TenantSettings)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
+    [ProducesResponseType(typeof(ConnectorSecretsSaveResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> SaveSecrets(
@@ -459,10 +528,17 @@ public class ConfigurationController : ControllerBase
 
         // Saving a Nightscout API secret adopts it as a working credential (see
         // RequireInteractiveSessionAttribute); other connector credentials hand out nothing.
-        if (ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null
-            && RequireInteractiveSessionAttribute.Refuses(HttpContext))
+        var adopts = ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null;
+        if (adopts && await HttpContext.IsCallerInactiveAsync(ct))
         {
-            return Forbid();
+            return Challenge();
+        }
+
+        if (adopts && RequireInteractiveSessionAttribute.Refuses(HttpContext))
+        {
+            return RequireInteractiveSessionAttribute.IsHandedOff(HttpContext)
+                ? RequireInteractiveSessionAttribute.SignInRequired(HttpContext)
+                : Forbid();
         }
 
         var modifiedBy = User.Identity?.Name ?? "api";
@@ -471,8 +547,11 @@ public class ConfigurationController : ControllerBase
 
         try
         {
-            await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, ct);
-            return NoContent();
+            var ceiling = HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing;
+            var saver = adopts && await HttpContext.CredentialMakerAsync(ct) is { } maker
+                ? new ConnectorSecretSaver(maker, ceiling.Scopes, ceiling.HistoryClamped)
+                : null;
+            return Ok(await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, saver, ct));
         }
         catch (InvalidOperationException ex)
         {
@@ -497,7 +576,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>The verification outcome</returns>
     [HttpPost("{connectorName}/verify")]
     [RemoteCommand]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
     [EnableRateLimiting(ServiceRegistrationExtensions.ConnectorVerifyRateLimitPolicy)]
     [ProducesResponseType(typeof(ConnectorCredentialVerificationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -548,7 +627,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>List of connector status information</returns>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [ProducesResponseType(typeof(IReadOnlyList<ConnectorStatusInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ConnectorStatusInfo>>> GetAllConnectorStatus(
         CancellationToken ct)
@@ -567,7 +646,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpPatch("{connectorName}/active")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SetActive(
@@ -595,7 +674,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpDelete("{connectorName}")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

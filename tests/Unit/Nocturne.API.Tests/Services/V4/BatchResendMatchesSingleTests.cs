@@ -1,25 +1,18 @@
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -59,14 +52,11 @@ public class BatchResendMatchesSingleTests : IDisposable
     [Fact]
     public async Task Entry_BatchResend_UpdatesSensorMeterAndCalibrationRows()
     {
-        var decomposer = new EntryDecomposer(
-            new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance),
-            new MeterGlucoseRepository(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance),
-            new CalibrationRepository(_factory, _audit, NullLogger<CalibrationRepository>.Instance),
-            Mock.Of<IGlucoseProcessingResolver>(),
-            Mock.Of<IPatientDeviceStamper>(),
-            _audit,
-            NullLogger<EntryDecomposer>.Instance);
+        var decomposer = EntryDecomposerDoubles.Build(
+            sensorGlucose: new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance),
+            meterGlucose: new MeterGlucoseRepository(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance),
+            calibration: new CalibrationRepository(_factory, _audit, NullLogger<CalibrationRepository>.Instance),
+            audit: _audit);
 
         Entry Sgv(double value) => new() { Id = "sgv-1", Type = "sgv", Mills = At, Sgv = value, Device = "cgm" };
         Entry Mbg(double value) => new() { Id = "mbg-1", Type = "mbg", Mills = At, Mbg = value, Device = "meter" };
@@ -92,26 +82,7 @@ public class BatchResendMatchesSingleTests : IDisposable
         foods
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
-            new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
-            new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
-            new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),
-            new DeviceEventRepository(_factory, _dedup, _audit, NullLogger<DeviceEventRepository>.Instance),
-            new BolusCalculationRepository(_factory, _dedup, _audit, NullLogger<BolusCalculationRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            foods.Object,
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            _audit,
-            NullLogger<TreatmentDecomposer>.Instance);
+        var decomposer = TreatmentDecomposerDoubles.Stored(_factory, _dedup, _audit, foods: foods.Object);
 
         Treatment Carbs(double carbs) => new()
         {
@@ -149,16 +120,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     [Fact]
     public async Task DeviceStatus_BatchResend_UpdatesTheSnapshotRow()
     {
-        var decomposer = new DeviceStatusDecomposer(
-            new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
-            new PumpSnapshotRepository(_factory, _audit, NullLogger<PumpSnapshotRepository>.Instance),
-            new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
-            new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            new UnresolvedDevices(),
-            _audit,
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        var decomposer = DeviceStatusDecomposerDoubles.Stored(_factory, _audit);
 
         DeviceStatus Status(int battery) => new()
         {
@@ -177,16 +139,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     [Fact]
     public async Task DeviceStatus_ResendWithExtras_KeepsOneExtrasRowThatADeleteRemoves()
     {
-        var decomposer = new DeviceStatusDecomposer(
-            new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
-            new PumpSnapshotRepository(_factory, _audit, NullLogger<PumpSnapshotRepository>.Instance),
-            new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
-            new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            new UnresolvedDevices(),
-            _audit,
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        var decomposer = DeviceStatusDecomposerDoubles.Stored(_factory, _audit);
 
         const string legacyId = "6500000000000000000000d2";
         DeviceStatus Status(int battery) => new()
@@ -218,16 +171,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     [Fact]
     public async Task DeviceStatus_ResendAfterUserDelete_WritesNoExtrasRow()
     {
-        var decomposer = new DeviceStatusDecomposer(
-            new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
-            new PumpSnapshotRepository(_factory, _audit, NullLogger<PumpSnapshotRepository>.Instance),
-            new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
-            new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            new UnresolvedDevices(),
-            _audit,
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        var decomposer = DeviceStatusDecomposerDoubles.Stored(_factory, _audit);
 
         const string legacyId = "6500000000000000000000d3";
         DeviceStatus Status() => new()
@@ -256,16 +200,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     [Fact]
     public async Task DeviceStatus_SnapshotlessResend_WritesNoSecondExtrasRow()
     {
-        var decomposer = new DeviceStatusDecomposer(
-            new ApsSnapshotRepository(_factory, _audit, NullLogger<ApsSnapshotRepository>.Instance),
-            new PumpSnapshotRepository(_factory, _audit, NullLogger<PumpSnapshotRepository>.Instance),
-            new UploaderSnapshotRepository(_factory, _audit, NullLogger<UploaderSnapshotRepository>.Instance),
-            new DeviceStatusExtrasRepository(_factory, _audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            new UnresolvedDevices(),
-            _audit,
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        var decomposer = DeviceStatusDecomposerDoubles.Stored(_factory, _audit);
 
         DeviceStatus Status() => new()
         {
@@ -286,10 +221,50 @@ public class BatchResendMatchesSingleTests : IDisposable
     }
 
     [Fact]
+    public async Task DeviceStatus_Replace_RewritesItsSensorStateReport()
+    {
+        // A mutable AuditContext takes the system attribution a replacement's deletes run under.
+        var decomposer = DeviceStatusDecomposerDoubles.Stored(
+            _factory, new AuditContext { SubjectId = Guid.CreateVersion7(), AuthType = "SessionCookie" });
+
+        await decomposer.DecomposeBatchAsync([CareLinkStatus("WARM_UP")], "carelink-connector", WriteOrigin.Live);
+        await decomposer.ReplaceAsync(CareLinkStatusId, CareLinkStatus("SENSOR_ERROR"), WriteOrigin.Live);
+
+        LiveSensorStateReports().Should().ContainSingle().Which.State.Should().Be(SensorState.Error);
+    }
+
+    [Fact]
+    public async Task DeviceStatus_DeleteThenResend_DeletesItsSensorStateReportAndWritesNoNewOne()
+    {
+        var decomposer = DeviceStatusDecomposerDoubles.Stored(_factory, _audit);
+
+        await decomposer.DecomposeBatchAsync([CareLinkStatus("WARM_UP")], "carelink-connector", WriteOrigin.Live);
+        await decomposer.DeleteStoredAsync(CareLinkStatusId, WriteOrigin.Live);
+        LiveSensorStateReports().Should().BeEmpty("deleting the device status must reach its sensor state report");
+
+        await decomposer.DecomposeBatchAsync([CareLinkStatus("WARM_UP")], "carelink-connector", WriteOrigin.Live);
+
+        LiveSensorStateReports().Should().BeEmpty("a resend must not revive the deleted status's report");
+    }
+
+    private const string CareLinkStatusId = "6500000000000000000000d5";
+
+    private static DeviceStatus CareLinkStatus(string sensorState) => new()
+    {
+        Id = CareLinkStatusId, Mills = At, Device = "CareLink MiniMed 780G",
+        Cgm = new CgmStatus { Manufacturer = "Medtronic", SensorState = sensorState },
+        Uploader = new UploaderStatus { Battery = 80 },
+    };
+
+    private List<V4Models.SensorStateReport> LiveSensorStateReports() =>
+        [.. _context.SensorStateReports.IgnoreQueryFilters().Where(e => e.DeletedAt == null).AsEnumerable()
+            .Select(Nocturne.Infrastructure.Data.Mappers.V4.SensorStateReportMapper.ToDomainModel)];
+
+    [Fact]
     public async Task Activity_BatchResend_UpdatesTheHeartRateRow()
     {
         var decomposer = new ActivityDecomposer(
-            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), NullLogger<ActivityDecomposer>.Instance);
+            new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System), Mock.Of<IStateSpanRepository>(), Mock.Of<ISleepService>(), TimeProvider.System, NullLogger<ActivityDecomposer>.Instance);
 
         Activity HeartRate(int bpm) => new()
         {

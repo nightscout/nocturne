@@ -59,7 +59,7 @@ public class V4ReadOnlyControllerBaseTests
         };
         _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(records);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         var result = await _controller.GetAll(null, null, 100, 0, "timestamp_desc", null, null);
@@ -80,7 +80,7 @@ public class V4ReadOnlyControllerBaseTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
         response.Pagination.Total.Should().Be(2);
-        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class V4ReadOnlyControllerBaseTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -106,7 +106,20 @@ public class V4ReadOnlyControllerBaseTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_IncludeTotal_CountsWithTheDeviceAndSourceTheDataQueryUses()
+    {
+        _repo.Setup(r => r.GetAsync(null, null, "pump-a", "tandem", 2, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ReadOnlyTestRecord(), new ReadOnlyTestRecord()]);
+        _repo.Setup(r => r.CountAsync(null, null, "pump-a", "tandem", It.IsAny<CancellationToken>())).ReturnsAsync(11);
+
+        var result = await _controller.GetAll(null, null, 2, 0, "timestamp_desc", "pump-a", "tandem", includeTotal: true);
+
+        var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
+        response.Pagination.Total.Should().Be(11);
     }
 
     [Fact]
@@ -114,13 +127,13 @@ public class V4ReadOnlyControllerBaseTests
     {
         _repo.Setup(r => r.GetAsync(null, null, null, null, 2, 0, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ReadOnlyTestRecord(), new ReadOnlyTestRecord()]);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(57);
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(57);
 
         var result = await _controller.GetAll(null, null, 2, 0, "timestamp_desc", null, null, includeTotal: true);
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
         response.Pagination.Total.Should().Be(57);
-        _repo.Verify(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -137,7 +150,7 @@ public class V4ReadOnlyControllerBaseTests
     {
         _repo.Setup(r => r.GetAsync(null, null, null, null, 100, 0, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _repo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(null, null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
         await _controller.GetAll(null, null, 100, 0, "timestamp_asc", null, null);
@@ -185,7 +198,7 @@ public class V4ReadOnlyControllerBaseTests
         var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays);
         _repo.Setup(r => r.GetAsync(from, to, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _repo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _repo.Setup(r => r.CountAsync(from, to, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var result = await _controller.GetAll(from, to, 100, 0, "timestamp_desc", null, null);
 
@@ -211,7 +224,7 @@ public class V4ReadOnlyControllerBaseTests
         var from = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         _repo.Setup(r => r.GetAsync(from, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _repo.Setup(r => r.CountAsync(from, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _repo.Setup(r => r.CountAsync(from, null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var result = await _controller.GetAll(from, null, 100, 0, "timestamp_desc", null, null);
 
@@ -223,7 +236,7 @@ public class V4ReadOnlyControllerBaseTests
         _repo.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _repo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
     }
 

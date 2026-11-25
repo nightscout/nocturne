@@ -251,6 +251,39 @@ public class AlertRepositoryTenantScopingTests
         context!.SubjectName.Should().Be("Alex");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetTenantAlertContextAsync_WithNoUsablePreferredName_CarriesNoSubjectName(string? preferredName)
+    {
+        var options = NewStore();
+        await SeedAsync(options, ctx =>
+        {
+            ctx.Tenants.Add(NewTenant(TenantA));
+            ctx.PatientRecords.Add(
+                new PatientRecordEntity { Id = Guid.NewGuid(), TenantId = TenantA, PreferredName = preferredName });
+        });
+        var repo = Repository(options, scopeTenant: Guid.Empty);
+
+        var context = await repo.GetTenantAlertContextAsync(TenantA, CancellationToken.None);
+
+        context!.SubjectName.Should().BeNull();
+        context.AlertSubjectName.Should().Be(context.DisplayName);
+    }
+
+    [Fact]
+    public async Task GetTenantAlertContextAsync_WithNoPatientRecord_CarriesNoSubjectName()
+    {
+        var options = NewStore();
+        await SeedAsync(options, ctx => ctx.Tenants.Add(NewTenant(TenantA)));
+        var repo = Repository(options, scopeTenant: Guid.Empty);
+
+        var context = await repo.GetTenantAlertContextAsync(TenantA, CancellationToken.None);
+
+        context!.SubjectName.Should().BeNull();
+    }
+
     [Fact]
     public async Task GetExcursionRuleAsync_ReturnsTheExcursionsRule_WithinTheScopesTenantOnly()
     {
@@ -363,12 +396,5 @@ public class AlertRepositoryTenantScopingTests
 
     /// <summary>A repository whose scope is resolved to <paramref name="scopeTenant"/>.</summary>
     private static AlertRepository Repository(DbContextOptions<NocturneDbContext> options, Guid scopeTenant) =>
-        new(new ScopeFactory(options, scopeTenant));
-
-    private sealed class ScopeFactory(DbContextOptions<NocturneDbContext> options, Guid scopeTenant)
-        : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(options) { TenantId = scopeTenant });
-    }
+        new(new SuppliedContextFactory(() => new NocturneDbContext(options) { TenantId = scopeTenant }));
 }

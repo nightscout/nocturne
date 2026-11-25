@@ -59,8 +59,8 @@ public class TotpStepUpTokenEntity
     public DateTime ExpiresAt { get; set; }
 
     /// <summary>
-    /// When the token was redeemed, or null if it has not been. A row with a value here is never
-    /// redeemable again.
+    /// When the token was redeemed, or spent by wrong codes, or null if neither. A row with a value
+    /// here is never redeemable again.
     /// </summary>
     [Column("consumed_at")]
     public DateTime? ConsumedAt { get; set; }

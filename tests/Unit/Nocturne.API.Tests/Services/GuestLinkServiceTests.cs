@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -18,6 +19,7 @@ namespace Nocturne.API.Tests.Services;
 public class GuestLinkServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GuestLinkService _service;
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -49,25 +51,46 @@ public class GuestLinkServiceTests : IDisposable
             _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             _sessionCache,
             new GrantRevocationService(_sessionCache),
+            _time,
             NullLogger<GuestLinkService>.Instance);
     }
 
     [Fact]
     public async Task CreateGuestLink_ReturnsCodeAndInfo()
     {
-        var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Test Link", "https://example.com", Unbounded());
+        var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Test Link", "https://example.com", Unbounded(), null);
 
         result.Code.Should().MatchRegex(@"^[A-Z2-9]{3}-[A-Z2-9]{4}$");
         result.FullUrl.Should().StartWith("https://example.com/guest/");
         result.Info.Label.Should().Be("Test Link");
         result.Info.Status.Should().Be(GuestLinkStatus.Pending);
-        result.Info.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(48), TimeSpan.FromSeconds(5));
+        result.Info.ExpiresAt.Should().Be(_time.GetUtcNow().UtcDateTime.AddHours(48));
+    }
+
+    [Fact]
+    public async Task CreateGuestLink_expiresNoLaterThanTheCreatorsAccess()
+    {
+        var creatorAccessEndsAt = _time.GetUtcNow().UtcDateTime.AddHours(6);
+
+        var result = await _service.CreateGuestLinkAsync(
+            _dataOwnerId, _creatorId, "Capped", "https://example.com", Unbounded(), expiresNoLaterThan: creatorAccessEndsAt);
+
+        result.Info.ExpiresAt.Should().Be(creatorAccessEndsAt);
+    }
+
+    [Fact]
+    public async Task CreateGuestLink_keepsItsLifetimeWhenTheCreatorsAccessEndsLater()
+    {
+        var result = await _service.CreateGuestLinkAsync(
+            _dataOwnerId, _creatorId, "Uncapped", "https://example.com", Unbounded(), expiresNoLaterThan: _time.GetUtcNow().UtcDateTime.AddDays(30));
+
+        result.Info.ExpiresAt.Should().Be(_time.GetUtcNow().UtcDateTime.AddHours(48));
     }
 
     [Fact]
     public async Task CreateGuestLink_StoresHashNotPlaintext()
     {
-        var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Hash Test", "https://example.com", Unbounded());
+        var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Hash Test", "https://example.com", Unbounded(), null);
 
         var grant = await _dbContext.OAuthGrants
             .IgnoreQueryFilters()
@@ -87,7 +110,7 @@ public class GuestLinkServiceTests : IDisposable
     {
         var act = () => _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Bad Scopes", "https://example.com",
-            Unbounded(), [Scope.GlucoseReadWrite]);
+            Unbounded(), null, [Scope.GlucoseReadWrite]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*not allowed*");
@@ -105,7 +128,7 @@ public class GuestLinkServiceTests : IDisposable
     public async Task CreateGuestLink_RejectsTenantAdministrationScopes(string scope)
     {
         var act = () => _service.CreateGuestLinkAsync(
-            _dataOwnerId, _creatorId, "Admin Scopes", "https://example.com", Unbounded(), [scope]);
+            _dataOwnerId, _creatorId, "Admin Scopes", "https://example.com", Unbounded(), null, [scope]);
 
         // An administration atom is absent from ValidRequestScopes, so the recognised-scope guard
         // rejects it before the guest cap is consulted. Either guard is a correct rejection, so the
@@ -120,10 +143,10 @@ public class GuestLinkServiceTests : IDisposable
     {
         for (var i = 0; i < 5; i++)
         {
-            await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, $"Link {i}", "https://example.com", Unbounded());
+            await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, $"Link {i}", "https://example.com", Unbounded(), null);
         }
 
-        var act = () => _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Link 6", "https://example.com", Unbounded());
+        var act = () => _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Link 6", "https://example.com", Unbounded(), null);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Maximum*5*");
@@ -132,7 +155,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task CreateGuestLink_DefaultScopes_AreReadOnly()
     {
-        var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Defaults", "https://example.com", Unbounded());
+        var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Defaults", "https://example.com", Unbounded(), null);
 
         result.Info.Scopes.Should().BeEquivalentTo(
             Scope.HealthReadExpansion
@@ -173,7 +196,7 @@ public class GuestLinkServiceTests : IDisposable
 
         var act = () => _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Too Wide", "https://example.com",
-            scopes: [Scope.TreatmentsRead], creatorScopes: creator);
+            creatorScopes: creator, expiresNoLaterThan: null, scopes: [Scope.TreatmentsRead]);
 
         var thrown = await act.Should().ThrowAsync<GrantCeilingViolationException>();
         thrown.Which.Violation.Code.Should().Be(GrantCeilingViolation.ExceedsGranter);
@@ -187,7 +210,7 @@ public class GuestLinkServiceTests : IDisposable
         var creator = new HashSet<string> { Scope.GlucoseRead, Scope.SharingGuest };
 
         var result = await _service.CreateGuestLinkAsync(
-            _dataOwnerId, _creatorId, "Narrowed", "https://example.com", creatorScopes: creator);
+            _dataOwnerId, _creatorId, "Narrowed", "https://example.com", creatorScopes: creator, null);
 
         result.Info.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
         result.Info.Scopes.Should().NotContain(Scope.HealthRead);
@@ -200,7 +223,7 @@ public class GuestLinkServiceTests : IDisposable
         var creator = new HashSet<string> { Scope.SharingGuest };
 
         var act = () => _service.CreateGuestLinkAsync(
-            _dataOwnerId, _creatorId, "Empty", "https://example.com", creatorScopes: creator);
+            _dataOwnerId, _creatorId, "Empty", "https://example.com", creatorScopes: creator, null);
 
         var thrown = await act.Should().ThrowAsync<GrantCeilingViolationException>();
         thrown.Which.Violation.Code.Should().Be(GrantCeilingViolation.ExceedsGranter);
@@ -213,7 +236,7 @@ public class GuestLinkServiceTests : IDisposable
 
         var result = await _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Alias", "https://example.com",
-            scopes: [Scope.HealthRead], creatorScopes: creator);
+            creatorScopes: creator, expiresNoLaterThan: null, scopes: [Scope.HealthRead]);
 
         var grant = await _dbContext.OAuthGrants
             .IgnoreQueryFilters()
@@ -224,7 +247,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task ActivateAsync_ValidCode_ReturnsSession()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Activate Me", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Activate Me", "https://example.com", Unbounded(), null);
 
         var result = await _service.ActivateAsync(created.Code, "1.2.3.4", "TestAgent");
 
@@ -237,7 +260,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task ActivateAsync_AlreadyActivated_Fails()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "One-Time", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "One-Time", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent1");
 
         var result = await _service.ActivateAsync(created.Code, "5.6.7.8", "Agent2");
@@ -258,7 +281,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task ActivateAsync_RecordsIpAndUserAgent()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "IP Test", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "IP Test", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "10.0.0.1", "Mozilla/5.0");
 
         var grant = await _dbContext.OAuthGrants
@@ -276,7 +299,7 @@ public class GuestLinkServiceTests : IDisposable
     public async Task CreateGuestLink_HistoryLimit_IsStoredAndCarriedIntoTheSession(bool limitTo24Hours)
     {
         var created = await _service.CreateGuestLinkAsync(
-            _dataOwnerId, _creatorId, "Clamp Test", "https://example.com", Unbounded(), limitTo24Hours: limitTo24Hours);
+            _dataOwnerId, _creatorId, "Clamp Test", "https://example.com", Unbounded(), null, limitTo24Hours: limitTo24Hours);
 
         var grant = await _dbContext.OAuthGrants.IgnoreQueryFilters().FirstAsync(g => g.Id == created.Info.Id);
         grant.LimitTo24Hours.Should().Be(limitTo24Hours);
@@ -289,7 +312,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task ValidateSessionAsync_ActiveGrant_ReturnsInfo()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Session Test", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Session Test", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
 
         var session = await _service.ValidateSessionAsync(created.Info.Id);
@@ -301,9 +324,23 @@ public class GuestLinkServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidateSessionAsync_ReadsTheInjectedClock_ExpiringTheLinkAtItsStatedTime()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Clock Test", "https://example.com", Unbounded(), null);
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        created.Info.ExpiresAt.Should().Be(_time.GetUtcNow().UtcDateTime.AddHours(48));
+
+        _time.Advance(TimeSpan.FromHours(48) - TimeSpan.FromSeconds(1));
+        (await _service.ValidateSessionAsync(created.Info.Id)).Should().NotBeNull();
+
+        _time.Advance(TimeSpan.FromSeconds(1));
+        (await _service.ValidateSessionAsync(created.Info.Id)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task ValidateSessionAsync_RevokedGrant_ReturnsNull()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoke Test", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoke Test", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
 
@@ -312,10 +349,45 @@ public class GuestLinkServiceTests : IDisposable
         session.Should().BeNull();
     }
 
+    private async Task CapAsync(DateTime notAfter)
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_dbContext.AsFactory(), _tenantId);
+        await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(_creatorId, notAfter, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
+        await unit.Context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_CappedGrant_ValidUntilItsNewExpiryThenNull()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Cap Test", "https://example.com", Unbounded(), null);
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        var newExpiry = _time.GetUtcNow().UtcDateTime.AddHours(1);
+
+        await CapAsync(newExpiry);
+
+        (await _service.ValidateSessionAsync(created.Info.Id))!.ExpiresAt.Should().Be(newExpiry);
+
+        await CapAsync(_time.GetUtcNow().UtcDateTime.AddMinutes(-1));
+
+        (await _service.ValidateSessionAsync(created.Info.Id)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_CapDoesNotLengthenALinkThatEndsSooner()
+    {
+        var soon = _time.GetUtcNow().UtcDateTime.AddMinutes(10);
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Short Test", "https://example.com", Unbounded(), soon);
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+
+        await CapAsync(_time.GetUtcNow().UtcDateTime.AddDays(5));
+
+        (await _service.ValidateSessionAsync(created.Info.Id))!.ExpiresAt.Should().Be(created.Info.ExpiresAt);
+    }
+
     [Fact]
     public async Task ValidateSessionAsync_CarriesGrantTenant()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant Test", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant Test", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
 
         var session = await _service.ValidateSessionAsync(created.Info.Id);
@@ -327,7 +399,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task ActivateAsync_SessionCarriesGrantTenant()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant Activate", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant Activate", "https://example.com", Unbounded(), null);
 
         var result = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
 
@@ -337,7 +409,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task DismissAsync_EvictsCachedSession()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Evict On Dismiss", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Evict On Dismiss", "https://example.com", Unbounded(), null);
         var activation = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
         _sessionCache.Set(_tenantId, created.Info.Id, activation.Session);
@@ -350,7 +422,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task RevokeAsync_DifferentSubject_Fails()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Not Yours", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Not Yours", "https://example.com", Unbounded(), null);
         var strangerId = Guid.CreateVersion7();
 
         var result = await _service.RevokeAsync(created.Info.Id, strangerId);
@@ -366,7 +438,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task RevokeAsync_Creator_CanRevoke()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Creator Revoke", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Creator Revoke", "https://example.com", Unbounded(), null);
 
         var result = await _service.RevokeAsync(created.Info.Id, _creatorId);
 
@@ -381,7 +453,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task DismissAsync_RevokedLink_SetsDismissedAt()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoked Dismiss", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoked Dismiss", "https://example.com", Unbounded(), null);
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
 
         var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
@@ -395,29 +467,26 @@ public class GuestLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DismissAsync_ExpiredLink_SetsDismissedAt()
+    public async Task DismissAsync_AtTheExpiryBoundary_SetsDismissedAt()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Expired Dismiss", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Expired Dismiss", "https://example.com", Unbounded(), null);
 
-        // Force expiration by backdating ExpiresAt
-        var grant = await _dbContext.OAuthGrants
-            .IgnoreQueryFilters()
-            .FirstAsync(g => g.Id == created.Info.Id);
-        grant.ExpiresAt = DateTime.UtcNow.AddHours(-1);
-        await _dbContext.SaveChangesAsync();
+        _time.Advance(TimeSpan.FromHours(48));
 
         var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
 
         result.Should().BeTrue();
 
-        await _dbContext.Entry(grant).ReloadAsync();
-        grant.DismissedAt.Should().NotBeNull();
+        var grant = await _dbContext.OAuthGrants.AsNoTracking()
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.DismissedAt.Should().Be(created.Info.ExpiresAt);
     }
 
     [Fact]
     public async Task DismissAsync_ActiveLink_ReturnsFalse()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Active No Dismiss", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Active No Dismiss", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
 
         var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
@@ -433,7 +502,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task DismissAsync_PendingLink_ReturnsFalse()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Pending No Dismiss", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Pending No Dismiss", "https://example.com", Unbounded(), null);
 
         var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
 
@@ -448,7 +517,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task DismissAsync_WrongOwner_ReturnsFalse()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Wrong Owner Dismiss", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Wrong Owner Dismiss", "https://example.com", Unbounded(), null);
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
         var strangerId = Guid.CreateVersion7();
 
@@ -471,7 +540,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task HasRedeemableCodeAsync_UnusedLink_ReturnsTrue()
     {
-        await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Unused", "https://example.com", Unbounded());
+        await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Unused", "https://example.com", Unbounded(), null);
 
         (await _service.HasRedeemableCodeAsync()).Should().BeTrue();
     }
@@ -479,7 +548,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task HasRedeemableCodeAsync_ActivatedLink_ReturnsFalse()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Used", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Used", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
 
         (await _service.HasRedeemableCodeAsync()).Should().BeFalse();
@@ -488,7 +557,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task HasRedeemableCodeAsync_RevokedLink_ReturnsFalse()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoked", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoked", "https://example.com", Unbounded(), null);
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
 
         (await _service.HasRedeemableCodeAsync()).Should().BeFalse();
@@ -497,11 +566,11 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task HasRedeemableCodeAsync_ExpiredLink_ReturnsFalse()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Expired", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Expired", "https://example.com", Unbounded(), null);
         var grant = await _dbContext.OAuthGrants
             .IgnoreQueryFilters()
             .FirstAsync(g => g.Id == created.Info.Id);
-        grant.ExpiresAt = DateTime.UtcNow.AddHours(-1);
+        grant.ExpiresAt = _time.GetUtcNow().UtcDateTime.AddHours(-1);
         await _dbContext.SaveChangesAsync();
 
         (await _service.HasRedeemableCodeAsync()).Should().BeFalse();
@@ -516,7 +585,7 @@ public class GuestLinkServiceTests : IDisposable
             SubjectId = _dataOwnerId,
             GrantType = OAuthGrantTypes.Direct,
             Scopes = [Scope.HealthRead],
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            ExpiresAt = _time.GetUtcNow().UtcDateTime.AddHours(1),
         });
         await _dbContext.SaveChangesAsync();
 
@@ -526,7 +595,7 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task HasRedeemableCodeAsync_OtherTenantsLink_ReturnsFalse()
     {
-        await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant A", "https://example.com", Unbounded());
+        await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant A", "https://example.com", Unbounded(), null);
 
         _dbContext.TenantId = Guid.CreateVersion7();
 
@@ -536,11 +605,11 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task GetGuestLinksAsync_ExcludesDismissedByDefault()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link", "https://example.com", Unbounded(), null);
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
         await _service.DismissAsync(created.Info.Id, _dataOwnerId);
 
-        var undismissed = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Visible Link", "https://example.com", Unbounded());
+        var undismissed = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Visible Link", "https://example.com", Unbounded(), null);
 
         var links = await _service.GetGuestLinksAsync(_dataOwnerId);
 
@@ -551,11 +620,11 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task GetGuestLinksAsync_IncludesDismissedWhenRequested()
     {
-        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link 2", "https://example.com", Unbounded());
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link 2", "https://example.com", Unbounded(), null);
         await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
         await _service.DismissAsync(created.Info.Id, _dataOwnerId);
 
-        var undismissed = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Visible Link 2", "https://example.com", Unbounded());
+        var undismissed = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Visible Link 2", "https://example.com", Unbounded(), null);
 
         var links = await _service.GetGuestLinksAsync(_dataOwnerId, includeDismissed: true);
 

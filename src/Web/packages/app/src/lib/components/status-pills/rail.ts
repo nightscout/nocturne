@@ -1,7 +1,7 @@
 import {
   RailItemId,
   type DashboardRailPreference,
-} from "../../api/generated/nocturne-api-client";
+} from "@nocturne/api-client";
 import { isRecord } from "../../utils/type-guards";
 
 /** Every rail item, in the order the default rail shows them. */
@@ -60,4 +60,23 @@ export function effectiveRail(
       !isRailItemHidden(preference, id) &&
       (id !== RailItemId.Trackers || trackerPillsEnabled)
   );
+}
+
+/** How many rail items a phone shows before the rest; for the default order, COB, basal, IOB and loop. */
+export const MOBILE_LEAD_RAIL_ITEMS = 4;
+
+/**
+ * A phone's rail: the first items in the user's order lead and the rest wait behind a disclosure.
+ * Trackers lead wherever the user placed them while one of their pills warns, so a due change
+ * is never behind it.
+ */
+export function splitMobileRail(
+  items: readonly RailItemId[],
+  trackersWarn: boolean
+): { lead: RailItemId[]; rest: RailItemId[] } {
+  const lead = items.filter(
+    (id, index) =>
+      index < MOBILE_LEAD_RAIL_ITEMS || (id === RailItemId.Trackers && trackersWarn)
+  );
+  return { lead, rest: items.filter((id) => !lead.includes(id)) };
 }

@@ -1,22 +1,14 @@
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.API.Tests.Infrastructure;
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -31,15 +23,6 @@ public class TreatmentDecomposerNotesTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var mockDedup = new Mock<IDuplicateLinker>();
-        var mockAudit = new Mock<IAuditContext>().Object;
-        var ctxFactory = new TestNocturneDbContextFactory(_context);
-        var bolusRepo = new BolusRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusRepository>.Instance);
-        var carbIntakeRepo = new CarbIntakeRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<CarbIntakeRepository>.Instance);
-        var bgCheckRepo = new BGCheckRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BGCheckRepository>.Instance);
-        var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<NoteRepository>.Instance);
-        var deviceEventRepo = new DeviceEventRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<DeviceEventRepository>.Instance);
-        var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusCalculationRepository>.Instance);
         var stateSpanServiceMock = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
         var treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
         var tempBasalRepoMock = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord();
@@ -49,24 +32,12 @@ public class TreatmentDecomposerNotesTests : IDisposable
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var activeProfileResolverMock = new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null);
-        var insulinRepoMock = new Mock<IPatientInsulinRepository>();
-
-        _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            bolusRepo, tempBasalRepoMock.Object,
-            carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
-            stateSpanServiceMock.Object,
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            treatmentFoodServiceMock.Object,
-            deviceServiceMock.Object,
-            Mock.Of<IPatientDeviceStamper>(),
-            activeProfileResolverMock.Object,
-            insulinRepoMock.Object,
-            TempBasalTestDeps.Unscheduled(),
-            Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+        _decomposer = TreatmentDecomposerDoubles.Stored(
+            _context.AsFactory(), Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(),
+            tempBasal: tempBasalRepoMock.Object,
+            stateSpans: stateSpanServiceMock.Object,
+            foods: treatmentFoodServiceMock.Object,
+            devices: deviceServiceMock.Object);
     }
 
     public void Dispose()

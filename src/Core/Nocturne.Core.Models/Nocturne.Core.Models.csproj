@@ -1,10 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+    <Import Project="..\CoreNetworkBan.props"/>
     <PropertyGroup>
         <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
     <ItemGroup>
+        <!-- This project reads the clock only through an injected TimeProvider; BannedSymbols.txt
+             holds it there. Scoped to this project until the rest of the tree follows. -->
+        <AdditionalFiles Include="BannedSymbols.txt"/>
         <PackageReference Include="NJsonSchema.Annotations" />
         <ProjectReference Include="..\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
     </ItemGroup>

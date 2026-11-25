@@ -49,9 +49,10 @@ public class OuraImportServiceTests
     [Fact]
     public async Task AnExport_IsWrittenThroughTheHealthServices_AndReportedByCount()
     {
-        var result = await Service().ImportAsync(Export(), CancellationToken.None);
+        var progress = new OuraImportProgress();
+        await Service().ImportAsync(Export(), progress, CancellationToken.None);
 
-        result.Should().Be(new OuraImportResult(SleepSessions: 2, HeartRates: 2, StepDays: 1));
+        (progress.SleepSessionCount, progress.HeartRateCount, progress.StepDayCount).Should().Be((2, 2, 1));
         _sleep.Verify(s => s.UpsertSessionAsync(
             It.Is<SleepSession>(session => session.Source == SleepSource.Oura), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
@@ -68,9 +69,10 @@ public class OuraImportServiceTests
                 It.Is<SleepSession>(session => session.OriginalId == "oura:night-1"), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new RecreationBlockedException("sleep session", "oura:night-1"));
 
-        var result = await Service().ImportAsync(Export(), CancellationToken.None);
+        var progress = new OuraImportProgress();
+        await Service().ImportAsync(Export(), progress, CancellationToken.None);
 
-        result.SleepSessions.Should().Be(1);
+        progress.SleepSessionCount.Should().Be(1);
     }
 
     [Fact]
@@ -79,9 +81,10 @@ public class OuraImportServiceTests
         _heartRates.Setup(s => s.CreateHeartRatesAsync(It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<HeartRate> batch, CancellationToken _) => batch.Take(1));
 
-        var result = await Service().ImportAsync(Export(), CancellationToken.None);
+        var progress = new OuraImportProgress();
+        await Service().ImportAsync(Export(), progress, CancellationToken.None);
 
-        result.HeartRates.Should().Be(1);
+        progress.HeartRateCount.Should().Be(1);
     }
 
     [Fact]
@@ -89,12 +92,25 @@ public class OuraImportServiceTests
     {
         using var notAZip = new MemoryStream(Encoding.UTF8.GetBytes("hello"));
 
-        var import = () => Service().ImportAsync(notAZip, CancellationToken.None);
+        var import = () => Service().ImportAsync(notAZip, new OuraImportProgress(), CancellationToken.None);
 
         await import.Should().ThrowAsync<OuraExportException>();
         _sleep.VerifyNoOtherCalls();
         _heartRates.VerifyNoOtherCalls();
         _stepCounts.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task AnExportPastTheSleepStageBudget_IsRefusedBeforeAnySessionIsWritten()
+    {
+        var progress = new OuraImportProgress();
+
+        var import = () => Service().ImportAsync(OverStageBudget(), progress, CancellationToken.None);
+
+        (await import.Should().ThrowAsync<OuraExportException>()).Which.Code.Should().Be(OuraExportException.TooMuchData);
+        _sleep.VerifyNoOtherCalls();
+        _heartRates.VerifyNoOtherCalls();
+        progress.Total.Should().Be(0);
     }
 
     [Fact]
@@ -119,15 +135,26 @@ public class OuraImportServiceTests
             SleepSource.Oura, "Oura", audit, "data_source=oura-connector", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static MemoryStream Export()
+    /// <summary>Every period is within the budget, and together they pass it.</summary>
+    internal static MemoryStream OverStageBudget()
+    {
+        var twoDays = string.Concat(Enumerable.Repeat("12", 2 * 24 * 60));
+        var rows = Enumerable.Range(0, OuraExportArchive.MaxSleepStagesAndSamples / twoDays.Length + 1)
+            .Select(i => $"p{i};2026-03-03T21:00:00+00:00;2026-03-01T21:00:00+00:00;2026-03-03;23400;long_sleep;{twoDays}");
+        return Zip(("sleepmodel.csv",
+            "id;bedtime_end;bedtime_start;day;total_sleep_duration;type;sleep_phase_30_sec\r\n" +
+            string.Join("\r\n", rows) + "\r\n"));
+    }
+
+    internal static MemoryStream Export() =>
+        Zip(("sleepmodel.csv", SleepCsv), ("heartrate.csv", HeartRateCsv), ("dailyactivity.csv", ActivityCsv));
+
+    private static MemoryStream Zip(params (string Name, string Content)[] files)
     {
         var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            foreach (var (name, content) in new[]
-                     {
-                         ("sleepmodel.csv", SleepCsv), ("heartrate.csv", HeartRateCsv), ("dailyactivity.csv", ActivityCsv),
-                     })
+            foreach (var (name, content) in files)
             {
                 using var writer = new StreamWriter(zip.CreateEntry(name).Open(), new UTF8Encoding(false));
                 writer.Write(content);

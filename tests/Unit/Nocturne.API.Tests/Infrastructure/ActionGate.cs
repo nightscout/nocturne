@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
+using Nocturne.API.Tests.Authorization;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Infrastructure;
@@ -13,7 +14,9 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// Runs the gate an action declares: the synchronous authorization filters, then the synchronous
 /// action filters, from the controller's attributes and the method's, in the order MVC runs them.
 /// A filter that also implements the asynchronous interface is skipped, as MVC runs only that path
-/// for it, and it would reach for request services a unit test does not build.
+/// for it, and it would reach for request services a unit test does not build. The request is made
+/// on the action's route with the action's endpoint metadata, because a scope refusal answers by
+/// API version and by <see cref="Nocturne.API.Attributes.NightscoutEndpointAttribute"/>.
 /// </summary>
 internal static class ActionGate
 {
@@ -35,6 +38,9 @@ internal static class ActionGate
         AuthContext? authContext = null)
     {
         var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = ControllerActionReflection.GetRoutes(controller, method).First();
+        httpContext.SetEndpoint(new Endpoint(
+            null, new EndpointMetadataCollection(Filters(controller, method)), $"{controller.Name}.{method.Name}"));
         if (authContext is not null)
             httpContext.Items["AuthContext"] = authContext;
         httpContext.Items["GrantedScopes"] = grantedScopes;

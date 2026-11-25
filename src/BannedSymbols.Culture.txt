@@ -1,0 +1,14 @@
+M:System.DateTime.ToString(System.String);Pass CultureInfo.InvariantCulture: a custom format follows the culture's time separator, digits and calendar.
+M:System.DateTimeOffset.ToString(System.String);Pass CultureInfo.InvariantCulture: a custom format follows the culture's time separator, digits and calendar.
+M:System.DateOnly.ToString(System.String);Pass CultureInfo.InvariantCulture: a custom format follows the culture's separators, digits and calendar.
+M:System.TimeOnly.ToString(System.String);Pass CultureInfo.InvariantCulture: a custom format follows the culture's time separator and digits.
+M:System.DateTime.Parse(System.String);Pass CultureInfo.InvariantCulture.
+M:System.DateTimeOffset.Parse(System.String);Pass CultureInfo.InvariantCulture.
+M:System.DateOnly.Parse(System.String);Pass CultureInfo.InvariantCulture.
+M:System.TimeOnly.Parse(System.String);Pass CultureInfo.InvariantCulture.
+M:System.DateTime.TryParse(System.String,System.DateTime@);Pass CultureInfo.InvariantCulture.
+M:System.DateTimeOffset.TryParse(System.String,System.DateTimeOffset@);Pass CultureInfo.InvariantCulture.
+M:System.DateOnly.TryParse(System.String,System.DateOnly@);Pass CultureInfo.InvariantCulture.
+M:System.TimeOnly.TryParse(System.String,System.TimeOnly@);Pass CultureInfo.InvariantCulture.
+M:System.DateTime.TryParse(System.ReadOnlySpan{System.Char},System.DateTime@);Pass CultureInfo.InvariantCulture.
+M:System.DateTimeOffset.TryParse(System.ReadOnlySpan{System.Char},System.DateTimeOffset@);Pass CultureInfo.InvariantCulture.

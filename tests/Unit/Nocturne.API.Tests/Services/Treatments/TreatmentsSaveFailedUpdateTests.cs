@@ -98,26 +98,26 @@ public class TreatmentsSaveFailedUpdateTests
     }
 
     [Fact]
-    public async Task PutById_WhenUpdatingAStoredRecordFails_Answers500AndDoesNotCreate()
+    public async Task PutById_WhenUpdatingAStoredRecordFails_TheExceptionEscapesAndNothingIsCreated()
     {
         StoreCarb();
         FailFirstDecomposition();
 
-        var result = await _controller.UpdateTreatment(StoredId, new Treatment { EventType = "Carb Correction", Carbs = 25 });
-
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        await FluentActions.Awaiting(() =>
+                _controller.UpdateTreatment(StoredId, new Treatment { EventType = "Carb Correction", Carbs = 25 }))
+            .Should().ThrowAsync<Exception>();
         VerifyDecomposedOnce();
     }
 
     [Fact]
-    public async Task PutById_WhenUpdatingAStoredStateSpanFails_Answers500AndDoesNotCreate()
+    public async Task PutById_WhenUpdatingAStoredStateSpanFails_TheExceptionEscapesAndNothingIsCreated()
     {
         StoreSpan();
         FailFirstDecomposition();
 
-        var result = await _controller.UpdateTreatment(StoredId, new Treatment { EventType = "Temporary Override", Duration = 30 });
-
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        await FluentActions.Awaiting(() =>
+                _controller.UpdateTreatment(StoredId, new Treatment { EventType = "Temporary Override", Duration = 30 }))
+            .Should().ThrowAsync<Exception>();
         VerifyDecomposedOnce();
     }
 

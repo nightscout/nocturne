@@ -1,6 +1,7 @@
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
@@ -58,16 +59,12 @@ public class TreatmentReadServiceTests
             new() { Id = "2", Mills = 2000 },
         };
 
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 10, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(treatments);
+        _projection.SetupWindowRead(treatments, range => range is { From: null, To: null, Limit: 10 });
 
         var result = await _service.QueryAsync(new TreatmentQuery { Count = 10 });
 
         result.Should().HaveCount(2);
-        _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(null, null, 10, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        _projection.VerifyWindowRead(range => range is { From: null, To: null, Limit: 10 }, Times.Once());
     }
 
     [Fact]
@@ -80,9 +77,7 @@ public class TreatmentReadServiceTests
             new() { Id = "3", Mills = 1000 },
         };
 
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(treatments);
+        _projection.SetupWindowRead(treatments, range => range is { From: null, To: null });
 
         var result = await _service.QueryAsync(new TreatmentQuery { Count = 1, Skip = 1 });
 
@@ -94,10 +89,11 @@ public class TreatmentReadServiceTests
     {
         var all = mills.Select(m => new Treatment { Id = m.ToString(), Mills = m }).ToList();
 
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long? _, long? _, int limit, bool descending, CancellationToken _) =>
-                (descending ? all.OrderByDescending(t => t.Mills) : all.OrderBy(t => t.Mills)).Take(limit).ToList());
+        _projection.SetupWindowRead(
+            range => (range.Descending ? all.OrderByDescending(t => t.Mills) : all.OrderBy(t => t.Mills))
+                .Take(range.Limit)
+                .ToList(),
+            range => range is { From: null, To: null });
     }
 
     private List<long> ServeModifiedSince(IReadOnlyList<Treatment> all)
@@ -132,9 +128,7 @@ public class TreatmentReadServiceTests
 
         result.Select(t => t.SrvModified).Should().Equal(10_102L, 10_103L, 10_104L);
         cursors.Should().Equal(10_100L);
-        _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        _projection.VerifyWindowRead(null, Times.Never());
     }
 
     [Fact]
@@ -533,8 +527,15 @@ public class TreatmentReadServiceTests
         _decomposer.Verify(d => d.DecomposeAsync(It.IsAny<Treatment>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task CreateAsync_WhenAStoredTreatmentCannotBeReadBack_CarriesItAsStored()
+    public static TheoryData<Exception> ReadBackFailures => new()
+    {
+        new TimeoutException(),
+        new RetryLimitExceededException("retries exhausted", new NpgsqlException("connection refused")),
+    };
+
+    [Theory]
+    [MemberData(nameof(ReadBackFailures))]
+    public async Task CreateAsync_WhenAStoredTreatmentCannotBeReadBack_CarriesItAsStored(Exception readFailure)
     {
         var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
         var span = new Treatment { Id = "t2", Mills = 2000, EventType = "Temporary Target" };
@@ -547,7 +548,7 @@ public class TreatmentReadServiceTests
             .ReturnsAsync(spanResult);
         _projection
             .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t2", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException());
+            .ThrowsAsync(readFailure);
 
         var act = () => _service.CreateAsync([first, span, last], WriteOrigin.Live);
 
@@ -591,6 +592,37 @@ public class TreatmentReadServiceTests
         stored.Should().HaveCount(3);
         stored[0].Should().BeOfType<StoredTreatment.Named>().Which.Created.Id.Should().Be(noteId.ToString());
         stored.Skip(1).Should().AllBeOfType<StoredTreatment.Unnamed>();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTheStoreFailsPastItsRetries_EndsTheBatchAsFailed()
+    {
+        var treatment = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition>()))
+            .ThrowsAsync(new RetryLimitExceededException(
+                "retries exhausted", new NpgsqlException("connection refused")));
+
+        var act = () => _service.CreateAsync([treatment], WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<TreatmentBatchFailedException>();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenACancellationIsNotTheCallers_EndsTheBatchAsFailed()
+    {
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _service.CreateAsync(
+            [new Treatment { Id = "t1", Mills = 1000, EventType = "Note" }], WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<TreatmentBatchFailedException>();
     }
 
     /// <param name="writes">Whether each treatment writes a record, so a batch that fails after it carries it as stored.</param>

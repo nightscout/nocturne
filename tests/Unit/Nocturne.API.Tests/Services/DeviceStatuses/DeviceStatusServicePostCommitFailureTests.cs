@@ -1,26 +1,19 @@
-using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 namespace Nocturne.API.Tests.Services.DeviceStatuses;
 
@@ -55,9 +48,12 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
     [Fact]
     public async Task ABroadcastCancelledAfterTheCommit_StillAnnouncesTheCommittedStatuses()
     {
-        var broadcaster = new Mock<IV4RecordBroadcaster<UploaderSnapshot>>();
+        var broadcaster = new Mock<IRecordChangePublisher>();
         broadcaster
-            .Setup(b => b.BroadcastCreatedAsync(It.IsAny<IReadOnlyList<UploaderSnapshot>>(), It.IsAny<CancellationToken>()))
+            .Setup(b => b.PublishAsync(
+                It.Is<RecordsChanged>(batch => batch.Changes.Any(c =>
+                    c.Origin == WriteOrigin.Live && c.RecordType == typeof(UploaderSnapshot) && c.Created.Count > 0)),
+                It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException("the client went away"));
         var service = Service(Decomposer(uploaderBroadcaster: broadcaster.Object, spans: Mock.Of<IStateSpanService>()));
 
@@ -105,21 +101,9 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
             It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single().Id == First), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private DeviceStatusDecomposer Decomposer(IV4RecordBroadcaster<UploaderSnapshot>? uploaderBroadcaster, IStateSpanService spans)
-    {
-        var factory = _context.AsFactory();
-        var audit = new SystemAuditContext();
-        return new DeviceStatusDecomposer(
-            new ApsSnapshotRepository(factory, audit, NullLogger<ApsSnapshotRepository>.Instance),
-            new PumpSnapshotRepository(factory, audit, NullLogger<PumpSnapshotRepository>.Instance),
-            new UploaderSnapshotRepository(factory, audit, NullLogger<UploaderSnapshotRepository>.Instance, uploaderBroadcaster),
-            new DeviceStatusExtrasRepository(factory, audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
-            spans,
-            new UnresolvedDevices(),
-            audit,
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
-    }
+    private DeviceStatusDecomposer Decomposer(IRecordChangePublisher? uploaderBroadcaster, IStateSpanService spans) =>
+        DeviceStatusDecomposerDoubles.Stored(
+            _context.AsFactory(), new SystemAuditContext(), spans, uploaderBroadcaster);
 
     private DeviceStatusService Service(DeviceStatusDecomposer decomposer) =>
         new(

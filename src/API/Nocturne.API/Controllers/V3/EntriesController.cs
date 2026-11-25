@@ -1,4 +1,3 @@
-using Nocturne.API.Services.Alerts;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,17 +7,19 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 Entries controller that provides full V3 API compatibility with Nightscout entries endpoints.
-/// Implements the /api/v3/entries endpoints with pagination, field selection, sorting, and advanced filtering.
+/// Nightscout entries: sensor glucose, meter glucose and calibration documents, with paging, field selection,
+/// sorting and filtering. A client can list, read, create, update, patch and delete entries, add them in bulk,
+/// and read changes since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout entries endpoints, at /api/v3/entries.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
-/// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="Entry"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -28,18 +29,15 @@ namespace Nocturne.API.Controllers.V3;
 public class EntriesController : BaseV3Controller<Entry>
 {
     private readonly IEntryService _entryService;
-    private readonly ICanonicalAlertEvaluator _alertEvaluator;
 
     public EntriesController(
         IDocumentProcessingService documentProcessingService,
         IEntryService entryService,
-        ICanonicalAlertEvaluator alertEvaluator,
         ILogger<EntriesController> logger
     )
         : base(documentProcessingService, logger)
     {
         _entryService = entryService;
-        _alertEvaluator = alertEvaluator;
     }
 
     /// <summary>
@@ -71,11 +69,6 @@ public class EntriesController : BaseV3Controller<Entry>
     [ErrorEnvelope]
     public async Task<ActionResult> GetEntries(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -178,7 +171,6 @@ public class EntriesController : BaseV3Controller<Entry>
     /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
     /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
     /// duplicate.
-    /// After creation, alerts are evaluated via <see cref="IAlertOrchestrator"/> for the new reading.
     /// </remarks>
     /// <response code="201">Entry created successfully.</response>
     /// <response code="200">Duplicate entry detected (deduplication response for AAPS).</response>
@@ -211,10 +203,17 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
             }
 
-            // Check for duplicate entry (AAPS expects isDeduplication response)
-            if (entry.Mills > 0)
+            // A create with isValid: false is not a duplicate of the entry its id names: it deletes
+            // it, when the write names it (InvalidUploads in Services/V4).
+            Entry? existingEntry = null;
+            if (entry.IsValid == false)
             {
-                var existingEntry = await _entryService.CheckForDuplicateEntryAsync(
+                if (!string.IsNullOrEmpty(entry.Id))
+                    existingEntry = await _entryService.GetEntryByIdAsync(entry.Id, cancellationToken);
+            }
+            else if (entry.Mills > 0)
+            {
+                existingEntry = await _entryService.CheckForDuplicateEntryAsync(
                     entry.Device,
                     entry.Type ?? "sgv",
                     entry.Mills,
@@ -243,9 +242,10 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
             }
 
-            _logger.LogDebug("Successfully created V3 entry {Id}", createdEntry.Id);
+            if (existingEntry != null && createdEntries.Invalidated.Count > 0)
+                return V3Deduplicated(existingEntry.Id, srvModified: null);
 
-            await _alertEvaluator.EvaluateForEntriesAsync([createdEntry], cancellationToken);
+            _logger.LogDebug("Successfully created V3 entry {Id}", createdEntry.Id);
 
             return V3Created(nameof(GetEntry), createdEntry.Id);
         }
@@ -317,8 +317,6 @@ public class EntriesController : BaseV3Controller<Entry>
                 createdEntries.Count()
             );
 
-            await _alertEvaluator.EvaluateForEntriesAsync(createdEntries, cancellationToken);
-
             return StatusCode(201, createdEntries.ToV3Responses());
         }
         catch (ArgumentException ex)
@@ -363,6 +361,9 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
             }
 
+            if (entry.IsValid == false)
+                return IsValidImmutable();
+
             // Ensure the ID matches
             entry.Id = id;
 
@@ -400,8 +401,8 @@ public class EntriesController : BaseV3Controller<Entry>
     /// Partially update an entry via V3 API (JSON merge-patch). Accepts <c>PATCH</c> as AAPS NSClientV3 sends it.
     /// </summary>
     /// <remarks>
-    /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries (e.g. marking
-    /// a value invalid); without this endpoint every such update returns 405.
+    /// AAPS's NSClientV3 sends <c>PATCH</c> rather than <c>PUT</c> to update entries; without this
+    /// endpoint every such update returns 405.
     /// </remarks>
     /// <param name="id">Entry ID to patch</param>
     /// <param name="patchData">JSON merge-patch data to apply to the existing entry</param>
@@ -413,6 +414,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
     public async Task<ActionResult> PatchEntry(
@@ -422,6 +424,9 @@ public class EntriesController : BaseV3Controller<Entry>
     )
     {
         _logger.LogDebug("V3 entry PATCH requested for {Id}", id);
+
+        if (PatchSetsInvalid(patchData))
+            return IsValidImmutable();
 
         var patchedEntry = await _entryService.PatchEntryAsync(id, patchData, cancellationToken);
 

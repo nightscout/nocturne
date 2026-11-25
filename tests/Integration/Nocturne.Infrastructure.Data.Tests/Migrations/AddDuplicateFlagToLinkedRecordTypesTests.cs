@@ -40,14 +40,10 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "duplicate_flag_backfill");
         _migrator = database.MigratorConnectionString;
 
-        await ExecuteAsync(string.Concat(LaterColumnTables.Select(t =>
-            $"ALTER TABLE {t} ADD COLUMN written_live boolean NOT NULL DEFAULT false;")));
-        await ExecuteAsync(string.Concat(WriterStampedTables.Select(t =>
-            $"ALTER TABLE {t} ADD COLUMN writer_grant_id uuid;")));
+        await ExecuteAsync(string.Concat(LaterColumns.Select(c => $"ALTER TABLE {c.Table} ADD COLUMN {c.Column} {c.Type};")));
         foreach (var tenant in new[] { TenantA, TenantB })
             Expected.AddRange(await SeedAsync(tenant));
-        await ExecuteAsync(string.Concat(LaterColumnTables.Select(t => $"ALTER TABLE {t} DROP COLUMN written_live;")));
-        await ExecuteAsync(string.Concat(WriterStampedTables.Select(t => $"ALTER TABLE {t} DROP COLUMN writer_grant_id;")));
+        await ExecuteAsync(string.Concat(LaterColumns.Select(c => $"ALTER TABLE {c.Table} DROP COLUMN {c.Column};")));
 
         await MigrateToAsync(null);
         FlaggedAfterUp = await FlaggedAsync();
@@ -71,13 +67,20 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>
-    /// The seeded tables the model writes <c>written_live</c> to, a column a later migration adds. It
-    /// is there only while the model seeds them.
+    /// The columns of the seeded tables that later migrations add and the model writes. Each is there
+    /// only while the model seeds them.
     /// </summary>
-    private static readonly string[] LaterColumnTables = ["carb_intakes", "sensor_glucose"];
-
-    /// <summary>The seeded tables the model writes <c>writer_grant_id</c> to, on the same terms.</summary>
-    private static readonly string[] WriterStampedTables = [.. LaterColumnTables, "state_spans"];
+    private static readonly (string Table, string Column, string Type)[] LaterColumns =
+    [
+        ("carb_intakes", "written_live", "boolean NOT NULL DEFAULT false"),
+        ("sensor_glucose", "written_live", "boolean NOT NULL DEFAULT false"),
+        ("state_spans", "written_live", "boolean NOT NULL DEFAULT false"),
+        ("carb_intakes", "writer_grant_id", "uuid"),
+        ("sensor_glucose", "writer_grant_id", "uuid"),
+        ("state_spans", "writer_grant_id", "uuid"),
+        ("carb_intakes", "write_back_sent_fingerprint", "text"),
+        ("state_spans", "upstream_fingerprint", "text"),
+    ];
 
     /// <summary>
     /// For each of three record types: a group of a primary and one non-primary copy, and a record

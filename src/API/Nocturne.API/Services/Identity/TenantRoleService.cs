@@ -1,9 +1,14 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.API.Services.Auth;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -17,7 +22,10 @@ namespace Nocturne.API.Services.Identity;
 /// <see cref="ITenantMembershipRepository"/>. A role id alone is not an authorization decision.
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
-public partial class TenantRoleService(ITenantMembershipRepository members, TimeProvider time) : ITenantRoleService
+public partial class TenantRoleService(
+    ITenantMembershipRepository members, TimeProvider time, IMemberInviteRepository invites, ITeamRepository teams,
+    INocturneDbContextFactory contexts, GrantRevocationService grantRevocation)
+    : ITenantRoleService
 {
     public async Task<List<TenantRoleDto>> GetRolesAsync(
         Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default)
@@ -32,6 +40,33 @@ public partial class TenantRoleService(ITenantMembershipRepository members, Time
     {
         var roles = await GetRolesAsync(tenantId, granterScopes, ct);
         return roles.Where(r => r.CanGrant).ToList();
+    }
+
+    public async Task<RoleHolders> GetRoleHoldersAsync(
+        Guid tenantId, DateTime? callerEnd, CancellationToken ct = default)
+    {
+        var all = await members.ListMembersAsync(tenantId, ct);
+        var heldByPublic = all
+            .Where(m => m.IsPublicSubject())
+            .SelectMany(m => m.Roles.Select(r => r.RoleId))
+            .ToHashSet();
+        var heldByTeam = await teams.ListRolesHeldByTeamsAsync(tenantId, ct);
+
+        if (callerEnd is null)
+            return new RoleHolders([], [], heldByPublic, heldByTeam);
+
+        var heldPast = all
+            .Where(m => MembershipLiveness.Outlasts(callerEnd, m.AccessEndsAt))
+            .SelectMany(m => m.Roles.Select(r => r.RoleId))
+            .ToHashSet();
+
+        var now = time.GetUtcNow().UtcDateTime;
+        var invitedPast = (await invites.GetForTenantAsync(tenantId, ct))
+            .Where(i => i.IsValidAt(now) && MembershipLiveness.Outlasts(callerEnd, i.AccessEndsAt))
+            .SelectMany(i => i.RoleIds)
+            .ToHashSet();
+
+        return new RoleHolders(heldPast, invitedPast, heldByPublic, heldByTeam);
     }
 
     public async Task<TenantRoleDto?> GetRoleByIdAsync(
@@ -72,6 +107,7 @@ public partial class TenantRoleService(ITenantMembershipRepository members, Time
         string? description,
         List<string> permissions,
         IReadOnlyCollection<string> granterScopes,
+        Guid? editorSubjectId,
         CancellationToken ct = default)
     {
         var existing = await members.GetRoleAsync(tenantId, roleId, ct);
@@ -87,10 +123,16 @@ public partial class TenantRoleService(ITenantMembershipRepository members, Time
 
         try
         {
-            var updated = await members.UpdateRoleAsync(
-                tenantId, roleId, new TenantRoleEdit(name, slug, description, permissions),
-                time.GetUtcNow().UtcDateTime, ct);
-            return updated is null ? null : SaveRoleResult.Saved(ToDto(updated, granterScopes));
+            var updated = await TeamReasonWrites.EditRoleAsync(
+                contexts, grantRevocation, tenantId, roleId, new TenantRoleEdit(name, slug, description, permissions),
+                editorSubjectId, time.GetUtcNow().UtcDateTime, ct);
+            return updated switch
+            {
+                { Outcome: RoleChangeOutcome.Changed, Role: { } role } => SaveRoleResult.Saved(ToDto(role, granterScopes)),
+                { Outcome: RoleChangeOutcome.HeldByTeam } => SaveRoleResult.HeldByTeam,
+                { Outcome: RoleChangeOutcome.HeldByTeamOwnerOnly } => SaveRoleResult.HeldByTeamOwnerOnly,
+                _ => null,
+            };
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
@@ -135,8 +177,13 @@ public partial class TenantRoleService(ITenantMembershipRepository members, Time
             }
         }
 
-        await members.DeleteRoleAsync(tenantId, roleId, ct);
-        return new DeleteRoleResult(true, null, null);
+        return await members.DeleteRoleAsync(tenantId, roleId, time.GetUtcNow().UtcDateTime, ct) switch
+        {
+            RoleChangeOutcome.Changed => new DeleteRoleResult(true, null, null),
+            RoleChangeOutcome.HeldByTeam => new DeleteRoleResult(
+                false, SaveRoleResult.RoleHeldByTeam, "A team has this role, so it cannot be deleted."),
+            _ => new DeleteRoleResult(false, "role_not_found", "The specified role does not exist."),
+        };
     }
 
     /// <summary>Seeds the tenant's default roles, skipping slugs that already exist.</summary>

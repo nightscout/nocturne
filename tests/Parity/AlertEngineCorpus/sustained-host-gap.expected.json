@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "scenario": "sustained-host-gap",
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-11-02T12:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T13:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "timer_ops": [
+            {
+              "op": "set",
+              "path": "sustained",
+              "at": "2026-11-02T12:05:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T13:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -225,7 +225,7 @@ public class StatusServiceTests
             _mockDemoModeService.Object,
             tenantFactory.Object,
             new CollectionLastModifiedReader(tenantFactory.Object),
-            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
+            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object, AccountLinkRoutes.Off), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
             _httpContextAccessor,
             tenantAccessor,
             TestPublicAccessCache.Create(),
@@ -864,6 +864,24 @@ public class StatusServiceTests
         result.ApiPermissions.Should().BeEquivalentTo(new Dictionary<string, string> { ["entries"] = "r" });
     }
 
+    [Fact]
+    public async Task GetV3SystemStatusAsync_ReportsRolesThatDifferOnlyByCaseAsTwoRoles()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            Roles = ["Admin", "admin", "admin"],
+        });
+        httpContext.SetGrantedScopes(Scope.Normalize([Scope.GlucoseRead]));
+        var service = CreateStatusService(
+            _configuration, httpContextAccessor: new HttpContextAccessor { HttpContext = httpContext });
+
+        var result = await service.GetV3SystemStatusAsync();
+
+        result.Extended!.Authorization!.Roles.Should().Equal("Admin", "admin");
+    }
+
     private static IHttpContextAccessor Caller(bool authenticated, params string[] scopes)
     {
         var httpContext = new DefaultHttpContext();
@@ -1171,7 +1189,7 @@ public class StatusServiceTests
                 .GetSystemStatusAsync())
             .ToList();
         held.SetResult(new UserDisplayPreferences());
-        var results = await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5));
+        var results = await Task.WhenAll(reads).WaitAsync(Eventually.DefaultPatience);
 
         runs.Should().Be(1);
         results.Should().AllSatisfy(r => r.Should().BeSameAs(results[0]));
@@ -1191,7 +1209,7 @@ public class StatusServiceTests
         var flights = new CacheFlights();
         StatusService Service() => new(
             _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(), Mock.Of<ICollectionLastModifiedReader>(),
-            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>()),
+            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>(), AccountLinkRoutes.Off),
             new RoleRepository(Mock.Of<INocturneDbContextFactory>()), new OidcProviderRepository(Mock.Of<INocturneDbContextFactory>()),
             _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(),
             new TenantGlucoseUnits(
@@ -1629,7 +1647,7 @@ public class StatusServiceTests
             _mockDemoModeService.Object,
             mockTenantDbContextFactory.Object,
             new CollectionLastModifiedReader(mockTenantDbContextFactory.Object),
-            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
+            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object, AccountLinkRoutes.Off), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor,
             TestPublicAccessCache.Create(),

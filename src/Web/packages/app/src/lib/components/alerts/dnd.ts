@@ -1,4 +1,4 @@
-import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantAlertSettingsResponse } from "@nocturne/api-client";
 
 type Settings = TenantAlertSettingsResponse | null | undefined;
 

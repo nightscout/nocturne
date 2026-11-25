@@ -44,6 +44,13 @@ public interface IAlertRuleRepository
     Task<bool> RemoveChannelAsync(Guid ruleId, Guid channelId, CancellationToken ct);
 
     /// <summary>
+    /// Sets who added one channel of the rule and when it stops
+    /// (<see cref="AlertRuleChannelSnapshot.AddedBySubjectId"/>, <see cref="AlertRuleChannelSnapshot.StopsAt"/>).
+    /// False when the rule has no such channel.
+    /// </summary>
+    Task<bool> RestampChannelAsync(Guid ruleId, Guid channelId, Guid addedBySubjectId, DateTime? stopsAt, CancellationToken ct);
+
+    /// <summary>
     /// Flips the rule's enablement and stamps it updated. Returns the enablement before the flip.
     /// </summary>
     Task<bool?> ToggleEnabledAsync(Guid ruleId, CancellationToken ct);

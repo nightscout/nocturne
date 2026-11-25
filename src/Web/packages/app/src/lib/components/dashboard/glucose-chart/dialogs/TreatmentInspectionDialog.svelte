@@ -14,7 +14,8 @@
   } from "#lib/utils/formatting.js";
   import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { entrySummary } from "#lib/utils/entry-summary.svelte.js";
-  import type { BolusCalculation, MealPeriod } from "#lib/api/index.js";
+  import type { BolusCalculation } from "#lib/api/index.js";
+  import type { MealPeriod } from "@nocturne/charts/core";
   import { CalculationType } from "#lib/api/index.js";
   import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import { entryCategoryName } from "#lib/constants/entry-category-labels.svelte.js";

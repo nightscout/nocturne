@@ -24,21 +24,25 @@ public class ActivityDecomposer : IActivityDecomposer
     private readonly IActivityRecordRepository _records;
     private readonly IStateSpanRepository _stateSpanRepository;
     private readonly ISleepService _sleepService;
+    private readonly TimeProvider _time;
     private readonly ILogger<ActivityDecomposer> _logger;
 
     /// <param name="records">Writes heart rates and step counts and reads the activity tombstones.</param>
     /// <param name="stateSpanRepository">Repository for bulk-creating regular activities as StateSpans.</param>
     /// <param name="sleepService">Upserts each sleep activity as a sleep session.</param>
+    /// <param name="timeProvider">Dates an activity that carries no time of its own by its receipt.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ActivityDecomposer(
         IActivityRecordRepository records,
         IStateSpanRepository stateSpanRepository,
         ISleepService sleepService,
+        TimeProvider timeProvider,
         ILogger<ActivityDecomposer> logger)
     {
         _records = records ?? throw new ArgumentNullException(nameof(records));
         _stateSpanRepository = stateSpanRepository;
         _sleepService = sleepService;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -59,18 +63,27 @@ public class ActivityDecomposer : IActivityDecomposer
     }
 
     /// <summary>
-    /// Precedence is mills, <c>timestamp</c>, <c>timeStamp</c>, <c>created_at</c>. xDrip's
-    /// <c>timeStamp</c> is read from extension data because binding is case-sensitive, and it ranks
-    /// above <c>created_at</c>, which xDrip truncates to whole seconds.
+    /// Precedence is mills, <c>timestamp</c>, <c>timeStamp</c>, <c>created_at</c>, then
+    /// <paramref name="receivedAt"/>. xDrip's <c>timeStamp</c> is read from extension data because
+    /// binding is case-sensitive, and it ranks above <c>created_at</c>, which xDrip truncates to
+    /// whole seconds.
     /// </summary>
-    internal static void NormalizeMills(Activity activity)
+    internal static void NormalizeMills(Activity activity, DateTimeOffset receivedAt)
     {
         if (ApplyClientTimestamp(activity))
             return;
 
         if (DateTimeOffset.TryParse(activity.CreatedAt, System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.AssumeUniversal, out var createdAt))
+        {
             activity.Mills = createdAt.ToUnixTimeMilliseconds();
+            return;
+        }
+
+        // Dated by receipt, like a Nightscout upload with no created_at.
+        activity.Mills = receivedAt.ToUnixTimeMilliseconds();
+        activity.CreatedAt ??= receivedAt.UtcDateTime.ToString(
+            "yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -140,10 +153,11 @@ public class ActivityDecomposer : IActivityDecomposer
         var stepCounts = new List<(int Index, StepCount Model)>();
         var sleep = new List<(int Index, Activity Activity)>();
         var regular = new List<Activity>();
+        var receivedAt = _time.GetUtcNow();
         for (var i = 0; i < activities.Count; i++)
         {
             var activity = activities[i];
-            NormalizeMills(activity);
+            NormalizeMills(activity, receivedAt);
             switch (Classify(activity))
             {
                 case ActivityDestination.HeartRate:
@@ -397,18 +411,6 @@ public class ActivityDecomposer : IActivityDecomposer
         };
     }
 
-    private static string? GetStringValue(Dictionary<string, object> props, string key)
-    {
-        if (!props.TryGetValue(key, out var value))
-            return null;
-
-        return value switch
-        {
-            string s => s,
-            System.Text.Json.JsonElement je
-                when je.ValueKind == System.Text.Json.JsonValueKind.String
-                => je.GetString(),
-            _ => value?.ToString(),
-        };
-    }
+    private static string? GetStringValue(Dictionary<string, object> props, string key) =>
+        props.TryGetValue(key, out var value) ? KeptField.LenientString(value) : null;
 }

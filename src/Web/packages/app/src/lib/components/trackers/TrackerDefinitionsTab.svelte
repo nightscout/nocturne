@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
@@ -22,7 +23,6 @@
     definitions: TrackerDefinitionDto[];
     categoryLabels: Record<TrackerCategory, string>;
     categoryColors: Record<TrackerCategory, string>;
-    openNewDefinition: () => void;
     openStartDialog: (def: TrackerDefinitionDto) => void;
     openEditDefinition: (def: TrackerDefinitionDto) => void;
     openDeleteDefinitionDialog: (id: string) => void;
@@ -32,7 +32,6 @@
     definitions,
     categoryLabels,
     categoryColors,
-    openNewDefinition,
     openStartDialog,
     openEditDefinition,
     openDeleteDefinitionDialog,
@@ -48,9 +47,9 @@
           Reusable tracker templates with notification thresholds
         </CardDescription>
       </div>
-      <Button size="touch" class="w-full @md:w-auto" onclick={openNewDefinition}>
+      <Button size="touch" class="w-full @md:w-auto" href={resolve("/(authenticated)/trackers/new")}>
         <Plus class="h-4 w-4 mr-2" />
-        New definition
+        New tracker
       </Button>
     </CardHeader>
     <CardContent>

@@ -107,7 +107,7 @@ internal class EntryReadService : IEntryStore
                 return new ModifiedSearch.Page<Entry>(page.Records, page.CursorMills, page.CursorMills is null);
             },
             entry => entry.IsValid == false,
-            entry => entry.Id,
+            entry => entry.Id is { } id ? $"{entry.Type}:{id}" : null,
             after,
             ModifiedSearch.ArrivesInOrder(query.SortField, descending) ? (long)query.Count + query.Skip : null,
             ModifiedSearch.MaxRead,
@@ -325,9 +325,9 @@ internal class EntryReadService : IEntryStore
 
         return effectiveType switch
         {
-            "sgv" => await _sgRepo.CountAsync(from, to, ct),
-            "mbg" => await _mgRepo.CountAsync(from, to, ct),
-            "cal" => await _calRepo.CountAsync(from, to, ct),
+            "sgv" => await _sgRepo.CountAsync(from, to, null, null, ct),
+            "mbg" => await _mgRepo.CountAsync(from, to, null, null, ct),
+            "cal" => await _calRepo.CountAsync(from, to, null, null, ct),
             null or "" => await CountAllTypesAsync(from, to, ct),
             _ => 0,
         };
@@ -335,9 +335,9 @@ internal class EntryReadService : IEntryStore
 
     private async Task<long> CountAllTypesAsync(DateTime? from, DateTime? to, CancellationToken ct)
     {
-        var sgCount = await _sgRepo.CountAsync(from, to, ct);
-        var mgCount = await _mgRepo.CountAsync(from, to, ct);
-        var calCount = await _calRepo.CountAsync(from, to, ct);
+        var sgCount = await _sgRepo.CountAsync(from, to, null, null, ct);
+        var mgCount = await _mgRepo.CountAsync(from, to, null, null, ct);
+        var calCount = await _calRepo.CountAsync(from, to, null, null, ct);
         return sgCount + mgCount + calCount;
     }
 

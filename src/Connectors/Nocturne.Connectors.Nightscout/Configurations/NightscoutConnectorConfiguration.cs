@@ -48,8 +48,12 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.RealtimeUrl, Format = "uri")]
     public string RealtimeUrl { get; set; } = string.Empty;
 
-    [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
-    public string ApiSecret { get; set; } = string.Empty;
+    /// <summary>
+    ///     Optional: a site can be readable without one (open to read, a default role that reads,
+    ///     or a proxy in front of it that admits the request). Blank sends no <c>api-secret</c>.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Secret = true)]
+    public virtual string ApiSecret { get; set; } = string.Empty;
 
     /// <summary>The largest page the connector asks the source for.</summary>
     public const int MaxPageSize = BackwardTimePager.MaxWidestPageSize;
@@ -79,7 +83,7 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     public static DateTime? HistoryStart(int historyDays, DateTime now) =>
         historyDays is > WholeHistory and <= LongestHistoryDays ? now.AddDays(-historyDays) : null;
 
-    [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false")]
+    [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false", SendsRecords = true)]
     public bool WriteBackEnabled { get; set; } = false;
 
     [ConnectorProperty(ConnectorPropertyKey.WriteBackBatchSize, DefaultValue = "50", MinValue = 1, MaxValue = 500)]

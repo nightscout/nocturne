@@ -10,7 +10,7 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Controller for querying the health and status of registered data connectors.
+/// Health and status of the data connectors. Read the state of each connector.
 /// </summary>
 /// <remarks>
 /// Connector status is maintained by <see cref="IConnectorHealthService"/>, which tracks
@@ -23,7 +23,7 @@ namespace Nocturne.API.Controllers.V4;
 // Reports the outcome of a fetch to a tenant-configured host — the readback half of the
 // request-forgery shape gated on ConfigurationController.
 [DenyDemoSubject]
-[RequireScope(Scope.TenantSettings)]
+[RequireScope(Scope.ConnectorsRead)]
 [ApiController]
 [Tags("Connectors")]
 [Route("api/v4/connectors")]

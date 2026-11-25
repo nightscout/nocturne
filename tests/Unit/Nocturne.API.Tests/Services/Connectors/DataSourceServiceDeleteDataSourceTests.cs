@@ -81,7 +81,7 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
         NullLogger<DataSourceService>.Instance);
 
     /// <summary>The shape DeviceStatusDecomposer writes for a connector-imported snapshot.</summary>
-    private void SeedImportedSnapshot(string legacyId, string rig)
+    private void SeedImportedSnapshot(string legacyId, string rig, DateTime? timestamp = null)
     {
         using var db = NewContext();
         db.ApsSnapshots.Add(new ApsSnapshotEntity
@@ -91,7 +91,7 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
             LegacyId = legacyId,
             DataSource = ImportingConnector,
             Device = rig,
-            Timestamp = DateTime.UtcNow,
+            Timestamp = timestamp ?? DateTime.UtcNow,
             AidAlgorithm = "Loop",
         });
         db.SaveChanges();
@@ -127,6 +127,25 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
         await using var assert = NewContext();
         (await assert.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-2"))
             .DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteDataSourceData_DeletesASourceWhoseLastRecordIsOlderThanTheDiscoveryWindow()
+    {
+        SeedImportedSnapshot(
+            "aps-old", Rig, DateTime.UtcNow.AddDays(-(DataSourceService.DiscoveryWindowDays + 5)));
+
+        await using (var ctx = NewContext())
+        {
+            var result = await CreateService(ctx).DeleteDataSourceDataAsync(Rig);
+
+            result.Success.Should().BeTrue();
+            result.DeletedCounts.Should().Contain(new KeyValuePair<string, long>("DeviceStatus", 1));
+        }
+
+        await using var assert = NewContext();
+        (await assert.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-old"))
+            .DeletedAt.Should().NotBeNull();
     }
 
     [Fact]

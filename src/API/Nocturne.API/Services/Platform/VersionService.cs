@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
@@ -54,7 +55,7 @@ public class VersionService : IVersionService
             Name = assemblyName,
             ServerTime = _time.GetUtcNow().UtcDateTime,
             Head = Environment.GetEnvironmentVariable("GIT_COMMIT") ?? "unknown",
-            Build = Environment.GetEnvironmentVariable("BUILD_DATE") ?? _time.GetUtcNow().UtcDateTime.ToString("yyyy.MM.dd"),
+            Build = Environment.GetEnvironmentVariable("BUILD_DATE") ?? _time.GetUtcNow().UtcDateTime.ToString("yyyy.MM.dd", CultureInfo.InvariantCulture),
             ApiCompatibility = "Nightscout v15.0",
         };
 

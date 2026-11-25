@@ -6,6 +6,7 @@ using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -237,11 +238,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         if (device != null)
             return arms;
 
-        var extrasInWindow = extras;
-        if (from.HasValue) extrasInWindow = extrasInWindow.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) extrasInWindow = extrasInWindow.Where(e => e.Timestamp <= to.Value);
-
-        arms.Add(extrasInWindow
+        arms.Add(extras.InWindow(e => e.Timestamp, from, to)
             .Where(e => !aps.Any(a => a.CorrelationId == e.CorrelationId && (a.DeletedAt == null || e.DeletedAt != null))
                 && !pumps.Any(p => p.CorrelationId == e.CorrelationId && (p.DeletedAt == null || e.DeletedAt != null))
                 && !uploaders.Any(u => u.CorrelationId == e.CorrelationId && (u.DeletedAt == null || e.DeletedAt != null)))

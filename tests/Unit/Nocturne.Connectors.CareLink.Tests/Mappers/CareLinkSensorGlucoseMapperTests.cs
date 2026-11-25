@@ -10,8 +10,6 @@ namespace Nocturne.Connectors.CareLink.Tests.Mappers;
 
 public class CareLinkSensorGlucoseMapperTests
 {
-    private static readonly DateTime Now = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
-
     private readonly CareLinkSensorGlucoseMapper _mapper = new(NullLogger.Instance);
 
     private static CareLinkData CreateTestData(int sgValue = 120, string? bgUnits = null) => new()
@@ -34,7 +32,7 @@ public class CareLinkSensorGlucoseMapperTests
         var data = CreateTestData();
         data.Sgs!.Add(new CareLinkSensorGlucose { Sg = 0, Datetime = "2024-01-15T14:20:00", Kind = "SG" });
 
-        var result = _mapper.Map(data, Now);
+        var result = _mapper.Map(data);
 
         result.Should().HaveCount(2);
         result.Should().OnlyContain(sg => sg.Mgdl > 0);
@@ -44,7 +42,7 @@ public class CareLinkSensorGlucoseMapperTests
     public void Map_AppliesTrendToMostRecentOnly()
     {
         var data = CreateTestData();
-        var result = _mapper.Map(data, Now);
+        var result = _mapper.Map(data);
 
         result[0].Direction.Should().Be(GlucoseDirection.SingleUp);
         result[1].Direction.Should().Be(GlucoseDirection.None);
@@ -54,7 +52,7 @@ public class CareLinkSensorGlucoseMapperTests
     public void Map_SetsMgdlDirectly_WhenNoUnitsSpecified()
     {
         var data = CreateTestData(120);
-        var result = _mapper.Map(data, Now);
+        var result = _mapper.Map(data);
         result[0].Mgdl.Should().Be(120);
     }
 
@@ -69,19 +67,18 @@ public class CareLinkSensorGlucoseMapperTests
         var data = CreateTestData(0, bgUnits);
         data.Sgs = [new CareLinkSensorGlucose { Sg = 126, Datetime = "2024-01-15T14:30:00", Kind = "SG" }];
 
-        var result = _mapper.Map(data, Now);
+        var result = _mapper.Map(data);
 
         result.Should().NotBeEmpty();
         result[0].Mgdl.Should().Be(126);
     }
 
     [Fact]
-    public void Map_SetsDataSourceAndDevice()
+    public void Map_SetsDevice()
     {
         var data = CreateTestData();
-        var result = _mapper.Map(data, Now);
+        var result = _mapper.Map(data);
 
-        result[0].DataSource.Should().Be(DataSources.CareLinkConnector);
         result[0].Device.Should().Be("CareLink BLE");
     }
 
@@ -89,7 +86,7 @@ public class CareLinkSensorGlucoseMapperTests
     public void Map_ReturnsEmpty_WhenSgsNull()
     {
         var data = new CareLinkData { Sgs = null };
-        _mapper.Map(data, Now).Should().BeEmpty();
+        _mapper.Map(data).Should().BeEmpty();
     }
 
     [Fact]
@@ -98,7 +95,7 @@ public class CareLinkSensorGlucoseMapperTests
         var data = CreateTestData();
         data.Sgs!.Add(new CareLinkSensorGlucose { Sg = 100, Datetime = "2024-01-15T14:20:00", Kind = "Insulin" });
 
-        var result = _mapper.Map(data, Now);
+        var result = _mapper.Map(data);
         result.Should().HaveCount(2);
     }
 }

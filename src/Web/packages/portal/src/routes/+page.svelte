@@ -42,7 +42,7 @@
         },
         {
             title: "Multitenant, by default",
-            body: "One install, many people. Run a household, a clinic, or a community on a single deployment, with each person's data and settings kept apart.",
+            body: "One install, many people. Run a household, a camp, or a community on a single deployment, with each person's data and settings kept apart.",
         },
         {
             title: "Real-time by design",

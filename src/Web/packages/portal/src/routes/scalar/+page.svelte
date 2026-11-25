@@ -17,7 +17,7 @@
     // Pinned standalone build. Scalar is a Vue app, so it's loaded at runtime in
     // the browser rather than bundled, which keeps it out of the Svelte SSR/prerender
     // graph (which can't resolve Vue's deps) and off the portal's dependency tree.
-    const SCALAR_SCRIPT = "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.57.5";
+    const SCALAR_SCRIPT = "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.78.0";
 
     type ScalarGlobal = {
         createApiReference: (
@@ -49,13 +49,18 @@
             { title: "Nightscout API", slug: "nightscout", url: `${specsUrl}/openapi/nightscout.json` },
         ];
 
+        // The API serves the plugin beside the specs, so the diagrams and tables it renders
+        // describe the same build.
+        const pluginUrls = [`${specsUrl}/scalar/nocturne-plugin.js`];
+
         if (!sendsToDemo || !demoTokens) {
-            return { theme: "mars", sources, hideTestRequestButton: true, hideClientButton: true };
+            return { theme: "mars", sources, pluginUrls, hideTestRequestButton: true, hideClientButton: true };
         }
 
         return {
             theme: "mars",
             sources,
+            pluginUrls,
             authentication: {
                 // One scheme per document: bearer is the Nocturne document's, apiSecret the
                 // Nightscout document's. Listing two of one document selects both at once.
@@ -78,30 +83,8 @@
         });
     }
 
-    function addMermaid(baseUrl: string): () => void {
-        // Diagrams embedded in the OpenAPI descriptions are rendered by the API's own mermaid
-        // lazy-loader, served alongside the specs, so rendering stays in sync with the API.
-        // It observes the document, so load order relative to Scalar doesn't matter.
-        const css = document.createElement("link");
-        css.rel = "stylesheet";
-        css.href = `${baseUrl}/scalar/mermaid-loader.css`;
-        document.head.appendChild(css);
-
-        const script = document.createElement("script");
-        script.type = "module";
-        script.crossOrigin = "anonymous";
-        script.src = `${baseUrl}/scalar/mermaid-loader.js`;
-        document.head.appendChild(script);
-
-        return () => {
-            css.remove();
-            script.remove();
-        };
-    }
-
     onMount(() => {
         let instance: { destroy?: () => void } | undefined;
-        let removeMermaid: (() => void) | undefined;
         const abort = new AbortController();
 
         const reachable = demoTokens ? demoTokens.reachable(abort.signal) : Promise.resolve(false);
@@ -112,7 +95,6 @@
                 if (abort.signal.aborted || !isScalarGlobal(scalar)) return;
 
                 mode = sendsToDemo ? "demo" : "read-only";
-                removeMermaid = addMermaid(sendsToDemo && demoUrl ? demoUrl : SCALAR_API_URL);
                 instance = scalar.createApiReference(container, scalarConfig(sendsToDemo));
             })
             .catch((error: unknown) => {
@@ -122,7 +104,6 @@
         return () => {
             abort.abort();
             instance?.destroy?.();
-            removeMermaid?.();
             document.head.querySelector(`script[src="${SCALAR_SCRIPT}"]`)?.remove();
         };
     });

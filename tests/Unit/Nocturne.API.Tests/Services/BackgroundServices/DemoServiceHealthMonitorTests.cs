@@ -64,7 +64,7 @@ public class DemoServiceHealthMonitorTests
 
         await monitor.StartAsync(CancellationToken.None);
         // The body is thread-pool scheduled, so wait for the cleanup before stopping the host.
-        await cleanupCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await cleanupCalled.Task.WaitAsync(Eventually.DefaultPatience);
         await monitor.StopAsync(CancellationToken.None);
 
         ambientIsSystem.Should().BeTrue();

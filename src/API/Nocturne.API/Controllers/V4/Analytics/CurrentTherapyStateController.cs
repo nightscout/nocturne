@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -15,13 +14,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Returns small "right now" therapy values for the dashboard: the active pump
-/// operational mode, the current insulin sensitivity expressed as a percentage
-/// of the profile baseline, the pump's latest reservoir and battery reading, and the
-/// glucose thresholds in force now.
+/// The current therapy values for the dashboard: the active pump operational mode, the insulin
+/// sensitivity as a percentage of the profile baseline, the latest pump reservoir and battery reading,
+/// and the glucose thresholds in force now.
 /// </summary>
 [ApiController]
-[Tags("Current Therapy State")]
+[Tags("Analytics")]
 [Route("api/v4/current-therapy-state")]
 [Authorize]
 public class CurrentTherapyStateController : ControllerBase
@@ -87,12 +85,7 @@ public class CurrentTherapyStateController : ControllerBase
     internal const string LinkBatteryVoltageKey = "RileyLinkBatteryVoltage";
 
     private static double? LinkBatteryVoltage(Nocturne.Core.Models.V4.PumpSnapshot? snapshot) =>
-        snapshot?.AdditionalProperties?.GetValueOrDefault(LinkBatteryVoltageKey) switch
-        {
-            JsonElement { ValueKind: JsonValueKind.Number } number => number.GetDouble(),
-            double voltage => voltage,
-            _ => null,
-        };
+        KeptField.Double(snapshot?.AdditionalProperties, LinkBatteryVoltageKey);
 }
 
 /// <summary>

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "replay-silent-clear-resets-timers",
-  "description": "a clear resets every timer of the rule, the auto-resolve tree\u0027s included, so after a re-fire the resolve hold starts over",
+  "description": "the auto-resolve tree is read while the excursion is in hysteresis and closes it there; a close ends no run, so after a re-fire the resolve tree still holds and resolves the new excursion at once",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,7 +11,6 @@
         "direction": "below",
         "value": 70
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": true,
       "auto_resolve_params": {

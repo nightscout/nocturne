@@ -32,7 +32,7 @@ import {
   WidgetId,
   type DashboardRailPreference,
   type UserDisplayPreferences,
-} from "../api/generated/nocturne-api-client";
+} from "@nocturne/api-client";
 import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
 import { parseRailPreference } from "../components/status-pills/rail";
 import { weekStartName } from "../components/calendar/calendar-date";
@@ -44,7 +44,7 @@ import { ENERGY_UNITS, type EnergyUnit } from "@nocturne/ui/energy";
 // Type Definitions
 // ==========================================
 
-const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic"] as const;
+const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic", "nightscout"] as const;
 
 /** Color theme - visual styling */
 export type ColorTheme = (typeof COLOR_THEMES)[number];
@@ -214,6 +214,8 @@ function writeThroughReporting(prefs: UserDisplayPreferences): void {
   }
 }
 
+export const PREFERENCES_WRITE_THROUGH_DELAY_MS = 400;
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Mirror to cookie immediately and debounce the backend write-through. */
@@ -225,7 +227,7 @@ function schedulePersist(): void {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     writeThroughReporting(prefs);
-  }, 400);
+  }, PREFERENCES_WRITE_THROUGH_DELAY_MS);
 }
 
 /**
@@ -562,7 +564,7 @@ export const hiddenLegacyFallbacks = new SyncedPref<LegacyConsumableKind[]>(
 // ==========================================
 
 /** All theme CSS classes that can be applied to the document root */
-const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme"] as const;
+const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme", "nightscout-theme"] as const;
 
 /**
  * Apply color theme class to document
@@ -576,6 +578,7 @@ function applyColorTheme(theme: ColorTheme): void {
   if (theme === "trio") root.classList.add("trio-theme");
   else if (theme === "aaps") root.classList.add("aaps-theme");
   else if (theme === "classic") root.classList.add("classic-theme");
+  else if (theme === "nightscout") root.classList.add("nightscout-theme");
 
   // Classic theme uses minimal border radius (2015 utilitarian aesthetic)
   if (theme === "classic") {
@@ -585,7 +588,7 @@ function applyColorTheme(theme: ColorTheme): void {
   }
 }
 
-const RANGE_PALETTE_CLASS = "range-palette-clarity";
+export const RANGE_PALETTE_CLASS = "range-palette-clarity";
 
 function applyGlucoseRangePalette(palette: GlucoseRangePalette): void {
   if (!browser) return;
@@ -631,7 +634,6 @@ if (browser) {
   // Use setTimeout to ensure DOM is ready
   setTimeout(() => {
     applyColorTheme(colorTheme.current);
-    applyGlucoseRangePalette(glucoseRangePalette.current);
   }, 0);
 }
 
@@ -923,6 +925,11 @@ export function collectPreferences(): UserDisplayPreferences {
   };
 }
 
+function hydratePreferences(prefs: UserDisplayPreferences): void {
+  for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
+  hydrateResolvedEnergyUnit(prefs);
+}
+
 /**
  * Apply a server- (or cookie-) sourced preference payload to the store without
  * echoing back to the backend. Only fields present in `prefs` are applied.
@@ -934,8 +941,7 @@ export function applyPreferences(
 ): void {
   if (!prefs) return;
 
-  for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
-  hydrateResolvedEnergyUnit(prefs);
+  hydratePreferences(prefs);
 
   if (browser) {
     applyColorTheme(colorTheme.current);
@@ -957,6 +963,7 @@ export function applyTenantPresentation(prefs: UserDisplayPreferences | null | u
   if (prefs) hydrateResolvedEnergyUnit(prefs);
   for (const pref of syncedRegistry.values()) pref.fallBackTo(prefs ?? {});
   applyColorTheme(colorTheme.current);
+  applyGlucoseRangePalette(glucoseRangePalette.current);
 }
 
 /**
@@ -1026,6 +1033,7 @@ export function presentOwnerPreferences(prefs: UserDisplayPreferences | null | u
   if (prefs) hydrateResolvedEnergyUnit(prefs);
   for (const pref of syncedRegistry.values()) pref.presentFrom(prefs ?? {});
   applyColorTheme(colorTheme.current);
+  applyGlucoseRangePalette(glucoseRangePalette.current);
 }
 
 /** True if any synced preference has a stored value on this device (legacy localStorage / prior sync). */
@@ -1166,7 +1174,10 @@ if (browser) {
   const devicePreferences = readDevicePreferences();
   // localStorage can hold units another tenant's cookie put there, which SSR never sees.
   if (!devicePreferences?.glucoseUnits) glucoseUnits.forget();
-  applyPreferences(devicePreferences);
+  if (devicePreferences) {
+    hydratePreferences(devicePreferences);
+    applyColorTheme(colorTheme.current);
+  }
   mirrorColorScheme();
 
   // Cross-tab sync: mirror another tab's change into this tab's store.

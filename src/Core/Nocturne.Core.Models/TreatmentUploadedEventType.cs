@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Nocturne.Core.Models;
 
 /// <summary>
@@ -21,23 +19,15 @@ public static class TreatmentUploadedEventType
     /// unchanged when it carries none or carries <paramref name="servedWithout"/>.
     /// </summary>
     public static Dictionary<string, object?>? AddTo(
-        Dictionary<string, object?>? record, Treatment treatment, string servedWithout)
-    {
-        if (string.IsNullOrWhiteSpace(treatment.EventType)
-            || string.Equals(treatment.EventType, servedWithout, StringComparison.Ordinal))
-            return record;
-
-        record ??= new();
-        record[Field] = treatment.EventType;
-        return record;
-    }
+        Dictionary<string, object?>? record, Treatment treatment, string servedWithout) =>
+        KeptField.Add(
+            record,
+            Field,
+            string.IsNullOrWhiteSpace(treatment.EventType)
+            || string.Equals(treatment.EventType, servedWithout, StringComparison.Ordinal)
+                ? null
+                : treatment.EventType);
 
     /// <summary>The uploaded event type a record's additional properties hold, or null.</summary>
-    public static string? Of(IReadOnlyDictionary<string, object?>? record) =>
-        record?.GetValueOrDefault(Field) switch
-        {
-            string eventType => eventType,
-            JsonElement { ValueKind: JsonValueKind.String } eventType => eventType.GetString(),
-            _ => null,
-        };
+    public static string? Of(IReadOnlyDictionary<string, object?>? record) => KeptField.String(record, Field);
 }

@@ -40,11 +40,11 @@
     remove as deleteBolus,
   } from "#lib/api/generated/bolus.generated.remote.js";
   import {
-    createCarbIntake as createCarbIntakeRemote,
-    updateCarbIntake as updateCarbIntakeRemote,
-    deleteCarbIntake,
-    addCarbIntakeFood,
-  } from "#lib/api/generated/nutritions.generated.remote.js";
+    create as createCarbIntakeRemote,
+    update as updateCarbIntakeRemote,
+    remove as deleteCarbIntake,
+  } from "#lib/api/generated/carbIntakes.generated.remote.js";
+  import { addCarbIntakeFood } from "#lib/api/generated/nutritions.generated.remote.js";
   import {
     create as createBGCheckRemote,
     update as updateBGCheckRemote,

@@ -1,11 +1,13 @@
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.TestDoubles;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
@@ -15,7 +17,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -39,19 +40,12 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
             _context.AsFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
             NullLogger<StateSpanRepository>.Instance);
 
-        _decomposer = new DeviceStatusDecomposer(
-            MicrosecondPrecision<IApsSnapshotRepository>.Wrap(new ApsSnapshotRepository(
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
+            aps: MicrosecondPrecision<IApsSnapshotRepository>.Wrap(new ApsSnapshotRepository(
                 new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
                 NullLogger<ApsSnapshotRepository>.Instance)),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            new StateSpanService(
-                MicrosecondPrecision<IStateSpanRepository>.Wrap(_spans), NullLogger<StateSpanService>.Instance),
-            new UnresolvedDevices(),
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            stateSpans: new StateSpanService(
+                MicrosecondPrecision<IStateSpanRepository>.Wrap(_spans), NullLogger<StateSpanService>.Instance));
     }
 
     public void Dispose()
@@ -596,6 +590,57 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
         await _decomposer.DeleteStoredAsync("ds-0", WriteOrigin.Live);
 
         (await OverrideSpansAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_KeepsTheOverrideObjectLoopSent()
+    {
+        var inactive = Snapshot(0, null);
+        inactive.Override!.Timestamp = "2026-11-16T19:49:17Z";
+        var active = Snapshot(1, "Exercise");
+        active.Override!.Timestamp = "2026-11-16T12:37:00Z";
+
+        await DecomposeEachAsync([inactive, active]);
+
+        var stored = _context.ApsSnapshots.OrderBy(a => a.Timestamp).Select(a => a.OverrideJson).ToList();
+        stored[0].Should().Be("""{"timestamp":"2026-11-16T19:49:17Z","active":false}""");
+        JsonNode.Parse(stored[1]!)!.AsObject().Select(p => p.Key)
+            .Should().BeEquivalentTo("name", "timestamp", "active", "multiplier", "currentCorrectionRange");
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_OfAStatusStoredWithoutAnOverrideObject_StoresAnOverrideTheClientAdds()
+    {
+        await DecomposeEachAsync(Enumerable.Range(0, 2).Select(i => Snapshot(i, "Exercise")));
+        foreach (var aps in _context.ApsSnapshots)
+            aps.OverrideJson = null;
+        await _context.SaveChangesAsync();
+
+        var edited = Snapshot(0, "Exercise");
+        edited.Override!.Timestamp = "2026-11-16T19:49:17Z";
+        edited.Override.Name = "Sleep";
+        await _decomposer.ReplaceAsync("ds-0", edited, WriteOrigin.Live);
+
+        JsonNode.Parse(_context.ApsSnapshots.AsNoTracking().Single(a => a.LegacyId == "ds-0").OverrideJson!)!["name"]!
+            .GetValue<string>().Should().Be("Sleep");
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_OfAStatusStoredWithoutAnOverrideObject_DoesNotStoreTheRebuiltOne()
+    {
+        await DecomposeEachAsync(Enumerable.Range(0, 2).Select(i => Snapshot(i, "Exercise", duration: 3600)));
+        foreach (var aps in _context.ApsSnapshots)
+            aps.OverrideJson = null;
+        await _context.SaveChangesAsync();
+        var projected = new DeviceStatus();
+        DeviceStatusProjectionService.ProjectOverrideData(projected, (await OverrideSpansAsync()).Single());
+        projected.Override!.Duration.Should().NotBeNull("the read rebuilds a duration Loop did not send");
+        var edited = Snapshot(0, null);
+        edited.Override = projected.Override;
+
+        await _decomposer.ReplaceAsync("ds-0", edited, WriteOrigin.Live);
+
+        _context.ApsSnapshots.AsNoTracking().Single(a => a.LegacyId == "ds-0").OverrideJson.Should().BeNull();
     }
 
     [Fact]

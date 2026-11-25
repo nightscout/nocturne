@@ -43,11 +43,18 @@ function wireRule(rule: SimRule) {
 	};
 }
 
-export async function replay(rules: SimRule[], ticks: ReplayTick[]): Promise<ReplayResult> {
+/** `until` is the end of the window, in unix milliseconds: the engine steps the rules on to it. */
+export async function replay(rules: SimRule[], ticks: ReplayTick[], until: number): Promise<ReplayResult> {
 	const engine = await loadEngine();
 	return unwrap<ReplayResult>(
 		engine.replay(
-			JSON.stringify({ schema_version: 1, rules: rules.map(wireRule), ticks, include_ticks: true }),
+			JSON.stringify({
+				schema_version: 1,
+				rules: rules.map(wireRule),
+				ticks,
+				include_ticks: true,
+				until: new Date(until).toISOString(),
+			}),
 		),
 	);
 }

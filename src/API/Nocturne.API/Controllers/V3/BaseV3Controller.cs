@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
@@ -369,7 +370,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
         // Tenant reads must not be shared-cacheable: UseResponseCaching answers before
         // authentication runs, so a stored entry would outlive the credential check.
         Response.Headers["Cache-Control"] = "private, max-age=60";
-        Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R");
+        Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R", CultureInfo.InvariantCulture);
         Response.Headers["Vary"] = "Accept, If-Modified-Since, If-None-Match";
     }
 
@@ -551,6 +552,21 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Nightscout's answer to an update that sets <c>isValid: false</c>: a client deletes a document
+    /// with DELETE, never by an edit.
+    /// </summary>
+    protected ActionResult IsValidImmutable() =>
+        CreateV3ErrorResponse(400, "Field isValid cannot be modified by the client");
+
+    /// <summary>
+    /// Whether a v3 patch body sets <c>isValid: false</c>, which <see cref="IsValidImmutable"/> refuses.
+    /// </summary>
+    protected static bool PatchSetsInvalid(JsonElement patch) =>
+        patch.ValueKind == JsonValueKind.Object
+        && patch.TryGetProperty("isValid", out var isValid)
+        && isValid.ValueKind == JsonValueKind.False;
+
+    /// <summary>
     /// The V3 answer to a create that matched a document already stored: 200 with
     /// <c>isDeduplication</c>, the stored document's identifier, which a v3 read by id resolves, and
     /// its <c>lastModified</c>. The stored document is left as it was.
@@ -573,7 +589,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     private static string FormatHttpDate(long mills) =>
-        mills.ToUtcDateTime().ToString("R");
+        mills.ToUtcDateTime().ToString("R", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// A V3 <c>history/{lastModified}</c> read: clamps <paramref name="limit"/>, reads one page,

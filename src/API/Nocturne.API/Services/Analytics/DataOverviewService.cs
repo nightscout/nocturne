@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -704,7 +705,7 @@ public class DataOverviewService : IDataOverviewService
             points.Add(
                 new EHbA1cPoint
                 {
-                    Date = rangeStart.AddDays(i).ToString("yyyy-MM-dd"),
+                    Date = rangeStart.AddDays(i).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     EstimatedA1cPercent = ScaledRounding.Round(estimatedA1c, 2),
                     WeightedAverageGlucoseMgdl = ScaledRounding.Round(weightedMeanMgdl, 1),
                     ReadingCount = rawCount,
@@ -887,8 +888,8 @@ public class DataOverviewService : IDataOverviewService
         if (carbsByMonth.TryGetValue(month, out var carbSum) && carbSum > 0)
             averageDailyCarbs = ScaledRounding.Round(carbSum / daysInMonth, 1);
 
-        var periodStartStr = localMonthStart.ToString("yyyy-MM-dd");
-        var periodEndStr = localMonthEnd.AddDays(-1).ToString("yyyy-MM-dd");
+        var periodStartStr = localMonthStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var periodEndStr = localMonthEnd.AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         return new GriTimelinePeriod
         {
@@ -1028,7 +1029,7 @@ public class DataOverviewService : IDataOverviewService
                 var readings = g.ToList();
                 return new
                 {
-                    Date = g.Key.ToString("yyyy-MM-dd"),
+                    Date = g.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     AvgMgdl = readings.Average(r => r.Mgdl),
                     TimeInRangePercent = ScaledRounding.Round(TimeInRangeOf(readings).Percentages.Target, 1),
                 };
@@ -1080,7 +1081,7 @@ public class DataOverviewService : IDataOverviewService
             {
                 var grouped = bolusRecords
                     .GroupBy(r => TimestampToDate(r.Timestamp, tz))
-                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), BolusUnits = g.Sum(r => r.Insulin) });
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), BolusUnits = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -1117,7 +1118,7 @@ public class DataOverviewService : IDataOverviewService
             {
                 var grouped = algorithmBolusRecords
                     .GroupBy(r => TimestampToDate(r.Timestamp, tz))
-                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), BolusUnits = g.Sum(r => r.Insulin) });
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), BolusUnits = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -1177,7 +1178,7 @@ public class DataOverviewService : IDataOverviewService
                     })
                     .Where(r => r.Insulin > 0)
                     .GroupBy(r => r.Date)
-                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), TotalBasal = g.Sum(r => r.Insulin) });
+                    .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), TotalBasal = g.Sum(r => r.Insulin) });
 
                 foreach (var group in grouped)
                 {
@@ -1231,7 +1232,7 @@ public class DataOverviewService : IDataOverviewService
 
             var grouped = carbRecords
                 .GroupBy(r => TimestampToDate(r.Timestamp, tz))
-                .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd"), TotalCarbs = g.Sum(r => r.Carbs) });
+                .Select(g => new { Date = g.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), TotalCarbs = g.Sum(r => r.Carbs) });
 
             foreach (var group in grouped)
             {
@@ -1282,7 +1283,7 @@ public class DataOverviewService : IDataOverviewService
 
             var grouped = counts.Select(group => new
             {
-                Date = group.Day.ToString("yyyy-MM-dd"), group.Count,
+                Date = group.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), group.Count,
             });
 
             foreach (var group in grouped)

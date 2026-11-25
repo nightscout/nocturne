@@ -10,7 +10,7 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 /// <summary>
-/// Controller for managing user preferences.
+/// Preferences of the signed-in user. Read the preferences, and update some or all of them.
 /// </summary>
 [ApiController]
 [Tags("Profiles")]

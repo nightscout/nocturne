@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Models;
 using Nocturne.Connectors.Dexcom.Utilities;
 using Nocturne.Core.Constants;
@@ -9,22 +10,24 @@ namespace Nocturne.Connectors.Dexcom.Mappers;
 
 public class DexcomSensorGlucoseMapper(ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<DexcomConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public IEnumerable<SensorGlucose> MapBatchData(DexcomEntry[]? batchData, DateTime now)
+    public IEnumerable<SensorGlucose> MapBatchData(DexcomEntry[]? batchData)
     {
         if (batchData == null || batchData.Length == 0) return [];
 
         return ConnectorFaults.NonNullRecords(batchData, _logger, DataSources.DexcomConnector, "Dexcom entry")
             .Where(entry => entry.Value > 0)
-            .Select(entry => ConvertEntry(entry, now))
+            .Select(entry => ConvertEntry(entry))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .OrderBy(sg => sg.Mills)
             .ToList();
     }
 
-    private SensorGlucose? ConvertEntry(DexcomEntry dexcomEntry, DateTime now)
+    private SensorGlucose? ConvertEntry(DexcomEntry dexcomEntry)
     {
         try
         {
@@ -39,15 +42,11 @@ public class DexcomSensorGlucoseMapper(ILogger logger)
 
             return new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                LegacyId = $"dexcom_{dexcomEntry.Wt}",
+                LegacyId = LegacyIds.Of(dexcomEntry.Wt),
                 Device = DataSources.DexcomConnector,
-                DataSource = DataSources.DexcomConnector,
                 Mgdl = mgdl,
                 Direction = direction,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))

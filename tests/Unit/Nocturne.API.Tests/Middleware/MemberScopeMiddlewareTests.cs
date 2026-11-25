@@ -273,7 +273,7 @@ public class MemberScopeMiddlewareTests
         AuthType authType)
     {
         // The real web-app credential shape: no scopes at all, because SessionCookieHandler
-        // never sets them and a JWT reaching LegacyJwtHandler has no scope claim
+        // never sets them and a JWT reaching SessionBearerHandler has no scope claim
         // (OAuthAccessTokenHandler claims those first). Intersecting membership against that empty
         // set 403ed the whole scope-gated surface for every non-owner. Every administration gate
         // (MemberInviteController, RoleController, ShareLinkController, GuestLinkController,
@@ -299,26 +299,6 @@ public class MemberScopeMiddlewareTests
         grantedScopes.Should().NotContain(Scope.FullAccess);
         Scope.Satisfies(grantedScopes!, Scope.AuditManage)
             .Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task InteractiveOidcLogin_IsNotBoundedByTheProvidersProtocolScopes()
-    {
-        // OidcTokenHandler sets Scopes to the provider's configured scopes — openid/profile/email,
-        // an outbound protocol list identical for every user of that provider, not a Nocturne data
-        // grant. Normalize drops all three, so treating them as a ceiling resolved the member to
-        // nothing.
-        var context = await ResolveAsync(
-            RoleSeeds.Permissions[RoleSeeds.Caretaker],
-            ["openid", "profile", "email"],
-            AuthType.OidcToken);
-
-        var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().Contain(Scope.GlucoseRead);
-        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
-        // The IdP's protocol scopes are not Nocturne scopes and must not be published.
-        grantedScopes.Should().NotContain("openid");
-        grantedScopes.Should().NotContain("profile");
     }
 
     [Fact]
@@ -586,6 +566,42 @@ public class MemberScopeMiddlewareTests
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.DirectGrant)]
     [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.LegacyJwt)]
+    public async Task EndedMember_GetsNothingFromTheMembershipOnEveryCredentialHeldToIt(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], accessEndsAt: MembershipNow.AddSeconds(-1));
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetPermissionTrie()!.Check("api:entries:read").Should().BeFalse();
+        context.GetGrantedScopes().Should().NotContain(Scope.FullAccess);
+        RequestMembership.Of(context, subjectId, TestDatabaseSeeder.TenantId)!.Membership.Should().BeNull(
+            "an ended membership reads as no membership, which AuthenticationMiddleware refuses");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task MemberWhoseEndIsStillAhead_ResolvesTheirRole(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], accessEndsAt: MembershipNow.AddSeconds(1));
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetGrantedScopes().Should().Contain(Scope.GlucoseRead);
+        RequestMembership.Of(context, subjectId, TestDatabaseSeeder.TenantId)!.Membership!.Access.AccessEndsAt
+            .Should().NotBeNull("the request carries the caller's end as its access ceiling");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
     public async Task ClampedFollower_IsHistoryClampedOnBothCarriers(AuthType authType)
     {
         using var db = TestDbContextFactory.CreateSqlite();
@@ -663,6 +679,256 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
+    public async Task Member_WithNoReasonRows_GivesFromTheRow()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var end = MembershipNow.AddDays(3);
+        var subjectId = SeedMemberWithRole(db, [Scope.GlucoseRead, Scope.MembersInvite], accessEndsAt: end);
+
+        var context = await ResolveAsync(db, subjectId, [], AuthType.SessionCookie);
+
+        context.CallerGrantCeiling().Should().BeEquivalentTo(
+            new GrantCeiling(context.GetGrantedScopes(), end, false),
+            "a row the reconcile has not reached is its own direct reason");
+    }
+
+    [Fact]
+    public async Task DirectOnlyMember_ReusesTheResolvedScopesForWhatTheyGive()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var end = MembershipNow.AddDays(3);
+        var subjectId = SeedReasonedMember(db, new DirectSeed([Scope.GlucoseRead, Scope.MembersInvite], true, end), teamPermissions: null);
+
+        var context = await ResolveAsync(db, subjectId, [], AuthType.SessionCookie);
+
+        var ceiling = context.CallerGrantCeiling()!;
+        ReferenceEquals(ceiling.Scopes, context.GetGrantedScopes()).Should().BeTrue();
+        ceiling.AccessEndsAt.Should().Be(end);
+        ceiling.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MixedMember_WhoseRowIsNarrowerThanTheDirectReason_GivesNoMoreThanTheRow()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var rowEnd = MembershipNow.AddDays(2);
+        var subjectId = SeedReasonedMember(
+            db, new DirectSeed([Scope.GlucoseRead, Scope.TreatmentsRead, Scope.MembersInvite], false, null), [Scope.GlucoseRead]);
+        using (var narrowing = db.CreateContext())
+        {
+            var directRole = narrowing.TenantRoles.Single(r => r.Slug == "direct-role").Id;
+            narrowing.TenantMemberRoles.RemoveRange(narrowing.TenantMemberRoles.Where(mr => mr.TenantRoleId == directRole));
+            var row = narrowing.TenantMembers.Single(m => m.SubjectId == subjectId);
+            row.DirectPermissions = [Scope.MembersInvite];
+            row.LimitTo24Hours = true;
+            row.AccessEndsAt = rowEnd;
+            narrowing.SaveChanges();
+        }
+
+        var context = await ResolveAsync(db, subjectId, [], AuthType.SessionCookie);
+
+        var ceiling = context.CallerGrantCeiling()!;
+        ceiling.Scopes.Should().BeEquivalentTo(context.GetGrantedScopes());
+        ceiling.Scopes.Should().NotContain(Scope.TreatmentsRead);
+        ceiling.AccessEndsAt.Should().Be(rowEnd);
+        ceiling.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MixedMember_GivesFromTheDirectReasonAlone()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var directEnd = MembershipNow.AddDays(3);
+        var subjectId = SeedReasonedMember(
+            db, new DirectSeed([Scope.GlucoseRead, Scope.MembersInvite], LimitTo24Hours: true, directEnd), [Scope.TreatmentsRead]);
+
+        var context = await ResolveAsync(db, subjectId, [], AuthType.SessionCookie);
+
+        context.GetGrantedScopes().Should().Contain([Scope.GlucoseRead, Scope.TreatmentsRead, Scope.MembersInvite]);
+        var ceiling = context.CallerGrantCeiling()!;
+        ceiling.Scopes.Should().Contain([Scope.GlucoseRead, Scope.MembersInvite]).And.NotContain(Scope.TreatmentsRead);
+        ceiling.AccessEndsAt.Should().Be(directEnd);
+        ceiling.HistoryClamped.Should().BeTrue();
+        context.GetAuthContext()!.LimitTo24Hours.Should().BeFalse("the team's reason widens the member's own reading");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    public async Task TeamOnlyMember_GivesNothing(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedReasonedMember(db, direct: null, [Scope.GlucoseRead]);
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetGrantedScopes().Should().Contain(Scope.GlucoseRead);
+        context.CallerGrantCeiling().Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Member_WhoseDirectReasonHasEnded_GivesNothing()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedReasonedMember(
+            db, new DirectSeed([Scope.GlucoseRead, Scope.MembersInvite], false, MembershipNow.AddDays(-1)), [Scope.GlucoseRead]);
+
+        var context = await ResolveAsync(db, subjectId, [], AuthType.SessionCookie);
+
+        context.GetGrantedScopes().Should().Contain(Scope.GlucoseRead);
+        context.CallerGrantCeiling().Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task NarrowCredential_NarrowsWhatTheMemberGives(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedReasonedMember(
+            db, new DirectSeed([Scope.GlucoseRead, Scope.MembersInvite], false, null), [Scope.TreatmentsRead]);
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.CallerGrantCeiling()!.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
+    }
+
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task MixedMembersOwnCredential_ReadsTheSum_AndOnlyTheDirectReasonOnceTheTeamReasonIsGone(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedReasonedMember(
+            db, new DirectSeed([Scope.GlucoseRead, Scope.MembersInvite], false, null), [Scope.TreatmentsRead]);
+        List<string> credential = [Scope.GlucoseRead, Scope.TreatmentsRead];
+
+        (await ResolveAsync(db, subjectId, credential, authType)).GetGrantedScopes()
+            .Should().Contain([Scope.GlucoseRead, Scope.TreatmentsRead]);
+
+        using (var removal = db.CreateContext())
+        {
+            var teamRole = removal.TenantRoles.Single(r => r.Slug == "team-role").Id;
+            removal.TenantMemberRoles.RemoveRange(removal.TenantMemberRoles.Where(mr => mr.TenantRoleId == teamRole));
+            removal.TenantMemberReasons.RemoveRange(removal.TenantMemberReasons.Where(
+                r => r.Kind == Nocturne.Core.Models.Identity.MembershipReasonKind.Team));
+            removal.SaveChanges();
+        }
+
+        (await ResolveAsync(db, subjectId, credential, authType)).GetGrantedScopes()
+            .Should().Contain(Scope.GlucoseRead).And.NotContain(Scope.TreatmentsRead);
+    }
+
+    [Fact]
+    public async Task NonMember_GivesFromWhatTheRequestResolved()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        using (var seed = db.CreateContext())
+        {
+            TestDatabaseSeeder.Seed(seed);
+        }
+
+        var context = await ResolveAsync(db, Guid.CreateVersion7(), [Scope.GlucoseRead], AuthType.ApiKey);
+
+        context.Items.Should().NotContainKey("GrantCeiling", "a caller held to no membership gives from what the request resolved");
+    }
+
+    [Fact]
+    public void Caller_WithNoRecordedCeiling_GivesFromTheSum()
+    {
+        var context = new DefaultHttpContext();
+        context.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, AuthType = AuthType.InstanceKey };
+        context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string> { Scope.FullAccess });
+
+        context.CallerGrantCeiling().Should().BeEquivalentTo(
+            new GrantCeiling(context.GetGrantedScopes(), context.CallerAccessEndsAt(), context.IsCallerHistoryClamped()));
+    }
+
+    private sealed record DirectSeed(List<string> Permissions, bool LimitTo24Hours, DateTime? AccessEndsAt);
+
+    /// <summary>
+    /// Seeds the default tenant plus a member whose row is the sum of a team reason holding
+    /// <paramref name="teamPermissions"/>, when given, and a direct reason, when given. Returns the
+    /// subject id.
+    /// </summary>
+    private static Guid SeedReasonedMember(SqliteTestDatabase db, DirectSeed? direct, List<string>? teamPermissions)
+    {
+        var subjectId = Guid.CreateVersion7();
+        var memberId = Guid.CreateVersion7();
+        var now = DateTime.UtcNow;
+        using var seed = db.CreateContext();
+        TestDatabaseSeeder.Seed(seed);
+
+        seed.Subjects.Add(new Nocturne.Infrastructure.Data.Entities.SubjectEntity
+        {
+            Id = subjectId, Name = "Member", IsActive = true, IsSystemSubject = false,
+        });
+        seed.TenantMembers.Add(new Nocturne.Infrastructure.Data.Entities.TenantMemberEntity
+        {
+            Id = memberId, TenantId = TestDatabaseSeeder.TenantId, SubjectId = subjectId,
+            LimitTo24Hours = teamPermissions is null && direct is { LimitTo24Hours: true },
+            AccessEndsAt = teamPermissions is null ? direct?.AccessEndsAt : null,
+        });
+
+        Guid Role(string slug, List<string> permissions)
+        {
+            var roleId = Guid.CreateVersion7();
+            seed.TenantRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantRoleEntity
+            {
+                Id = roleId, TenantId = TestDatabaseSeeder.TenantId, Name = slug, Slug = slug,
+                Permissions = permissions, IsSystem = false, SysCreatedAt = now, SysUpdatedAt = now,
+            });
+            seed.TenantMemberRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantMemberId = memberId, TenantRoleId = roleId, SysCreatedAt = now,
+            });
+            return roleId;
+        }
+
+        void Reason(string kind, Guid roleId, bool limitTo24Hours, DateTime? accessEndsAt)
+        {
+            Guid? sourceId = null;
+            if (kind == Nocturne.Core.Models.Identity.MembershipReasonKind.Team)
+            {
+                var teamId = Guid.CreateVersion7();
+                seed.Teams.Add(new Nocturne.Infrastructure.Data.Entities.TeamEntity
+                {
+                    Id = teamId, Name = "Team", SysCreatedAt = now, SysUpdatedAt = now,
+                });
+                sourceId = Guid.CreateVersion7();
+                seed.TeamTenantAccess.Add(new Nocturne.Infrastructure.Data.Entities.TeamTenantAccessEntity
+                {
+                    Id = sourceId.Value, TeamId = teamId, TenantId = TestDatabaseSeeder.TenantId,
+                    SysCreatedAt = now, SysUpdatedAt = now,
+                });
+            }
+
+            var reasonId = Guid.CreateVersion7();
+            seed.TenantMemberReasons.Add(new Nocturne.Infrastructure.Data.Entities.TenantMemberReasonEntity
+            {
+                Id = reasonId, TenantMemberId = memberId, Kind = kind, SourceId = sourceId,
+                LimitTo24Hours = limitTo24Hours, AccessEndsAt = accessEndsAt, SysCreatedAt = now, SysUpdatedAt = now,
+            });
+            seed.TenantMemberReasonRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantMemberReasonRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TenantMemberReasonId = reasonId, TenantRoleId = roleId, SysCreatedAt = now,
+            });
+        }
+
+        if (teamPermissions is not null)
+            Reason(Nocturne.Core.Models.Identity.MembershipReasonKind.Team, Role("team-role", teamPermissions), false, null);
+        if (direct is not null)
+            Reason(Nocturne.Core.Models.Identity.MembershipReasonKind.Direct, Role("direct-role", direct.Permissions),
+                direct.LimitTo24Hours, direct.AccessEndsAt);
+
+        seed.SaveChanges();
+        return subjectId;
+    }
+
+    [Fact]
     public async Task LastUsedWrite_RunsAfterTheRequestScopeIsDisposed_AndReadsNoRequestState()
     {
         using var db = TestDbContextFactory.CreateSqlite();
@@ -673,11 +939,12 @@ public class MemberScopeMiddlewareTests
         services.AddSingleton(db.ContextFactory);
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         await using var provider = services.BuildServiceProvider();
 
         var detached = new GatedFactory(provider.GetRequiredService<INocturneDbContextFactory>());
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(detached), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(detached, AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
 
         await using (var request = provider.CreateAsyncScope())
         {
@@ -692,7 +959,7 @@ public class MemberScopeMiddlewareTests
             };
             context.Items["GrantedScopes"] = Scope.Normalize([]);
             context.Items["PermissionTrie"] = new PermissionTrie();
-            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()), subjectId);
+            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off), subjectId);
 
             await middleware.InvokeAsync(context);
 
@@ -701,25 +968,24 @@ public class MemberScopeMiddlewareTests
         }
 
         detached.Release();
-        var writer = await detached.Created.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var writer = await detached.Created.Task.WaitAsync(Eventually.DefaultPatience);
 
         writer.TenantId.Should().Be(TestDatabaseSeeder.TenantId);
         writer.HistoryClamped.Should().BeFalse();
         writer.IsShareContext.Should().BeFalse();
         writer.AuditContext.Should().BeNull();
 
-        DateTime? lastUsed = null;
-        for (var attempt = 0; attempt < 100 && lastUsed is null; attempt++)
-        {
-            await Task.Delay(20);
-            using var read = db.CreateContext();
-            lastUsed = await read.TenantMembers.AsNoTracking()
-                .Where(tm => tm.SubjectId == subjectId)
-                .Select(tm => tm.LastUsedAt)
-                .SingleAsync();
-        }
-
-        lastUsed.Should().NotBeNull("the write lands after the request's scope is gone");
+        await Eventually.UntilAsync(
+            "the write to land after the request's scope is gone",
+            async () =>
+            {
+                using var read = db.CreateContext();
+                return await read.TenantMembers.AsNoTracking()
+                    .Where(tm => tm.SubjectId == subjectId)
+                    .Select(tm => tm.LastUsedAt)
+                    .SingleAsync() is not null;
+            },
+            step: TimeSpan.FromMilliseconds(20));
     }
 
     /// <summary>
@@ -787,10 +1053,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
-        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return (category, scoped);
@@ -837,10 +1103,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
-        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return context;
@@ -851,9 +1117,12 @@ public class MemberScopeMiddlewareTests
         HttpContext context, ITenantMembershipRepository members, Guid subjectId)
     {
         var (membership, _) = await RequestMembership.ReadAsync(
-            members, subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None);
+            members, subjectId, TestDatabaseSeeder.TenantId, MembershipNow, CancellationToken.None);
         membership.StoreOn(context);
     }
+
+    /// <summary>The instant the request's membership read judges end dates at.</summary>
+    private static readonly DateTime MembershipNow = new(2026, 11, 22, 9, 0, 0, DateTimeKind.Utc);
 
     /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>
     private static List<string> OwnerPermissions =>
@@ -871,7 +1140,7 @@ public class MemberScopeMiddlewareTests
     /// permission atoms. Returns the member's subject id.
     /// </summary>
     private static Guid SeedMemberWithRole(
-        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false)
+        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false, DateTime? accessEndsAt = null)
     {
         var subjectId = Guid.CreateVersion7();
         using var seed = db.CreateContext();
@@ -891,6 +1160,7 @@ public class MemberScopeMiddlewareTests
             TenantId = TestDatabaseSeeder.TenantId,
             SubjectId = subjectId,
             LimitTo24Hours = limitTo24Hours,
+            AccessEndsAt = accessEndsAt,
         });
         var roleId = Guid.CreateVersion7();
         seed.TenantRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantRoleEntity

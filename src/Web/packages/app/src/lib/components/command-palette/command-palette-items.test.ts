@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { items, paletteItemsFor } from "./command-palette-items";
+import { afterEach, describe, expect, it } from "vitest";
+import { glucoseChartLookback, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import {
+  paletteItems,
+  paletteItemsFor,
+  paletteKeywordWords,
+  paletteStatValues,
+  type PaletteKeywordKey,
+} from "./command-palette-items.svelte.js";
 import { isTenantlessRoute } from "#lib/navigation/tenantless-navigation.js";
 import {
   reportCategories,
@@ -28,9 +35,15 @@ function registryReports(viewer: ReportViewer) {
 
 describe("paletteItemsFor", () => {
   it("offers every non-report entry on a host that resolves a tenant", () => {
-    expect(paletteItemsFor(false, OWNER)).toEqual(
-      expect.arrayContaining(items)
-    );
+    const offered = paletteItemsFor(false, OWNER).map((item) => item.id);
+
+    expect(offered).toEqual(expect.arrayContaining(paletteItems().map((item) => item.id)));
+  });
+
+  it("reads the keywords from the translatable table when no words are passed", () => {
+    const sage = paletteItemsFor(false, OWNER).find((item) => item.id === "stat-sage");
+
+    expect(sage?.keywords).toContain("CGM age");
   });
 
   it("offers only the subject-scoped destinations on a tenantless host", () => {
@@ -38,6 +51,7 @@ describe("paletteItemsFor", () => {
     expect(paletteItemsFor(true, OWNER).map((item) => item.id)).toEqual([
       "page-dashboard",
       "settings-account",
+      "settings-teams",
       "settings-appearance",
     ]);
   });
@@ -60,6 +74,16 @@ describe("paletteItemsFor", () => {
 
     const tenantlessGroups = new Set(paletteItemsFor(true, OWNER).map((item) => item.group));
     expect(tenantlessGroups).toEqual(new Set(["pages", "settings"]));
+  });
+});
+
+describe("the demo visitor", () => {
+  it("is not offered Teams by the palette flag", () => {
+    const all = paletteItems();
+    const teams = all.find((item) => item.id === "settings-teams");
+
+    expect(teams?.notForDemoSubject).toBe(true);
+    expect(all.filter((item) => item.notForDemoSubject).map((item) => item.id)).toEqual(["settings-teams"]);
   });
 });
 
@@ -119,5 +143,123 @@ describe("the reports group", () => {
     const labels = paletteReports(OWNER).map((i) => i.label);
     expect(labels).toContain("Loop analysis: Daily profile");
     expect(labels).toContain("Loop analysis: Settings evidence");
+  });
+});
+
+describe("search keywords", () => {
+  const german: Partial<Record<PaletteKeywordKey, string[]>> = {
+    settingsAppearance: ["Erscheinungsbild", "dunkler Modus"],
+    pageDashboard: ["Startseite"],
+    actionManualSync: ["synchronisieren"],
+  };
+
+  const keywordsOf = (id: string, words = german) =>
+    paletteItemsFor(false, OWNER, words).find((item) => item.id === id)?.keywords;
+
+  it("finds a setting, a page and an action by a translated word and by the English one", () => {
+    expect(keywordsOf("settings-appearance")).toEqual(expect.arrayContaining(["Erscheinungsbild", "dunkler Modus", "theme"]));
+    expect(keywordsOf("page-dashboard")).toEqual(expect.arrayContaining(["Startseite", "overview"]));
+    expect(keywordsOf("action-manual-sync")).toEqual(expect.arrayContaining(["synchronisieren", "refresh"]));
+  });
+
+  it("keeps one entry's translated words out of another's", () => {
+    expect(keywordsOf("settings-account")).not.toContain("Erscheinungsbild");
+    expect(keywordsOf("page-dashboard")).not.toContain("synchronisieren");
+  });
+
+  it("falls back to the English words for an entry with no translation", () => {
+    expect(keywordsOf("settings-account", {})).toEqual(["account", "email", "password"]);
+  });
+
+  it("lists each word once", () => {
+    const words = { settingsAccount: ["account", "Konto"] };
+
+    expect(keywordsOf("settings-account", words)).toEqual(["account", "Konto", "email", "password"]);
+  });
+
+  it("has translatable words for every entry, and keeps an English word for each", () => {
+    const translated = paletteKeywordWords();
+    const keyOf = (id: string) => id.replace(/-(.)/g, (_, c: string) => c.toUpperCase()) as PaletteKeywordKey;
+    const english = paletteItems({});
+    const localised = paletteItems(translated);
+
+    for (const item of paletteItems()) {
+      const words = translated[keyOf(item.id)];
+      expect(words?.length, item.id).toBeGreaterThan(0);
+      expect(english.find((i) => i.id === item.id)?.keywords, item.id).toEqual(
+        expect.arrayContaining(words.map((word) => word.toLowerCase())),
+      );
+      expect(localised.find((i) => i.id === item.id)?.keywords, item.id).toEqual(expect.arrayContaining(words));
+    }
+  });
+
+  it("gives every entry that is not a report words to match", () => {
+    for (const item of paletteItems()) {
+      expect(item.keywords?.length, item.id).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("quick-settings labels", () => {
+  const labelOf = (id: string) => paletteItems().find((item) => item.id === id)?.label;
+
+  afterEach(() => {
+    glucoseUnits.current = "mg/dl";
+    glucoseChartLookback.current = 12;
+  });
+
+  it("shows the unit in use", () => {
+    expect(labelOf("qs-glucose-units")).toBe("Units: mg/dL");
+
+    glucoseUnits.current = "mmol";
+    expect(labelOf("qs-glucose-units")).toBe("Units: mmol/L");
+  });
+
+  it("shows the chart lookback in use", () => {
+    glucoseChartLookback.current = 6;
+    expect(labelOf("qs-chart-lookback")).toBe("Chart lookback: 6h");
+  });
+
+  it("still finds the units and lookback items by the verbs they once carried", () => {
+    const keywords = (id: string) => paletteItems().find((item) => item.id === id)?.keywords;
+
+    expect(keywords("qs-glucose-units")).toContain("switch");
+    expect(keywords("qs-chart-lookback")).toContain("change");
+  });
+
+  it("shows a dark mode that follows the system", () => {
+    expect(labelOf("qs-dark-mode")).toBe("Dark mode: System");
+  });
+});
+
+describe("stat labels", () => {
+  const NOW = Date.UTC(2026, 9, 25, 12, 0, 0);
+  const labelOf = (id: string, values = {}) =>
+    paletteItems(undefined, values).find((item) => item.id === id)?.label;
+
+  it("carry the live value after the name", () => {
+    expect(labelOf("stat-iob", { iob: "1.2 U" })).toBe("IOB: 1.2 U");
+    expect(labelOf("stat-cob", { cob: "5 g" })).toBe("COB: 5 g");
+    expect(labelOf("stat-cage", { cage: "2d 2h" })).toBe("CAGE: 2d 2h");
+    expect(labelOf("stat-sage", { sage: "5h" })).toBe("SAGE: 5h");
+  });
+
+  it("are the bare name while there is no value", () => {
+    expect(labelOf("stat-iob")).toBe("IOB");
+    expect(labelOf("stat-sage", { iob: "1.2 U" })).toBe("SAGE");
+  });
+
+  it("read the pills and the consumable ages off the realtime store", () => {
+    const values = paletteStatValues({
+      pillsData: { iob: { display: "1.2 U" } },
+      nowMinute: NOW,
+      legacyFallbacks: [
+        { kind: "Site", latestEventAt: new Date(NOW - 50 * 3600_000).toISOString(), ageHours: 1 },
+      ],
+      legacyCoverage: [],
+      trackerInstances: [],
+    } as unknown as Parameters<typeof paletteStatValues>[0]);
+
+    expect(values).toEqual({ iob: "1.2 U", cob: undefined, cage: "2d 2h", sage: undefined });
   });
 });

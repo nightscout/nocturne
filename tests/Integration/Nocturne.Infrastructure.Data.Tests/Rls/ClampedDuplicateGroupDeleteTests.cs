@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
@@ -15,6 +14,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -113,7 +113,7 @@ public class ClampedDuplicateGroupDeleteTests : IAsyncLifetime
     public async Task ClampedNoteDeleteAndRestore_ReachTheCopyBeforeTheWindow_AndBroadcastOnlyTheVisibleNote()
     {
         var (recent, old) = await SeedNoteGroupAsync();
-        var broadcaster = new RecordingBroadcaster();
+        var broadcaster = new RecordingV4RecordBroadcaster<Note>();
 
         await using (var scope = OpenScope(clamped: true))
             await NoteRepository(scope, broadcaster).DeleteAsync(recent, WriteOrigin.Live);
@@ -136,7 +136,7 @@ public class ClampedDuplicateGroupDeleteTests : IAsyncLifetime
     public async Task ClampedNoteRestore_OfAGroupWhosePrimaryIsBeforeTheWindow_RestoresIt_AndReturnsNothingHidden()
     {
         var (recent, old) = await SeedNoteGroupAsync(oldIsPrimary: true);
-        var broadcaster = new RecordingBroadcaster();
+        var broadcaster = new RecordingV4RecordBroadcaster<Note>();
         await using (var scope = OpenScope(clamped: true))
             await NoteRepository(scope, broadcaster).DeleteAsync(recent, WriteOrigin.Live);
         (await DeletedNotesAsync(recent, old)).Should().BeEquivalentTo([recent, old]);
@@ -234,15 +234,15 @@ public class ClampedDuplicateGroupDeleteTests : IAsyncLifetime
     {
         var (recent, old) = await SeedNoteGroupAsync();
         await using (var scope = OpenScope(clamped: false))
-            await NoteRepository(scope, new RecordingBroadcaster()).DeleteAsync(old, WriteOrigin.Live);
+            await NoteRepository(scope, new RecordingV4RecordBroadcaster<Note>()).DeleteAsync(old, WriteOrigin.Live);
         await using (var revive = await Contexts(_provider).CreateForTenantAsync(_tenant))
             await revive.Notes.IncludingDeleted().Where(n => n.Id == recent)
                 .ExecuteUpdateAsync(s => s.SetProperty(n => n.DeletedAt, (DateTime?)null));
         await using (var scope = OpenScope(clamped: true))
-            await NoteRepository(scope, new RecordingBroadcaster()).DeleteAsync(recent, WriteOrigin.Live);
+            await NoteRepository(scope, new RecordingV4RecordBroadcaster<Note>()).DeleteAsync(recent, WriteOrigin.Live);
 
         await using (var scope = OpenScope(clamped: true))
-            await NoteRepository(scope, new RecordingBroadcaster()).RestoreAsync(recent, WriteOrigin.Live);
+            await NoteRepository(scope, new RecordingV4RecordBroadcaster<Note>()).RestoreAsync(recent, WriteOrigin.Live);
 
         (await DeletedNotesAsync(recent, old)).Should().Equal(old);
     }
@@ -252,7 +252,7 @@ public class ClampedDuplicateGroupDeleteTests : IAsyncLifetime
     {
         var (recent, old) = await SeedNoteGroupAsync();
         await using (var scope = OpenScope(clamped: true))
-            await NoteRepository(scope, new RecordingBroadcaster()).DeleteAsync(recent, WriteOrigin.Live);
+            await NoteRepository(scope, new RecordingV4RecordBroadcaster<Note>()).DeleteAsync(recent, WriteOrigin.Live);
         var holder = Guid.NewGuid();
         await using (var seed = await Contexts(_provider).CreateForTenantAsync(_tenant))
         {
@@ -265,7 +265,7 @@ public class ClampedDuplicateGroupDeleteTests : IAsyncLifetime
         }
 
         await using (var scope = OpenScope(clamped: true))
-            (await NoteRepository(scope, new RecordingBroadcaster()).RestoreAsync(recent, WriteOrigin.Live))
+            (await NoteRepository(scope, new RecordingV4RecordBroadcaster<Note>()).RestoreAsync(recent, WriteOrigin.Live))
                 .Id.Should().Be(recent);
 
         (await DeletedNotesAsync(recent, old, holder)).Should().Equal(old);
@@ -360,35 +360,10 @@ public class ClampedDuplicateGroupDeleteTests : IAsyncLifetime
         new Mock<IAuditContext>().Object,
         NullLogger<StateSpanRepository>.Instance);
 
-    private static NoteRepository NoteRepository(AsyncServiceScope scope, RecordingBroadcaster broadcaster) => new(
+    private static NoteRepository NoteRepository(AsyncServiceScope scope, RecordingV4RecordBroadcaster<Note> broadcaster) => new(
         Contexts(scope),
         new Mock<IDuplicateLinker>().Object,
         new Mock<IAuditContext>().Object,
         NullLogger<NoteRepository>.Instance,
         broadcaster);
-
-    private sealed class RecordingBroadcaster : IV4RecordBroadcaster<Note>
-    {
-        public List<Note> Created { get; } = [];
-        public List<Note> Updated { get; } = [];
-        public List<Guid> Deleted { get; } = [];
-
-        public Task BroadcastCreatedAsync(IReadOnlyList<Note> items, CancellationToken ct = default)
-        {
-            Created.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public Task BroadcastUpdatedAsync(IReadOnlyList<Note> items, CancellationToken ct = default)
-        {
-            Updated.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
-        {
-            Deleted.AddRange(ids);
-            return Task.CompletedTask;
-        }
-    }
 }

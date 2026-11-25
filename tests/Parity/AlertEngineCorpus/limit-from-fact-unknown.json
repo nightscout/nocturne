@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "name": "limit-from-fact-unknown",
+  "description": "a limit whose fact is unknown leaves the leaf unknown, never a comparison against a default: no target range is target_range absent, a stale reading or a sensor in error leaves a latest_glucose limit unknown by glucose or sensor_state, and a leaf unknown on both sides names both; under hold nothing opens, and the rule waits",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "within_minutes": 30,
+        "value_from": {
+          "fact": "latest_glucose",
+          "offset": -30
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "eventual_glucose",
+      "condition_params": {
+        "operator": ">",
+        "value_from": {
+          "fact": "target_high"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 20
+          }
+        ],
+        "aps_determination": {
+          "at": "2026-01-05T12:00:00Z",
+          "eventual_mgdl": 300
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 20
+          }
+        ],
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "last_reading_at": "2026-01-05T12:25:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 20
+          }
+        ],
+        "sensor_state": {
+          "state": "error"
+        },
+        "aps_determination": {
+          "at": "2026-01-05T12:25:00Z",
+          "eventual_mgdl": 300
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 20
+          }
+        ],
+        "aps_determination": {
+          "at": "2026-01-05T12:30:00Z",
+          "eventual_mgdl": 300
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

@@ -5,9 +5,6 @@ namespace Nocturne.Core.Alerts.Native;
 /// <summary>The rule configuration the tracker entry points read.</summary>
 public sealed record RustTrackerConfig
 {
-    [JsonPropertyName("confirmation_readings")]
-    public int ConfirmationReadings { get; init; } = 1;
-
     [JsonPropertyName("hysteresis_minutes")]
     public int HysteresisMinutes { get; init; }
 }

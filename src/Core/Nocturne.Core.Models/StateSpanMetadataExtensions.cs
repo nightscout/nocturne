@@ -25,6 +25,9 @@ public static class StateSpanMetadataExtensions
     /// <summary>A "Temporary Override" treatment.</summary>
     public const string TreatmentsCollection = "treatments";
 
+    /// <summary>The JSON a span's metadata contains when <see cref="IsFromTreatment"/>, for a database containment test.</summary>
+    public const string TreatmentsCollectionJson = $$"""{"{{CollectionKey}}":"{{TreatmentsCollection}}"}""";
+
     /// <summary>A devicestatus <c>override</c>.</summary>
     public const string DeviceStatusCollection = "devicestatus";
 
@@ -74,6 +77,14 @@ public static class StateSpanMetadataExtensions
         };
     }
 
+    /// <summary>Whether <see cref="CollectionKey"/> says the span was decomposed from a devicestatus <c>override</c>.</summary>
+    public static bool IsFromDeviceStatus(this IDictionary<string, object>? metadata) =>
+        metadata.TryReadString(CollectionKey) == DeviceStatusCollection;
+
+    /// <summary>Whether <see cref="CollectionKey"/> says the span was decomposed from a "Temporary Override" treatment.</summary>
+    public static bool IsFromTreatment(this IDictionary<string, object>? metadata) =>
+        metadata.TryReadString(CollectionKey) == TreatmentsCollection;
+
     /// <summary>
     /// Whether two <see cref="StateSpanCategory.Override"/> spans are Loop's two records of one
     /// override, a "Temporary Override" treatment and a devicestatus snapshot, so neither ends the
@@ -115,8 +126,8 @@ public static class StateSpanMetadataExtensions
 
     private static bool AreTreatmentAndDeviceStatus(
         IDictionary<string, object> metadata, IDictionary<string, object> other) =>
-        (metadata.TryReadString(CollectionKey), other.TryReadString(CollectionKey)) is
-            (TreatmentsCollection, DeviceStatusCollection) or (DeviceStatusCollection, TreatmentsCollection);
+        (metadata.IsFromTreatment() && other.IsFromDeviceStatus())
+        || (metadata.IsFromDeviceStatus() && other.IsFromTreatment());
 
     private static HashSet<string> PresetNames(IDictionary<string, object> metadata)
     {

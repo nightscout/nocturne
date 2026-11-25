@@ -3,13 +3,18 @@
     ConnectionDirection,
     ConnectionKind,
     ConnectionStatus,
+    ConnectorTimeZoneSource,
     OAuthClientIdentity,
     type Connection,
     type ConnectionCredential,
     type ConnectionStream,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { revoke as revokeAppGrant } from "#lib/api/generated/connectedApps.generated.remote.js";
-  import { revoke as revokeDirectGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import {
+    keep as keepDeviceCredential,
+    revoke as revokeDirectGrant,
+  } from "#lib/api/generated/directGrants.generated.remote.js";
+  import { deleteConnectionRecords } from "#lib/api/generated/services.generated.remote.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -34,16 +39,20 @@
   import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
-  import { formatNumber } from "#lib/utils/formatting.js";
+  import { formatMediumDate, formatNumber } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import ConnectionLogo from "./ConnectionLogo.svelte";
   import ConnectionStatusLabel from "./ConnectionStatusLabel.svelte";
   import ConnectionTime from "./ConnectionTime.svelte";
+  import DeleteRecordsConfirmDialog from "./DeleteRecordsConfirmDialog.svelte";
 
   let {
     open = $bindable(false),
     connection,
     windowDays,
+    activeWithinMinutes,
     canManage,
+    canSetUp,
     syncing = false,
     quickSyncing = false,
     supportsManualSync = true,
@@ -54,8 +63,12 @@
     open: boolean;
     connection: Connection | null;
     windowDays: number | undefined;
-    /** Whether the viewer may configure, sync and delete the data of connectors. */
+    /** Minutes without a record after which a connection that sends is no longer active. */
+    activeWithinMinutes: number | undefined;
+    /** Whether the viewer may delete the data of connectors and of their own credentials. */
     canManage: boolean;
+    /** Whether the viewer may configure and sync connectors. */
+    canSetUp: boolean;
     syncing?: boolean;
     quickSyncing?: boolean;
     supportsManualSync?: boolean;
@@ -67,6 +80,23 @@
 
   const WILDCARD_SCOPE = "*";
 
+  const timeZoneNote = $derived.by(() => {
+    switch (connection?.timeZone?.source) {
+      case ConnectorTimeZoneSource.ConnectorZone:
+        return "set on this connection";
+      case ConnectorTimeZoneSource.ConnectorOffset:
+        return "offset set on this connection";
+      case ConnectorTimeZoneSource.TenantZone:
+        return "from your Timezone setting";
+      case ConnectorTimeZoneSource.TenantTimeline:
+        return "from your Timezone history";
+      case ConnectorTimeZoneSource.Utc:
+        return "no time zone is set";
+      default:
+        return undefined;
+    }
+  });
+
   let revokingId = $state<string | null>(null);
   let revokeError = $state<string | null>(null);
 
@@ -77,6 +107,11 @@
   // The API withholds when another member's credential was last used, so "Never" is a claim only
   // about the viewer's own.
   const hasOwnCredential = $derived(credentials.some((c) => c.isOwn === true));
+  const canDeleteRecords = $derived(
+    canManage && connection?.canDeleteRecords === true
+  );
+
+  let showDeleteRecords = $state(false);
 
   function canRevoke(credential: ConnectionCredential): boolean {
     return (
@@ -85,6 +120,24 @@
       credential.isRevoked !== true &&
       !!credential.grantId
     );
+  }
+
+  let keepingId = $state<string | null>(null);
+
+  async function handleKeep(grantId: string) {
+    keepingId = grantId;
+    revokeError = null;
+    try {
+      await keepDeviceCredential(grantId);
+      toast.success("Connection kept.");
+    } catch (err) {
+      revokeError = describeSubmitError(
+        err,
+        "Failed to keep the connection. Try again."
+      );
+    } finally {
+      keepingId = null;
+    }
   }
 
   async function handleRevoke(grantId: string) {
@@ -194,6 +247,8 @@
             Sends to Nocturne
           {:else if connection.direction === ConnectionDirection.Fetches}
             Nocturne fetches
+          {:else if connection.direction === ConnectionDirection.Imports}
+            Imported from a file
           {:else}
             No records in the last {windowDays} days
           {/if}
@@ -211,14 +266,34 @@
               fallback={hasOwnCredential ? "Never" : undefined}
             />
           {/if}
-          {#if isConnector}
+          {#if connection.direction === ConnectionDirection.Fetches}
             <ConnectionTime
               label="Last sync"
               at={connection.lastSyncAt}
               fallback="Never"
             />
           {/if}
+          {#if connection.timeZone}
+            <span>
+              Time zone
+              <span class="text-foreground">{connection.timeZone.id}</span>
+              {#if timeZoneNote}({timeZoneNote}){/if}
+            </span>
+          {/if}
         </div>
+        {#if connection.direction === ConnectionDirection.Sends && connection.status === ConnectionStatus.Stopped}
+          <p class="text-sm text-muted-foreground">
+            No record arrived in the last {activeWithinMinutes} minutes. This
+            connection sends glucose or device status all the time. It is
+            possible that it stopped.
+          </p>
+        {:else if connection.direction === ConnectionDirection.Sends && connection.status === ConnectionStatus.Quiet}
+          <p class="text-sm text-muted-foreground">
+            No record arrived in the last {activeWithinMinutes} minutes. This
+            connection sends only records that come from time to time, such as
+            treatments. This is normal.
+          </p>
+        {/if}
       </Dialog.Header>
 
       <div class="-mx-6 min-h-0 flex-1 space-y-6 overflow-y-auto px-6">
@@ -315,6 +390,54 @@
                       <p class="text-sm text-muted-foreground">
                         Belongs to another member
                       </p>
+                    {/if}
+                    {#if credential.stopsAt}
+                      {@const stopDate = formatMediumDate(accessEndDate(credential.stopsAt))}
+                      {@const maker = credential.setUpByName}
+                      {#if credential.hasStopped}
+                        <p
+                          class="flex items-start gap-1.5 text-sm text-warning"
+                          data-testid="credential-stop"
+                        >
+                          <CircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                          <span>
+                            {#if maker}
+                              Stopped on {stopDate}. {maker} set it up.
+                            {:else}
+                              Stopped on {stopDate}.
+                            {/if}
+                          </span>
+                        </p>
+                      {:else}
+                        <p
+                          class="flex items-start gap-1.5 text-sm text-muted-foreground"
+                          data-testid="credential-stop"
+                        >
+                          <Clock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                          <span>
+                            {#if maker}
+                              Stops on {stopDate}. {maker} set it up.
+                            {:else}
+                              Stops on {stopDate}.
+                            {/if}
+                          </span>
+                        </p>
+                      {/if}
+                      {#if credential.canKeep && credential.grantId}
+                        {@const grantId = credential.grantId}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={keepingId === grantId}
+                          onclick={() => handleKeep(grantId)}
+                        >
+                          {#if keepingId === grantId}
+                            <Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+                          {/if}
+                          Keep this connection
+                        </Button>
+                      {/if}
                     {/if}
                   </div>
                   {#if canRevoke(credential)}
@@ -431,10 +554,27 @@
           </section>
         {/if}
 
-        {#if isConnector && connection.connectorId && (canManage || onConnectorDetails)}
+        {#if canSetUp && !canManage && connection?.canDeleteRecords === true}
+          <p class="text-sm text-muted-foreground" data-testid="connection-delete-reason">
+            Only members who can manage this site's settings can delete synced data.
+          </p>
+        {/if}
+
+        {#if canDeleteRecords}
+          <Button
+            variant="outline-destructive"
+            size="sm"
+            onclick={() => (showDeleteRecords = true)}
+          >
+            <Trash2 class="size-4" aria-hidden="true" />
+            Delete data...
+          </Button>
+        {/if}
+
+        {#if isConnector && connection.connectorId && (canSetUp || onConnectorDetails)}
           {@const connectorId = connection.connectorId}
           <div class="flex flex-wrap gap-2">
-            {#if canManage}
+            {#if canSetUp}
               <Button
                 variant="outline"
                 size="sm"
@@ -444,7 +584,7 @@
                 Configure
               </Button>
             {/if}
-            {#if canManage && supportsManualSync && connection.status !== ConnectionStatus.Disabled}
+            {#if canSetUp && supportsManualSync && connection.direction === ConnectionDirection.Fetches && connection.status !== ConnectionStatus.Disabled}
               <Button
                 variant="outline"
                 size="sm"
@@ -475,3 +615,19 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+{#if canDeleteRecords && connection}
+  {@const grantIds = credentials.flatMap((c) => (c.grantId ? [c.grantId] : []))}
+  <DeleteRecordsConfirmDialog
+    bind:open={showDeleteRecords}
+    name={connection.name ?? "API token"}
+    {recordCounts}
+    {windowDays}
+    notFound={{
+      title: "You cannot delete this data",
+      message: "A credential of this connection is not yours, or it was removed.",
+    }}
+    onDelete={(allowReimport) =>
+      deleteConnectionRecords({ grantIds, allowReimport })}
+  />
+{/if}

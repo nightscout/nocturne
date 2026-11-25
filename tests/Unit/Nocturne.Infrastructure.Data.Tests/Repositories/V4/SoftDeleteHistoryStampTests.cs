@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -244,7 +245,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
 
         await using var context = _db.CreateContext();
         var deleted = await context.AuditedSoftDeleteAsync(
-            context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            context.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(2);
         await using var verify = _db.CreateContext();
@@ -297,7 +298,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         await using var context = _db.CreateContext();
         _statements.Clear();
         var deleted = await context.AuditedSoftDeleteAsync(
-            context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            context.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(count);
         _statements.Count("SELECT", s => s.Contains("FROM \"linked_records\"", StringComparison.Ordinal)).Should().Be(1 + 3, "one lookup of the groups, then one read per chunk");
@@ -314,7 +315,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         var (primaries, copies) = await SeedGroupsAsync(1);
 
         await using var context = _db.CreateContext();
-        var rows = context.SensorGlucose.FromSource("source-a");
+        var rows = context.SensorGlucose.Selected(RecordSelector.ForSource("source-a"));
         _statements.FailOn(s => s.StartsWith("UPDATE \"linked_records\"", StringComparison.Ordinal), ordinal: 2);
         Func<Task> act = withEntities
             ? () => context.AuditedSoftDeleteWithEntitiesAsync(rows, new UserAuditContext(), "data_source=source-a")
@@ -402,8 +403,16 @@ public class SoftDeleteHistoryStampTests : IDisposable
     }
 
     private NoteRepository NotesAs(IAuditContext audit) => new(
-        new AuditedFactory(_db, audit), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
+        new SuppliedContextFactory(() => AuditedContext(audit)), Mock.Of<Core.Contracts.Infrastructure.IDuplicateLinker>(),
         audit, NullLogger<NoteRepository>.Instance);
+
+    /// <summary>A fresh context carrying a user's audit context, as a request's factory hands out.</summary>
+    private NocturneDbContext AuditedContext(IAuditContext audit)
+    {
+        var ctx = _db.CreateContext();
+        ctx.AttributedTo(audit);
+        return ctx;
+    }
 
     /// <summary>One group per row: source A's reading leads, source B's is its duplicate.</summary>
     private async Task<(List<Guid> Primaries, List<Guid> Copies)> SeedGroupsAsync(int count)
@@ -442,17 +451,6 @@ public class SoftDeleteHistoryStampTests : IDisposable
         await _context.Notes.ExecuteUpdateAsync(s => s.SetProperty(n => n.SysUpdatedAt, Written));
         _context.ChangeTracker.Clear();
         return (primary.Id, copy.Id);
-    }
-
-    /// <summary>Hands out fresh contexts carrying a user's audit context, as a request's factory does.</summary>
-    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
-        {
-            var ctx = db.CreateContext();
-            ctx.AttributedTo(audit);
-            return ValueTask.FromResult(ctx);
-        }
     }
 
     private sealed class UserAuditContext : IAuditContext

@@ -15,6 +15,8 @@
     predictionEnabled,
     predictionDisplayMode,
     glucoseChartLookback,
+    glucoseUnits as glucoseUnitsPreference,
+    glucoseRangePalette,
     chartLineColorMode,
     chartLineColor,
     chartPointColorMode,
@@ -22,42 +24,29 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
+    colorTheme,
+    type GlucoseUnits,
+    type PredictionDisplayMode,
   } from "#lib/stores/appearance-store.svelte.js";
-  import type { PredictionDisplayMode } from "#lib/stores/appearance-store.svelte.js";
-  import { BasalDeliveryOrigin, type SystemEventType } from "#lib/api/index.js";
+  import {
+    GlucoseChartView,
+    createLegendState,
+    plotPadding,
+    type TransformedChartData,
+  } from "@nocturne/charts";
   import PredictionSettings from "../PredictionSettings.svelte";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
-  import GlucoseChartShell from "./GlucoseChartShell.svelte";
-  import ChartLegend from "./ChartLegend.svelte";
   import ZoomIndicator from "./ZoomIndicator.svelte";
   import { createChartDataEngine } from "./engine/chart-data-engine.svelte";
   import { createPointInspection, syncInspectionDialogs } from "./engine/point-inspection.svelte";
-  import type { LegendState } from "./chart-context.svelte";
-  import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
   import type { PredictionData } from "#lib/api/predictions.remote.js";
   import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
-
-  // Tracks
-  import BasalTrack from "./tracks/BasalTrack.svelte";
-  import SwimLaneTrack from "./tracks/SwimLaneTrack.svelte";
-  import ThresholdRules from "./tracks/ThresholdRules.svelte";
-  import GlucoseTrack from "./tracks/GlucoseTrack.svelte";
-  import PredictionTrack from "./tracks/PredictionTrack.svelte";
-  import IobCobTrack from "./tracks/IobCobTrack.svelte";
-  import DeviceEventMarkers from "./markers/DeviceEventMarkers.svelte";
-  import SystemEventMarkers from "./markers/SystemEventMarkers.svelte";
-  import TrackerMarkers from "./markers/TrackerMarkers.svelte";
-  import ChartHighlight from "./tracks/ChartHighlight.svelte";
-  import ChartTooltip from "./ChartTooltip.svelte";
   import { openDayInReview } from "./day-in-review";
-
+  import { glucoseChartLabels } from "./chart-labels.svelte";
   import ChartEntryActions from "./ChartEntryActions.svelte";
   import { canLogEvents } from "#lib/components/entries/can-log-events.js";
-  import BasalInjectionMarkers from "./markers/BasalInjectionMarkers.svelte";
-  import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
-  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { afterNextPaint } from "#lib/utils/after-next-paint.js";
-  import { plotPadding } from "./plot-padding";
+  import { chartFormat } from "#lib/utils/formatting.js";
   import { writePlotSize } from "./plot-size";
 
   interface Props {
@@ -128,7 +117,38 @@
   const compact = $derived(cardWidth > 0 ? cardWidth < 672 : isMobile.current);
   const print = new PrintMode();
 
-  const chartPadding = $derived(plotPadding(compact, print.active));
+  // The Nightscout theme draws cgm-remote-monitor's focus and context charts: no card chrome,
+  // no legend, ticks inside the right edge. Paper keeps the default chart.
+  const nightscout = $derived(colorTheme.current === "nightscout" && !print.active);
+  /** Below this the focus chart has no room for its treatment bubbles. */
+  const NIGHTSCOUT_MIN_HEIGHT = 360;
+
+  // index.js: the charts fill the window below the header, 70% focus and 30% context (chart.js).
+  let nightscoutFrame = $state<HTMLDivElement>();
+  let nightscoutHeight = $state(0);
+  $effect(() => {
+    const frame = nightscoutFrame;
+    if (!frame) return;
+    const measure = () => {
+      const top = frame.getBoundingClientRect().top + window.scrollY;
+      nightscoutHeight = Math.max(NIGHTSCOUT_MIN_HEIGHT, window.innerHeight - top - 10);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  });
+
+  const chartPadding = $derived(
+    nightscout
+      ? { left: 0, right: 0, top: 0, bottom: 30 }
+      : plotPadding(compact, print.active)
+  );
+
 
   $effect(() => {
     if (!recordsPlotSize || print.active || plotWidth === 0 || plotHeight === 0 || cardWidth === 0) return;
@@ -162,57 +182,7 @@
   );
 
   // ===== LEGEND STATE =====
-  let showIob = $state(true);
-  let showCob = $state(true);
-  let showBasal = $state(true);
-  let showBolus = $state(true);
-  let showCarbs = $state(true);
-  let showDeviceEvents = $state(true);
-  let showAlarms = $state(true);
-  let showScheduledTrackers = $state(true);
-  let showOverrideSpans = $state(false);
-  let showProfileSpans = $state(false);
-  let showActivitySpans = $state(false);
-  let showBasalInjections = $state(true);
-  let showPumpModes = $state(true);
-  let expandedPumpModes = $state(false);
-
-  const legend: LegendState = {
-    get iob() { return showIob; },
-    get cob() { return showCob; },
-    get basal() { return showBasal; },
-    get bolus() { return showBolus; },
-    get carbs() { return showCarbs; },
-    get deviceEvents() { return showDeviceEvents; },
-    get alarms() { return showAlarms; },
-    get scheduledTrackers() { return showScheduledTrackers; },
-    get basalInjections() { return showBasalInjections; },
-    get overrideSpans() { return showOverrideSpans; },
-    get profileSpans() { return showProfileSpans; },
-    get activitySpans() { return showActivitySpans; },
-    get pumpModes() { return showPumpModes; },
-    get expandedPumpModes() { return expandedPumpModes; },
-    toggle(key: string) {
-      switch (key) {
-        case "iob": showIob = !showIob; break;
-        case "cob": showCob = !showCob; break;
-        case "basal": showBasal = !showBasal; break;
-        case "bolus": showBolus = !showBolus; break;
-        case "carbs": showCarbs = !showCarbs; break;
-        case "deviceEvents": showDeviceEvents = !showDeviceEvents; break;
-        case "alarms": showAlarms = !showAlarms; break;
-        case "scheduledTrackers": showScheduledTrackers = !showScheduledTrackers; break;
-        case "basalInjections": showBasalInjections = !showBasalInjections; break;
-        case "overrideSpans": showOverrideSpans = !showOverrideSpans; break;
-        case "profileSpans": showProfileSpans = !showProfileSpans; break;
-        case "activitySpans": showActivitySpans = !showActivitySpans; break;
-        case "pumpModes":
-          showPumpModes = !showPumpModes;
-          if (!showPumpModes) expandedPumpModes = false;
-          break;
-      }
-    },
-  };
+  const legend = createLegendState();
 
   // ===== BRUSH / ZOOM =====
   let brushDomain = $state<[Date, Date] | null>(null);
@@ -295,16 +265,6 @@
     ],
   );
 
-  const legendSystemEvents = $derived(
-    engine.displaySystemEvents.map(
-      (e): { id?: string; eventType?: SystemEventType; color?: string } => ({
-        id: e.id,
-        eventType: e.eventType,
-        color: e.color,
-      }),
-    ),
-  );
-
   const glucoseInspectionDialog = lazyComponent(
     () => import("./dialogs/GlucoseInspectionDialog.svelte"),
   );
@@ -322,14 +282,15 @@
 </script>
 
 {#snippet chartBody()}
-  <CardHeader class="pb-2 px-1 @2xl/chart-card:px-6">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2">
-        Blood glucose
-        {#if displayDemoMode}
-          <Badge variant="demo">
-            Demo
-          </Badge>
+  {#if !nightscout}
+    <CardHeader class="pb-2 px-1 @2xl/chart-card:px-6">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <CardTitle class="flex items-center gap-2">
+          Blood glucose
+          {#if displayDemoMode}
+            <Badge variant="demo">
+              Demo
+            </Badge>
         {/if}
       </CardTitle>
 
@@ -351,144 +312,104 @@
       </div>
     </div>
   </CardHeader>
+  {/if}
 
   <!-- The bare plot reaches into the page's gutter only while <main> is phone-width, where
        pages pad p-3: a narrow chart on a wide page, e.g. a clock builder preview, stays in
        its box. -->
-  <CardContent class="p-0 @max-md/main:-mx-2 @2xl/chart-card:p-2">
+  <CardContent
+    class={nightscout ? "p-0" : "p-0 @max-md/main:-mx-2 @2xl/chart-card:p-2"}
+  >
     <ZoomIndicator {isZoomed} brushXDomain={brushDomain} onResetZoom={resetZoom} />
 
-    <!-- The basal, mode and IOB/COB tracks take fixed shares of the height, so
-         a 320px chart left them 38px, 13px and 58px tall on a phone: too little
-         for their labels. 400px is what a portrait phone shows above the fold. -->
-    <div
-      class={heightClass ?? "h-[400px] @md:h-[450px]"}
-      data-testid="glucose-plot"
-      bind:clientWidth={plotWidth}
-      bind:clientHeight={plotHeight}
+    <GlucoseChartView
+      view={engine}
+      {inspection}
+      {legend}
+      glucoseUnits={glucoseUnits ?? glucoseUnitsPreference.current}
+      rangePalette={glucoseRangePalette.current}
+      labels={glucoseChartLabels()}
+      format={chartFormat()}
+      printing={print.active}
+      padding={chartPadding}
+      {brushDomain}
+      heightClass={heightClass ?? (nightscout ? "h-(--ns-focus-height)" : undefined)}
+      variant={nightscout ? "nightscout" : "default"}
+      draw={plotDrawn}
+      bind:plotWidth
+      bind:plotHeight
+      appearance={{
+        lineColorMode: chartLineColorMode.current,
+        lineColor: chartLineColor.current,
+        pointColorMode: chartPointColorMode.current,
+        pointColor: chartPointColor.current,
+        showPoints: chartShowPoints.current,
+        areaMode: chartAreaMode.current,
+        areaOpacity: chartAreaOpacity.current,
+      }}
+      predictions={{
+        show: effectiveShowPredictions,
+        displayMode: predictionDisplayMode.current,
+        enabled: predictionEnabled.current,
+      }}
+      onMarkerClick={handleMarkerClick}
+      onTimeClick={openDayInReview}
     >
-      {#if plotDrawn}
-        <GlucoseChartShell
-          {engine}
-          {inspection}
-          {legend}
-          {glucoseUnits}
-          brushDomain={brushDomain}
-          padding={chartPadding}
-        >
-          {#snippet tracks()}
-            <BasalTrack />
-            <SwimLaneTrack />
-            <ThresholdRules />
-            <GlucoseTrack
-              lineColorMode={chartLineColorMode.current}
-              lineColor={chartLineColor.current}
-              pointColorMode={chartPointColorMode.current}
-              pointColor={chartPointColor.current}
-              showPoints={chartShowPoints.current}
-              areaMode={chartAreaMode.current}
-              areaOpacity={chartAreaOpacity.current}
-            />
-            {#if effectiveShowPredictions}
-              <PredictionTrack />
-            {/if}
-            <IobCobTrack onMarkerClick={handleMarkerClick} />
-            <DeviceEventMarkers onMarkerClick={handleMarkerClick} />
-            <SystemEventMarkers />
-            <TrackerMarkers />
-            <BasalInjectionMarkers />
-            <BgCheckMarkers />
-            <ChartHighlight />
-          {/snippet}
-          {#snippet overlays()}
-            <ChartTooltip onTimeClick={openDayInReview} />
-          {/snippet}
-        </GlucoseChartShell>
-      {:else if plotSnapshot}
-        <div class="h-full w-full overflow-hidden" data-testid="plot-snapshot" aria-hidden="true">
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -- the server's own render of this chart's components, no user input -->
-          {@html plotSnapshot}
-        </div>
-      {/if}
-    </div>
-
-    {#if engine.glucoseData.length > 0}
-      <MiniOverviewChart
-        data={engine.glucoseData}
-        fullXDomain={[engine.fullXDomain.from, engine.fullXDomain.to]}
-        selectedXDomain={miniSelectedDomain}
-        yDomain={[0, engine.thresholds.glucoseYMax]}
-        expanded={true}
-        onSelectionChange={(domain) => handleMiniChartBrush(domain)}
-        predictionData={miniPredictionData}
-        showPredictions={effectiveShowPredictions && predictionEnabled.current}
-        {isZoomed}
-        thresholds={engine.thresholds}
-        lineColorMode={chartLineColorMode.current}
-        lineColor={chartLineColor.current}
-        areaMode={chartAreaMode.current}
-        areaOpacity={chartAreaOpacity.current}
-        padding={{
-          left: chartPadding.left,
-          right: chartPadding.right,
-          top: 20,
-          bottom: 20,
-        }}
-      />
-    {/if}
-
-    <ChartLegend
-      {glucoseUnits}
-      glucoseData={engine.glucoseData}
-      highThreshold={engine.thresholds.high}
-      lowThreshold={engine.thresholds.low}
-      veryHighThreshold={engine.thresholds.veryHigh}
-      veryLowThreshold={engine.thresholds.veryLow}
-      {showBasal}
-      {showIob}
-      {showCob}
-      {showBolus}
-      {showCarbs}
-      {showPumpModes}
-      {showAlarms}
-      {showScheduledTrackers}
-      {showOverrideSpans}
-      {showProfileSpans}
-      {showActivitySpans}
-      onToggleBasal={() => legend.toggle("basal")}
-      onToggleIob={() => legend.toggle("iob")}
-      onToggleCob={() => legend.toggle("cob")}
-      onToggleBolus={() => legend.toggle("bolus")}
-      onToggleCarbs={() => legend.toggle("carbs")}
-      onTogglePumpModes={() => legend.toggle("pumpModes")}
-      onToggleAlarms={() => legend.toggle("alarms")}
-      onToggleScheduledTrackers={() => legend.toggle("scheduledTrackers")}
-      onToggleOverrideSpans={() => legend.toggle("overrideSpans")}
-      onToggleProfileSpans={() => legend.toggle("profileSpans")}
-      onToggleActivitySpans={() => legend.toggle("activitySpans")}
-      deviceEventMarkers={engine.deviceEventMarkers}
-      systemEvents={legendSystemEvents}
-      pumpModeSpans={engine.displayPumpModeSpans}
-      scheduledTrackerMarkers={engine.displayTrackerMarkers}
-      currentPumpMode={engine.currentPumpMode}
-      uniquePumpModes={engine.uniquePumpModes}
-      {expandedPumpModes}
-      hasBgChecks={engine.bgCheckMarkers.length > 0}
-      hasUnreportedBasal={showBasal &&
-        (engine.staleBasalData != null ||
-          engine.basalData.some((p) => p.origin === BasalDeliveryOrigin.Inferred))}
-      hasScheduledBasal={showBasal && engine.scheduledBasalData.length > 0}
-      targetLow={engine.thresholds.targetLow}
-      targetHigh={engine.thresholds.targetHigh}
-      onToggleExpandedPumpModes={() => (expandedPumpModes = !expandedPumpModes)}
-    />
+      {#snippet placeholder()}
+        {#if plotSnapshot}
+          <div class="h-full w-full overflow-hidden" data-testid="plot-snapshot" aria-hidden="true">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- the server's own render of this chart's components, no user input -->
+            {@html plotSnapshot}
+          </div>
+        {/if}
+      {/snippet}
+      {#snippet belowPlot()}
+        {#if engine.glucoseData.length > 0}
+          <MiniOverviewChart
+            variant={nightscout ? "nightscout" : "default"}
+            data={engine.glucoseData}
+            fullXDomain={[engine.fullXDomain.from, engine.fullXDomain.to]}
+            selectedXDomain={miniSelectedDomain}
+            yDomain={[0, engine.thresholds.glucoseYMax]}
+            expanded={true}
+            onSelectionChange={(domain) => handleMiniChartBrush(domain)}
+            predictionData={miniPredictionData}
+            showPredictions={effectiveShowPredictions && predictionEnabled.current}
+            {isZoomed}
+            thresholds={engine.thresholds}
+            lineColorMode={chartLineColorMode.current}
+            lineColor={chartLineColor.current}
+            areaMode={chartAreaMode.current}
+            areaOpacity={chartAreaOpacity.current}
+            padding={{
+              left: chartPadding.left,
+              right: chartPadding.right,
+              top: nightscout ? 4 : 20,
+              bottom: nightscout ? 30 : 20,
+            }}
+          />
+        {/if}
+      {/snippet}
+    </GlucoseChartView>
   </CardContent>
 {/snippet}
 
 <div class="@container/chart-card" bind:clientWidth={cardWidth}>
-  <Card bareWhenNarrow class="@container">
-    {@render chartBody()}
-  </Card>
+  {#if nightscout}
+    <div
+      bind:this={nightscoutFrame}
+      class="@container bg-(--ns-chart-bg)"
+      style:--ns-focus-height="{Math.round((nightscoutHeight || 600) * 0.7)}px"
+      style:--ns-context-height="{Math.round((nightscoutHeight || 600) * 0.3)}px"
+      data-testid="nightscout-chart"
+    >
+      {@render chartBody()}
+    </div>
+  {:else}
+    <Card bareWhenNarrow class="@container">
+      {@render chartBody()}
+    </Card>
+  {/if}
 </div>
 
 <!-- The picker step of point inspection, marker disambiguation, and the entry editor. -->

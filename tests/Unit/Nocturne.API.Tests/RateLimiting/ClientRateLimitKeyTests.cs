@@ -101,10 +101,78 @@ public class ClientRateLimitKeyTests
     [Fact]
     public void ASignedIPv6Address_IsCanonicalized()
     {
-        var context = Context("2001:DB8::1");
-
-        KeyFor().Resolve(context).Should().Be("2001:db8::1",
+        KeyFor().Resolve(Context("2001:DB8::1")).Should().Be(KeyFor().Resolve(Context("2001:db8:0:0::1")),
             "one address written two ways must not buy two windows");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TwoAddressesInOneIPv6Network_ShareAPartition(bool signed)
+    {
+        var key = KeyFor();
+
+        var first = key.Resolve(Request("2001:db8:aa:bb::1", signed));
+        var second = key.Resolve(Request("2001:db8:aa:bb:ffff:ffff:ffff:fffe", signed));
+
+        first.Should().Be(second,
+            "an IPv6 subscriber holds a whole /64, so each address in it is the same client");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AddressesInNeighbouringIPv6Networks_HaveTheirOwnPartitions(bool signed)
+    {
+        var key = KeyFor();
+
+        var first = key.Resolve(Request("2001:db8:aa:bb::1", signed));
+        var second = key.Resolve(Request("2001:db8:aa:bc::1", signed));
+
+        first.Should().NotBe(second, "the next /64 is another subscriber");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AnIPv4Address_PartitionsOnItself(bool signed)
+    {
+        var key = KeyFor();
+
+        key.Resolve(Request("203.0.113.4", signed)).Should().Be("203.0.113.4");
+        key.Resolve(Request("203.0.113.5", signed)).Should().Be("203.0.113.5",
+            "an IPv4 address is one client however few bits differ");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AnIPv4MappedAddress_PartitionsAsTheIPv4AddressItCarries(bool signed)
+    {
+        var key = KeyFor();
+
+        key.Resolve(Request("::ffff:203.0.113.4", signed)).Should().Be(key.Resolve(Request("203.0.113.4", signed)),
+            "a dual-stack socket reports an IPv4 client in the mapped form");
+        key.Resolve(Request("::ffff:203.0.113.4", signed)).Should().NotBe(key.Resolve(Request("::ffff:203.0.113.5", signed)),
+            "the mapped range is IPv4 addresses, not one IPv6 network");
+    }
+
+    [Fact]
+    public void AnIPv6AddressWithAZone_PartitionsAsTheAddressWithout()
+    {
+        var key = KeyFor();
+
+        key.Resolve(Request("fe80::1%3", signed: true)).Should().Be(key.Resolve(Request("fe80::2", signed: true)));
+    }
+
+    private static HttpContext Request(string clientAddress, bool signed)
+    {
+        if (signed)
+            return Context(clientAddress);
+
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse(clientAddress);
+        return context;
     }
 
     private static ClientRateLimitKey KeyFor(string? instanceKey = InstanceKey) =>

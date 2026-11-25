@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Tests.Infrastructure;
@@ -32,10 +33,10 @@ public class TrackerLegacyFallbacksControllerTests
                     LegacyConsumableKind.Site,
                     new DeviceEvent { Id = Guid.NewGuid(), EventType = DeviceEventType.SiteChange, Timestamp = at },
                     spec,
-                    new TrackerInstanceEntity
+                    new TrackerInstance
                     {
                         StartedAt = at,
-                        Definition = ConsumableTrackerSpecs.ToDefinition(spec, string.Empty),
+                        Definition = ConsumableTrackerSpecs.ToDefinition(spec, string.Empty, at),
                     }),
             ], [new LegacyCoverage(LegacyConsumableKind.Sensor, [SensorTrackerId])]));
         _service.Setup(s => s.GetAsync(false, It.IsAny<CancellationToken>()))
@@ -148,7 +149,7 @@ public class TrackerLegacyFallbacksControllerTests
             new HashSet<string> { Scope.AlertsReadWrite, Scope.DevicesRead },
             authContext);
 
-        refused.Should().BeOfType<ForbidResult>();
+        refused.Should().BeOfType<ScopeForbiddenResult>();
         admitted.Should().BeNull();
     }
 }

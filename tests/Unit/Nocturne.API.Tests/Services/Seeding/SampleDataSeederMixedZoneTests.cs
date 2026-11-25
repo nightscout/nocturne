@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Contracts.Audit;
@@ -96,14 +97,14 @@ public class SampleDataSeederMixedZoneTests : IDisposable
         return new SampleDataSeeder(
             tenant.Object,
             _db.ContextFactory.AsNocturneFactory(),
-            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             entries.Object,
             treatments.Object,
             sleep.Object,
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
-            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory()),
+            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory(), _time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,

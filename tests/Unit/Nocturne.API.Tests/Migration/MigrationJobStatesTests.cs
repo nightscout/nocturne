@@ -54,8 +54,12 @@ public class MigrationJobStatesTests
     [Fact]
     public void RestartSweep_ReadsTheLiveNamesOfEachJobTable()
     {
-        BackgroundJobLiveStates.ByTable.Should().HaveCount(2);
-        BackgroundJobLiveStates.ByTable["migration_runs"].Should().BeEquivalentTo(MigrationJobStates.LiveNames);
+        BackgroundJobLiveStates.ByTable.Should().ContainSingle();
         BackgroundJobLiveStates.ByTable["connector_reset_jobs"].Should().BeEquivalentTo(ConnectorResetJobStates.LiveNames);
     }
+
+    /// <summary>A live migration run is resumed by its job, which a sweep marking it Interrupted would end.</summary>
+    [Fact]
+    public void RestartSweep_LeavesMigrationRunsToTheirJob() =>
+        BackgroundJobLiveStates.ByTable.Should().NotContainKey("migration_runs");
 }

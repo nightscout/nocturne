@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "name": "pump-state-mode-start-ahead-of-clock",
+  "description": "a pump_state leaf reads the start of the entry for the mode it names: a Suspended span dated 30 minutes ahead of the clock makes the for_minutes leaf over Suspended unknown and the rule hold, with clock_anomaly naming active_pump_modes and next_change_at where the start comes within the tolerance, while the leaf over the Automatic span, dated behind the clock, is answered as usual; a start within the 5 minute tolerance reads as zero elapsed",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "Suspended",
+        "is_active": true,
+        "for_minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "Automatic",
+        "is_active": true,
+        "for_minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "Suspended",
+        "is_active": true,
+        "for_minutes": null
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T12:30:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:26:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:26:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:26:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T12:30:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:41:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:41:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:41:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T12:30:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:45:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:45:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:45:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T12:30:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

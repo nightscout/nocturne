@@ -17,7 +17,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         }
@@ -38,7 +37,6 @@
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         }
@@ -59,7 +57,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T12:10:00Z"
           }
@@ -72,17 +69,25 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "pump",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "closed",
           "close_reason": "hysteresis",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:15:00Z"
           }
         }
       ]

@@ -6,10 +6,12 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
@@ -23,6 +25,7 @@ public class GoogleHealthWorkerTests
         var tenants = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
         var releases = tenants.ToDictionary(id => id, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
         var started = Channel.CreateUnbounded<Guid>();
+        var imports = new ConcurrencyProbe();
         var tenantService = new Mock<ITenantService>();
         tenantService.Setup(service => service.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns<Guid, CancellationToken>((id, _) => Task.FromResult<TenantDetailDto?>(
@@ -40,6 +43,7 @@ public class GoogleHealthWorkerTests
                 .Returns<string, SyncRequest, CancellationToken>(async (_, _, ct) =>
                 {
                     var id = accessor.TenantId;
+                    using var inFlight = imports.Enter();
                     started.Writer.TryWrite(id);
                     await releases[id].Task.WaitAsync(ct);
                     return new SyncResult { Success = true };
@@ -50,25 +54,25 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         foreach (var tenant in tenants) Assert.True(await coordinator.QueueAsync(tenant, 1, default));
+        using var hang = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
             var active = new List<Guid>();
             for (var index = 0; index < 4; index++)
-                active.Add(await started.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)));
+                active.Add(await started.Reader.ReadAsync(hang.Token));
             Assert.Equal(4, active.Distinct().Count());
-            using var noSlot = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => started.Reader.ReadAsync(noSlot.Token).AsTask());
             foreach (var id in active)
                 Assert.Null(await coordinator.ClaimWorkerAsync(id, default));
 
             releases[active[0]].SetResult();
-            var next = await started.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+            var next = await started.Reader.ReadAsync(hang.Token);
             Assert.DoesNotContain(next, active);
             Assert.Null(await coordinator.ProgressAsync(active[0], default));
             active.RemoveAt(0);
             active.Add(next);
             await worker.StopAsync(default);
+            Assert.Equal(4, imports.Peak);
 
             foreach (var id in active)
             {
@@ -87,7 +91,7 @@ public class GoogleHealthWorkerTests
     public async Task Scheduled_run_conflict_keeps_manual_request_until_retry_shutdown_or_cancellation(bool shutdown, bool cancel)
     {
         var tenant = Guid.NewGuid();
-        var coordinator = InMemoryGoogleHealthCoordinator.Create();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create(out var cleared);
         var conflicted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -125,7 +129,7 @@ public class GoogleHealthWorkerTests
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         var scheduled = await coordinator.AcquireAsync(tenant, default);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
@@ -146,9 +150,9 @@ public class GoogleHealthWorkerTests
             scheduled = null;
             if (cancel)
             {
-                IAsyncDisposable? released;
-                while ((released = await coordinator.ClaimWorkerAsync(tenant, timeout.Token)) is null)
-                    await Task.Delay(10, timeout.Token);
+                var released = await Eventually.ValueAsync(
+                    "the coordinator to release the worker claim",
+                    () => coordinator.ClaimWorkerAsync(tenant, CancellationToken.None));
                 await using (released)
                 {
                     Assert.Null(await coordinator.ProgressAsync(tenant, timeout.Token));
@@ -163,8 +167,8 @@ public class GoogleHealthWorkerTests
             Assert.Null(await coordinator.ClaimWorkerAsync(tenant, default));
             finish.TrySetResult();
             await healthUpdated.Task.WaitAsync(timeout.Token);
-            while (await coordinator.ProgressAsync(tenant, timeout.Token) is not null)
-                await Task.Delay(10, timeout.Token);
+            await cleared.WaitAsync(timeout.Token);
+            Assert.Null(await coordinator.ProgressAsync(tenant, timeout.Token));
             Assert.Equal(2, calls);
         }
         finally
@@ -210,14 +214,14 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
             await failed.Task.WaitAsync(timeout.Token);
-            IAsyncDisposable? recovered;
-            while ((recovered = await coordinator.ClaimWorkerAsync(tenant, timeout.Token)) is null)
-                await Task.Delay(10, timeout.Token);
+            var recovered = await Eventually.ValueAsync(
+                "the coordinator to release the worker claim",
+                () => coordinator.ClaimWorkerAsync(tenant, CancellationToken.None));
             await using (recovered)
             {
                 Assert.True((await coordinator.ProgressAsync(tenant, timeout.Token))!.WorkerOwned);
@@ -231,20 +235,20 @@ public class GoogleHealthWorkerTests
     public async Task A_failed_import_is_retried_at_the_next_rescan()
     {
         var tenant = Guid.NewGuid();
-        var clock = new FakeTimeProvider();
+        var clock = new RescanClock();
         var tenants = new Mock<ITenantService>();
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         tenants.Setup(service => service.GetByIdAsync(tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantDetailDto(tenant, "tenant", "Tenant", true, DateTime.UtcNow, []));
-        var coordinator = InMemoryGoogleHealthCoordinator.Create(clock, tenants.Object);
-        var attempts = Channel.CreateUnbounded<int>();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create(out var cleared, clock, tenants.Object);
+        var attempts = Channel.CreateUnbounded<(int Number, DateTimeOffset At)>();
         var count = 0;
         var sync = new Mock<IConnectorSyncService>();
         sync.Setup(service => service.TriggerSyncAsync("googlehealth", It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()))
             .Returns(() =>
             {
                 var attempt = Interlocked.Increment(ref count);
-                attempts.Writer.TryWrite(attempt);
+                attempts.Writer.TryWrite((attempt, clock.GetUtcNow()));
                 return attempt == 1
                     ? Task.FromException<SyncResult>(new IOException("Transient infrastructure failure"))
                     : Task.FromResult(new SyncResult { Success = true });
@@ -259,22 +263,26 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var hang = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
-            Assert.Equal(1, await attempts.Reader.ReadAsync(timeout.Token));
+            var first = await attempts.Reader.ReadAsync(hang.Token);
+            Assert.Equal(1, first.Number);
             tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync([new TenantDto(tenant, "tenant", "Tenant", true, DateTime.UtcNow)]);
-            var retry = attempts.Reader.ReadAsync(timeout.Token).AsTask();
-            while (!retry.IsCompleted)
+            var retry = attempts.Reader.ReadAsync(hang.Token).AsTask();
+            while (true)
             {
+                var armed = clock.RescanArmed.ReadAsync(hang.Token).AsTask();
+                if (await Task.WhenAny(retry, armed) == retry) break;
                 clock.Advance(GoogleHealthCoordinator.RescanInterval);
-                await Task.WhenAny(retry, Task.Delay(20, timeout.Token));
             }
-            Assert.Equal(2, await retry);
-            while (await coordinator.ProgressAsync(tenant, timeout.Token) is not null)
-                await Task.Delay(10, timeout.Token);
+            var second = await retry;
+            Assert.Equal(2, second.Number);
+            Assert.InRange(second.At - first.At, GoogleHealthCoordinator.RescanInterval, TimeSpan.MaxValue);
+            await cleared.WaitAsync(hang.Token);
+            Assert.Null(await coordinator.ProgressAsync(tenant, hang.Token));
         }
         finally { await worker.StopAsync(default); }
     }
@@ -283,7 +291,7 @@ public class GoogleHealthWorkerTests
     public async Task An_unconfigured_instance_drops_queued_imports_without_syncing_or_touching_health()
     {
         var tenant = Guid.NewGuid();
-        var coordinator = InMemoryGoogleHealthCoordinator.Create();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create(out var cleared);
         var sync = new Mock<IConnectorSyncService>();
         var configurations = new Mock<IConnectorConfigurationService>();
         var services = new ServiceCollection();
@@ -296,12 +304,11 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
-            while (await coordinator.ProgressAsync(tenant, timeout.Token) is not null)
-                await Task.Delay(10, timeout.Token);
+            await cleared.WaitAsync(timeout.Token);
         }
         finally { await worker.StopAsync(default); }
 
@@ -316,6 +323,20 @@ public class GoogleHealthWorkerTests
             ClientSecret = "synthetic-secret",
             RedirectUri = "https://example.test" + GoogleHealthPlatformOptions.CallbackPath
         });
+
+    private sealed class RescanClock : FakeTimeProvider
+    {
+        private readonly Channel<bool> armed = Channel.CreateUnbounded<bool>();
+
+        public ChannelReader<bool> RescanArmed => armed.Reader;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
+            armed.Writer.TryWrite(true);
+            return timer;
+        }
+    }
 
     private sealed class TenantAccessor : ITenantAccessor
     {

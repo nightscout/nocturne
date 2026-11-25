@@ -14,7 +14,7 @@ namespace Nocturne.API.Middleware.Handlers;
 public class SessionCookieHandler : IAuthHandler
 {
     /// <summary>
-    /// Handler priority (50 - highest priority, before OIDC tokens)
+    /// Handler priority (50 - before every bearer credential)
     /// Session cookies should be checked first for web app authentication
     /// </summary>
     public int Priority => 50;
@@ -138,7 +138,7 @@ public class SessionCookieHandler : IAuthHandler
         try
         {
             var authService = scope.ServiceProvider.GetRequiredService<IOidcAuthService>();
-            var ipAddress = GetClientIpAddress(context);
+            var ipAddress = context.GetClientAddress();
             var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
 
             var newTokens = await authService.RefreshSessionAsync(
@@ -196,10 +196,11 @@ public class SessionCookieHandler : IAuthHandler
     /// those, and
     /// <see cref="AuthType.SessionCookie"/> is treated as an unscoped credential, so accepting a
     /// grant here would let a holder move it into the session cookie and shed both its tenant pin
-    /// and its scope ceiling. <see cref="LegacyJwtHandler"/> applies the same test to a bearer JWT,
+    /// and its scope ceiling. <see cref="SessionBearerHandler"/> applies the same test to a bearer JWT,
     /// which resolves to the same unscoped type. Session tokens are minted only via the overload
     /// that cannot emit any of these claims, so their absence is the session shape; the <c>sid</c>
-    /// that overload does emit names a session, not a grant, and is no part of the test.
+    /// and hand-off mark that overload does emit describe a session, not a grant, and are no part
+    /// of the test.
     /// The refresh-token cookie needs no equivalent check: it holds an opaque random string that
     /// is looked up server-side, and the access token it yields is re-minted here.
     /// </remarks>
@@ -229,17 +230,12 @@ public class SessionCookieHandler : IAuthHandler
             ExpiresAt = claims.ExpiresAt,
             LimitTo24Hours = claims.LimitTo24Hours,
             SessionId = claims.SessionId,
+            IsHandedOff = claims.HandedOff,
         };
     }
 
     private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens) =>
         context.Response.SetSessionCookies(
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
-
-    /// <summary>
-    /// Get client IP address
-    /// </summary>
-    private static string? GetClientIpAddress(HttpContext context) =>
-        context.Connection.RemoteIpAddress?.ToString();
 
 }

@@ -57,6 +57,7 @@ internal sealed class AlertAcknowledgementService(
         // EndedAt > now matches the active-intents snapshot filter: a device_action test fire
         // keeps the tray flashing for its window, so it must be acknowledgeable during it.
         var excursions = await db.AlertExcursions
+            .OfCondition(includeTest: true)
             .Where(e => e.TenantId == tenantId && (e.EndedAt == null || e.EndedAt > now))
             .ToListAsync(ct);
 
@@ -68,6 +69,7 @@ internal sealed class AlertAcknowledgementService(
 
         var excursionIds = excursions.Select(e => e.Id).ToHashSet();
         var instances = await db.AlertInstances
+            .OfCondition(includeTest: true)
             .Where(i => excursionIds.Contains(i.AlertExcursionId) && i.ResolvedAt == null)
             .ToListAsync(ct);
 
@@ -83,20 +85,13 @@ internal sealed class AlertAcknowledgementService(
 
         await db.SaveChangesAsync(ct);
 
-        try
+        await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
         {
-            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
-            {
-                TenantId = tenantId,
-                ExcursionIds = excursions.Select(e => e.Id).ToList(),
-                AcknowledgedBy = acknowledgedBy,
-                AcknowledgedAt = now,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for tenant {TenantId}", tenantId);
-        }
+            TenantId = tenantId,
+            ExcursionIds = excursions.Select(e => e.Id).ToList(),
+            AcknowledgedBy = acknowledgedBy,
+            AcknowledgedAt = now,
+        });
 
         await alarmRelay.ClearIfQuietAsync(excursionIds, ct);
 
@@ -122,6 +117,7 @@ internal sealed class AlertAcknowledgementService(
         // leak across tenants. EndedAt > now matches the active-intents snapshot filter so a
         // device_action test fire (future EndedAt) is acknowledgeable during its window.
         var excursion = await db.AlertExcursions
+            .OfCondition(includeTest: true)
             .FirstOrDefaultAsync(e => e.Id == excursionId
                                        && e.TenantId == tenantId
                                        && (e.EndedAt == null || e.EndedAt > now), ct);
@@ -144,6 +140,7 @@ internal sealed class AlertAcknowledgementService(
         }
 
         var instances = await db.AlertInstances
+            .OfCondition(includeTest: true)
             .Where(i => i.AlertExcursionId == excursionId && i.ResolvedAt == null)
             .ToListAsync(ct);
 
@@ -155,20 +152,13 @@ internal sealed class AlertAcknowledgementService(
 
         if (broadcast)
         {
-            try
+            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
             {
-                await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
-                {
-                    TenantId = excursion.TenantId,
-                    ExcursionIds = [excursionId],
-                    AcknowledgedBy = acknowledgedBy,
-                    AcknowledgedAt = now,
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for excursion {ExcursionId}", excursionId);
-            }
+                TenantId = excursion.TenantId,
+                ExcursionIds = [excursionId],
+                AcknowledgedBy = acknowledgedBy,
+                AcknowledgedAt = now,
+            });
         }
 
         logger.LogInformation(

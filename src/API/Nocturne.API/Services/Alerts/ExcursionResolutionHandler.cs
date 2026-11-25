@@ -11,13 +11,17 @@ namespace Nocturne.API.Services.Alerts;
 /// Shared cleanup pathway invoked after an excursion closes (whether via the
 /// orchestrator's per-reading state machine or <see cref="AlertSweepJob"/>'s
 /// periodic run): stamps <c>resolution_reason</c> on instances, expires their
-/// pending deliveries, deletes members' mutes of the excursion, and broadcasts
-/// <c>alert_resolved</c>.
+/// pending deliveries, deletes members' mutes of the excursion, broadcasts
+/// <c>alert_resolved</c>, archives the in-app notifications and clears the alarm, then records
+/// that the close owes no more work (<see cref="IAlertRepository.SettleTransitionAsync"/>).
 /// </summary>
 /// <remarks>
 /// The tracker is the single owner of <see cref="Nocturne.Core.Models.AlertTrackerState"/>
 /// and the open/closed flag on the <see cref="Nocturne.Core.Models.AlertExcursion"/>
-/// itself; this handler runs strictly after the close has been persisted.
+/// itself; this handler runs strictly after the close has been persisted. Every step is safe to
+/// run again, which is how <see cref="AlertSweepJob"/> finishes a close a run that died left
+/// unsettled; that run passes no close reason, since none is stored, so an instance it resolves
+/// has none.
 /// </remarks>
 public interface IExcursionResolutionHandler
 {
@@ -54,9 +58,10 @@ internal sealed class ExcursionResolutionHandler(
 
         await repository.DeleteExcursionMutesAsync(excursionId, ct);
 
+        ExcursionRuleSnapshot? rule = null;
         try
         {
-            var rule = await repository.GetExcursionRuleAsync(excursionId, ct);
+            rule = await repository.GetExcursionRuleAsync(excursionId, ct);
             if (rule is null)
             {
                 // Only an excursion deleted with its rule (an FK cascade) has none.
@@ -65,7 +70,7 @@ internal sealed class ExcursionResolutionHandler(
             }
             else
             {
-                await broadcastService.BroadcastAlertResolvedAsync(new AlertResolvedEvent
+                var resolved = new AlertResolvedEvent
                 {
                     TenantId = tenantId,
                     ExcursionId = excursionId,
@@ -73,16 +78,29 @@ internal sealed class ExcursionResolutionHandler(
                     RuleName = rule.Name,
                     ResolvedAt = now,
                     Reason = transition.CloseReason,
-                });
+                };
+                // A notice reached only its rule's channels, so only a Home Assistant instance it
+                // was delivered to hears that it is resolved.
+                if (rule.IsNotice)
+                    await broadcastService.BroadcastAlertResolvedToHomeAssistantAsync(
+                        resolved, await repository.GetHomeAssistantInstancesSentExcursionAsync(excursionId, ct));
+                else
+                    await broadcastService.BroadcastAlertResolvedAsync(resolved);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
         }
 
-        await ArchiveInAppNotificationsAsync(excursionId, ct);
+        // A rule that could not be read leaves the kind of excursion unknown, so both kinds of
+        // notification it may have made are archived.
+        IReadOnlyList<string> notificationTypes = rule is null
+            ? InAppProvider.AllNotificationTypes
+            : [InAppProvider.NotificationTypeFor(rule)];
+        await ArchiveInAppNotificationsAsync(excursionId, notificationTypes, ct);
         await alarmRelay.ClearIfQuietAsync([excursionId], ct);
+        await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",
@@ -94,14 +112,15 @@ internal sealed class ExcursionResolutionHandler(
     /// excursion, so the bell/toast row clears once the alert is no longer firing.
     /// Iterates the unique InApp recipient userIds — one notification can exist per user.
     /// </summary>
-    private async Task ArchiveInAppNotificationsAsync(Guid excursionId, CancellationToken ct)
+    private async Task ArchiveInAppNotificationsAsync(
+        Guid excursionId, IReadOnlyList<string> notificationTypes, CancellationToken ct)
     {
         IReadOnlyList<string> destinations;
         try
         {
             destinations = await repository.GetInAppDestinationsForExcursionAsync(excursionId, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             // Bumped to Error: a query-shape failure here would leak toast notifications across
             // every close — needs to be visible. Per-recipient archive failures stay Warning.
@@ -114,18 +133,18 @@ internal sealed class ExcursionResolutionHandler(
         if (destinations.Count == 0) return;
 
         var sourceId = excursionId.ToString();
-        foreach (var userId in destinations)
+        foreach (var (userId, notificationType) in destinations.SelectMany(u => notificationTypes.Select(t => (u, t))))
         {
             try
             {
                 await notificationService.ArchiveBySourceAsync(
                     userId,
-                    InAppProvider.NotificationType,
+                    notificationType,
                     sourceId,
                     NotificationArchiveReason.ConditionMet,
                     ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex,
                     "Failed to archive InApp notification for user {UserId}, excursion {ExcursionId}",

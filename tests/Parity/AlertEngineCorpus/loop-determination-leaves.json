@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "name": "loop-determination-leaves",
+  "description": "eventual_glucose and carbs_required over the loop's newest determination: true and false while fresh, unknown by aps_determination absent with no determination or without the value, stale past the rule's glucose freshness bound from when it was made (exactly the bound old is fresh), and ahead_of_clock beyond the tolerance; a clear margin keeps the open excursion past the plain limit",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "eventual_glucose",
+      "condition_params": {
+        "operator": "<",
+        "value": 80
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "carbs_required",
+      "condition_params": {
+        "operator": ">=",
+        "value": 10,
+        "clear_margin": 5
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "carbs_required",
+      "condition_params": {
+        "operator": ">",
+        "value": 0
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "glucose_freshness_minutes": 5
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:04:00Z",
+          "eventual_mgdl": 75,
+          "carbs_required_grams": 12
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:09:00Z",
+          "eventual_mgdl": 90,
+          "carbs_required_grams": 7
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:10:00Z",
+          "eventual_mgdl": 90,
+          "carbs_required_grams": 4
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:21:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:21:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:21:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:10:00Z",
+          "eventual_mgdl": 70,
+          "carbs_required_grams": 20
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:22:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:22:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:22:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:10:00Z",
+          "eventual_mgdl": 70,
+          "carbs_required_grams": 20
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:25:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:24:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "aps_determination": {
+          "at": "2026-01-05T12:40:00Z",
+          "eventual_mgdl": 60,
+          "carbs_required_grams": 30
+        }
+      }
+    }
+  ]
+}

@@ -321,7 +321,9 @@ public class TimeQueryFindTests
             .ReturnsAsync((TreatmentQuery query, CancellationToken _) =>
             {
                 var parsed = FindQuery.Parse(query.Find);
-                return Treatments.Where(parsed.Matches).ToList().AsEnumerable();
+                var matching = Treatments.Where(parsed.Matches).ToList();
+                ThrowIfAbandoned(parsed, query.Find);
+                return matching.AsEnumerable();
             });
 
         var deviceStatuses = Mock.Of<IDeviceStatusService>(s => s.GetDeviceStatusesAsync(
@@ -354,9 +356,18 @@ public class TimeQueryFindTests
             .ReturnsAsync((EntryQuery query, CancellationToken _) =>
             {
                 var parsed = FindQuery.Parse(query.Find);
-                return Entries.Where(parsed.Matches).ToList().AsEnumerable();
+                var matching = Entries.Where(parsed.Matches).ToList();
+                ThrowIfAbandoned(parsed, query.Find);
+                return matching.AsEnumerable();
             });
         return entries.Object;
+    }
+
+    private static void ThrowIfAbandoned(FindQuery parsed, string? find)
+    {
+        if (parsed.HasAbandonedRegex)
+            throw new InvalidOperationException(
+                $"A BoundedRegex ran out of its time budget, so the fake store under-matched. Find: {find}");
     }
 
     private static Entry Sgv(string id, string dateString, double sgv) =>

@@ -1,7 +1,10 @@
 import { untrack } from "svelte";
 import { getSummary } from "#lib/api/generated/summaries.generated.remote.js";
-import type { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
-import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+import type {
+  GlucoseStatus,
+  V4BasalInjectionStatus,
+} from "@nocturne/api-client";
+import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
 
 /** Longest a superseded reading stays on screen while the summary catches up. */
 export const PAIR_HOLD_MS = 5000;
@@ -58,9 +61,46 @@ export function currentGlucoseStatus(
   return current?.mills === mills ? current.status : undefined;
 }
 
+/**
+ * The IOB the server calculated from treatments, as of the summary's last refresh (once per
+ * new reading). Undefined when the server has no IOB to report (none in the window, a failed
+ * calculation, or redacted), so a 0 here is a real zero. Callers still check the treatments
+ * scope before showing it.
+ */
+export function calculatedIob(): number | undefined {
+  const summary = getSummary().current;
+  return summary?.iobKnown ? summary.iob : undefined;
+}
+
+/**
+ * The COB the server calculated from treatments, as of the summary's last refresh (once per
+ * new reading). Undefined when the server has no COB to report (a failed calculation or
+ * redacted), so a 0 here is a real zero. Callers still check the treatments
+ * scope before showing it.
+ */
+export function calculatedCob(): number | undefined {
+  const summary = getSummary().current;
+  return summary?.cobKnown ? summary.cob : undefined;
+}
+
+/**
+ * The last long-acting dose the server read for a tenant on multiple daily injections, as of the
+ * summary's last refresh. The summary drops a redacted dose, so callers check the treatments
+ * scope before showing it.
+ */
+export function calculatedBasalInjection(): V4BasalInjectionStatus | undefined {
+  return getSummary().current?.basalInjection;
+}
+
 export interface DisplayedGlucose {
   readonly mills: number | undefined;
   readonly currentBG: number;
+  /**
+   * The reading's value in mg/dL. Null when there is no reading, or when the newest reading has
+   * no value (stored as 0, as a legacy `sgv` entry without one is), so a surface shows
+   * no reading rather than a reading of 0.
+   */
+  readonly value: number | null;
   readonly bgDelta: number | null;
   readonly direction: string;
   readonly status: GlucoseStatus | undefined;
@@ -86,7 +126,7 @@ interface GlucoseSource {
 export function displayedGlucose(
   store: GlucoseSource | null | undefined
 ): DisplayedGlucose {
-  let lastPaired = $state.raw<Omit<DisplayedGlucose, "status"> & {
+  let lastPaired = $state.raw<Omit<DisplayedGlucose, "status" | "value"> & {
     mills: number;
     status: GlucoseStatus;
   }>();
@@ -171,6 +211,10 @@ export function displayedGlucose(
     },
     get currentBG() {
       return held()?.currentBG ?? store?.currentBG ?? 0;
+    },
+    get value() {
+      const mgdl = this.currentBG;
+      return mgdl > 0 ? mgdl : null;
     },
     get bgDelta() {
       const pair = held();

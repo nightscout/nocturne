@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyLife.Tests.Services;
 
@@ -100,29 +100,55 @@ public class MyLifeAuthTokenProviderRetryTests
         handler.LoginAttempts.Should().Be(maxRetryAttempts, "the configured attempt budget is what gets spent");
     }
 
+    /// <summary>
+    ///     The sign-in answer MyLife gives for a wrong password is a 200 with no auth token, which
+    ///     is a refusal the tenant can fix, unlike a login that failed with a 5xx.
+    /// </summary>
+    [Fact]
+    public async Task SignInFailureReason_WhenLoginReturnsNoAuthToken_SaysMyLifeDidNotAcceptTheSignIn()
+    {
+        var handler = new SoapHandler { LoginResultJson = "{}" };
+        using var httpClient = new HttpClient(handler);
+        var provider = ProviderFor(httpClient, serviceUrl: "", maxRetryAttempts: 3, out var config);
+
+        var token = await provider.GetValidTokenAsync(config, CancellationToken.None);
+
+        token.Should().BeNull();
+        provider.SignInFailureReason.Should().Contain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task SignInFailureReason_WhenLoginFailsWith503_ReportsATemporaryFailure()
+    {
+        var handler = new SoapHandler { LoginStatus = HttpStatusCode.ServiceUnavailable };
+        using var httpClient = new HttpClient(handler);
+        var provider = ProviderFor(httpClient, serviceUrl: "", maxRetryAttempts: 2, out var config);
+
+        var token = await provider.GetValidTokenAsync(config, CancellationToken.None);
+
+        token.Should().BeNull();
+        provider.SignInFailureReason.Should().Contain("usually temporary")
+            .And.NotContain("did not accept this sign-in");
+    }
+
     private static async Task<string?> AuthenticateAsync(
         SoapHandler handler, string serviceUrl = "", int maxRetryAttempts = 3)
     {
         using var httpClient = new HttpClient(handler);
+        var provider = ProviderFor(httpClient, serviceUrl, maxRetryAttempts, out var config);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        return await provider.GetValidTokenAsync(config, CancellationToken.None);
+    }
+
+    private static MyLifeAuthTokenProvider ProviderFor(
+        HttpClient httpClient, string serviceUrl, int maxRetryAttempts, out MyLifeConnectorConfiguration config)
+    {
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        var provider = new MyLifeAuthTokenProvider(
-            httpClient,
-            new ConnectorTokenCache(),
-            new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
-            new MyLifeSoapClient(httpClient, NullLogger<MyLifeSoapClient>.Instance),
-            new MyLifeSessionCache(),
-            NullLogger<MyLifeAuthTokenProvider>.Instance,
-            retryDelay.Object);
-
-        var config = new MyLifeConnectorConfiguration
+        config = new MyLifeConnectorConfiguration
         {
             Username = "someone@example.com",
             Password = "hunter2",
@@ -130,7 +156,15 @@ public class MyLifeAuthTokenProviderRetryTests
             MaxRetryAttempts = maxRetryAttempts
         };
 
-        return await provider.GetValidTokenAsync(config, CancellationToken.None);
+        return new MyLifeAuthTokenProvider(
+            httpClient,
+            new ConnectorTokenCache(),
+            new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null),
+            tenantAccessor,
+            new MyLifeSoapClient(httpClient, NullLogger<MyLifeSoapClient>.Instance),
+            new MyLifeSessionCache(),
+            NullLogger<MyLifeAuthTokenProvider>.Instance,
+            retryDelay.Object);
     }
 
     /// <summary>Answers the three SOAP calls of a MyLife login, with per-test failure injection.</summary>

@@ -9,6 +9,7 @@
   import { findSessionJob } from "../migration-session";
   import CollectionLanes from "#lib/components/migration/CollectionLanes.svelte";
   import TimeRemaining from "#lib/components/migration/TimeRemaining.svelte";
+  import { Progress } from "#lib/components/ui/progress/index.js";
   import type { ImportResult } from "./Finish.svelte";
   import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import { fresh } from "#lib/api/fresh-query.js";
@@ -61,12 +62,12 @@
   let remaining = $state<string | undefined>(undefined);
   let totalMigrated = $state(0);
 
-  const circumference = 2 * Math.PI * 88; // ≈ 553.0
   const MIN_DURATION_MS = 3000; // minimum time the progress animation takes
   let startedAt = $state(0);
 
   const hasCollections = $derived(Object.keys(collections).length > 0);
   const nothingToShow = $derived(error !== null && !hasCollections);
+  const faulted = $derived(failed || (done && caveatIsFault));
 
   $effect(() => {
     let active = true;
@@ -287,84 +288,35 @@
       {/if}
     </div>
   {:else}
-    <!-- Import hero card -->
-    <div
-      class="grid grid-cols-1 justify-items-center @xl:grid-cols-[1fr_260px] @xl:justify-items-stretch gap-6 p-5 @lg:p-7 rounded-2xl border overflow-hidden relative bg-card"
-    >
-      <!-- Left side -->
-      <div class="flex flex-col gap-3">
-        <span
-          class="font-mono text-xs uppercase tracking-widest text-muted-foreground"
-        >
-          Overall progress
-        </span>
-        <div class="flex items-baseline gap-1">
-          <span
-            class="font-brand font-hairline tabular-nums text-5xl @lg:text-6xl @min-[40rem]:text-7xl text-primary"
-          >
-            {Math.round(progress)}
-          </span>
-          <span
-            class="text-3xl font-brand font-hairline tabular-nums text-muted-foreground"
-          >
-            %
-          </span>
-        </div>
-        <p class="text-sm text-muted-foreground">
-          {#if error}
-            <span class="text-warning">{error}</span>
-          {:else if caveat}
-            <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>
-          {:else if phase === MigrationPhase.Connecting}
-            Connecting to Nightscout
-          {:else if phase === MigrationPhase.Counting}
-            Counting the records in Nightscout
-          {:else if remaining && !done}
-            <TimeRemaining {remaining} /> &middot; {formatNumber(totalMigrated)} records
-          {:else}
-            {formatNumber(totalMigrated)} records imported
-          {/if}
-        </p>
-      </div>
-
-      <!-- Right side — Progress ring -->
-      <div
-        class="relative flex items-center justify-center w-full max-w-50 aspect-square"
+    <div class="flex flex-col gap-3">
+      <span
+        class="font-brand font-hairline tabular-nums text-5xl @lg:text-6xl {faulted
+          ? 'text-warning'
+          : 'text-primary'}"
       >
-        <svg
-          viewBox="0 0 200 200"
-          class="-rotate-90 size-full"
-        >
-          <!-- Track -->
-          <circle
-            cx="100"
-            cy="100"
-            r="88"
-            fill="none"
-            class="stroke-border"
-            stroke-width="6"
-          />
-          <!-- Progress arc -->
-          <circle
-            cx="100"
-            cy="100"
-            r="88"
-            fill="none"
-            stroke="currentColor"
-            class="progress-arc {failed ? 'text-warning' : 'text-primary'}"
-            stroke-width="6"
-            stroke-linecap="round"
-            stroke-dasharray={circumference}
-            stroke-dashoffset={circumference * (1 - progress / 100)}
-          />
-        </svg>
-        <!-- Center overlay -->
-        <span
-          class="absolute font-brand text-4xl font-light tabular-nums text-foreground"
-        >
-          {Math.round(progress)}%
-        </span>
-      </div>
+        {Math.round(progress)}%
+      </span>
+      <Progress
+        value={progress}
+        tone={faulted ? "warning" : "default"}
+        aria-label="Import progress"
+        data-testid="import-progress"
+      />
+      <p class="text-sm text-muted-foreground">
+        {#if error}
+          <span class="text-warning">{error}</span>
+        {:else if caveat}
+          <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>
+        {:else if phase === MigrationPhase.Connecting}
+          Connecting to Nightscout
+        {:else if phase === MigrationPhase.Counting}
+          Counting the records in Nightscout
+        {:else if remaining && !done}
+          <TimeRemaining {remaining} /> &middot; {formatNumber(totalMigrated)} records
+        {:else}
+          {formatNumber(totalMigrated)} records imported
+        {/if}
+      </p>
     </div>
 
     {#if hasCollections}
@@ -373,9 +325,3 @@
   {/if}
 </div>
 
-<style>
-  .progress-arc {
-    transition: stroke-dashoffset 0.6s ease;
-    filter: drop-shadow(0 0 6px currentColor);
-  }
-</style>

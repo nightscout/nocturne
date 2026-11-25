@@ -7,7 +7,7 @@ describe("filterTenantlessNav", () => {
       { title: "Dashboard", href: "/" },
       { title: "Calendar", href: "/calendar" },
       { title: "Clock", href: "/clock" },
-      { title: "Tenants", href: "/tenants" },
+      { title: "People", href: "/people" },
     ];
 
     expect(filterTenantlessNav(items)).toEqual([{ title: "Dashboard", href: "/" }]);
@@ -41,6 +41,20 @@ describe("filterTenantlessNav", () => {
   it("admits the subject's own settings pages as routes", () => {
     expect(isTenantlessRoute("/settings/appearance")).toBe(true);
     expect(isTenantlessRoute("/settings/account")).toBe(true);
+  });
+
+  it("admits the teams pages, which belong to the person, as routes", () => {
+    expect(isTenantlessRoute("/settings/teams")).toBe(true);
+    expect(isTenantlessRoute("/settings/teams/0d3c1f52-7a4b-4f4e-9d1a-1c2b3d4e5f60")).toBe(true);
+    expect(isTenantlessRoute("/teams/join")).toBe(true);
+    expect(isTenantlessRoute("/teams/join-staff")).toBe(true);
+    expect(isTenantlessRoute("/teams/access")).toBe(true);
+  });
+
+  it("does not admit paths that only resemble the teams pages", () => {
+    for (const href of ["/settings/teams/a/b", "/settings/teams/", "/teams", "/teams/join/x", "/teams/join-staff/x", "/teams/access/x", "/teams/accessx", "/teams/access/"]) {
+      expect(isTenantlessRoute(href)).toBe(false);
+    }
   });
 
   it("keeps the rest of settings off a tenantless host", () => {
@@ -88,7 +102,7 @@ describe("filterTenantlessNav", () => {
 describe("isTenantlessRoute", () => {
   it("rejects tenant-scoped routes", () => {
     expect(isTenantlessRoute("/calendar")).toBe(false);
-    expect(isTenantlessRoute("/tenants")).toBe(false);
+    expect(isTenantlessRoute("/people")).toBe(false);
     expect(isTenantlessRoute("/settings/members")).toBe(false);
   });
 

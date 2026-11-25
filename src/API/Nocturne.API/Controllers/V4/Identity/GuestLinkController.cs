@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -12,9 +14,12 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Manages temporary guest access links for read-only data sharing.
+/// Temporary guest links that give a person read-only access to the tenant's data. A caller can
+/// create, list, revoke and dismiss links, and read the scope options a link can grant. A guest
+/// activates a link with its code, and can check whether a code is waiting to be activated.
 /// </summary>
 [ApiController]
+[System.ComponentModel.DisplayName("Guest Links")]
 [Tags("Identity")]
 [Route("api/v4/guest-links")]
 [Produces("application/json")]
@@ -41,6 +46,7 @@ public class GuestLinkController : ControllerBase
     [RequireInteractiveSession]
     [Authorize]
     [DenyDemoSubject]
+    [RequireScope(Scope.SharingGuest)]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -53,8 +59,11 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (!HttpContext.HasScope(Scope.SharingGuest))
-            return Forbid();
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
 
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
         var baseUrl = $"{Request.PublicScheme()}://{Request.Host}";
@@ -66,9 +75,10 @@ public class GuestLinkController : ControllerBase
                 auth.SubjectId.Value,
                 request.Label,
                 baseUrl,
-                HttpContext.GetGrantedScopes(),
+                ceiling.Scopes,
+                ceiling.AccessEndsAt,
                 request.Scopes,
-                limitTo24Hours: HttpContext.IsCallerHistoryClamped(),
+                limitTo24Hours: ceiling.HistoryClamped,
                 ct: ct);
 
             return Ok(result);
@@ -96,15 +106,13 @@ public class GuestLinkController : ControllerBase
     [HttpGet("scope-options")]
     [Authorize]
     [DenyDemoSubject]
+    [RequireScope(Scope.SharingGuest)]
     [RemoteQuery]
     [ProducesResponseType(typeof(GuestLinkScopeOptions), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<GuestLinkScopeOptions> GetGuestLinkScopeOptions()
     {
-        if (!HttpContext.HasScope(Scope.SharingGuest))
-            return Forbid();
-
-        return Ok(GuestLinkService.ScopeOptions(HttpContext.GetGrantedScopes()));
+        return Ok(GuestLinkService.ScopeOptions((HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing).Scopes));
     }
 
     /// <summary>
@@ -183,13 +191,14 @@ public class GuestLinkController : ControllerBase
     [HttpPost("activate")]
     [AllowAnonymous]
     [EnableRateLimiting("guest-activate")]
+    [LimitGuestActivationsPerTenant]
     [ProducesResponseType(typeof(ActivateGuestLinkResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ActivateGuestLink(
         [FromBody] ActivateGuestLinkRequest request,
         CancellationToken ct)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.GetClientAddress();
         var userAgent = Request.Headers.UserAgent.FirstOrDefault();
 
         var result = await _guestLinkService.ActivateAsync(request.Code, ip, userAgent, ct);

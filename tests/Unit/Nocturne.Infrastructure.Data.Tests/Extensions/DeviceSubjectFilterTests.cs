@@ -52,8 +52,16 @@ public class DeviceSubjectFilterTests : IDisposable
         var subjectId = await _context.DeviceSubjectOf(_tenant);
         await _context.DeviceSubjectOf(_tenant);
 
-        var row = (await _context.AuthAuditLog.AsNoTracking().ToListAsync()).Should().ContainSingle().Subject;
-        row.Should().BeEquivalentTo(new
+        var rows = await _context.AuthAuditLog.AsNoTracking().OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows[0].Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.MemberJoined,
+            TargetSubjectId = (Guid?)subjectId,
+            TenantId = (Guid?)_tenant,
+            DetailsJson = """{"kind":"tenant","how":"system"}""",
+        });
+        rows[1].Should().BeEquivalentTo(new
         {
             EventType = AuthAuditEventType.RoleAssigned,
             TargetSubjectId = (Guid?)subjectId,
@@ -67,9 +75,9 @@ public class DeviceSubjectFilterTests : IDisposable
     {
         await _context.DeviceSubjectOf(_tenant);
 
-        // It holds a membership and can never hold a passkey, which is the shape that puts a tenant
-        // into recovery mode for every request.
-        (await _context.OrphanedSubjectsOf(_tenant).ToListAsync()).Should().BeEmpty();
+        // It holds a membership and can never hold a passkey or an address, which is the shape of a
+        // locked-out account.
+        (await _context.OrphanedSubjectsOf(_tenant, AccountLinkRoutes.Off).ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]

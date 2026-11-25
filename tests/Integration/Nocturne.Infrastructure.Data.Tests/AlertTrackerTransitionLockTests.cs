@@ -22,6 +22,9 @@ namespace Nocturne.Infrastructure.Data.Tests;
 [Collection("RLS completeness")]
 public class AlertTrackerTransitionLockTests
 {
+    // A lock on another rule must not wait on a held one; this is how long it has, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
     private readonly RlsCompletenessFixture _fx;
 
     public AlertTrackerTransitionLockTests(RlsCompletenessFixture fx) => _fx = fx;
@@ -49,7 +52,7 @@ public class AlertTrackerTransitionLockTests
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var contender = secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
@@ -60,8 +63,8 @@ public class AlertTrackerTransitionLockTests
         contender.IsCompleted.Should().BeFalse("the first transaction holds the rule's lock");
 
         release.SetResult();
-        await holder.WaitAsync(TimeSpan.FromSeconds(30));
-        (await contender.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be("active",
+        await holder.WaitAsync(Eventually.DefaultPatience);
+        (await contender.WaitAsync(Eventually.DefaultPatience)).Should().Be("active",
             "the lock is granted after the holder's commit, so the contender reads what it wrote");
     }
 
@@ -88,13 +91,13 @@ public class AlertTrackerTransitionLockTests
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         await secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
             await tx.LockRuleAsync(ruleB, ct);
             return true;
-        }).WaitAsync(TimeSpan.FromSeconds(10));
+        }).WaitAsync(MustNotWaitLongerThan);
 
         release.SetResult();
         await holder;
@@ -111,6 +114,30 @@ public class AlertTrackerTransitionLockTests
         var act = () => new AlertTrackerRepository(DbUnitOfWork.Own(context)).LockRuleAsync(Guid.NewGuid());
 
         await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task A_tracker_row_is_written_without_the_retired_count_and_one_that_holds_it_still_reads()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedTenantAsync(tenant);
+        await using var provider = BuildProvider();
+        var ruleId = await SeedRuleAsync(provider, tenant);
+
+        await using var context = await ContextAsync(provider, tenant);
+        var repository = new AlertTrackerRepository(DbUnitOfWork.Own(context));
+        await repository.UpsertTrackerStateAsync(State(ruleId, "active"));
+
+        var stored = await context.Database
+            .SqlQuery<int>($"SELECT confirmation_count AS \"Value\" FROM alert_tracker_state WHERE alert_rule_id = {ruleId}")
+            .SingleAsync();
+        stored.Should().Be(0, "the column keeps its default while the model no longer writes it");
+
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE alert_tracker_state SET state = 'confirming', confirmation_count = 3 WHERE alert_rule_id = {ruleId}");
+        await using var fresh = await ContextAsync(provider, tenant);
+        var reader = new AlertTrackerRepository(DbUnitOfWork.Own(fresh));
+        (await reader.GetTrackerStateAsync(ruleId))!.State.Should().Be("confirming");
     }
 
     private static AlertTrackerState State(Guid ruleId, string state) => new()

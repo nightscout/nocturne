@@ -35,7 +35,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Notes,
         SyncDataType.Activity
     ],
-    DocumentationUrl = UrlConstants.External.DocsGlooko
+    LegacyIdPrefix = "glooko"
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration
 {

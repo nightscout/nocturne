@@ -1,0 +1,1941 @@
+{
+ "template glucose": {
+  "version": 1,
+  "title": "Glucose",
+  "range": {
+   "hours": 6,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "glucose",
+    "title": null,
+    "kind": "chart",
+    "range": {
+     "hours": 6,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "basal",
+      "title": "Basal",
+      "height": 0.5,
+      "layers": [
+       {
+        "id": "basal",
+        "title": "Basal",
+        "dataset": {
+         "name": "basal_delivery"
+        },
+        "derived": null,
+        "mark": "area",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "delivered"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "glucose",
+      "title": "Glucose",
+      "height": 2,
+      "layers": [
+       {
+        "id": "target",
+        "title": "Target range",
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "time",
+         "y": null,
+         "edges": [
+          "targetLow",
+          "targetHigh"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "glucose",
+        "title": "Glucose",
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "glucose"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "treatments",
+        "title": "Boluses and carbs",
+        "dataset": {
+         "name": "treatments",
+         "types": [
+          "bolus",
+          "carbs"
+         ],
+         "minCarbs": null,
+         "minInsulin": null
+        },
+        "derived": null,
+        "mark": "markers",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "insulin",
+          "carbs"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "onboard",
+      "title": "On board",
+      "height": 0.6,
+      "layers": [
+       {
+        "id": "iob",
+        "title": "IOB",
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "iob"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "cob",
+        "title": "COB",
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "cob"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "states",
+      "title": "Modes",
+      "height": 0.3,
+      "layers": [
+       {
+        "id": "spans",
+        "title": "Modes and overrides",
+        "dataset": {
+         "name": "state_spans",
+         "kinds": null
+        },
+        "derived": null,
+        "mark": "spans",
+        "bindings": {
+         "x": null,
+         "y": null,
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": "start",
+         "end": "end",
+         "category": "kind"
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "template agp": {
+  "version": 1,
+  "title": "Ambulatory glucose profile, last 14 days",
+  "range": {
+   "hours": 336,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "figures",
+    "title": "Key figures",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv",
+      "timeBelow",
+      "timeAbove",
+      "tdd",
+      "basalPercent",
+      "carbsPerDay"
+     ]
+    }
+   },
+   {
+    "id": "profile",
+    "title": "Glucose pattern over the day",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "bands",
+        "title": null,
+        "dataset": {
+         "name": "glucose_distribution_by_hour",
+         "dayOfWeek": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "hour",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP10",
+          "glucoseP25",
+          "glucoseP75",
+          "glucoseP90"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "ranges",
+    "title": "Time in each glucose range",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "ranges",
+        "title": null,
+        "dataset": {
+         "name": "glucose_distribution"
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "period",
+         "y": [
+          "veryLow",
+          "low",
+          "inRange",
+          "high",
+          "veryHigh"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "horizontal",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "template treatments": {
+  "version": 1,
+  "title": "Treatments, last 24 hours",
+  "range": {
+   "hours": 24,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "glucose",
+    "title": "Glucose with boluses and carbs",
+    "kind": "chart",
+    "range": {
+     "hours": 24,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "glucose",
+        "title": "Glucose",
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "glucose"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "markers",
+        "title": "Boluses and carbs",
+        "dataset": {
+         "name": "treatments",
+         "types": [
+          "bolus",
+          "carbs"
+         ],
+         "minCarbs": null,
+         "minInsulin": null
+        },
+        "derived": null,
+        "mark": "markers",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "insulin",
+          "carbs"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "treatments",
+    "title": "Treatment records",
+    "kind": "table",
+    "range": {
+     "hours": 24,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "treatments",
+     "types": null,
+     "minCarbs": null,
+     "minInsulin": null
+    },
+    "bindings": {
+     "columns": [
+      "time",
+      "type",
+      "insulin",
+      "injectionUnits",
+      "carbs",
+      "bgCheck",
+      "rate",
+      "durationMinutes",
+      "automatic",
+      "detail"
+     ]
+    }
+   }
+  ]
+ },
+ "template comparison": {
+  "version": 1,
+  "title": "Period comparison",
+  "range": null,
+  "panels": [
+   {
+    "id": "comparison",
+    "title": "Two periods side by side",
+    "kind": "comparison",
+    "range": {
+     "hours": 672,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "period_comparison",
+     "preset": "last14-prior14",
+     "a": null,
+     "b": null
+    },
+    "bindings": {
+     "columns": [
+      "metric",
+      "group",
+      "label",
+      "a",
+      "b",
+      "delta",
+      "changePercent",
+      "direction",
+      "unit",
+      "verdict",
+      "color"
+     ]
+    }
+   }
+  ]
+ },
+ "template weekdays": {
+  "version": 1,
+  "title": "Weekdays and the weekend, last 28 days",
+  "range": {
+   "hours": 672,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "weekdays",
+    "title": "Glucose over the day: median and middle half",
+    "kind": "chart",
+    "range": {
+     "hours": 672,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "weekdays",
+        "title": "Monday to Friday",
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": [
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri"
+         ],
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "weekend",
+        "title": "Saturday and Sunday",
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": [
+          "Sat",
+          "Sun"
+         ],
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "template insulin-glucose": {
+  "version": 1,
+  "title": "Insulin and glucose, last 14 days",
+  "range": {
+   "hours": 336,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "scatter",
+    "title": "Glucose against insulin on board",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": 15,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "scatter",
+        "title": null,
+        "dataset": null,
+        "derived": {
+         "op": "scatter",
+         "b": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "glucose",
+          "series": null
+         },
+         "a": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "iob",
+          "series": null
+         }
+        },
+        "mark": "points",
+        "bindings": {
+         "x": "a",
+         "y": [
+          "b"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": "fit",
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "lag",
+    "title": "Correlation of IOB with glucose shifted earlier and later",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": 15,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "lag",
+        "title": null,
+        "dataset": null,
+        "derived": {
+         "op": "lag_correlation",
+         "b": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "glucose",
+          "series": null
+         },
+         "a": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "iob",
+          "series": null
+         }
+        },
+        "mark": "line",
+        "bindings": {
+         "x": "lag",
+         "y": [
+          "r"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "saved Year by quarter": {
+  "version": 1,
+  "title": "The year, quarter by quarter",
+  "range": null,
+  "panels": [
+   {
+    "id": "q1",
+    "title": "16 Nov 2025 to 14 Feb 2026",
+    "group": "quarters",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": null,
+     "from": "2025-11-16T00:00:00+00:00",
+     "to": "2026-02-14T00:00:00+00:00"
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv"
+     ]
+    }
+   },
+   {
+    "id": "q2",
+    "title": "15 Feb 2026 to 16 May 2026",
+    "group": "quarters",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": null,
+     "from": "2026-02-15T00:00:00+00:00",
+     "to": "2026-05-16T00:00:00+00:00"
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv"
+     ]
+    }
+   },
+   {
+    "id": "q3",
+    "title": "17 May 2026 to 15 Aug 2026",
+    "group": "quarters",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": null,
+     "from": "2026-05-17T00:00:00+00:00",
+     "to": "2026-08-15T00:00:00+00:00"
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv"
+     ]
+    }
+   },
+   {
+    "id": "q4",
+    "title": "16 Aug 2026 to 14 Nov 2026",
+    "group": "quarters",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": null,
+     "from": "2026-08-16T00:00:00+00:00",
+     "to": "2026-11-14T00:00:00+00:00"
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv"
+     ]
+    }
+   }
+  ]
+ },
+ "saved This month against a year ago": {
+  "version": 1,
+  "title": "The last 30 days against the same 30 days a year ago",
+  "range": null,
+  "panels": [
+   {
+    "id": "yoy",
+    "title": "A year apart",
+    "kind": "comparison",
+    "range": {
+     "hours": 672,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "period_comparison",
+     "preset": null,
+     "a": {
+      "from": "2025-11-17",
+      "to": "2025-12-16"
+     },
+     "b": {
+      "from": "2026-10-16",
+      "to": "2026-11-14"
+     }
+    },
+    "bindings": {
+     "columns": [
+      "metric",
+      "group",
+      "label",
+      "a",
+      "b",
+      "delta",
+      "changePercent",
+      "direction",
+      "unit",
+      "verdict",
+      "color"
+     ]
+    }
+   }
+  ]
+ },
+ "saved Time in range, 90 days": {
+  "version": 1,
+  "title": "Daily time in range over 90 days",
+  "range": {
+   "hours": 2160,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "tir",
+    "title": "Time below, in and above range, day by day",
+    "kind": "chart",
+    "range": {
+     "hours": 2160,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "days",
+        "title": null,
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeBelow",
+          "timeInRange",
+          "timeAbove"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "mean",
+    "title": "Mean glucose, with its 7-day rolling mean",
+    "kind": "chart",
+    "range": {
+     "hours": 2160,
+     "from": null,
+     "to": null
+    },
+    "grid": 1440,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "mean",
+        "title": "Glucose",
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "glucose"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "rolling",
+        "title": "7-day rolling mean",
+        "dataset": null,
+        "derived": {
+         "op": "rolling_mean",
+         "minutes": 10080,
+         "a": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "glucose",
+          "series": null
+         }
+        },
+        "mark": "line",
+        "bindings": {
+         "x": "x",
+         "y": [
+          "value"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "trend",
+        "title": "Trend",
+        "dataset": null,
+        "derived": {
+         "op": "trend",
+         "confidence": true,
+         "a": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "glucose",
+          "series": null
+         }
+        },
+        "mark": "line",
+        "bindings": {
+         "x": "x",
+         "y": [
+          "value"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "figures",
+    "title": "Key figures",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": 2160,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv",
+      "timeBelow",
+      "timeAbove",
+      "tdd",
+      "carbsPerDay"
+     ]
+    }
+   }
+  ]
+ },
+ "saved Winter and summer": {
+  "version": 1,
+  "title": "Glucose over the day: winter and summer",
+  "range": null,
+  "panels": [
+   {
+    "id": "winter",
+    "title": "Dec 2025, 60 days",
+    "group": "seasons",
+    "kind": "chart",
+    "range": {
+     "hours": null,
+     "from": "2025-12-16T00:00:00+00:00",
+     "to": "2026-02-14T00:00:00+00:00"
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "band",
+        "title": null,
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": null,
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "summer",
+    "title": "Jun 2026, 60 days",
+    "group": "seasons",
+    "kind": "chart",
+    "range": {
+     "hours": null,
+     "from": "2026-06-14T00:00:00+00:00",
+     "to": "2026-08-13T00:00:00+00:00"
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "band",
+        "title": null,
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": null,
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "saved Activity and sleep": {
+  "version": 1,
+  "title": "Steps, heart rate and sleep against glucose, last 30 days",
+  "range": {
+   "hours": 720,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "act",
+    "title": "Day by day",
+    "kind": "chart",
+    "range": {
+     "hours": 720,
+     "from": null,
+     "to": null
+    },
+    "grid": 1440,
+    "tracks": [
+     {
+      "id": "glucose",
+      "title": "Mean glucose and time in range",
+      "height": 1,
+      "layers": [
+       {
+        "id": "g",
+        "title": null,
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "glucose"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "tir",
+        "title": "Time in range",
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeInRange"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "steps",
+      "title": "Steps",
+      "height": 1,
+      "layers": [
+       {
+        "id": "s",
+        "title": null,
+        "dataset": {
+         "name": "steps"
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "steps"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": false,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "hr",
+      "title": "Heart rate",
+      "height": 1,
+      "layers": [
+       {
+        "id": "h",
+        "title": null,
+        "dataset": {
+         "name": "heart_rate"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "bpm"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "sleep",
+      "title": "Sleep",
+      "height": 1,
+      "layers": [
+       {
+        "id": "z",
+        "title": null,
+        "dataset": {
+         "name": "sleep"
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "night",
+         "y": [
+          "totalSleep"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": false,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "steps-glucose",
+    "title": "Glucose against steps, hourly",
+    "kind": "chart",
+    "range": {
+     "hours": 720,
+     "from": null,
+     "to": null
+    },
+    "grid": 60,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "sc",
+        "title": null,
+        "dataset": null,
+        "derived": {
+         "op": "scatter",
+         "b": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "glucose",
+          "series": null
+         },
+         "a": {
+          "dataset": {
+           "name": "steps"
+          },
+          "derived": null,
+          "field": "steps",
+          "series": null
+         }
+        },
+        "mark": "points",
+        "bindings": {
+         "x": "a",
+         "y": [
+          "b"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": "fit",
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "saved AGP, 90 days": {
+  "version": 1,
+  "title": "Ambulatory glucose profile, last 90 days",
+  "range": {
+   "hours": 2160,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "figures",
+    "title": "Key figures",
+    "kind": "stat_tiles",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": null,
+    "dataset": {
+     "name": "glucose_statistics"
+    },
+    "bindings": {
+     "columns": [
+      "timeInRangePercent",
+      "mean",
+      "gmi",
+      "cv",
+      "timeBelow",
+      "timeAbove",
+      "tdd",
+      "basalPercent",
+      "carbsPerDay"
+     ]
+    }
+   },
+   {
+    "id": "profile",
+    "title": "Glucose pattern over the day",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "bands",
+        "title": null,
+        "dataset": {
+         "name": "glucose_distribution_by_hour",
+         "dayOfWeek": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "hour",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP10",
+          "glucoseP25",
+          "glucoseP75",
+          "glucoseP90"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   },
+   {
+    "id": "ranges",
+    "title": "Time in each glucose range",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "ranges",
+        "title": null,
+        "dataset": {
+         "name": "glucose_distribution"
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "period",
+         "y": [
+          "veryLow",
+          "low",
+          "inRange",
+          "high",
+          "veryHigh"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "horizontal",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "saved Weekdays and weekend, 90 days": {
+  "version": 1,
+  "title": "Weekdays and the weekend, last 90 days",
+  "range": {
+   "hours": 2160,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "weekdays",
+    "title": "Glucose over the day: median and middle half",
+    "kind": "chart",
+    "range": {
+     "hours": 672,
+     "from": null,
+     "to": null
+    },
+    "grid": null,
+    "tracks": [
+     {
+      "id": "t1",
+      "title": null,
+      "height": 1,
+      "layers": [
+       {
+        "id": "weekdays",
+        "title": "Monday to Friday",
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": [
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri"
+         ],
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "weekend",
+        "title": "Saturday and Sunday",
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": [
+          "Sat",
+          "Sun"
+         ],
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ },
+ "saved Mixed axes": {
+  "version": 1,
+  "title": "One panel, several axes",
+  "range": {
+   "hours": 336,
+   "from": null,
+   "to": null
+  },
+  "panels": [
+   {
+    "id": "mixed",
+    "title": "The last 14 days, the day's pattern, and glucose against insulin",
+    "kind": "chart",
+    "range": {
+     "hours": 336,
+     "from": null,
+     "to": null
+    },
+    "grid": 60,
+    "tracks": [
+     {
+      "id": "glucose",
+      "title": "Glucose and daily time in range",
+      "height": 1.5,
+      "layers": [
+       {
+        "id": "g",
+        "title": null,
+        "dataset": {
+         "name": "glucose_series"
+        },
+        "derived": null,
+        "mark": "line",
+        "bindings": {
+         "x": "time",
+         "y": [
+          "glucose"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       },
+       {
+        "id": "tir",
+        "title": "Time in range",
+        "dataset": {
+         "name": "daily_summary",
+         "days": null
+        },
+        "derived": null,
+        "mark": "bars",
+        "bindings": {
+         "x": "day",
+         "y": [
+          "timeInRange"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": true,
+         "orientation": "vertical",
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "modes",
+      "title": "Modes, and sleep",
+      "height": 0.6,
+      "layers": [
+       {
+        "id": "spans",
+        "title": "Modes and overrides",
+        "dataset": {
+         "name": "state_spans",
+         "kinds": null
+        },
+        "derived": null,
+        "mark": "spans",
+        "bindings": {
+         "x": null,
+         "y": null,
+         "edges": null,
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": "start",
+         "end": "end",
+         "category": "kind"
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "profile",
+      "title": "Glucose over the day",
+      "height": 1,
+      "layers": [
+       {
+        "id": "band",
+        "title": null,
+        "dataset": {
+         "name": "daily_profile",
+         "dayOfWeek": null,
+         "days": null,
+         "excludeOverrides": false,
+         "excludeTemporaryTargets": false,
+         "excludeExercise": false,
+         "excludeIllness": true,
+         "excludeOpenLoop": true,
+         "profileName": null
+        },
+        "derived": null,
+        "mark": "band",
+        "bindings": {
+         "x": "minuteOfDay",
+         "y": [
+          "glucoseP50"
+         ],
+         "edges": [
+          "glucoseP25",
+          "glucoseP75"
+         ],
+         "series": null,
+         "fit": null,
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     },
+     {
+      "id": "scatter",
+      "title": "Glucose against insulin on board",
+      "height": 1,
+      "layers": [
+       {
+        "id": "sc",
+        "title": null,
+        "dataset": null,
+        "derived": {
+         "op": "scatter",
+         "b": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "glucose",
+          "series": null
+         },
+         "a": {
+          "dataset": {
+           "name": "glucose_series"
+          },
+          "derived": null,
+          "field": "iob",
+          "series": null
+         }
+        },
+        "mark": "points",
+        "bindings": {
+         "x": "a",
+         "y": [
+          "b"
+         ],
+         "edges": null,
+         "series": null,
+         "fit": "fit",
+         "stacked": null,
+         "orientation": null,
+         "start": null,
+         "end": null,
+         "category": null
+        },
+        "range": null
+       }
+      ]
+     }
+    ],
+    "dataset": null,
+    "bindings": null
+   }
+  ]
+ }
+}

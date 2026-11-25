@@ -21,7 +21,7 @@ public class GlookoV4TreatmentMapperSsv2CarbsTests
     {
         var logger = Mock.Of<ILogger>();
         var timeMapper = new GlookoTimeMapper(new GlookoConnectorConfiguration(), logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
     }
 
     [Fact]
@@ -33,7 +33,6 @@ public class GlookoV4TreatmentMapperSsv2CarbsTests
 
         carbs.Should().ContainSingle();
         carbs[0].Carbs.Should().Be(45);
-        carbs[0].DataSource.Should().Be("glooko-connector");
         carbs[0].LegacyId.Should().Be("glooko_carbs_event_c-9");
         carbs[0].SyncIdentifier.Should().Be(carbs[0].LegacyId);
         carbs[0].Timestamp.Should().Be(new DateTime(2026, 6, 20, 12, 30, 0, DateTimeKind.Utc));

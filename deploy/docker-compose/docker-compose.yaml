@@ -74,6 +74,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    stop_grace_period: "35s"
     labels:
       com.centurylinklabs.watchtower.enable: "true"
   nocturne-web:

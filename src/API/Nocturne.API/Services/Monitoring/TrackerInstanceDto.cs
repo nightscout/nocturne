@@ -1,5 +1,4 @@
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -32,37 +31,39 @@ public class TrackerInstanceDto
     /// </summary>
     public TrackerThresholdTimeDto[] Schedule { get; set; } = [];
 
-    public static TrackerInstanceDto FromEntity(TrackerInstanceEntity entity) =>
+    /// <summary>The run as a client reads it, its age measured at <paramref name="now"/>.</summary>
+    public static TrackerInstanceDto From(TrackerInstance instance, DateTime now) =>
         new()
         {
-            Id = entity.Id,
-            DefinitionId = entity.DefinitionId,
-            DefinitionName = entity.Definition?.Name ?? string.Empty,
-            Category = entity.Definition?.Category ?? TrackerCategory.Custom,
-            Icon = entity.Definition?.Icon ?? "activity",
-            StartedAt = entity.StartedAt,
-            CompletedAt = entity.CompletedAt,
-            ExpectedEndAt = entity.ExpectedEndAt,
-            ScheduledAt = entity.ScheduledAt,
-            StartNotes = entity.StartNotes,
-            CompletionNotes = entity.CompletionNotes,
-            CompletionReason = entity.CompletionReason,
-            AgeHours = entity.AgeHours,
-            IsActive = entity.IsActive,
-            LastAckedAt = entity.LastAckedAt,
-            AckSnoozeMins = entity.AckSnoozeMins,
-            Schedule = entity.Definition is null
-                ? []
-                : [.. entity.Definition.NotificationThresholds
+            Id = instance.Id,
+            DefinitionId = instance.DefinitionId,
+            DefinitionName = instance.Definition.Name,
+            Category = instance.Definition.Category,
+            Icon = instance.Definition.Icon,
+            StartedAt = instance.StartedAt,
+            CompletedAt = instance.CompletedAt,
+            ExpectedEndAt = instance.ExpectedEndAt,
+            ScheduledAt = instance.ScheduledAt,
+            StartNotes = instance.StartNotes,
+            CompletionNotes = instance.CompletionNotes,
+            CompletionReason = instance.CompletionReason,
+            AgeHours = instance.AgeHoursAt(now),
+            IsActive = instance.IsActive,
+            LastAckedAt = instance.LastAckedAt,
+            AckSnoozeMins = instance.AckSnoozeMins,
+            Schedule =
+            [
+                .. instance.Definition.NotificationThresholds
                     .OrderBy(t => t.DisplayOrder)
-                    .Select(t => (Threshold: t, FiresAt: TrackerSchedule.FiresAt(entity, t)))
+                    .Select(t => (Threshold: t, FiresAt: TrackerSchedule.FiresAt(instance, t)))
                     .Where(t => t.FiresAt is not null)
                     .Select(t => new TrackerThresholdTimeDto
                     {
                         Urgency = t.Threshold.Urgency,
                         FiresAt = t.FiresAt!.Value,
                         Description = t.Threshold.Description,
-                    })],
+                    }),
+            ],
         };
 }
 

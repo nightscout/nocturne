@@ -12,7 +12,6 @@
         "is_active": true,
         "for_minutes": null
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -25,7 +24,6 @@
         "is_active": true,
         "for_minutes": 30
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -38,7 +36,6 @@
         "is_active": false,
         "for_minutes": null
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
@@ -55,10 +52,12 @@
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
         "has_ever_aps_sensitivity": false,
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-01-05T11:50:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:50:00Z"
+          }
+        ],
         "sleep_session_active": false
       }
     },
@@ -73,10 +72,12 @@
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
         "has_ever_aps_sensitivity": false,
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-01-05T11:35:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:35:00Z"
+          }
+        ],
         "sleep_session_active": false
       }
     },
@@ -91,10 +92,12 @@
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
         "has_ever_aps_sensitivity": false,
-        "active_pump_state": {
-          "mode": "Manual",
-          "started_at": "2026-01-05T11:50:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Manual",
+            "started_at": "2026-01-05T11:50:00Z"
+          }
+        ],
         "sleep_session_active": false
       }
     },

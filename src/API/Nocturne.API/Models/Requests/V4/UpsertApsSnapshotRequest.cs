@@ -128,6 +128,9 @@ public class UpsertApsSnapshotRequest : IBulkUpsertRequest
     /// <summary>Full serialized Loop status object for round-trip fidelity</summary>
     public string? LoopJson { get; set; }
 
+    /// <summary>The override object Loop uploaded with the status, as it sent it</summary>
+    public string? OverrideJson { get; set; }
+
     /// <summary>Catch-all for fields not mapped to dedicated columns</summary>
     public Dictionary<string, object?>? AdditionalProperties { get; set; }
 }

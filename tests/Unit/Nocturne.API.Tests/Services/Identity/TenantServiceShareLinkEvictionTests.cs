@@ -40,8 +40,8 @@ public sealed class TenantServiceShareLinkEvictionTests : IDisposable
     private TenantService Service() => new(
         _db.ContextFactory.AsNocturneFactory(),
         Tenants(),
-        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory()),
-        new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
         _cache,
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -49,7 +49,7 @@ public sealed class TenantServiceShareLinkEvictionTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>());
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private ShareTokenCacheService ShareLinks() =>
         new(_cache, Tenants(), Mock.Of<ILogger<ShareTokenCacheService>>());

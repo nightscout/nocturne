@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -23,7 +24,10 @@ public class AuthorizationManagementControllerTests
         _controller = new AuthorizationController(
             _mockAuthorizationService.Object,
             _mockLogger.Object
-        );
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
     }
 
     #region Subject Management Tests
@@ -78,7 +82,7 @@ public class AuthorizationManagementControllerTests
             Modified = DateTime.UtcNow,
         };
         _mockAuthorizationService
-            .Setup(s => s.CreateSubjectAsync(It.IsAny<Subject>()))
+            .Setup(s => s.CreateSubjectAsync(It.IsAny<Subject>(), It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>()))
             .ReturnsAsync(createdSubject);
 
         // Act
@@ -268,6 +272,24 @@ public class AuthorizationManagementControllerTests
 
         // Assert
         Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateRole_ByAnInactiveCaller_IsRefusedAndNothingIsUpdated()
+    {
+        var subjectId = Guid.CreateVersion7();
+        var tenantId = Guid.CreateVersion7();
+        var http = _controller.ControllerContext.HttpContext;
+        http.Items["AuthContext"] = new Nocturne.Core.Models.Authorization.AuthContext
+        {
+            IsAuthenticated = true, SubjectId = subjectId, TenantId = tenantId,
+        };
+        new Nocturne.API.Middleware.RequestMembership(subjectId, tenantId, null) { SubjectIsInactive = true }.StoreOn(http);
+
+        var result = await _controller.UpdateRole(new Role { Id = "67890", Name = "moderator" });
+
+        Assert.IsType<ChallengeResult>(result.Result);
+        _mockAuthorizationService.Verify(s => s.UpdateRoleAsync(It.IsAny<Role>()), Times.Never);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -16,6 +17,8 @@ namespace Nocturne.API.Tests.Services.V4;
 
 public class ActivityDecomposerBatchTests : IDisposable
 {
+    private static readonly DateTimeOffset ReceivedAt = new(2026, 10, 29, 3, 4, 5, 678, TimeSpan.Zero);
+
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanRepository> _stateSpanRepoMock;
     private readonly Mock<ISleepService> _sleepServiceMock;
@@ -44,7 +47,7 @@ public class ActivityDecomposerBatchTests : IDisposable
         _decomposer = new ActivityDecomposer(
             new ActivityRecordRepository(_context.AsFactory(), TimeProvider.System),
             _stateSpanRepoMock.Object,
-            _sleepServiceMock.Object, NullLogger<ActivityDecomposer>.Instance);
+            _sleepServiceMock.Object, new FakeTimeProvider(ReceivedAt), NullLogger<ActivityDecomposer>.Instance);
     }
 
     public void Dispose()
@@ -306,17 +309,40 @@ public class ActivityDecomposerBatchTests : IDisposable
     [InlineData(
         """{"timestamp":-1,"timeStamp":"soon","created_at":"2026-05-28T20:26:44Z"}""",
         1_780_000_004_000, null)]
-    [InlineData(
-        """{"timeStamp":null,"created_at":null}""",
-        0, null)]
     public void NormalizeMills_TakesTheFirstUsableRung(string json, long expectedMills, int? expectedUtcOffset)
     {
         var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(json)!;
 
-        ActivityDecomposer.NormalizeMills(activity);
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
 
         activity.Mills.Should().Be(expectedMills);
         activity.UtcOffset.Should().Be(expectedUtcOffset);
+    }
+
+    [Theory]
+    [InlineData("""{}""")]
+    [InlineData("""{"timeStamp":null,"created_at":null}""")]
+    [InlineData("""{"created_at":"soon"}""")]
+    public void NormalizeMills_NoUsableTime_DatesTheActivityByReceipt(string json)
+    {
+        var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(json)!;
+
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
+
+        activity.Mills.Should().Be(ReceivedAt.ToUnixTimeMilliseconds());
+        activity.UtcOffset.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_HeartRateWithoutAnyTime_IsStoredAtReceipt()
+    {
+        var activity = System.Text.Json.JsonSerializer.Deserialize<Activity>(
+            """{"_id":"hr-no-time","type":"hr-bpm","bpm":64}""")!;
+
+        await _decomposer.DecomposeBatchAsync([activity], WriteOrigin.Backfill);
+
+        _context.HeartRates.Should().ContainSingle().Which.Timestamp
+            .Should().Be(ReceivedAt.UtcDateTime);
     }
 
     #endregion
@@ -469,7 +495,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void MapToHeartRate_XDripHeartRateWithoutId_KeysItByTimeAndKeepsItsType()
     {
         var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
-        ActivityDecomposer.NormalizeMills(activity);
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
 
         var heartRate = ActivityDecomposer.MapToHeartRate(activity);
 
@@ -498,7 +524,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     {
         var activity = CreateXDripHeartRateUpload(1_780_000_000_123, 72);
         activity.DataSource = "nightscout-connector";
-        ActivityDecomposer.NormalizeMills(activity);
+        ActivityDecomposer.NormalizeMills(activity, ReceivedAt);
 
         var heartRate = ActivityDecomposer.MapToHeartRate(activity);
 

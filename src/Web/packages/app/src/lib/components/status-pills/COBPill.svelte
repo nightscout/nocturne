@@ -47,16 +47,6 @@
       items.push({ label: "Source", value: data.source });
     }
 
-    // Decay status
-    if (data.isDecaying !== undefined) {
-      items.push({
-        label: "Status",
-        value: data.isDecaying
-          ? "Actively absorbing"
-          : "Waiting for absorption",
-      });
-    }
-
     return items;
   });
 

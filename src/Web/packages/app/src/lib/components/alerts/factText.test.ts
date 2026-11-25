@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { FACT_GROUP_ORDER, LEAF_FACTS } from "./factCatalog";
 import { factDescription, factGroupLabel, factLabel } from "./factText.svelte";
 
-const ACRONYMS = new Set(["AAPS", "CGM", "APS", "IOB", "COB", "DND", "Trio"]);
+const ACRONYMS = new Set(["AAPS", "AndroidAPS", "CGM", "APS", "IOB", "COB", "DND", "Trio"]);
 
 function isSentenceCase(text: string): boolean {
   return text

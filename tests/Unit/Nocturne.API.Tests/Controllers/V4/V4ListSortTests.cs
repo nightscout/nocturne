@@ -37,7 +37,7 @@ public class V4ListSortTests
         nameof(StateSpansController.GetTravel),
         nameof(StateSpansController.GetActivities),
         nameof(SleepController.GetSessions),
-        nameof(NutritionController.GetCarbIntakes),
+        $"{nameof(CarbIntakeController)}.{nameof(CarbIntakeController.GetAll)}",
         nameof(TempBasalController.GetAll),
         nameof(ProfileController.GetTherapySettings),
     ];
@@ -71,12 +71,7 @@ public class V4ListSortTests
     {
         var spans = new StateSpansController(Mock.Of<IStateSpanService>(), Mock.Of<ISignalRBroadcastService>());
         var sleep = new SleepController(Mock.Of<ISleepService>());
-        var nutrition = new NutritionController(
-            Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<IBolusRepository>(),
-            Mock.Of<ITreatmentFoodService>(),
-            Mock.Of<IFoodRepository>(),
-            Mock.Of<IMealReadService>());
+        var carbIntakes = new CarbIntakeController(Mock.Of<ICarbIntakeRepository>(), Mock.Of<ITreatmentFoodService>());
         var tempBasal = new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>());
         var profile = new ProfileController(
             Mock.Of<ITherapySettingsRepository>(),
@@ -87,8 +82,9 @@ public class V4ListSortTests
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>());
-        foreach (var controller in new ControllerBase[] { spans, sleep, nutrition, tempBasal, profile })
+            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>());
+        foreach (var controller in new ControllerBase[] { spans, sleep, carbIntakes, tempBasal, profile })
             controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
 
         return list switch
@@ -98,7 +94,7 @@ public class V4ListSortTests
             nameof(StateSpansController.GetTravel) => (await spans.GetTravel(sort: InvalidSort)).Result!,
             nameof(StateSpansController.GetActivities) => (await spans.GetActivities(sort: InvalidSort)).Result!,
             nameof(SleepController.GetSessions) => (await sleep.GetSessions(sort: InvalidSort)).Result!,
-            nameof(NutritionController.GetCarbIntakes) => (await nutrition.GetCarbIntakes(null, null, sort: InvalidSort)).Result!,
+            $"{nameof(CarbIntakeController)}.{nameof(CarbIntakeController.GetAll)}" => (await carbIntakes.GetAll(null, null, sort: InvalidSort)).Result!,
             nameof(TempBasalController.GetAll) => (await tempBasal.GetAll(null, null, sort: InvalidSort)).Result!,
             nameof(ProfileController.GetTherapySettings) => (await profile.GetTherapySettings(null, null, sort: InvalidSort)).Result!,
             _ => throw new ArgumentOutOfRangeException(nameof(list), list, null),

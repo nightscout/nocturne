@@ -299,14 +299,17 @@
     },
     {
       "label": "generate-typescript-client",
-      "command": "nswag",
-      "type": "shell",
-      "args": ["run", "nswag.json"],
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/API/Nocturne.API/Nocturne.API.csproj",
+        "-p:GenerateNSwagClient=true",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
       "group": "build",
       "isBackground": false,
-      "options": {
-        "cwd": "${workspaceFolder}/src/API/Nocturne.API"
-      },
       "presentation": {
         "echo": true,
         "reveal": "always",
@@ -315,24 +318,7 @@
         "showReuseMessage": true,
         "clear": false
       },
-      "problemMatcher": []
-    },
-    {
-      "label": "generate-typescript-client-with-transform",
-      "type": "shell",
-      "command": "cd src/API/Nocturne.API && nswag run nswag.json && cd ../../Web/utils/transformApiClient && node index.js",
-      "group": "build",
-      "isBackground": false,
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared"
-      },
-      "problemMatcher": []
+      "problemMatcher": "$msCompile"
     }
   ],
   "inputs": [

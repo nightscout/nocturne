@@ -196,6 +196,100 @@ public class StateSpanDedupSupersessionTests : IDisposable
         await TheOneOpenSpanAsync(category, null);
     }
 
+    private static StateSpan LoopOverrideTreatment(DateTime? end) => new()
+    {
+        Category = StateSpanCategory.Override,
+        State = OverrideState.Custom.ToString(),
+        StartTimestamp = T,
+        EndTimestamp = end,
+        Source = "loop://iPhone",
+        OriginalId = "treatment-1",
+        Metadata = new Dictionary<string, object>
+        {
+            [StateSpanMetadataExtensions.CollectionKey] = StateSpanMetadataExtensions.TreatmentsCollection,
+            ["reason"] = "N Night",
+        },
+    };
+
+    private static StateSpan LoopOverrideDeviceStatus(DateTime? end) => new()
+    {
+        Category = StateSpanCategory.Override,
+        State = OverrideState.Custom.ToString(),
+        StartTimestamp = T.AddSeconds(5),
+        EndTimestamp = end,
+        Source = "iPhone",
+        OriginalId = "devicestatus-1",
+        Metadata = new Dictionary<string, object>
+        {
+            [StateSpanMetadataExtensions.CollectionKey] = StateSpanMetadataExtensions.DeviceStatusCollection,
+            ["name"] = "Night",
+        },
+    };
+
+    /// <summary>
+    /// Loop reports one override as a treatment and as a device status, which deduplication links into one
+    /// group. Which copy is the primary depends on the order and the ends, so a read that leaves out the hidden
+    /// copies can lose the device status one; the all-copies read never does.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public async Task LoopsTwoRecordsOfOneOverride_AreOneVisibleSpan_AndTheAllCopiesReadHasBoth(
+        bool deviceStatusFirst, bool treatmentEnds, bool deviceStatusEnds)
+    {
+        var treatment = LoopOverrideTreatment(treatmentEnds ? T.AddHours(1) : null);
+        var deviceStatus = LoopOverrideDeviceStatus(deviceStatusEnds ? T.AddHours(1) : null);
+
+        await UpsertInOrderAsync(deviceStatusFirst ? [deviceStatus, treatment] : [treatment, deviceStatus]);
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Override)).Should().ContainSingle();
+        var copies = await _repository.GetAllCopiesAsync(StateSpanCategory.Override, T.AddMinutes(-2), T.AddMinutes(3));
+        copies.Select(c => c.OriginalId).Should().Equal("treatment-1", "devicestatus-1");
+        copies.Single(c => c.Metadata.IsFromDeviceStatus()).OriginalId.Should().Be("devicestatus-1");
+    }
+
+    [Fact]
+    public async Task TheAllCopiesRead_LeavesOutDeletedSpans_OtherCategoriesAndSpansOutsideTheRange()
+    {
+        var kept = LoopOverrideTreatment(null);
+        var deleted = LoopOverrideDeviceStatus(null);
+        deleted.OriginalId = "deleted-1";
+        deleted.Metadata!["name"] = "Other";
+        var earlier = Preset(StateSpanCategory.Override, "ended-before", -3600, "X Exercise");
+        earlier.EndTimestamp = T.AddMinutes(-30);
+        var later = Preset(StateSpanCategory.Override, "starts-after", 3600, "R Run");
+        var otherCategory = PumpMode("pump", 0);
+        await UpsertInOrderAsync([kept, deleted, earlier, later, otherCategory]);
+        var deletedRow = await _context.StateSpans.SingleAsync(s => s.LegacyId == "deleted-1");
+        deletedRow.DeletedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var copies = await _repository.GetAllCopiesAsync(StateSpanCategory.Override, T.AddMinutes(-2), T.AddMinutes(3));
+
+        copies.Select(c => c.OriginalId).Should().Equal("treatment-1");
+    }
+
+    [Fact]
+    public async Task TheAllCopiesRead_WithNoLaterBound_KeepsEverySpanNotEndedBeforeItsStart()
+    {
+        var kept = LoopOverrideTreatment(null);
+        var earlier = Preset(StateSpanCategory.Override, "ended-before", -3600, "X Exercise");
+        earlier.EndTimestamp = T.AddMinutes(-30);
+        var later = Preset(StateSpanCategory.Override, "starts-after", 3600, "R Run");
+        await UpsertInOrderAsync([kept, earlier, later]);
+
+        var copies = await _repository.GetAllCopiesAsync(StateSpanCategory.Override, T.AddMinutes(-2), to: null);
+
+        copies.Select(c => c.OriginalId).Should().Equal("treatment-1", "starts-after");
+    }
+
     [Fact]
     public async Task AGroupStoredWithAClosedPrimaryAndAnOpenCopy_IsRepairedOnce()
     {

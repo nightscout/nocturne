@@ -14,8 +14,26 @@ should last, and when to remind you. After that you start and complete it as
 often as you change the thing it tracks.
 
 Definitions live on the **Trackers** page, on the
-**Definitions** tab. Press **New Definition** to make one, or the pencil icon on
-a row to edit one.
+**Definitions** tab.
+
+## Making a tracker
+
+Press **New tracker**. Nocturne asks for it in three steps:
+
+1. **Type.** Choose what you want to track: a CGM sensor, an infusion site, a
+   pod, a reservoir, a pump battery, an appointment or a reminder. The type
+   fills in the settings for you, from the devices you registered when it can.
+   **Something else** starts with no settings filled in.
+2. **Settings.** Give it a name and say how long it lasts. The other settings
+   on this page are under **More settings**.
+3. **Reminders.** Change when it reminds you, and when it shows on the
+   dashboard.
+
+Press **Create tracker**. Nocturne then asks when the tracker started, so that
+it can start to count.
+
+To change a tracker later, press the pencil icon on its row. The editor has
+every setting on one page.
 
 <Screenshot id="tracker-editor" />
 
@@ -88,12 +106,11 @@ A threshold is one reminder step. Each has:
 
 - **Level**: Info, Warning, Hazard or Urgent. This decides how prominent the
   reminder is, and how it looks on the dashboard.
-- **After (hours)**, or **Hours** for an event tracker: when it fires. For a duration tracker, a positive number counts
-  from the start and a negative number counts back from the end of the
-  lifespan. `-24` on a ten-day sensor means "24 hours before day ten". For an
-  event tracker, a negative number is before the event and a positive number is
-  after.
-- **Description**: the message the notification carries. Leave it blank and
+- **Time**: when it fires, as a number of hours or days. For a duration
+  tracker, choose **after it starts** or **before it ends**. "1 day before it
+  ends" on a ten-day sensor fires on day nine. For an event tracker, choose
+  **before the date** or **after the date**.
+- **Message**: the message the notification carries. Leave it blank and
   Nocturne makes one, such as "24h before end".
 
 <Screenshot id="tracker-thresholds" />
@@ -103,7 +120,8 @@ above: a notice the day before it ends, a warning shortly before, and an urgent
 alert once it is overdue.
 
 A before-the-end step needs a lifespan, and must be shorter than it. Change the
-lifespan later and every before-the-end step moves with it.
+lifespan later and every before-the-end step moves with it. A step that was at
+the end of the lifespan, or after it, moves by the same amount.
 
 ### Where the notification goes
 

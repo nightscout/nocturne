@@ -1,5 +1,4 @@
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -28,12 +27,12 @@ public static class LegacyFallbackRules
         kind == LegacyConsumableKind.PumpBattery;
 
     /// <summary>Whether any of <paramref name="definitions"/> <see cref="Covers"/> <paramref name="kind"/>.</summary>
-    public static bool IsCovered(LegacyConsumableKind kind, IEnumerable<TrackerDefinitionEntity> definitions) =>
+    public static bool IsCovered(LegacyConsumableKind kind, IEnumerable<TrackerDefinition> definitions) =>
         definitions.Any(d => Covers(kind, d));
 
     /// <summary>
     /// Whether <paramref name="definition"/> already stands for <paramref name="kind"/>: a Duration
-    /// tracker whose hardware provides the kind's capability (<see cref="TrackerCoverage.Of(TrackerDefinitionEntity)"/>), or,
+    /// tracker whose hardware provides the kind's capability (<see cref="TrackerCoverage.Of(TrackerDefinition)"/>), or,
     /// when that is not known, one restarted by one of the kind's events, whatever its category,
     /// dashboard visibility or notes filter, or a Duration sensor, cannula or reservoir tracker of
     /// the kind's category that restarts on nothing, run by hand. A definition hidden from the
@@ -43,7 +42,7 @@ public static class LegacyFallbackRules
     /// The battery category is not enough on its own: it also holds phone and CGM transmitter
     /// batteries, which stand for no pump battery.
     /// </remarks>
-    public static bool Covers(LegacyConsumableKind kind, TrackerDefinitionEntity definition)
+    public static bool Covers(LegacyConsumableKind kind, TrackerDefinition definition)
     {
         if (definition.Mode != TrackerMode.Duration)
             return false;
@@ -71,7 +70,7 @@ public static class LegacyFallbackRules
     /// Equal coverage is enough across models, so switching between two pod pumps keeps the pod
     /// tracker, while switching between a pod and an infusion set adds the new one.
     /// </remarks>
-    public static bool Follows(TrackerDefinitionEntity definition, ConsumableTrackerSpec spec)
+    public static bool Follows(TrackerDefinition definition, ConsumableTrackerSpec spec)
     {
         if (definition.Mode != TrackerMode.Duration)
             return false;

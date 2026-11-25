@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import type { DailySummaryDay } from "@nocturne/api-client";
 import { createQueryResource } from "./remote-resource";
 
 export const yearOverviewMocks = {

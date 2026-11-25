@@ -1,22 +1,22 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { statusHex, statusRgb, type StatusToken } from "@nocturne/ui/tokens";
-import type { AlertSeverity } from "../types.js";
+import { AlertRuleSeverity } from "@nocturne/api-client";
 import { createLogger } from "./logger.js";
 
 const logger = createLogger();
 
-export const isKnownSeverity = (value: unknown): value is AlertSeverity =>
-  value === "critical" || value === "warning" || value === "info";
+export const isKnownSeverity = (value: unknown): value is AlertRuleSeverity =>
+  Object.values<unknown>(AlertRuleSeverity).includes(value);
 
 /**
  * The design-system token each severity is coloured from. The annotation is the
  * drift guard: a severity with no token of that name fails to compile, and the
  * value itself lives once, in `@nocturne/ui/tokens`.
  */
-const TOKEN_BY_SEVERITY: Record<AlertSeverity, StatusToken> = {
-  critical: "critical",
-  warning: "warning",
-  info: "info",
+const TOKEN_BY_SEVERITY: Record<AlertRuleSeverity, StatusToken> = {
+  [AlertRuleSeverity.Critical]: "critical",
+  [AlertRuleSeverity.Warning]: "warning",
+  [AlertRuleSeverity.Info]: "info",
 };
 
 export interface AlertAccent {
@@ -59,3 +59,14 @@ export function withAlertAccent<T>(severity: unknown, run: () => T): T {
 export function currentAlertAccent(): AlertAccent | undefined {
   return scope.getStore();
 }
+
+/**
+ * Card titles per severity. Every platform gets this, including the ones with
+ * no colour to carry (Telegram, WhatsApp, e-mail); on Discord and Slack it sits
+ * alongside the coloured bar that `../adapters/accented-discord.ts` applies.
+ */
+export const SEVERITY_TITLES: Record<AlertRuleSeverity, string> = {
+  [AlertRuleSeverity.Critical]: "CRITICAL",
+  [AlertRuleSeverity.Warning]: "Warning",
+  [AlertRuleSeverity.Info]: "Info",
+};

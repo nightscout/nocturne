@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { MutationAuditDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { MutationAuditDto } from "@nocturne/api-client";
   import type {
     Column,
     ColumnDef,

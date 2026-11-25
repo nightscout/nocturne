@@ -58,8 +58,8 @@ public class ConnectorConfigurationUriValidationTests
     [Fact]
     public async Task SaveConfiguration_RejectsCredentialsEmbeddedInTheUrl()
     {
-        // Runtime configuration is returned in the clear by GET; the secret fields are the ones
-        // held back, so a password smuggled into the URL would sidestep that.
+        // Runtime configuration is stored unencrypted; the secret fields are the ones encrypted,
+        // so a password smuggled into the URL would sidestep that.
         var result = await SaveAsync("https://admin:hunter2@mysite.example");
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
@@ -71,11 +71,15 @@ public class ConnectorConfigurationUriValidationTests
             {
               "properties": {
                 "url": { "type": "string", "format": "uri" }
-              }
+              },
+              "required": ["url"]
             }
             """);
 
         var service = new Mock<IConnectorConfigurationService>();
+        service
+            .Setup(s => s.GetBoundKeysAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, Type> { ["enabled"] = typeof(bool), ["url"] = typeof(string) });
         service
             .Setup(s => s.GetSchemaAsync(ConnectorName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(schema);

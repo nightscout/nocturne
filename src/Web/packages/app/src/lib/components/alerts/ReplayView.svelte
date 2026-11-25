@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
+  import { expoOut } from "svelte/easing";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { fly } from "svelte/transition";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import BellOff from "@lucide/svelte/icons/bell-off";
@@ -10,16 +13,12 @@
     type AlertReplayResult,
     type AlertReplayEvent,
     type AlertRuleResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { indexBy } from "#lib/utils/collections.js";
   import { time } from "#lib/utils/formatting.js";
-  import type { ChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.js";
+  import type { ChartDataView } from "@nocturne/charts";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import BasalTrack from "#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
-  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import ChartTooltip from "#lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, ChartTooltip } from "@nocturne/charts";
   import { severityVar } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import ReplayOverlay from "./ReplayOverlay.svelte";
@@ -42,7 +41,7 @@
     chartEngine: (options: {
       range: { from: Date; to: Date };
       onDataReady: () => void;
-    }) => ChartDataEngine;
+    }) => ChartDataView;
     onSelectionChange?: (domain: [Date, Date] | null) => void;
     /** Draw glucose and only the series the rules read, rather than every series. */
     seriesFromRules?: boolean;
@@ -220,9 +219,24 @@
     currentTimeMs != null ? markers.filter((m) => m.tMs <= currentTimeMs) : []
   );
 
-  // Replay events land on the same 5-min ticks the chart's glucose readings
-  // do, so a half-tick window catches all events for the hovered point
-  // without bleeding into neighbouring ones.
+  // The list grows as the playhead passes each event. Once it is taller than its space it
+  // follows the newest one, so the event that just happened is always in view.
+  let eventList = $state<HTMLDivElement>();
+  $effect(() => {
+    const count = firedMarkers.length;
+    const list = eventList;
+    if (!list || count === 0) return;
+    list.scrollTo({
+      top: list.scrollHeight,
+      behavior: prefersReducedMotion.current ? "auto" : "smooth",
+    });
+  });
+
+  // Replay events land where live evaluated a reading (its arrival, usually
+  // within seconds of its point), or between readings where a rule changes
+  // with the clock. Half a 5-minute reading interval catches the events of the
+  // hovered point without bleeding into neighbouring ones; an event of a late
+  // upload or inside a gap shows as its marker and in the list.
   const TOOLTIP_HALF_WINDOW_MS = 2.5 * 60 * 1000;
   function eventsNear(at: Date): Marker[] {
     const t = at.getTime();
@@ -266,7 +280,7 @@
               <ThresholdRules />
               <GlucoseTrack />
               <IobCobTrack />
-              <ReplayOverlay {firedMarkers} {currentDate} />
+              <ReplayOverlay {firedMarkers} {currentDate} highlightRuleId={editingRuleId} />
             {/snippet}
             {#snippet overlays()}
               <ChartTooltip tooltipExtras={replayTooltipExtras} {onTimeClick} />
@@ -281,6 +295,7 @@
         {maxPct}
         {currentDate}
         bind:speed
+        highlightRuleId={editingRuleId}
         events={markers.map((m) => ({
           tMs: m.tMs,
           severity: m.ev.severity,
@@ -308,16 +323,23 @@
         </div>
       {:else}
         <div
+          bind:this={eventList}
+          data-testid="replay-events"
           class="max-h-72 overflow-y-auto rounded-md border divide-y @2xl:max-h-none @2xl:flex-1 @2xl:min-h-0"
         >
           {#each firedMarkers as m, i (`${m.ev.ruleId ?? "x"}:${m.tMs}:${m.ev.kind ?? ""}:${i}`)}
             {@const dimmed = currentTimeMs != null && m.tMs > currentTimeMs}
             {@const isResolved = m.ev.kind === AlertReplayEventKind.AutoResolved}
             {@const isSuppressed = m.ev.kind === AlertReplayEventKind.SuppressedByDnd}
+            {@const isEditing = !!editingRuleId && m.ev.ruleId === editingRuleId}
             <div
-              class="flex items-center gap-3 px-3 py-2 text-sm transition-opacity duration-150"
+              class="flex items-center gap-3 px-3 py-2 text-sm transition-opacity duration-150 {isEditing
+                ? 'bg-primary/5 font-medium'
+                : ''}"
               class:opacity-40={dimmed}
               class:text-muted-foreground={isSuppressed}
+              data-editing={isEditing}
+              in:fly={{ y: 8, duration: prefersReducedMotion.current ? 0 : 220, easing: expoOut }}
             >
               {#if isResolved}
                 <CheckCircle2
@@ -343,6 +365,9 @@
               <span class="flex-1 min-w-0 truncate">
                 {m.ev.ruleName ?? "(unnamed rule)"}
               </span>
+              {#if isEditing}
+                <Badge>This alert</Badge>
+              {/if}
             </div>
           {/each}
         </div>

@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "name": "replay-target-changes-between-readings",
+  "description": "the target range changes at 07:00 between two readings: a wall-clock rule over below target_low is evaluated on the sample ticks and opens at the first one after the boundary, while the same leaf alone, which live evaluates only per reading, opens at the next reading, as live does",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value_from": {
+                "fact": "target_low"
+              }
+            }
+          },
+          {
+            "type": "signal_loss",
+            "signal_loss": {
+              "timeout_minutes": 60
+            }
+          }
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T06:55:00Z",
+      "context": {
+        "latest_value": 75,
+        "latest_timestamp": "2026-01-05T06:55:00Z",
+        "last_reading_at": "2026-01-05T06:55:00Z",
+        "target_low": 70,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T06:58:00Z",
+      "context": {
+        "latest_value": 75,
+        "latest_timestamp": "2026-01-05T06:55:00Z",
+        "last_reading_at": "2026-01-05T06:55:00Z",
+        "target_low": 70,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      },
+      "reading": false
+    },
+    {
+      "at": "2026-01-05T07:01:00Z",
+      "context": {
+        "latest_value": 75,
+        "latest_timestamp": "2026-01-05T06:55:00Z",
+        "last_reading_at": "2026-01-05T06:55:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      },
+      "reading": false
+    },
+    {
+      "at": "2026-01-05T07:04:00Z",
+      "context": {
+        "latest_value": 75,
+        "latest_timestamp": "2026-01-05T06:55:00Z",
+        "last_reading_at": "2026-01-05T06:55:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      },
+      "reading": false
+    },
+    {
+      "at": "2026-01-05T07:05:00Z",
+      "context": {
+        "latest_value": 75,
+        "latest_timestamp": "2026-01-05T07:05:00Z",
+        "last_reading_at": "2026-01-05T07:05:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

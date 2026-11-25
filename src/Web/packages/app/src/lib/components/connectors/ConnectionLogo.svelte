@@ -2,7 +2,7 @@
   import {
     ConnectionKind,
     type Connection,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
   import AppWindow from "@lucide/svelte/icons/app-window";
   import KeyRound from "@lucide/svelte/icons/key-round";

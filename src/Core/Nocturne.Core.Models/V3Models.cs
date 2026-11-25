@@ -154,7 +154,7 @@ public class V3ErrorResponse
 /// </summary>
 public class V3ResponseMetadata
 {
-    public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset Timestamp { get; set; }
 
     public string Version { get; set; } = "3.0";
 

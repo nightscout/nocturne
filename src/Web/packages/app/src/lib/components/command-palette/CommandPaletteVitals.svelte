@@ -5,8 +5,9 @@
     formatGlucoseValue,
     formatGlucoseDelta,
   } from "#lib/utils/formatting.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
   import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
 
@@ -14,20 +15,20 @@
 
   const units = $derived(glucoseUnits.current);
   const glucose = displayedGlucose(realtimeStore);
-  const currentBG = $derived(glucose.currentBG);
+  const value = $derived(glucose.value);
   const bgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const currentTime = $derived(realtimeStore.now);
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
-  const displayBG = $derived(formatGlucoseValue(currentBG, units));
+  const displayBG = $derived(value === null ? "" : formatGlucoseValue(value, units));
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const isDimmed = $derived(isStale || isDisconnected);
-  const hasData = $derived(currentBG > 0);
+  const hasData = $derived(value !== null);
 
   const statusClass = $derived(
     getGlucoseStatusClass(glucose.status)
@@ -47,7 +48,7 @@
     <span class="flex items-center gap-1 text-muted-foreground">
       {#if directionInfo.icon}
         {@const Icon = directionInfo.icon}
-        <Icon class="h-3.5 w-3.5 {directionInfo.css}" />
+        <Icon class="h-3.5 w-3.5 {deltaColorClass(glucose.direction)}" />
       {/if}
       {displayDelta}
     </span>

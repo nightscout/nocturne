@@ -59,7 +59,7 @@ public class DemoLoopHealthTests
             readings.AddRange(DemoCoverageSeeds.CgmReadings(step));
             if (DemoDeviceStatusGenerator.ForStep(step, DemoTestClock.Host, config.TargetGlucose, config.BasalRate) is not { } status)
                 continue;
-            var snapshot = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(status, status.Mills.ToString("x24"), SampleDataSeeder.DevSampleDataSource, null)!;
+            var snapshot = DeviceStatusDecomposerDoubles.Build().MapToApsSnapshot(status, status.Mills.ToString("x24"), SampleDataSeeder.DevSampleDataSource, null)!;
             snapshot.Id = Guid.NewGuid();
             snapshots.Add(snapshot);
         }

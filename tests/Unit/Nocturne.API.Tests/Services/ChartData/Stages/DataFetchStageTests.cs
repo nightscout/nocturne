@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -17,6 +18,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.ChartData.Stages;
 
@@ -121,7 +123,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceEvent>());
 
         _mockTempBasalRepo
@@ -180,11 +182,11 @@ public class DataFetchStageTests
 
         _mockTrackerRepo
             .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<TrackerDefinitionEntity>());
+            .ReturnsAsync(Array.Empty<TrackerDefinition>());
 
         _mockTrackerRepo
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
+            .ReturnsAsync(Array.Empty<TrackerInstance>());
 
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(
@@ -232,8 +234,8 @@ public class DataFetchStageTests
         result.DeviceEventList.Should().NotBeNull();
         result.TempBasalList.Should().NotBeNull();
         result.SystemEvents.Should().NotBeNull();
-        result.TrackerDefinitions.Should().NotBeNull();
-        result.TrackerInstances.Should().NotBeNull();
+        result.Trackers.Should().NotBeNull();
+        result.RunningTrackers.Should().NotBeNull();
         result.StateSpans.Should().NotBeNull();
 
         // Assert — all 6 state span categories are present in the result
@@ -321,7 +323,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<DeviceEvent>>(Array.Empty<DeviceEvent>()));
         _mockTempBasalRepo
             .Setup(r => r.GetAsync(
@@ -357,7 +359,7 @@ public class DataFetchStageTests
         };
 
         var result = await _stage.ExecuteAsync(context, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(Eventually.DefaultPatience);
 
         started.Should().Be(factoryBackedReads);
         result.BolusList.Should().ContainSingle();
@@ -368,17 +370,15 @@ public class DataFetchStageTests
     [Fact]
     public async Task ExecuteAsync_NeverOverlapsScopedContextReads()
     {
-        var inFlight = 0;
-        var maxInFlight = 0;
+        var reads = new ConcurrencyProbe();
         var pending = new ConcurrentQueue<TaskCompletionSource>();
 
         async Task<T> Tracked<T>(T result)
         {
-            InterlockedMax(ref maxInFlight, Interlocked.Increment(ref inFlight));
+            using var inFlight = reads.Enter();
             var gate = new TaskCompletionSource();
             pending.Enqueue(gate);
             await gate.Task;
-            Interlocked.Decrement(ref inFlight);
             return result;
         }
 
@@ -395,10 +395,10 @@ public class DataFetchStageTests
             .Returns(() => Tracked<IEnumerable<SystemEvent>>(Array.Empty<SystemEvent>()));
         _mockTrackerRepo
             .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => Tracked(new List<TrackerDefinitionEntity>()));
+            .Returns(() => Tracked<IReadOnlyList<TrackerDefinition>>(Array.Empty<TrackerDefinition>()));
         _mockTrackerRepo
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => Tracked(Array.Empty<TrackerInstanceEntity>()));
+            .Returns(() => Tracked<IReadOnlyList<TrackerInstance>>(Array.Empty<TrackerInstance>()));
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
@@ -431,14 +431,7 @@ public class DataFetchStageTests
         }
         await run;
 
-        maxInFlight.Should().Be(1);
-    }
-
-    private static void InterlockedMax(ref int target, int value)
-    {
-        int current;
-        while (value > (current = Volatile.Read(ref target))
-               && Interlocked.CompareExchange(ref target, value, current) != current) { }
+        reads.Peak.Should().Be(1);
     }
 
     [Fact]

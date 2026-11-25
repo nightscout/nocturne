@@ -44,20 +44,18 @@ public class TwiistConnectorService
     public override string ServiceName => "Twiist Insight";
 
 
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         TwiistConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
         var activeTypes = ResolveActiveTypes(request, config);
 
-        if (await ValidTokenAsync(config, cancellationToken) is null)
-            return AuthenticationFailedResult();
-
         try
         {
-            var (pwdId, resolveError) = await ResolvePatientIdAsync(config, cancellationToken);
+            var (pwdId, resolveError) = await ResolvePatientIdAsync(config, session, cancellationToken);
             if (pwdId == null)
             {
                 result.Success = false;
@@ -65,7 +63,7 @@ public class TwiistConnectorService
                 return result;
             }
 
-            var package = await FetchPackageAsync(pwdId, config, cancellationToken);
+            var package = await FetchPackageAsync(pwdId, config, session, cancellationToken);
             if (package?.Status == null)
             {
                 _logger.LogWarning("[{Source}] Twiist returned empty package for PWD {PwdId}",
@@ -126,7 +124,7 @@ public class TwiistConnectorService
         }
 
         var sensorGlucose = _glucoseMapper.MapGlucoseRecords(
-            glucoseRecords, Clock.GetUtcNow().UtcDateTime, status.Summary?.LastGlucoseTrend).ToList();
+            glucoseRecords, status.Summary?.LastGlucoseTrend).ToList();
 
         // Apply trend to the most recent reading if available
         if (sensorGlucose.Count > 0 && status.Summary?.LastGlucoseTrend != null)
@@ -144,7 +142,7 @@ public class TwiistConnectorService
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         await PublishRecordTypeAsync(result, activeTypes,
-            _insulinMapper.MapBoluses(status.InsulinHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
+            _insulinMapper.MapBoluses(status.InsulinHistory).ToList(), config, cancellationToken);
     }
 
     private async Task SyncCarbIntakeAsync(
@@ -152,7 +150,7 @@ public class TwiistConnectorService
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         await PublishRecordTypeAsync(result, activeTypes,
-            _mealMapper.MapMeals(status.MealHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
+            _mealMapper.MapMeals(status.MealHistory).ToList(), config, cancellationToken);
     }
 
     private async Task SyncTempBasalsAsync(
@@ -160,9 +158,8 @@ public class TwiistConnectorService
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var scheduledRate = _tempBasalMapper.ParseScheduledRate(status.Details?.BasalRateUnitsPerHour);
-        var now = Clock.GetUtcNow().UtcDateTime;
-        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate, now)
-            .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory, now))
+        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate)
+            .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory))
             .ToList();
 
         await PublishRecordTypeAsync(result, activeTypes,
@@ -175,12 +172,12 @@ public class TwiistConnectorService
     /// error message (for the connector health state) when no single patient can be determined.
     /// </summary>
     private async Task<(string? PwdId, string? Error)> ResolvePatientIdAsync(
-        TwiistConnectorConfiguration config, CancellationToken cancellationToken)
+        TwiistConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(config.PatientId))
             return (config.PatientId, null);
 
-        var overviews = await FetchOverviewsAsync(config, cancellationToken);
+        var overviews = await FetchOverviewsAsync(config, session, cancellationToken);
 
         if (overviews == null)
             return (null, "Could not reach Twiist. Nocturne will try again at the next sync.");
@@ -209,18 +206,11 @@ public class TwiistConnectorService
     }
 
     private async Task<List<TwiistOverview>?> FetchOverviewsAsync(
-        TwiistConnectorConfiguration config, CancellationToken cancellationToken)
+        TwiistConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
-        var accessToken = await ValidTokenAsync(config, cancellationToken);
-        if (accessToken is null)
-        {
-            _logger.LogWarning("[{Source}] Failed to get valid token for overviews fetch", ConnectorSource);
-            return null;
-        }
-
         return await ExecuteWithRetryAsync(
-            async () => await FetchOverviewsCoreAsync(accessToken, cancellationToken),
-            ReauthenticateWith(config, t => accessToken = t, cancellationToken),
+            async () => await FetchOverviewsCoreAsync(session.Token, cancellationToken),
+            session.ReauthenticateAsync,
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchTwiistOverviews",
             cancellationToken: cancellationToken);
@@ -244,18 +234,11 @@ public class TwiistConnectorService
     }
 
     private async Task<TwiistPackage?> FetchPackageAsync(
-        string pwdId, TwiistConnectorConfiguration config, CancellationToken cancellationToken)
+        string pwdId, TwiistConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
-        var accessToken = await ValidTokenAsync(config, cancellationToken);
-        if (accessToken is null)
-        {
-            _logger.LogWarning("[{Source}] Failed to get valid token for package fetch", ConnectorSource);
-            return null;
-        }
-
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchPackageCoreAsync(accessToken, pwdId, cancellationToken),
-            ReauthenticateWith(config, t => accessToken = t, cancellationToken),
+            async () => await FetchPackageCoreAsync(session.Token, pwdId, cancellationToken),
+            session.ReauthenticateAsync,
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchTwiistPackage",
             cancellationToken: cancellationToken);

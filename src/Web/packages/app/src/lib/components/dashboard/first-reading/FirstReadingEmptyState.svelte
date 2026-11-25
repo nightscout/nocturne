@@ -9,7 +9,7 @@
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import { DropGroup, DropSurface } from "water-ui";
   import { resolve } from "$app/paths";
-  import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ConnectorStatusDto } from "@nocturne/api-client";
 
   interface Props {
     /**

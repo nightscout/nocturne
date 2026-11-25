@@ -29,11 +29,16 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Lock from "@lucide/svelte/icons/lock";
-  import type {
-    JsonSchema,
-    JsonSchemaProperty,
+  import {
+    isAddress,
+    type JsonSchema,
+    type JsonSchemaProperty,
   } from "#lib/utils/connector-json-schema.js";
-  import { getPropertyMeta, type PropertyMeta } from "#lib/config/connectorPropertyMeta.js";
+  import {
+    getPropertyMeta,
+    type PropertyCategory,
+    type PropertyMeta,
+  } from "#lib/config/connectorPropertyMeta.js";
 
   interface Props {
     schema: JsonSchema;
@@ -47,6 +52,19 @@
     showEnvVarHints?: boolean;
     /** Names the save, for a form whose save also starts something. The save is then the form's one large action. */
     saveLabel?: string;
+    /** The keys the viewer may not change, as the API reports them (`lockedKeys`). */
+    lockedKeys?: readonly string[];
+    /**
+     * The stored configuration as the API returns it, each address masked. An address is shown from
+     * here, and the save leaves it out until the viewer presses "Change address", so the API keeps
+     * the stored one.
+     */
+    storedConfiguration: Record<string, unknown>;
+    /**
+     * `setup` shows only what connecting needs (the General and Credentials categories and any
+     * required field) as one flat list, for a form that sits inside a setup or migration step.
+     */
+    variant?: "settings" | "setup";
     onSave: (config: Record<string, unknown>, secrets: Record<string, string>) => Promise<void>;
   }
 
@@ -58,11 +76,59 @@
     hasSecrets = false,
     showEnvVarHints = true,
     saveLabel,
+    lockedKeys = [],
+    storedConfiguration,
+    variant = "settings",
     onSave,
   }: Props = $props();
 
+  const setup = $derived(variant === "setup");
+  const envHints = $derived(showEnvVarHints && !setup);
+  const SETUP_CATEGORIES: ReadonlySet<PropertyCategory> = new Set(["General", "Credentials"]);
+
+  function shownInVariant(propName: string): boolean {
+    return (
+      !setup ||
+      SETUP_CATEGORIES.has(getPropertyMeta(propName).category) ||
+      (schema.required ?? []).includes(propName)
+    );
+  }
+
   // Track which secret fields are visible
   const visibleSecrets = new SvelteSet<string>();
+
+  const changingAddresses = new SvelteSet<string>();
+
+  function shownAddress(propName: string): string {
+    const shown = storedConfiguration[propName];
+    return typeof shown === "string" ? shown : "";
+  }
+
+  /** With no stored address there is nothing to keep, so the field is an input from the start. */
+  function isChangingAddress(propName: string): boolean {
+    return (
+      changingAddresses.has(propName) ||
+      (shownAddress(propName) === "" && !lockedKeys.includes(propName))
+    );
+  }
+
+  function changeAddress(propName: string) {
+    changingAddresses.add(propName);
+    setPropertyValue(propName, "");
+  }
+
+  function keepAddress(propName: string) {
+    changingAddresses.delete(propName);
+    setPropertyValue(propName, initialConfiguration[propName]);
+  }
+
+  function sentConfiguration(): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(configuration).filter(
+        ([key]) => !isAddress(schema.properties[key]) || isChangingAddress(key)
+      )
+    );
+  }
 
   // Track initial configuration for unsaved change detection
   let initialConfiguration = $state<Record<string, unknown>>({});
@@ -133,6 +199,8 @@
       // Skip 'enabled' field - it's controlled by the "Enable Connector" toggle
       if (propName.toLowerCase() === "enabled") continue;
 
+      if (!shownInVariant(propName)) continue;
+
       const category = getPropertyMeta(propName).category;
 
       // Skip credential-category fields - they're shown in the credentials card
@@ -171,7 +239,7 @@
         name,
         schema: schema.properties[name],
       }))
-      .filter((s) => s.schema && s.schema["x-hidden"] !== true);
+      .filter((s) => s.schema && s.schema["x-hidden"] !== true && shownInVariant(s.name));
   });
 
   // Get non-secret fields in the Credentials category
@@ -182,7 +250,8 @@
         ([name, propSchema]) =>
           getPropertyMeta(name).category === ConnectorConfigCategory.Credentials &&
           !secretFieldSet.has(name) &&
-          propSchema["x-hidden"] !== true
+          propSchema["x-hidden"] !== true &&
+          shownInVariant(name)
       )
       .map(([name, schema]) => ({ name, schema }));
   });
@@ -284,11 +353,12 @@
       for (const [key, value] of Object.entries(secrets)) {
         if (value && value.trim()) nonEmptySecrets[key] = value;
       }
-      await onSave(configuration, nonEmptySecrets);
+      await onSave(sentConfiguration(), nonEmptySecrets);
       // onSave resolves after loadConnectorData runs in the parent,
       // so configuration now has the latest backend values
       initialConfiguration = { ...configuration };
       secrets = {};
+      changingAddresses.clear();
     } catch {
       // The parent has shown the failure; the form stays dirty for a retry.
     } finally {
@@ -300,42 +370,150 @@
     configuration = { ...initialConfiguration };
     secrets = {};
     visibleSecrets.clear();
+    changingAddresses.clear();
   }
 
 </script>
 
 {#snippet envVarHint(envVar: string | undefined)}
-  {#if envVar && showEnvVarHints}
+  {#if envVar && envHints}
     <p class="text-xs text-muted-foreground/70">
       <code class="bg-muted px-1 rounded break-all">{envVar}</code>
     </p>
   {/if}
 {/snippet}
 
+{#snippet changeStatus(propName: string)}
+  {#if !setup}
+    {#if hasUnsavedChanges(propName)}
+      <Badge variant="default">Unsaved</Badge>
+    {:else if hasUserOverride(propName) && !lockedKeys.includes(propName)}
+      <Badge variant="secondary">Modified</Badge>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        title="Reset to environment variable value"
+        onclick={() => resetToEnvVar(propName)}
+      >
+        <RotateCcw class="h-3 w-3" />
+      </Button>
+    {:else if hasEnvOverride(propName)}
+      <Badge variant="outline">From env</Badge>
+    {/if}
+  {/if}
+{/snippet}
+
+{#snippet secretField(name: string)}
+  {@const secretMeta = getPropertyMeta(name)}
+  {@const propSchema = schema.properties[name]}
+  <div class="space-y-2">
+    <Label>
+      {secretMeta.label}
+      {#if !(schema.required ?? []).includes(name)}
+        <span class="font-normal text-muted-foreground">(optional)</span>
+      {/if}
+    </Label>
+    <div class="flex gap-2">
+      <Input
+        type={visibleSecrets.has(name) ? "text" : "password"}
+        value={getSecretValue(name)}
+        placeholder={setup && !hasSecrets
+          ? undefined
+          : "Enter to update (leave blank to keep current)"}
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+          setSecretValue(name, e.currentTarget.value)}
+        class="flex-1"
+      />
+      <Button
+        variant="outline"
+        size="icon"
+        aria-label={visibleSecrets.has(name) ? "Hide secret" : "Show secret"}
+        onclick={() => toggleSecretVisibility(name)}
+      >
+        {#if visibleSecrets.has(name)}
+          <EyeOff class="h-4 w-4" />
+        {:else}
+          <Eye class="h-4 w-4" />
+        {/if}
+      </Button>
+    </div>
+    {#if secretMeta.description}
+      <p class="text-sm text-muted-foreground">
+        {secretMeta.description}
+      </p>
+    {/if}
+    {#if propSchema["x-envVar"] && envHints}
+      <p class="text-xs text-muted-foreground/70">
+        Environment variable: <code class="bg-muted px-1 rounded break-all">
+          {propSchema["x-envVar"]}
+        </code>
+      </p>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet addressField(propName: string, propSchema: JsonSchemaProperty)}
+  {@const meta = getPropertyMeta(propName)}
+  {@const shown = shownAddress(propName)}
+  {@const locked = lockedKeys.includes(propName)}
+  <div class="flex flex-wrap items-center gap-2">
+    <Label for={isChangingAddress(propName) ? `address-${propName}` : undefined}>{meta.label}</Label>
+    {#if !setup && hasUnsavedChanges(propName)}
+      <Badge variant="default">Unsaved</Badge>
+    {/if}
+  </div>
+  {#if isChangingAddress(propName)}
+    <div class="flex flex-wrap items-center gap-2">
+      <Input
+        id="address-{propName}"
+        type="url"
+        value={String(configuration[propName] ?? "")}
+        placeholder="https://..."
+        class="min-w-0 flex-1"
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+          setPropertyValue(propName, e.currentTarget.value)}
+      />
+      {#if shown}
+        <Button variant="ghost" size="sm" onclick={() => keepAddress(propName)}>
+          Keep current address
+        </Button>
+      {/if}
+    </div>
+  {:else}
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <span class="min-w-0 break-all text-sm" data-testid="address-{propName}">
+        {shown || "No address"}
+      </span>
+      {#if !locked}
+        <Button variant="outline" size="sm" onclick={() => changeAddress(propName)}>
+          Change address
+        </Button>
+      {/if}
+    </div>
+  {/if}
+  {#if locked}
+    <p id="{propName}-locked" class="text-sm text-muted-foreground" data-testid="locked-{propName}">
+      Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it.
+    </p>
+  {/if}
+  {#if meta.description}
+    <p class="text-sm text-muted-foreground">{meta.description}</p>
+  {/if}
+  {@render envVarHint(propSchema["x-envVar"])}
+{/snippet}
+
 {#snippet propertyField(propName: string, propSchema: JsonSchemaProperty)}
   {@const meta = getPropertyMeta(propName)}
   <div class="space-y-2">
-    {#if propSchema.type === "boolean"}
+    {#if isAddress(propSchema)}
+      {@render addressField(propName, propSchema)}
+    {:else if propSchema.type === "boolean"}
       <!-- Boolean: Switch -->
       <div class="flex items-center justify-between gap-4">
         <div class="space-y-0.5 min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <Label>{meta.label}</Label>
-            {#if hasUnsavedChanges(propName)}
-              <Badge variant="default">Unsaved</Badge>
-            {:else if hasUserOverride(propName)}
-              <Badge variant="secondary">Modified</Badge>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                title="Reset to environment variable value"
-                onclick={() => resetToEnvVar(propName)}
-              >
-                <RotateCcw class="h-3 w-3" />
-              </Button>
-            {:else if hasEnvOverride(propName)}
-              <Badge variant="outline">From env</Badge>
-            {/if}
+            {@render changeStatus(propName)}
           </div>
           {#if meta.description}
             <p class="text-sm text-muted-foreground">
@@ -347,29 +525,22 @@
         <Switch
           class="shrink-0"
           checked={Boolean(getPropertyValue(propName))}
+          disabled={lockedKeys.includes(propName)}
+          aria-describedby={lockedKeys.includes(propName) ? `${propName}-locked` : undefined}
           onCheckedChange={(checked: boolean) =>
             setPropertyValue(propName, checked)}
         />
       </div>
+      {#if lockedKeys.includes(propName)}
+        <p id="{propName}-locked" class="text-sm text-muted-foreground" data-testid="locked-{propName}">
+          Only members who can manage this site's settings can turn this on.
+        </p>
+      {/if}
     {:else if propSchema.enum}
       <!-- Enum: Select -->
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
-        {#if hasUnsavedChanges(propName)}
-          <Badge variant="default">Unsaved</Badge>
-        {:else if hasUserOverride(propName)}
-          <Badge variant="secondary">Modified</Badge>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title="Reset to environment variable value"
-            onclick={() => resetToEnvVar(propName)}
-          >
-            <RotateCcw class="h-3 w-3" />
-          </Button>
-        {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From env</Badge>
-        {/if}
+        {@render changeStatus(propName)}
       </div>
       {@const chosen = getPropertyValue(propName)}
       {@const choiceDescription = meta.choiceDescription ?? meta.description}
@@ -395,21 +566,7 @@
       <!-- Number: Input with constraints -->
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
-        {#if hasUnsavedChanges(propName)}
-          <Badge variant="default">Unsaved</Badge>
-        {:else if hasUserOverride(propName)}
-          <Badge variant="secondary">Modified</Badge>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title="Reset to environment variable value"
-            onclick={() => resetToEnvVar(propName)}
-          >
-            <RotateCcw class="h-3 w-3" />
-          </Button>
-        {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From env</Badge>
-        {/if}
+        {@render changeStatus(propName)}
       </div>
       <Input
         type="number"
@@ -446,26 +603,11 @@
       <!-- String: Input -->
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
-        {#if hasUnsavedChanges(propName)}
-          <Badge variant="default">Unsaved</Badge>
-        {:else if hasUserOverride(propName)}
-          <Badge variant="secondary">Modified</Badge>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title="Reset to environment variable value"
-            onclick={() => resetToEnvVar(propName)}
-          >
-            <RotateCcw class="h-3 w-3" />
-          </Button>
-        {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From env</Badge>
-        {/if}
+        {@render changeStatus(propName)}
       </div>
       <Input
-        type={propSchema.format === "uri" ? "url" : "text"}
+        type="text"
         value={String(getPropertyValue(propName) ?? "")}
-        placeholder={propSchema.format === "uri" ? "https://..." : undefined}
         minlength={propSchema.minLength}
         maxlength={propSchema.maxLength}
         pattern={propSchema.pattern}
@@ -480,165 +622,157 @@
   </div>
 {/snippet}
 
-<div class="space-y-6">
-  <!-- Main Configuration Fields by Category -->
-  {#each mainGroups as group (group.name)}
-    <Card>
-      <CardHeader>
-        <CardTitle>{group.name}</CardTitle>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        {#each group.properties as [propName, propSchema], i (propName)}
-          {@render propertyField(propName, propSchema)}
-          {#if i < group.properties.length - 1}
-            <Separator />
-          {/if}
-        {/each}
-      </CardContent>
-    </Card>
-  {/each}
-
-  <!-- Advanced Settings (Collapsible) -->
-  {#if advancedGroup && advancedGroup.properties.length > 0}
-    <Collapsible.Root bind:open={advancedExpanded}>
+{#if setup}
+  <div class="space-y-5">
+    {#each groupedProperties as group (group.name)}
+      {#each group.properties as [propName, propSchema] (propName)}
+        {@render propertyField(propName, propSchema)}
+      {/each}
+    {/each}
+    {#each credentialFields as { name, schema: propSchema } (name)}
+      {@render propertyField(name, propSchema)}
+    {/each}
+    {#each secretFields as { name } (name)}
+      {@render secretField(name)}
+    {/each}
+    {#if secretFields.length > 0}
+      <p class="flex items-start gap-2 text-sm text-muted-foreground">
+        <Lock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        Nocturne keeps secrets encrypted and does not show them again.
+      </p>
+    {/if}
+    <Button size="xl" class="w-full" onclick={handleSave} disabled={isSaving}>
+      {#if isSaving}
+        <Loader2 class="animate-spin" />
+      {/if}
+      {saveLabel ?? "Connect"}
+    </Button>
+  </div>
+{:else}
+  <div class="space-y-6">
+    <!-- Main Configuration Fields by Category -->
+    {#each mainGroups as group (group.name)}
       <Card>
-        <Collapsible.Trigger class="w-full">
-          <CardHeader interactive>
-            <div class="flex items-center justify-between">
-              <CardTitle class="flex items-center gap-2">
-                {advancedGroup.name}
-                <Badge variant="secondary">
-                  {advancedGroup.properties.length} settings
-                </Badge>
-              </CardTitle>
-              {#if advancedExpanded}
-                <ChevronDown class="h-4 w-4 text-muted-foreground" />
-              {:else}
-                <ChevronRight class="h-4 w-4 text-muted-foreground" />
-              {/if}
-            </div>
-          </CardHeader>
-        </Collapsible.Trigger>
-        <Collapsible.Content>
-          <CardContent class="space-y-4 pt-0">
-            {#each advancedGroup.properties as [propName, propSchema], i (propName)}
-              {@render propertyField(propName, propSchema)}
-              {#if i < advancedGroup.properties.length - 1}
-                <Separator />
-              {/if}
-            {/each}
-          </CardContent>
-        </Collapsible.Content>
+        <CardHeader>
+          <CardTitle>{group.name}</CardTitle>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          {#each group.properties as [propName, propSchema], i (propName)}
+            {@render propertyField(propName, propSchema)}
+            {#if i < group.properties.length - 1}
+              <Separator />
+            {/if}
+          {/each}
+        </CardContent>
       </Card>
-    </Collapsible.Root>
-  {/if}
+    {/each}
 
-  <!-- Credentials Section -->
-  {#if secretFields.length > 0 || credentialFields.length > 0}
-    <Separator class="my-6" />
-
-    <Card data-testid="connector-credentials">
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Lock class="h-4 w-4" />
-          Credentials
-        </CardTitle>
-        <CardDescription>
-          Sensitive credentials are stored encrypted and never displayed after
-          saving.
-          {#if hasSecrets}
-            <Badge variant="outline" class="ml-2">Configured</Badge>
-          {:else}
-            <Badge variant="destructive" class="ml-2">
-              Not configured
-            </Badge>
-          {/if}
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        {#each credentialFields as { name, schema: propSchema }, i (name)}
-          {@render propertyField(name, propSchema)}
-          {#if i < credentialFields.length - 1 || secretFields.length > 0}
-            <Separator />
-          {/if}
-        {/each}
-        {#each secretFields as { name, schema: propSchema }, i (name)}
-          {@const secretMeta = getPropertyMeta(name)}
-          <div class="space-y-2">
-            <Label>{secretMeta.label}</Label>
-            <div class="flex gap-2">
-              <Input
-                type={visibleSecrets.has(name) ? "text" : "password"}
-                value={getSecretValue(name)}
-                placeholder="Enter to update (leave blank to keep current)"
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  setSecretValue(name, e.currentTarget.value)}
-                class="flex-1"
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                onclick={() => toggleSecretVisibility(name)}
-              >
-                {#if visibleSecrets.has(name)}
-                  <EyeOff class="h-4 w-4" />
+    <!-- Advanced Settings (Collapsible) -->
+    {#if advancedGroup && advancedGroup.properties.length > 0}
+      <Collapsible.Root bind:open={advancedExpanded}>
+        <Card>
+          <Collapsible.Trigger class="w-full">
+            <CardHeader interactive>
+              <div class="flex items-center justify-between">
+                <CardTitle class="flex items-center gap-2">
+                  {advancedGroup.name}
+                  <Badge variant="secondary">
+                    {advancedGroup.properties.length} settings
+                  </Badge>
+                </CardTitle>
+                {#if advancedExpanded}
+                  <ChevronDown class="h-4 w-4 text-muted-foreground" />
                 {:else}
-                  <Eye class="h-4 w-4" />
+                  <ChevronRight class="h-4 w-4 text-muted-foreground" />
                 {/if}
-              </Button>
-            </div>
-            {#if secretMeta.description}
-              <p class="text-sm text-muted-foreground">
-                {secretMeta.description}
-              </p>
+              </div>
+            </CardHeader>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <CardContent class="space-y-4 pt-0">
+              {#each advancedGroup.properties as [propName, propSchema], i (propName)}
+                {@render propertyField(propName, propSchema)}
+                {#if i < advancedGroup.properties.length - 1}
+                  <Separator />
+                {/if}
+              {/each}
+            </CardContent>
+          </Collapsible.Content>
+        </Card>
+      </Collapsible.Root>
+    {/if}
+
+    <!-- Credentials Section -->
+    {#if secretFields.length > 0 || credentialFields.length > 0}
+      <Separator class="my-6" />
+
+      <Card data-testid="connector-credentials">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2">
+            <Lock class="h-4 w-4" />
+            Credentials
+          </CardTitle>
+          <CardDescription>
+            Sensitive credentials are stored encrypted and never displayed after
+            saving.
+            {#if hasSecrets}
+              <Badge variant="outline" class="ml-2">Configured</Badge>
+            {:else}
+              <Badge variant="destructive" class="ml-2">
+                Not configured
+              </Badge>
             {/if}
-            {#if propSchema["x-envVar"] && showEnvVarHints}
-              <p class="text-xs text-muted-foreground/70">
-                Environment variable: <code class="bg-muted px-1 rounded break-all">
-                  {propSchema["x-envVar"]}
-                </code>
-              </p>
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          {#each credentialFields as { name, schema: propSchema }, i (name)}
+            {@render propertyField(name, propSchema)}
+            {#if i < credentialFields.length - 1 || secretFields.length > 0}
+              <Separator />
             {/if}
-          </div>
-          {#if i < secretFields.length - 1}
-            <Separator />
+          {/each}
+          {#each secretFields as { name }, i (name)}
+            {@render secretField(name)}
+            {#if i < secretFields.length - 1}
+              <Separator />
+            {/if}
+          {/each}
+        </CardContent>
+      </Card>
+
+    {/if}
+
+    <!-- Sticky Save Bar -->
+    {#if hasAnyUnsavedChanges && saveLabel}
+      <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex flex-col gap-2">
+        <Button size="xl" class="w-full" onclick={handleSave} disabled={isSaving}>
+          {#if isSaving}
+            <Loader2 class="animate-spin" />
           {/if}
-        {/each}
-      </CardContent>
-    </Card>
-
-  {/if}
-
-  <!-- Sticky Save Bar -->
-  {#if hasAnyUnsavedChanges && saveLabel}
-    <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex flex-col gap-2">
-      <Button size="xl" class="w-full" onclick={handleSave} disabled={isSaving}>
-        {#if isSaving}
-          <Loader2 class="animate-spin" />
-        {/if}
-        {saveLabel}
-      </Button>
-      <Button variant="ghost" onclick={handleCancel} disabled={isSaving}>
-        Cancel
-      </Button>
-    </div>
-  {:else if hasAnyUnsavedChanges}
-    <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex items-center justify-between gap-4">
-      <p class="text-sm text-muted-foreground">You have unsaved changes</p>
-      <div class="flex gap-2">
-        <Button variant="outline" onclick={handleCancel} disabled={isSaving}>
+          {saveLabel}
+        </Button>
+        <Button variant="ghost" onclick={handleCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button onclick={handleSave} disabled={isSaving}>
-          {#if isSaving}
-            <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-            Saving...
-          {:else}
-            <Save class="mr-2 h-4 w-4" />
-            Save
-          {/if}
-        </Button>
       </div>
-    </div>
-  {/if}
-</div>
+    {:else if hasAnyUnsavedChanges}
+      <div class="sticky bottom-0 -mx-3 @md:-mx-6 border-t bg-background px-3 @md:px-6 py-4 flex items-center justify-between gap-4">
+        <p class="text-sm text-muted-foreground">You have unsaved changes</p>
+        <div class="flex gap-2">
+          <Button variant="outline" onclick={handleCancel} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button onclick={handleSave} disabled={isSaving}>
+            {#if isSaving}
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            {:else}
+              <Save class="mr-2 h-4 w-4" />
+              Save
+            {/if}
+          </Button>
+        </div>
+      </div>
+    {/if}
+  </div>
+{/if}

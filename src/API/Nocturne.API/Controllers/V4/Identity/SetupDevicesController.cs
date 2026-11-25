@@ -14,8 +14,9 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The setup hub's Devices item: device guesses with their evidence, and the writes that record
-/// what the owner confirms. Owner-only, like the rest of the setup hub.
+/// The devices step of setup. A caller can read device suggestions with their evidence, confirm a
+/// device, record an insulin or tracker, answer that no insulin is used, and remove an insulin or
+/// tracker that setup added. Only the owner can use these endpoints.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
@@ -31,9 +32,6 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<DeviceSetup>> GetDeviceSetup(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await deviceSetup.GetAsync(ct));
     }
 
@@ -48,16 +46,13 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<InsulinActionTime>> GetInsulinActionTime(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await deviceSetup.ActionTimeAsync(ct));
     }
 
     /// <summary>Records a guessed device, or the catalogue model it was swapped for.</summary>
     [DenyDemoSubject]
     [HttpPost("confirm")]
-    [RequireScope(Scope.DevicesReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.DevicesReadWrite)]
     [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -67,7 +62,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
 
     [DenyDemoSubject]
     [HttpPost("insulins")]
-    [RequireScope(Scope.TherapyReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.TherapyReadWrite)]
     [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -78,7 +73,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     /// <summary>Answers the insulin question with "none", or takes that answer back.</summary>
     [DenyDemoSubject]
     [HttpPut("no-insulin")]
-    [RequireScope(Scope.TherapyReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.TherapyReadWrite)]
     [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -92,7 +87,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     /// </summary>
     [DenyDemoSubject]
     [HttpPost("trackers")]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -103,7 +98,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     /// <summary>Takes back an insulin this item added; one that was on record before is refused.</summary>
     [DenyDemoSubject]
     [HttpDelete("insulins/{formulationId}")]
-    [RequireScope(Scope.TherapyReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.TherapyReadWrite)]
     [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -114,7 +109,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     /// <summary>Deletes a tracker this item created; one the owner had before is refused.</summary>
     [DenyDemoSubject]
     [HttpDelete("trackers/{kind}")]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(true, Scope.FullAccess, Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -125,9 +120,6 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
 
     private async Task<ActionResult<DeviceSetup>> Write(Func<Task> write, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         try
         {
             await write();
