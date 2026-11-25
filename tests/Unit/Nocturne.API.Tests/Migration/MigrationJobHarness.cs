@@ -150,6 +150,12 @@ internal static class MigrationJobHarness
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(handler))
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [Nocturne.Core.Constants.ServiceNames.ConfigKeys.InstanceKey] = "test-instance-key",
+                })
+                .Build())
             .AddSingleton(entries.Object)
             .AddSingleton(treatments.Object)
             .AddSingleton(deviceStatuses.Object)

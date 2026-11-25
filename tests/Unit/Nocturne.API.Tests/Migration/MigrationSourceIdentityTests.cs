@@ -58,6 +58,12 @@ public class MigrationSourceIdentityTests
             .AddSingleton(AccountLinkRoutes.Off)
             .AddScoped<ITenantAccessor, HttpContextTenantAccessor>()
             .AddActiveTenantSnapshot()
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [Nocturne.Core.Constants.ServiceNames.ConfigKeys.InstanceKey] = "test-instance-key",
+                })
+                .Build())
             .AddScoped<INotificationV1Service>(sp => RecordingNotifications(
                 sp.GetRequiredService<ITenantAccessor>(), notifiedTenants ?? []))
             .BuildServiceProvider();
@@ -91,7 +97,12 @@ public class MigrationSourceIdentityTests
         IServiceProvider provider, ILogger<MigrationStartupService>? logger = null) => new(
         provider,
         provider.GetRequiredService<ActiveTenantSnapshot>(),
-        Configured,
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["MIGRATION_MODE"] = "Api",
+            ["MIGRATION_NS_URL"] = TokenUrl,
+            [Nocturne.Core.Constants.ServiceNames.ConfigKeys.InstanceKey] = "test-instance-key",
+        }).Build(),
         logger ?? NullLogger<MigrationStartupService>.Instance);
 
     private static TenantContext Tenant() =>
@@ -121,7 +132,7 @@ public class MigrationSourceIdentityTests
         await using var scope = provider.CreateAsyncScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         var source = await db.MigrationSources.SingleAsync();
-        source.SourceIdentifier.Should().Be(HashUtils.Sha256Hex(SiteBase));
+        source.SourceIdentifier.Should().Be(HashUtils.HmacSha256OverSha256Hex("test-instance-key", SiteBase));
         source.NightscoutUrl.Should().Be(MaskedUrl);
         (await db.MigrationRuns.SingleAsync()).SourceDescription.Should().Be(MaskedUrl);
     }

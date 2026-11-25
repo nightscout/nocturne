@@ -1165,17 +1165,21 @@ internal class MigrationJob
 
     /// <summary>
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
-    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>, a SHA-256 digest of the
-    /// Nightscout base for API mode and of the connection string for MongoDB mode. Only non-usable
-    /// digests and the <see cref="NightscoutAddress.Masked"/> URL are stored, never the API secret,
-    /// a URL's token or path secret, or the connection string themselves.
+    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>, an HMAC-SHA256 over the
+    /// SHA-256 digest of the Nightscout base (API mode) or connection string (MongoDB mode),
+    /// keyed by the instance key. Only non-usable digests and the
+    /// <see cref="NightscoutAddress.Masked"/> URL are stored, never the API secret, a URL's token
+    /// or path secret, or the connection string themselves.
     /// </summary>
     private async Task<Guid> UpsertSourceAsync(NocturneDbContext db, CancellationToken ct)
     {
+        var configuration = _serviceProvider.GetService<IConfiguration>();
+        var instanceKey = ResolveInstanceKey(configuration);
+
         var isApi = _request.Mode == MigrationMode.Api;
         var identifier = isApi
-            ? ApiSourceIdentifier(_request.NightscoutUrl!)
-            : MongoSourceIdentifier(_request.MongoConnectionString ?? string.Empty);
+            ? ApiSourceIdentifier(_request.NightscoutUrl!, instanceKey)
+            : MongoSourceIdentifier(_request.MongoConnectionString ?? string.Empty, instanceKey);
 
         var existing = await db.MigrationSources
             .Where(s => s.TenantId == _tenantId && s.SourceIdentifier == identifier)
@@ -1192,7 +1196,7 @@ internal class MigrationJob
             SourceIdentifier = identifier,
             NightscoutUrl = isApi ? NightscoutAddress.Masked(_request.NightscoutUrl!) : null,
             NightscoutApiSecretHash = isApi && !string.IsNullOrEmpty(_request.NightscoutApiSecret)
-                ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
+                ? HashNightscoutApiSecret(_request.NightscoutApiSecret, instanceKey)
                 : null,
             MongoDatabaseName = isApi ? null : _request.MongoDatabaseName,
             CreatedAt = UtcNow,
@@ -1202,16 +1206,33 @@ internal class MigrationJob
     }
 
     /// <summary>
-    /// Canonical source identifier for an API-mode migration: a non-usable digest of the
-    /// <see cref="NightscoutAddress.Display"/> base, never the URL itself. Shared with the startup
-    /// pending-migration check so the two always agree.
+    /// Canonical source identifier for an API-mode migration: an HMAC-SHA256 over the SHA-256
+    /// digest of the <see cref="NightscoutAddress.Display"/> base, keyed by the instance key.
+    /// Shared with the startup pending-migration check so the two always agree.
     /// </summary>
-    internal static string ApiSourceIdentifier(string nightscoutUrl) =>
-        HashUtils.Sha256Hex(NightscoutAddress.Display(nightscoutUrl));
+    internal static string ApiSourceIdentifier(string nightscoutUrl, string instanceKey) =>
+        HashUtils.HmacSha256OverSha256Hex(instanceKey, NightscoutAddress.Display(nightscoutUrl));
 
-    /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
-    internal static string MongoSourceIdentifier(string connectionString) =>
-        HashUtils.Sha256Hex(connectionString);
+    /// <summary>
+    /// Canonical source identifier for a MongoDB-mode migration: an HMAC-SHA256 over the SHA-256
+    /// digest of the connection string, keyed by the instance key.
+    /// </summary>
+    internal static string MongoSourceIdentifier(string connectionString, string instanceKey) =>
+        HashUtils.HmacSha256OverSha256Hex(instanceKey, connectionString);
+
+    /// <summary>
+    /// Computes the stored <c>nightscout_api_secret_hash</c>: an HMAC-SHA256 over the SHA-256
+    /// digest of the API secret, keyed by the instance key.
+    /// </summary>
+    internal static string HashNightscoutApiSecret(string apiSecret, string instanceKey) =>
+        HashUtils.HmacSha256OverSha256Hex(instanceKey, apiSecret);
+
+    internal static string ResolveInstanceKey(IConfiguration? configuration) =>
+        configuration is null
+            ? string.Empty
+            : configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
+              ?? configuration[ServiceNames.ConfigKeys.InstanceKey]
+              ?? string.Empty;
 
     /// <summary>A run record's status as of <paramref name="now"/>; a live run's from its checkpoint.</summary>
     public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run, DateTime now)
