@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Alerts.Corpus;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
@@ -15,7 +16,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
@@ -85,11 +85,6 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 : ValueTask.FromResult(result);
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
@@ -150,18 +145,18 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
         var controller = new AlertRulesController(
-            new Factory(() => Context(tenant, failure)),
-            new TenantMembershipRepository(new Factory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
-            new SubjectRepository(new Factory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
-            new AlertRepository(new Factory(() => Context(tenant, failure))),
-            new AlertRuleRepository(new Factory(() => Context(tenant, failure))),
+            new SuppliedContextFactory(() => Context(tenant, failure)),
+            new TenantMembershipRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
+            new SubjectRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
+            new AlertRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
+            new AlertRuleRepository(new SuppliedContextFactory(() => Context(tenant, failure)), TimeProvider.System),
             MockTenantAccessor.Create(tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
         return (controller, tenant, rule, failure);

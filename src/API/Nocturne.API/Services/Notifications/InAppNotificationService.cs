@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.ClientDevices;
@@ -189,33 +188,14 @@ public class InAppNotificationService : IInAppNotificationService
             userId
         );
 
-        // Broadcast the notification created event
-        try
-        {
-            await _broadcastService.BroadcastNotificationCreatedAsync(userId, dto);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification created event for {NotificationId}",
-                dto.Id
-            );
-        }
+        await _broadcastService.BroadcastNotificationCreatedAsync(userId, dto);
 
         // Mirror qualifying non-alert notifications to the user's registered devices. Alerts reach
         // devices via device_action channels, so alert.firing is excluded by Qualifies.
         if (DeviceNotificationMirror.Qualifies(dto))
         {
-            try
-            {
-                await _broadcastService.BroadcastDeviceNotificationAsync(
-                    new DeviceNotificationMirror { UserId = userId, Notification = dto });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to mirror notification {NotificationId} to devices", dto.Id);
-            }
+            await _broadcastService.BroadcastDeviceNotificationAsync(
+                new DeviceNotificationMirror { UserId = userId, Notification = dto });
         }
 
         return dto;
@@ -291,20 +271,8 @@ public class InAppNotificationService : IInAppNotificationService
             reason
         );
 
-        // Broadcast the notification archived event
-        var dto = InAppNotificationRepository.ToDto(archived);
-        try
-        {
-            await _broadcastService.BroadcastNotificationArchivedAsync(archived.UserId, dto, reason);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification archived event for {NotificationId}",
-                notificationId
-            );
-        }
+        await _broadcastService.BroadcastNotificationArchivedAsync(
+            archived.UserId, InAppNotificationRepository.ToDto(archived), reason);
 
         return true;
     }
@@ -335,7 +303,7 @@ public class InAppNotificationService : IInAppNotificationService
             return false;
         }
 
-        await BroadcastUpdatedSafeAsync(updated);
+        await BroadcastUpdatedAsync(updated);
         return true;
     }
 
@@ -349,7 +317,7 @@ public class InAppNotificationService : IInAppNotificationService
 
         foreach (var entity in updated)
         {
-            await BroadcastUpdatedSafeAsync(entity);
+            await BroadcastUpdatedAsync(entity);
         }
 
         _logger.LogInformation(
@@ -361,26 +329,9 @@ public class InAppNotificationService : IInAppNotificationService
         return updated.Count;
     }
 
-    /// <summary>
-    /// Broadcast a notification-updated event, logging and swallowing any failure so a
-    /// broadcast hiccup never fails the mark-read operation.
-    /// </summary>
-    private async Task BroadcastUpdatedSafeAsync(InAppNotificationEntity entity)
-    {
-        var dto = InAppNotificationRepository.ToDto(entity);
-        try
-        {
-            await _broadcastService.BroadcastNotificationUpdatedAsync(entity.UserId, dto);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification updated event for {NotificationId}",
-                entity.Id
-            );
-        }
-    }
+    private Task BroadcastUpdatedAsync(InAppNotificationEntity entity) =>
+        _broadcastService.BroadcastNotificationUpdatedAsync(
+            entity.UserId, InAppNotificationRepository.ToDto(entity));
 
     /// <inheritdoc />
     public async Task<string?> GetNotificationTypeAsync(
@@ -400,7 +351,7 @@ public class InAppNotificationService : IInAppNotificationService
     }
 
     /// <inheritdoc />
-    public async Task<bool> ExecuteActionAsync(
+    public async Task<NotificationActionResult> ExecuteActionAsync(
         Guid notificationId,
         string actionId,
         string userId,
@@ -415,7 +366,7 @@ public class InAppNotificationService : IInAppNotificationService
                 "Attempted to execute action on non-existent notification {NotificationId}",
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         // Verify the notification belongs to the user
@@ -426,7 +377,7 @@ public class InAppNotificationService : IInAppNotificationService
                 userId,
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         _logger.LogDebug(
@@ -444,7 +395,7 @@ public class InAppNotificationService : IInAppNotificationService
 
         if (_actionHandlers.TryGetValue(notification.Type, out var handler))
         {
-            var metadata = DeserializeMetadata(notification.MetadataJson);
+            var metadata = InAppNotificationRepository.DeserializeMetadata(notification.MetadataJson);
             var result = await handler.HandleAsync(
                 notificationId,
                 actionId,
@@ -454,14 +405,14 @@ public class InAppNotificationService : IInAppNotificationService
                 cancellationToken
             );
 
-            if (result.Handled || builtInArchive is null)
+            if (result.Handled || result.RefusedScope is not null || builtInArchive is null)
             {
-                if (result.Archive is { } reason)
+                if (result.RefusedScope is null && result.Archive is { } reason)
                 {
                     await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
                 }
 
-                return result.Handled;
+                return result;
             }
 
             _logger.LogInformation(
@@ -472,12 +423,9 @@ public class InAppNotificationService : IInAppNotificationService
             );
         }
 
-        return await ArchiveNotificationAsync(
-            notificationId,
-            builtInArchive ?? NotificationArchiveReason.Completed,
-            userId,
-            cancellationToken
-        );
+        var archiveReason = builtInArchive ?? NotificationArchiveReason.Completed;
+        var archived = await ArchiveNotificationAsync(notificationId, archiveReason, userId, cancellationToken);
+        return new NotificationActionResult(archived, archived ? archiveReason : null);
     }
 
     /// <inheritdoc />
@@ -508,25 +456,5 @@ public class InAppNotificationService : IInAppNotificationService
         }
 
         return await ArchiveNotificationAsync(notification.Id, reason, userId, cancellationToken);
-    }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
-    private static Dictionary<string, object>? DeserializeMetadata(string? json)
-    {
-        if (string.IsNullOrEmpty(json))
-            return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions);
-        }
-        catch
-        {
-            return null;
-        }
     }
 }

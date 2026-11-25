@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.Core.Models;
+using Polly;
 
 namespace Nocturne.API.Services.Compatibility;
 
@@ -42,8 +43,8 @@ public interface IDiscrepancyForwardingService
 /// </para>
 /// <para>
 /// HTTP forwarding always targets the fixed path <c>/api/v4/discrepancy/ingest</c> on the
-/// configured <c>EndpointUrl</c>. Retries use exponential back-off; 4xx responses are not
-/// retried because they indicate a permanent client-side error. The HTTP client is named
+/// configured <c>EndpointUrl</c>. A report is sent once (see
+/// <see cref="Nocturne.Connectors.Core.Extensions.RepeatableRequest"/>). The HTTP client is named
 /// <see cref="HttpClientName"/> and must be registered in the DI container.
 /// </para>
 /// <para>
@@ -128,7 +129,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
         // Forward to remote endpoint if enabled and configured
         if (settings.Enabled && !string.IsNullOrEmpty(settings.EndpointUrl))
         {
-            forwardSuccess = await ForwardWithRetriesAsync(payload, settings, cancellationToken);
+            forwardSuccess = await ForwardAsync(payload, settings, cancellationToken);
         }
         else if (settings.Enabled && string.IsNullOrEmpty(settings.EndpointUrl))
         {
@@ -262,97 +263,66 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
         };
     }
 
-    private async Task<bool> ForwardWithRetriesAsync(
+    private async Task<bool> ForwardAsync(
         ForwardedDiscrepancyDto payload,
         DiscrepancyForwardingSettings settings,
         CancellationToken cancellationToken)
     {
-        var retryCount = 0;
-        var maxRetries = settings.RetryAttempts;
-
-        while (retryCount <= maxRetries)
+        try
         {
-            try
+            using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+
+            var endpointUri = new Uri(new Uri(settings.EndpointUrl.TrimEnd('/')), "/api/v4/discrepancy/ingest");
+
+            var json = JsonSerializer.Serialize(payload, JsonOptions);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpointUri);
+            request.Content = content;
+
+            if (!string.IsNullOrEmpty(settings.ApiKey))
             {
-                using var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-                httpClient.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+            }
 
-                var endpointUri = new Uri(new Uri(settings.EndpointUrl.TrimEnd('/')), "/api/v4/discrepancy/ingest");
+            request.Headers.Add("X-Nocturne-Source", payload.SourceId);
+            request.Headers.Add("X-Correlation-ID", payload.Analysis.TraceId);
 
-                var json = JsonSerializer.Serialize(payload, JsonOptions);
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var response = await httpClient.SendAsync(request, cancellationToken);
 
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpointUri);
-                request.Content = content;
-
-                // Add authentication if configured
-                if (!string.IsNullOrEmpty(settings.ApiKey))
-                {
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
-                }
-
-                // Add source identification header
-                request.Headers.Add("X-Nocturne-Source", payload.SourceId);
-                request.Headers.Add("X-Correlation-ID", payload.Analysis.TraceId);
-
-                var response = await httpClient.SendAsync(request, cancellationToken);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    _logger.LogDebug(
-                        "Successfully forwarded discrepancy {CorrelationId} to {Endpoint}",
-                        payload.Analysis.TraceId,
-                        settings.EndpointUrl
-                    );
-                    return true;
-                }
-
-                _logger.LogWarning(
-                    "Failed to forward discrepancy {CorrelationId} to {Endpoint}: {StatusCode}",
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug(
+                    "Successfully forwarded discrepancy {CorrelationId} to {Endpoint}",
                     payload.Analysis.TraceId,
-                    settings.EndpointUrl,
-                    response.StatusCode
+                    settings.EndpointUrl
                 );
-
-                // Don't retry on client errors (4xx)
-                if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
-                {
-                    return false;
-                }
-            }
-            catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogDebug("Discrepancy forwarding cancelled");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Error forwarding discrepancy {CorrelationId} to {Endpoint} (attempt {Attempt}/{MaxAttempts})",
-                    payload.Analysis.TraceId,
-                    settings.EndpointUrl,
-                    retryCount + 1,
-                    maxRetries + 1
-                );
+                return true;
             }
 
-            retryCount++;
-
-            if (retryCount <= maxRetries)
-            {
-                // Exponential backoff
-                var delay = settings.RetryDelayMs * (int)Math.Pow(2, retryCount - 1);
-                await Task.Delay(delay, cancellationToken);
-            }
+            _logger.LogWarning(
+                "Failed to forward discrepancy {CorrelationId} to {Endpoint}: {StatusCode}",
+                payload.Analysis.TraceId,
+                settings.EndpointUrl,
+                response.StatusCode
+            );
+            return false;
         }
-
-        _logger.LogError(
-            "Failed to forward discrepancy {CorrelationId} after {MaxAttempts} attempts",
-            payload.Analysis.TraceId,
-            maxRetries + 1
-        );
-
-        return false;
+        catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug("Discrepancy forwarding cancelled");
+            return false;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ExecutionRejectedException
+            or InvalidOperationException or NotSupportedException or UriFormatException or FormatException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Error forwarding discrepancy {CorrelationId} to {Endpoint}",
+                payload.Analysis.TraceId,
+                settings.EndpointUrl
+            );
+            return false;
+        }
     }
 }

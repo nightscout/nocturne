@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -41,11 +42,7 @@ public class GlookoEndpointPacingTests
         await Task.Delay(200);
         handler.Fetched.Should().HaveCount(1, "the clock has not moved, so the pause before the second endpoint holds");
 
-        while (!sync.IsCompleted)
-        {
-            clock.Advance(Pause);
-            await Task.Delay(10);
-        }
+        await Eventually.UntilAsync("the sync to complete", () => sync.IsCompleted, eachStep: () => clock.Advance(Pause));
 
         await sync;
         handler.Fetched.Select(fetch => fetch.Path).Should().Equal(V2Endpoints);
@@ -69,7 +66,7 @@ public class GlookoEndpointPacingTests
         await Task.Delay(200);
         await cts.CancelAsync();
 
-        await FluentActions.Awaiting(() => sync.WaitAsync(TimeSpan.FromSeconds(5)))
+        await FluentActions.Awaiting(() => sync.WaitAsync(Eventually.DefaultPatience))
             .Should().ThrowAsync<OperationCanceledException>();
         handler.Fetched.Should().HaveCount(1, "the pause was cut short and nothing after it ran");
         progress.Phases.Should().EndWith(SyncPhase.Failed);
@@ -85,15 +82,8 @@ public class GlookoEndpointPacingTests
         From = DateTime.UtcNow.AddDays(-3),
     };
 
-    private static async Task WaitForRequestsAsync(V2RecordingHandler handler, int count)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (handler.Fetched.Count < count)
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the sync should have reached its first endpoint");
-            await Task.Delay(10);
-        }
-    }
+    private static Task WaitForRequestsAsync(V2RecordingHandler handler, int count) =>
+        Eventually.UntilAsync($"the sync to reach endpoint {count}", () => handler.Fetched.Count >= count);
 
     private sealed class V2RecordingHandler(TimeProvider clock) : DelegatingHandler(new GlookoEndpointHandler())
     {

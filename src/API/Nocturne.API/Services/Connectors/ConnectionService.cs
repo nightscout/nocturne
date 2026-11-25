@@ -1,5 +1,6 @@
 using Nocturne.API.Models;
 using Nocturne.API.Services.Identity;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
@@ -31,6 +32,7 @@ public class ConnectionService(
     ITenantMembershipRepository members,
     ISubjectRepository subjects,
     ITenantAccessor tenant,
+    IConnectorStateStore connectorState,
     TimeProvider time) : IConnectionService
 {
     private const int SenderActiveMinutes = 15;
@@ -100,7 +102,9 @@ public class ConnectionService(
             if (owned.Count == 0 && !status.IsEnabled && !status.HasDatabaseConfig)
                 continue;
 
-            connections.Add(FromConnector(status, owned, androidApsDevices));
+            var connection = FromConnector(status, owned, androidApsDevices);
+            connection.TimeZone = await ReadTimeZoneAsync(status, ct);
+            connections.Add(connection);
         }
 
         foreach (var import in ConnectorMetadataService.GetAll().Where(c => c.IsImport))
@@ -298,6 +302,18 @@ public class ConnectionService(
         connection.Direction == ConnectionDirection.Sends
             ? now - connection.LastRecordAt < TimeSpan.FromMinutes(SenderActiveMinutes)
             : now - connection.LastUsedAt < ReaderActiveWindow;
+
+    private async Task<ConnectorTimeZone?> ReadTimeZoneAsync(ConnectorStatusDto status, CancellationToken ct)
+    {
+        if (!status.HasDatabaseConfig)
+            return null;
+
+        if (ConnectorMetadataService.GetByConnectorId(status.Id)?.DataSourceId is not { Length: > 0 } source)
+            return null;
+
+        var stored = await connectorState.VendorAsync(source, ConnectorTimeZone.VendorStateKey, ct);
+        return ConnectorTimeZone.FromStored(stored);
+    }
 
     private static Connection FromConnector(
         ConnectorStatusDto status, List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices)

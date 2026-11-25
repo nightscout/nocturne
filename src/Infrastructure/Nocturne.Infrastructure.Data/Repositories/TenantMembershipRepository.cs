@@ -101,6 +101,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         {
             return await InTransactionAsync(member.TenantId, async (db, token) =>
             {
+                await db.LockSubjectRowSharedAsync(member.SubjectId, token);
                 await db.LockMembershipAsync(member.TenantId, member.SubjectId, token);
                 if (await db.TenantMembers.AnyAsync(m => m.TenantId == member.TenantId && m.SubjectId == member.SubjectId, token))
                     return false;
@@ -124,6 +125,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         {
             return await InTransactionAsync(member.TenantId, async (db, token) =>
             {
+                await db.LockSubjectRowSharedAsync(member.SubjectId, token);
                 await db.LockMembershipAsync(member.TenantId, member.SubjectId, token);
                 var existing = await db.TenantMembers
                     .FirstOrDefaultAsync(m => m.TenantId == member.TenantId && m.SubjectId == member.SubjectId, token);
@@ -200,8 +202,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     /// <summary>
     /// Stages the reason a team's access to the tenant (<paramref name="teamAccessId"/>) gives
     /// <paramref name="subjectId"/> through <see cref="MembershipReasons.AddTeamReasonAsync"/>, with the rows
-    /// of what it gives, attributed to <paramref name="source"/>. For the team's staff: no request path
-    /// calls it yet.
+    /// of what it gives, attributed to <paramref name="source"/>.
     /// </summary>
     internal static async Task<TenantMemberEntity> StageAddTeamReasonAsync(
         NocturneDbContext db, Guid tenantId, Guid subjectId, Guid teamAccessId, MembershipGrant grant,
@@ -213,21 +214,78 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <summary>
+    /// Stages setting the reason a team's access to the tenant (<paramref name="teamAccessId"/>) gives
+    /// <paramref name="subjectId"/> to <paramref name="grant"/> through <see cref="MembershipReasons.SetTeamReasonAsync"/>,
+    /// with the rows of what changed in it, attributed to <paramref name="source"/>, on <paramref name="unit"/>,
+    /// which must be pinned to <paramref name="tenantId"/>. A reason whose end had passed and whose grant is
+    /// in force again also stages its joined row, as <see cref="StageAddTeamReasonAsync"/> does, since the
+    /// member has access through the team again. A membership it leaves with an earlier end has what the
+    /// subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
+    /// </summary>
+    /// <returns>The grants the cap lowered, for the caller to evict their sessions once the unit commits.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The subject holds no reason from the access, or <paramref name="grant"/> gives the owner role.
+    /// </exception>
+    internal static async Task<IReadOnlyList<OAuthGrantRecord>> StageSetTeamReasonAsync(
+        DbUnitOfWork unit, Guid tenantId, Guid subjectId, Guid teamAccessId, MembershipGrant grant, MemberAccessSource source,
+        DateTime now, CancellationToken ct)
+    {
+        var db = unit.Context;
+        await db.LockMembershipAsync(tenantId, subjectId, ct);
+        var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
+        if (member is null || await MembershipReasons.TeamGrantAsync(db, member, teamAccessId, now, ct) is not { } before)
+            throw new InvalidOperationException($"Subject {subjectId} holds no reason from team access {teamAccessId} on tenant {tenantId}.");
+
+        if (MembershipLiveness.HasEnded(before.AccessEndsAt, now) && !MembershipLiveness.HasEnded(grant.AccessEndsAt, now))
+        {
+            var team = await db.TeamTenantAccess.AsNoTracking()
+                .Where(a => a.Id == teamAccessId)
+                .Select(a => new MemberAccessTeam(a.TeamId, a.Team!.Name))
+                .FirstAsync(ct);
+            MemberAccessAudit.StageJoined(db, tenantId, subjectId, MembershipJoinHow.Team, inviteId: null, by: null, team, source);
+        }
+
+        MemberAccessAudit.StageRoles(
+            db, tenantId, subjectId,
+            await SlugsOfAsync(db, grant.RoleIds.Except(before.RoleIds).ToList(), ct),
+            await SlugsOfAsync(db, before.RoleIds.Except(grant.RoleIds).ToList(), ct),
+            source);
+        MemberAccessAudit.StagePermissions(db, tenantId, subjectId, before.DirectPermissions, grant.DirectPermissions, source);
+        MemberAccessAudit.StageHistoryLimit(db, tenantId, subjectId, before.LimitTo24Hours, grant.LimitTo24Hours, source);
+        MemberAccessAudit.StageAccessEnd(db, tenantId, subjectId, before.AccessEndsAt, grant.AccessEndsAt, source);
+        return await MembershipReasons.SetTeamReasonAsync(db, member, teamAccessId, grant, now, ct) is { } end
+            ? await MemberCreations.CapAsync(unit, subjectId, end, now, ct)
+            : [];
+    }
+
+    /// <summary>
     /// Stages the removal of the reason a team's access to the tenant (<paramref name="teamAccessId"/>)
     /// gives <paramref name="subjectId"/> through <see cref="MembershipReasons.RemoveTeamReasonAsync"/>, with
-    /// the rows of what it gave, attributed to <paramref name="source"/>; false when they hold none.
+    /// the rows of what it gave, attributed to <paramref name="source"/>, on <paramref name="unit"/>, which
+    /// must be pinned to <paramref name="tenantId"/>. A membership it leaves with an earlier end has what
+    /// the subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
+    /// When it is the member's only reason, the membership is removed and nothing they made is revoked
+    /// or capped here: the caller must revoke and cap what the member made, as <c>MembershipRemoval</c>
+    /// does for a direct removal.
     /// </summary>
-    internal static async Task<bool> StageRemoveTeamReasonAsync(
-        NocturneDbContext db, Guid tenantId, Guid subjectId, Guid teamAccessId, MemberAccessSource source, DateTime now,
+    /// <returns>
+    /// The grants the cap lowered, for the caller to evict their sessions once the unit commits; null
+    /// when they hold no such reason.
+    /// </returns>
+    internal static async Task<IReadOnlyList<OAuthGrantRecord>?> StageRemoveTeamReasonAsync(
+        DbUnitOfWork unit, Guid tenantId, Guid subjectId, Guid teamAccessId, MemberAccessSource source, DateTime now,
         CancellationToken ct)
     {
+        var db = unit.Context;
         await db.LockMembershipAsync(tenantId, subjectId, ct);
         var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
         if (member is null || await MembershipReasons.TeamGrantAsync(db, member, teamAccessId, now, ct) is not { } grant)
-            return false;
+            return null;
 
         await StageGrantRemovedRowsAsync(db, tenantId, subjectId, grant, source, ct);
-        return await MembershipReasons.RemoveTeamReasonAsync(db, member, teamAccessId, source, now, ct);
+        return await MembershipReasons.RemoveTeamReasonAsync(db, member, teamAccessId, source, now, ct) is { } end
+            ? await MemberCreations.CapAsync(unit, subjectId, end, now, ct)
+            : [];
     }
 
     /// <summary>
@@ -396,6 +454,19 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsWhoCanSignInAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var lease = await OpenForTenantAsync(tenantId, ct);
+        var db = lease.Context;
+        var capable = db.Subjects.WhoCanSignIn(db, _linkRoute);
+        return await db.TenantMembers.AsNoTracking()
+            .OwnersOf(tenantId)
+            .Where(m => capable.Any(s => s.Id == m.SubjectId))
+            .Select(m => m.SubjectId)
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<string?> GetEarliestOwnerPreferencesAsync(Guid tenantId, CancellationToken ct)
     {
         await using var lease = await OpenForTenantAsync(tenantId, ct);
@@ -413,44 +484,71 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <summary>
-    /// Runs <paramref name="change"/> under the tenant's owner lock (<see cref="TenantOwnerLock"/>)
-    /// and saves it when it reports <see cref="OwnerGuardedChange.Changed"/>: on this repository's unit,
-    /// whose owner commits it, else on a new unit pinned to <paramref name="tenantId"/>.
+    /// Stages <paramref name="change"/> on this repository's unit under the tenant's owner lock
+    /// (<see cref="TenantOwnerLock"/>) and its team access lock (<see cref="TeamAccessLock"/>), in the
+    /// order <see cref="MembershipLock"/> states, for the unit's owner to save, sync and commit.
     /// </summary>
     /// <remarks>
-    /// Holding the lock from the check to the commit makes the second of two owners stepping down or
-    /// removing each other read the first one's write.
+    /// Holding the owner lock from the check to the commit makes the second of two owners stepping down
+    /// or removing each other read the first one's write. A change here can change whether the member
+    /// owns the site, and an owner holds no team reason, so the owner of the unit syncs the member's team
+    /// reasons in the same commit (<see cref="TeamReasonChanges.SyncAsync"/>), which needs the team access
+    /// lock; it cannot be taken after the membership lock the change takes. There is no form without a
+    /// unit: it would commit an owner change that nothing syncs.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">The repository is over a unit with no transaction open.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The repository is not over a unit, or the unit has no transaction open.
+    /// </exception>
     private async Task<OwnerGuardedChange> UnderOwnersLockAsync(
         Guid tenantId,
         Func<NocturneDbContext, CancellationToken, Task<OwnerGuardedChange>> change,
         CancellationToken ct)
     {
-        if (_unit is not null)
-        {
-            await _unit.Context.LockTenantOwnersAsync(tenantId, ct);
-            return await change(_unit.Context, ct);
-        }
-
-        await using var unit = await DbUnitOfWork.OpenForTenantAsync(Pinnable, tenantId, ct);
-        return await unit.CommitAsync(
-            async token =>
-            {
-                await unit.Context.LockTenantOwnersAsync(tenantId, token);
-                var outcome = await change(unit.Context, token);
-                if (outcome == OwnerGuardedChange.Changed)
-                    await unit.Context.SaveChangesAsync(token);
-                return outcome;
-            },
-            ct: ct);
+        var unit = _unit ?? throw new InvalidOperationException(
+            "An owner-guarded change runs on a repository over a unit, whose owner syncs the member's team reasons in its commit.");
+        await unit.Context.LockTenantOwnersAsync(tenantId, ct);
+        await unit.Context.LockTeamAccessAsync(tenantId, ct);
+        return await change(unit.Context, ct);
     }
 
-    /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(
-        Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct) =>
-        UnderOwnersLockAsync(tenantId, async (db, token) =>
+    /// <summary>
+    /// Takes, on <paramref name="unit"/>, what a write that can change whether <paramref name="subjectId"/>
+    /// owns <paramref name="tenantId"/> holds from before any other lock to its commit, in the order
+    /// <see cref="MembershipLock"/> states: the subject's row, the site's owners lock and its team access
+    /// lock. Under them the write and then a sync of the subject's team reasons at the site
+    /// (<see cref="TeamReasonChanges.SyncAsync"/>) can each take the membership's lock.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the unit.</exception>
+    public static async Task LockOwnerChangeAsync(DbUnitOfWork unit, Guid tenantId, Guid subjectId, CancellationToken ct)
+    {
+        await unit.LockSubjectRowSharedAsync(subjectId, ct);
+        await unit.Context.LockTenantOwnersAsync(tenantId, ct);
+        await unit.Context.LockTeamAccessAsync(tenantId, ct);
+    }
+
+    /// <summary>
+    /// Stages on this repository's unit the removal of the membership's direct reason, refused with
+    /// <see cref="OwnerGuardedChange.LastOwner"/> when <see cref="TenantOwnerFilter.IsLastOwnerAsync"/>
+    /// says it is the last owner, and with <see cref="OwnerGuardedChange.FromTeam"/> when it holds no
+    /// direct reason. A membership whose only reason it is goes with it; one that also holds a team's
+    /// reason stays, projected at <paramref name="now"/> from what is left, and says the end it keeps.
+    /// Its removed row records <paramref name="how"/>.
+    /// </summary>
+    /// <remarks>
+    /// Call it inside the unit's commit, which holds the locks <see cref="UnderOwnersLockAsync"/> takes
+    /// until it commits. The caller saves, caps what the member made at
+    /// <see cref="DirectReasonRemoval.KeptAccessEndsAt"/> (<c>MemberCreations.CapAsync</c>) and syncs the
+    /// subject's team reasons on the tenant, all in that commit.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public async Task<DirectReasonRemoval> RemoveMemberUnlessLastOwnerAsync(
+        Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct)
+    {
+        var kept = false;
+        DateTime? keptEnd = null;
+        var outcome = await UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
+            (kept, keptEnd) = (false, null);
             if (await db.IsLastOwnerAsync(tenantId, memberId, _linkRoute, token))
                 return OwnerGuardedChange.LastOwner;
 
@@ -461,9 +559,12 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 return OwnerGuardedChange.FromTeam;
 
             await StageGrantRemovedRowsAsync(db, tenantId, member.SubjectId, direct, source: null, token);
-            await MembershipReasons.RemoveDirectReasonAsync(db, member, how, now, token);
+            kept = await MembershipReasons.RemoveDirectReasonAsync(db, member, how, now, token);
+            keptEnd = kept ? member.AccessEndsAt : null;
             return OwnerGuardedChange.Changed;
         }, ct);
+        return new DirectReasonRemoval(outcome, kept, keptEnd);
+    }
 
     /// <inheritdoc/>
     public virtual async Task<SubjectMembershipsRemoval> RemoveMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct)
@@ -486,6 +587,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
     {
         var leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, linkRoute, ct);
+        await db.LockTeamManagersOfSubjectAsync(subjectId, ct);
         var memberships = await db.TenantMembers
             .Include(m => m.MemberRoles)
             .Where(m => m.SubjectId == subjectId)
@@ -553,8 +655,16 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return true;
         }, ct);
 
-    /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(
+    /// <summary>
+    /// Stages on this repository's unit when the membership's direct reason ends, null clearing it, and
+    /// stamps it updated at <paramref name="now"/> when the date moved. Refused with
+    /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it would give an owner an end date, and with
+    /// <see cref="OwnerGuardedChange.FromTeam"/> when it holds no direct reason. The caller saves, caps
+    /// what the member made and syncs the member's team reasons in the unit's commit.
+    /// </summary>
+    /// <remarks>Holds the locks <see cref="UnderOwnersLockAsync"/> takes, so it and a role change cannot race.</remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(
         Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct) =>
         UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
@@ -605,8 +715,17 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return true;
         }, ct);
 
-    /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
+    /// <summary>
+    /// <see cref="ReplaceRolesAsync"/> staged on this repository's unit, refused with
+    /// <see cref="OwnerGuardedChange.LastOwner"/> when it removes the owner role from a membership
+    /// <see cref="TenantOwnerFilter.IsLastOwnerAsync"/> says is the last owner, with
+    /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it gives the owner role to a direct reason
+    /// that has an end date, and with <see cref="OwnerGuardedChange.FromTeam"/> when the membership holds
+    /// no direct reason. The caller saves and syncs the member's team reasons in the unit's commit.
+    /// </summary>
+    /// <remarks>Holds the locks <see cref="UnderOwnersLockAsync"/> takes.</remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
         Guid tenantId, Guid memberId, IReadOnlyCollection<Guid> removedRoleIds, IReadOnlyCollection<Guid> addedRoleIds,
         DateTime now, CancellationToken ct) =>
         UnderOwnersLockAsync(tenantId, async (db, token) =>
@@ -673,12 +792,12 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         Guid subjectId, Guid tenantId, DateTime now, CancellationToken ct) =>
         MembershipReasons.ReadInForceAsync(_contexts, tenantId, now, async (inForce, token) =>
         {
-            var row = await ReadSubjectMembershipRowAsync(subjectId, tenantId, inForce, token);
-            return (row is null ? null : new SubjectMembershipRead(row.IsPlatformAdmin, row.IsActive, row.Facts()), subjectId, row?.NextReasonLapseAt);
+            var row = await ReadSubjectMembershipRowAsync(subjectId, tenantId, now, inForce, token);
+            return (row is null ? null : new SubjectMembershipRead(row.IsPlatformAdmin, row.IsActive, row.Facts(now)), subjectId, row?.NextReasonLapseAt);
         }, ct);
 
     private async Task<MembershipRow?> ReadSubjectMembershipRowAsync(
-        Guid subjectId, Guid tenantId, Expression<Func<TenantMemberEntity, bool>> inForce, CancellationToken ct)
+        Guid subjectId, Guid tenantId, DateTime now, Expression<Func<TenantMemberEntity, bool>> inForce, CancellationToken ct)
     {
         await using var lease = await OpenForTenantAsync(tenantId, ct);
         var db = lease.Context;
@@ -702,6 +821,9 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                     AccessEndsAt = m.AccessEndsAt,
                     NextReasonLapseAt = m.NextReasonLapseAt,
                     LastUsedAt = m.LastUsedAt,
+                    Reasons = m.Reasons.AsQueryable()
+                        .Where(r => r.TenantMember.NextReasonLapseAt == null || r.TenantMember.NextReasonLapseAt > now)
+                        .Select(MembershipReasonColumns.Of).ToList(),
                 })
             .FirstOrDefaultAsync(ct);
     }
@@ -727,25 +849,26 @@ public class TenantMembershipRepository : ITenantMembershipRepository
 
         public DateTime? LastUsedAt { get; init; }
 
-        public TenantMembershipFacts? Facts() => MemberId is { } id
-            ? new TenantMembershipFacts(
-                id,
-                new TenantMemberAccess(
-                    MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
-                    LimitTo24Hours == true,
-                    AccessEndsAt),
-                LastUsedAt)
-            : null;
+        public List<MembershipReasonColumns> Reasons { get; init; } = [];
+
+        public TenantMembershipFacts? Facts(DateTime now)
+        {
+            if (MemberId is not { } id)
+                return null;
+
+            var access = new TenantMemberAccess(
+                MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
+                LimitTo24Hours == true,
+                AccessEndsAt);
+            return new TenantMembershipFacts(id, access, MembershipReasonColumns.DirectAccess(Reasons, access, now), LastUsedAt);
+        }
     }
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<Guid>> ListTenantIdsOfSubjectAsync(Guid subjectId, CancellationToken ct)
     {
         await using var db = await Pinnable.CreateForSubjectAsync(subjectId, ct);
-        return await db.TenantMembers.AsNoTracking()
-            .Where(m => m.SubjectId == subjectId)
-            .Select(m => m.TenantId)
-            .ToListAsync(ct);
+        return await db.TenantMembers.AsNoTracking().TenantIdsOf(subjectId).ToListAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -960,37 +1083,97 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         return ToRole(entity, 0);
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<TenantRoleUpdate> UpdateRoleAsync(
-        Guid tenantId, Guid roleId, TenantRoleEdit edit, Guid? editorSubjectId, DateTime now, CancellationToken ct)
+    /// <summary>
+    /// Applies <paramref name="edit"/> to the role on <paramref name="unit"/>, which must be pinned to
+    /// <paramref name="tenantId"/>, stamps it updated at <paramref name="now"/> and saves it. Returns with
+    /// it the team reasons that bring the memberships of the staff of every team whose access gives the role
+    /// into line (<see cref="TeamReasonChanges.SyncAsync"/>): a role id resolves at read time, but what a
+    /// ceiling lets through of a role is a copy of its permissions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// While a team's access gives the role, an edit that is not data only (<see cref="Scope.IsDataOnly"/>)
+    /// is refused with <see cref="RoleChangeOutcome.HeldByTeam"/>, and one that adds a permission the role
+    /// does not hold is refused with <see cref="RoleChangeOutcome.HeldByTeamOwnerOnly"/> unless
+    /// <paramref name="editorSubjectId"/> is an owner of the site in force: only an owner may give a team
+    /// more. A null <paramref name="editorSubjectId"/> is the system, which is no owner.
+    /// </para>
+    /// <para>
+    /// It locks the rows of the staff it may sync, then the site's owners lock and team access lock
+    /// (<see cref="MembershipLock"/>), so an approval, a join or an owner change racing it is either seen or
+    /// waits. Null, writing nothing, when a staff member joined between the two: the caller runs it again.
+    /// </para>
+    /// </remarks>
+    public static async Task<(TenantRoleUpdate Update, TeamReasonChanges? Changes)?> LockRoleEditAsync(
+        DbUnitOfWork unit, Guid tenantId, Guid roleId, TenantRoleEdit edit, Guid? editorSubjectId, DateTime now,
+        CancellationToken ct)
     {
-        TenantRoleRecord? updated = null;
-        var outcome = await UnderTeamAccessLockAsync(tenantId, async (db, token) =>
-        {
-            var entity = await db.TenantRoles
-                .Include(r => r.MemberRoles)
-                .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, token);
-            if (entity is null)
-                return RoleChangeOutcome.NotFound;
-            if (await HeldByTeamAsync(db, tenantId, roleId, token))
-            {
-                if (!Scope.IsDataOnly(edit.Permissions))
-                    return RoleChangeOutcome.HeldByTeam;
-                if (Scope.ValidateGrant(edit.Permissions, entity.Permissions) is not null
-                    && !(editorSubjectId is { } editor && await IsOwnerInForceAsync(db, tenantId, editor, now, token)))
-                    return RoleChangeOutcome.HeldByTeamOwnerOnly;
-            }
+        var db = unit.Context;
+        var locked = (await StaffOfRoleAsync(db, tenantId, roleId, ct)).ToHashSet();
+        await db.LockSubjectRowsSharedAsync(locked, ct);
+        await db.LockTenantOwnersAsync(tenantId, ct);
+        await db.LockTeamAccessAsync(tenantId, ct);
 
-            MemberAccessAudit.StageRolePermissions(db, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
-            entity.Name = edit.Name;
-            entity.Slug = edit.Slug;
-            entity.Description = edit.Description;
-            entity.Permissions = [.. edit.Permissions];
-            entity.SysUpdatedAt = now;
-            updated = ToRole(entity, entity.MemberRoles.Count);
-            return RoleChangeOutcome.Changed;
-        }, ct);
-        return new TenantRoleUpdate(outcome, outcome == RoleChangeOutcome.Changed ? updated : null);
+        var staff = await StaffOfRoleAsync(db, tenantId, roleId, ct);
+        if (!locked.IsSupersetOf(staff))
+            return null;
+
+        var (outcome, updated) = await StageRoleEditAsync(db, tenantId, roleId, edit, editorSubjectId, now, ct);
+        if (outcome != RoleChangeOutcome.Changed)
+            return (new TenantRoleUpdate(outcome, null), null);
+
+        await db.SaveChangesAsync(ct);
+        return (new TenantRoleUpdate(outcome, updated), await TeamReasonChanges.SyncAsync(
+            unit, staff.Select(subjectId => (tenantId, subjectId)), now, ct));
+    }
+
+    /// <summary>
+    /// The subjects a team reason from an access of <paramref name="tenantId"/> that gives the role can
+    /// reach: the staff of each such access's team, and whoever holds a reason from one.
+    /// </summary>
+    private static Task<List<Guid>> StaffOfRoleAsync(NocturneDbContext db, Guid tenantId, Guid roleId, CancellationToken ct)
+    {
+        var accessIds = db.TeamTenantAccessRoles.AsNoTracking()
+            .Where(r => r.TenantRoleId == roleId && r.TeamTenantAccess!.TenantId == tenantId)
+            .Select(r => r.TeamTenantAccessId);
+        return db.TeamSiteStaff.AsNoTracking()
+            .Where(s => accessIds.Contains(s.TeamTenantAccessId))
+            .Select(s => s.TeamMember!.SubjectId)
+            .Union(db.TenantMemberReasons.AsNoTracking()
+                .Where(r => r.Kind == MembershipReasonKind.Team && r.SourceId != null && accessIds.Contains(r.SourceId.Value))
+                .Select(r => r.TenantMember.SubjectId))
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Stages <paramref name="edit"/> on the role, refused as <see cref="LockRoleEditAsync"/> says while a
+    /// team's access gives it. The caller holds the site's owners lock and team access lock.
+    /// </summary>
+    private static async Task<(RoleChangeOutcome Outcome, TenantRoleRecord? Role)> StageRoleEditAsync(
+        NocturneDbContext db, Guid tenantId, Guid roleId, TenantRoleEdit edit, Guid? editorSubjectId, DateTime now,
+        CancellationToken ct)
+    {
+        var entity = await db.TenantRoles
+            .Include(r => r.MemberRoles)
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, ct);
+        if (entity is null)
+            return (RoleChangeOutcome.NotFound, null);
+        if (await HeldByTeamAsync(db, tenantId, roleId, ct))
+        {
+            if (!Scope.IsDataOnly(edit.Permissions))
+                return (RoleChangeOutcome.HeldByTeam, null);
+            if (Scope.ValidateGrant(edit.Permissions, entity.Permissions) is not null
+                && !(editorSubjectId is { } editor && await IsOwnerInForceAsync(db, tenantId, editor, now, ct)))
+                return (RoleChangeOutcome.HeldByTeamOwnerOnly, null);
+        }
+
+        MemberAccessAudit.StageRolePermissions(db, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
+        entity.Name = edit.Name;
+        entity.Slug = edit.Slug;
+        entity.Description = edit.Description;
+        entity.Permissions = [.. edit.Permissions];
+        entity.SysUpdatedAt = now;
+        return (RoleChangeOutcome.Changed, ToRole(entity, entity.MemberRoles.Count));
     }
 
     /// <inheritdoc/>

@@ -62,7 +62,7 @@ public abstract class TenantUrlConnectorInstaller<TConfig, TService>(
     ///     that runs in production, and a bare <c>AddHttpClient</c> there left the guard absent for
     ///     exactly the connectors whose base URL a member supplies.
     /// </remarks>
-    protected IHttpClientBuilder ConfigureClient(IHttpClientBuilder builder, TConfig config) =>
+    protected virtual IHttpClientBuilder ConfigureClient(IHttpClientBuilder builder, TConfig config) =>
         builder.ConfigureConnectorClient(
             configuredUrl(config) is { Length: > 0 } url ? url : null,
             options.AdditionalHeaders,

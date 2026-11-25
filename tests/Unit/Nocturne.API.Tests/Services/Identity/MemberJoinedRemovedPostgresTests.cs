@@ -57,26 +57,6 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Row(string EventType, string? Details, Guid? Actor, string? Credential, Guid? Target, Guid? Tenant)
     {
         public string? How => Read("how");
@@ -105,7 +85,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         return context;
     }
 
-    private Factory Contexts(Guid tenant, Guid? actor = null) => new(t => Context(t, actor), tenant);
+    private SuppliedContextFactory Contexts(Guid tenant, Guid? actor = null) => new(() => Context(tenant, actor));
 
     private async Task<Seeded> SeedAsync(string slug)
     {
@@ -149,7 +129,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
 
-    private static MemberInviteService InviteService(Factory contexts) => new(
+    private static MemberInviteService InviteService(SuppliedContextFactory contexts) => new(
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
         new MemberInviteRepository(contexts),
         new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -160,14 +140,14 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         new FakeTimeProvider(Now),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static ITenantRoleService GrantsEverything() =>
         Mock.Of<ITenantRoleService>(r => r.ValidateRoleGrantAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())
             == Task.FromResult(RoleGrantValidation.Valid));
 
-    private static TenantService TenantService(Factory contexts) => new(
+    private static TenantService TenantService(SuppliedContextFactory contexts) => new(
         contexts,
         new TenantRepository(contexts),
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
@@ -179,7 +159,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         Revocation(),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private async Task<(Guid Id, string Token)> InviteAsync(Seeded s, string? label, DateTime? accessEndsAt = null)
     {
@@ -232,7 +212,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MembershipRequestService>.Instance,
             AccountLinkRoutes.Off,
-            Revocation());
+            Revocation(), InertTeamStaff.Announcer());
 
         (await service.ApproveRequestAsync(request, s.Tenant, [s.CaretakerRole], s.Manager, [Scope.FullAccess], accessEndsAt: null))
             .Error.Should().BeNull();
@@ -258,7 +238,8 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
             Mock.Of<IInAppNotificationService>(),
             new FakeTimeProvider(Now),
             NullLogger<AccessRequestService>.Instance,
-            AccountLinkRoutes.Off);
+            AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
 
         (await service.ApproveAsync(pending, s.Tenant, [s.CaretakerRole], null, false, [Scope.FullAccess], s.Manager))
             .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
@@ -384,7 +365,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MemberInviteService>.Instance,
             AccountLinkRoutes.Off,
-            Revocation());
+            Revocation(), InertTeamStaff.Announcer());
 
         (await service.AcceptInviteAsync(token, s.Person, s.Tenant)).ErrorCode.Should().Be("exhausted");
 
@@ -457,7 +438,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         var subjects = new SubjectRepository(contexts, AccountLinkRoutes.Off);
         var (invite, _) = await InviteAsync(s, "Setup");
         var end = Now.UtcDateTime.AddDays(30);
-        var created = await subjects.CreateAsync(new NewSubject("Owner Name", Username: "owner"), Ct);
+        var created = await subjects.CreateSetupOwnerAsync(s.Tenant, new NewSubject("Owner Name", Username: "owner"), Ct);
         (await new TenantMembershipRepository(contexts, AccountLinkRoutes.Off).AddMemberAsync(
             new NewTenantMember(
                 s.Tenant, created, [s.OwnerRole], [Scope.GlucoseRead], Label: "Owner", Username: "owner", LimitTo24Hours: true,

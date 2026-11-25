@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
@@ -181,7 +182,7 @@ public class MealMatchingController : ControllerBase
 
         await _notificationService.ArchiveBySourceAsync(
             userId,
-            "meal_matching.suggested_match",
+            IMealMatchingService.SuggestedMatchNotificationType,
             request.FoodEntryId.ToString(),
             NotificationArchiveReason.Completed,
             HttpContext.RequestAborted);
@@ -238,7 +239,7 @@ public class MealMatchingController : ControllerBase
 
         await _notificationService.ArchiveBySourceAsync(
             userId,
-            "meal_matching.suggested_match",
+            IMealMatchingService.SuggestedMatchNotificationType,
             request.FoodEntryId.ToString(),
             NotificationArchiveReason.Dismissed,
             HttpContext.RequestAborted);

@@ -135,7 +135,6 @@ public class SyncProgressConnectorIdTests
         services.AddSingleton(Mock.Of<IGoogleHealthPlatformSettings>());
         services.AddSingleton(Mock.Of<IGoogleHealthReadingWriter>());
         services.AddSingleton(Mock.Of<IGoogleHealthSyncCoordinator>());
-        services.AddSingleton(Mock.Of<IConnectorSyncCursorStore>());
         services.AddConnectors(new ConfigurationBuilder().Build());
         return services.BuildServiceProvider();
     }

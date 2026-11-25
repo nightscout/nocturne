@@ -218,12 +218,14 @@ public class DemoSessionControllerTests : IDisposable
     {
         var demoTenantService = new DemoTenantService(
             BuildDbFactory().AsNocturneFactory(), new TenantRepository(BuildDbFactory().AsNocturneFactory()), new TenantMembershipRepository(BuildDbFactory().AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(BuildDbFactory().AsNocturneFactory(), AccountLinkRoutes.Off),
+            Mock.Of<ISubjectDeletion>(),
             new EfFirstPartyTokenRepository(BuildDbFactory().AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
-            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off);
+            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var controller = new DemoSessionController(
             demoTenantService,

@@ -23,7 +23,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// <c>platform_admin</c> role can list pending requests, approve them (activating the subject
 /// and adding them as a tenant member), or reject them (deleting the subject record).
 /// </remarks>
-/// <seealso cref="ISubjectService"/>
+/// <seealso cref="ISubjectDeletion"/>
 /// <seealso cref="IAccessRequestService"/>
 [ApiController]
 [System.ComponentModel.DisplayName("Access Requests")]
@@ -34,7 +34,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 public class AccessRequestController(
     ITenantMembershipRepository members,
     ISubjectRepository subjects,
-    ISubjectService subjectService,
+    ISubjectDeletion subjectDeletion,
     IAccessRequestService accessRequests,
     ITenantAccessor tenantAccessor,
     IInAppNotificationService notificationService,
@@ -67,6 +67,9 @@ public class AccessRequestController(
         [FromBody] ApproveAccessRequestRequest request,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var result = await accessRequests.ApproveAsync(
             subjectId,
             tenantAccessor.Context?.TenantId,
@@ -98,7 +101,10 @@ public class AccessRequestController(
         }
     }
 
-    /// <inheritdoc cref="ISubjectService.DeleteSubjectAsync"/>
+    /// <summary>
+    /// Denies a pending access request by deleting its subject, with what they made
+    /// (<see cref="ISubjectDeletion"/>).
+    /// </summary>
     [HttpPost("{subjectId:guid}/deny")]
     [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -111,7 +117,7 @@ public class AccessRequestController(
         if (subject is not { ApprovalStatus: nameof(ApprovalStatus.Pending) })
             return NotFound();
 
-        var refusal = await subjectService.DeleteSubjectAsync(subjectId) switch
+        var refusal = (await subjectDeletion.DeleteAsync(subjectId, evenLastOwner: false, ct)).Change switch
         {
             SubjectChange.LastOwnerOf lastOwnerOf =>
                 $"The subject is the only owner, or the last owner who can sign in, of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
@@ -131,7 +137,7 @@ public class AccessRequestController(
             {
                 await notificationService.ArchiveBySourceAsync(
                     ownerId.ToString(),
-                    "passkey.anonymous_login_request",
+                    NotificationSubjectNaming.AnonymousLoginRequest,
                     subjectId.ToString(),
                     NotificationArchiveReason.Dismissed,
                     ct);

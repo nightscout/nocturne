@@ -56,6 +56,9 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     private TenantMembershipRepository Repository(IAuditContext? actor) =>
         new(new TestNocturneDbContextFactory(Context(actor)), AccountLinkRoutes.Off);
 
+    private Task<TenantRoleUpdate> EditViewerAsync(IAuditContext actor, TenantRoleEdit edit) =>
+        TeamWrites.EditRoleAsync(new TestNocturneDbContextFactory(Context(actor)), _tenant, _viewer, edit, editorSubjectId: null, Now);
+
     private async Task SeedMemberAsync()
     {
         await using var db = _db.CreateContext(_tenant);
@@ -247,8 +250,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     {
         var changed = new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.DevicesRead]);
 
-        await Repository(new TestAuditActor { SubjectId = _actor })
-            .UpdateRoleAsync(_tenant, _viewer, changed, null, Now, CancellationToken.None);
+        await EditViewerAsync(new TestAuditActor { SubjectId = _actor }, changed);
 
         var row = (await RowsAsync()).Should().ContainSingle().Subject;
         row.EventType.Should().Be(AuthAuditEventType.RolePermissionsChanged);
@@ -262,8 +264,8 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     [Fact]
     public async Task EditingARoleWithoutChangingItsPermissionsAuditsNothing()
     {
-        await Repository(new TestAuditActor { SubjectId = _actor }).UpdateRoleAsync(
-            _tenant, _viewer, new TenantRoleEdit("Renamed", "renamed", "described", [Scope.GlucoseRead]), null, Now, CancellationToken.None);
+        await EditViewerAsync(
+            new TestAuditActor { SubjectId = _actor }, new TenantRoleEdit("Renamed", "renamed", "described", [Scope.GlucoseRead]));
 
         (await RowsAsync()).Should().BeEmpty();
         await using var db = _db.CreateContext(_tenant);
@@ -279,8 +281,8 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        await Repository(new TestAuditActor { SubjectId = _actor }).UpdateRoleAsync(
-            _tenant, _viewer, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.GlucoseRead]), null, Now, CancellationToken.None);
+        await EditViewerAsync(
+            new TestAuditActor { SubjectId = _actor }, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.TreatmentsRead, Scope.GlucoseRead]));
 
         (await RowsAsync()).Should().BeEmpty();
     }
@@ -290,13 +292,11 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(
             new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), _tenant, CancellationToken.None);
-        var repository = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
         var act = () => unit.CommitAsync(async token =>
         {
-            await repository.UpdateRoleAsync(
-                _tenant, _viewer, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.DevicesRead]), null, Now, token);
-            await unit.Context.SaveChangesAsync(token);
+            await TenantMembershipRepository.LockRoleEditAsync(
+                unit, _tenant, _viewer, new TenantRoleEdit("viewer", RoleSeeds.Viewer, null, [Scope.DevicesRead]), editorSubjectId: null, Now, token);
             throw new InvalidOperationException("the rest of the unit failed");
         });
 
@@ -336,8 +336,9 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     {
         await SeedMemberAsync();
 
-        await Repository(new TestAuditActor { SubjectId = _actor })
-            .RemoveMemberUnlessLastOwnerAsync(_tenant, _member, MembershipEndHow.Removed, Now, CancellationToken.None);
+        await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+            new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), AccountLinkRoutes.Off,
+            _tenant, _member, MembershipEndHow.Removed, Now, CancellationToken.None);
 
         var rows = await RowsAsync();
         rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)

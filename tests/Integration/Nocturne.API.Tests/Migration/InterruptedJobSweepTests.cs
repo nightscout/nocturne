@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Migration;
+using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -32,7 +33,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
         {
             foreach (var (id, state) in rows)
             {
-                await ExecuteAsync(conn, $"""
+                await conn.ExecuteAsync($"""
                     INSERT INTO migration_runs (id, source_id, tenant_id, mode, created_at, started_at, state, entries_migrated, treatments_migrated, revision)
                     VALUES ('{id}', '{SourceId}', '{TenantId}', 'Api', now(), now(), '{state}', 0, 0, 0);
                     """);
@@ -44,7 +45,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
         await using var read = await OpenSuperuserAsync();
         foreach (var (id, state) in rows)
         {
-            var after = await ScalarAsync(read, $"SELECT state FROM migration_runs WHERE id = '{id}'");
+            var after = await read.ScalarAsync<string?>($"SELECT state FROM migration_runs WHERE id = '{id}'");
             after.Should().Be(state, $"a {state} run");
         }
     }
@@ -59,7 +60,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
         {
             foreach (var (id, state) in rows)
             {
-                await ExecuteAsync(conn, $"""
+                await conn.ExecuteAsync($"""
                     INSERT INTO connector_reset_jobs (id, tenant_id, tenant_slug, state, created_at, total_connectors, completed_connectors)
                     VALUES ('{id}', '{TenantId}', 'sweep', '{state}', now(), 0, 0);
                     """);
@@ -71,7 +72,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
         await using var read = await OpenSuperuserAsync();
         foreach (var (id, state) in rows)
         {
-            var after = await ScalarAsync(read, $"SELECT state FROM connector_reset_jobs WHERE id = '{id}'");
+            var after = await read.ScalarAsync<string?>($"SELECT state FROM connector_reset_jobs WHERE id = '{id}'");
             var wasLive = Enum.Parse<ConnectorResetJobState>(state).IsLive();
             after.Should().Be(wasLive ? nameof(ConnectorResetJobState.Interrupted) : state, $"a {state} job");
         }
@@ -91,20 +92,6 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
         await conn.OpenAsync();
         return conn;
     }
-
-    internal static async Task ExecuteAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<string?> ScalarAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        return (string?)await cmd.ExecuteScalarAsync();
-    }
 }
 
 public sealed class InterruptedJobSweepPostgresFixture : IAsyncLifetime
@@ -118,7 +105,7 @@ public sealed class InterruptedJobSweepPostgresFixture : IAsyncLifetime
     {
         Database = await SharedPostgres.CreateMigratedDatabaseAsync("interrupted_sweep");
         await using var conn = await InterruptedJobSweepTests.OpenAsync(Database);
-        await InterruptedJobSweepTests.ExecuteAsync(conn, $"""
+        await conn.ExecuteAsync($"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{TenantId}', 'sweep', 'Sweep', true, now(), now());
             INSERT INTO migration_sources (id, tenant_id, mode, source_identifier, created_at)

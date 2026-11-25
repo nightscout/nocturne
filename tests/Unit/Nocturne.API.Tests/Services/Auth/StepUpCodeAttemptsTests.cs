@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Auth;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -98,7 +99,6 @@ public class StepUpCodeAttemptsTests
 
     private static async Task<IReadOnlyList<T>> RunTogether<T>(int count, Func<int, T> attempt)
     {
-        var timeout = TimeSpan.FromSeconds(30);
         using var go = new ManualResetEventSlim();
         using var ready = new CountdownEvent(count);
 
@@ -107,15 +107,15 @@ public class StepUpCodeAttemptsTests
                 () =>
                 {
                     ready.Signal();
-                    go.Wait(timeout).Should().BeTrue("the attempts start together");
+                    go.Wait(Eventually.DefaultPatience).Should().BeTrue("the attempts start together");
                     return attempt(n);
                 },
                 TaskCreationOptions.LongRunning))
             .ToList();
 
-        ready.Wait(timeout).Should().BeTrue("every attempt is waiting at the gate");
+        ready.Wait(Eventually.DefaultPatience).Should().BeTrue("every attempt is waiting at the gate");
         go.Set();
 
-        return await Task.WhenAll(tasks).WaitAsync(timeout);
+        return await Task.WhenAll(tasks).WaitAsync(Eventually.DefaultPatience);
     }
 }

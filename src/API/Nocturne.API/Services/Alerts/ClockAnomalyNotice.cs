@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -13,7 +12,9 @@ namespace Nocturne.API.Services.Alerts;
 /// Tells the tenant's owner, by an in-app notification, that a device sent data dated more than the
 /// engine's clock tolerance ahead of now (docs/alerts/engine-semantics.md §5.4). Alerts do not use
 /// such data until its time comes near: a reading is skipped by the alert context
-/// (<see cref="AlertReadings"/>), and a rule that reads another such instant is held.
+/// (<see cref="AlertReadings"/>), a pump-mode span or a device-status override is not sent to the
+/// engine (<see cref="SensorContext.PumpModesRead"/>, <see cref="SensorContext.OverridesRead"/>), and a
+/// rule that reads another such instant is held.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -32,7 +33,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="ClockAnomalyNoticeIsolation"/>, which logs a failure and goes on.
 /// </para>
 /// <para>
-/// Instants the host writes itself (<see cref="HostFacts"/>) are ahead only when the host's clock
+/// Instants the host writes itself (<see cref="ClockAnomalyNotice.HostFacts"/>) are ahead only when the host's clock
 /// went back, which the owner cannot act on: they are logged once per tenant and fact, and not
 /// notified.
 /// </para>
@@ -54,10 +55,10 @@ public interface IClockAnomalyNotice
     Task ReportReadingAsync(AlertReadingSelection selection, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// For a pass with no reading of its own: selects the reading and reports it when a notification
-    /// may stand, so one is archived once time passes the reading with no new one.
+    /// Whether the reading selection must be reported at <paramref name="now"/> though no new reading
+    /// arrived: a notification may stand for the tenant, and is archived once time passes the reading.
     /// </summary>
-    Task RefreshAsync(DateTime now, CancellationToken ct);
+    bool NeedsReadingReport(DateTime now);
 }
 
 /// <summary>
@@ -93,7 +94,6 @@ internal sealed class ClockAnomalyNotice(
     IInAppNotificationService notifications,
     ITenantOwnerResolver ownerResolver,
     ITenantAccessor tenantAccessor,
-    ICanonicalGlucoseService canonicalGlucose,
     ClockAnomalyNoticeLog log,
     TimeProvider timeProvider,
     ILogger<ClockAnomalyNotice> logger)
@@ -104,6 +104,7 @@ internal sealed class ClockAnomalyNotice(
     internal const string ReadingFact = "last_reading_at";
     internal const string AheadUntilKey = "aheadUntil";
     private const string PumpModesFact = "active_pump_modes";
+    private const string OverrideFact = "active_override";
     private const string TitleKey = "device_clock_ahead";
 
     /// <summary>Instants the host writes from its own clock (docs/alerts/engine-semantics.md §5.4).</summary>
@@ -117,13 +118,31 @@ internal sealed class ClockAnomalyNotice(
     private static readonly IReadOnlySet<string> ReadingFacts =
         new HashSet<string> { ReadingFact, "latest_timestamp" };
 
-    public Task ReportAsync(SensorContext context, IReadOnlyCollection<ClockAnomaly> anomalies, CancellationToken ct) =>
-        ReconcileAsync(
-            anomalies.ToDictionary(a => a.Fact, a => a.Ahead),
-            Observed(context).Where(o => o.Value is not null && !ReadingFacts.Contains(o.Key))
-                .ToDictionary(o => o.Key, o => o.Value!.Value),
-            timeProvider.GetUtcNow().UtcDateTime,
-            ct);
+    public Task ReportAsync(SensorContext context, IReadOnlyCollection<ClockAnomaly> anomalies, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var raise = anomalies.ToDictionary(a => a.Fact, a => a.Ahead);
+        var observed = Observed(context).Where(o => o.Value is not null && !ReadingFacts.Contains(o.Key))
+            .ToDictionary(o => o.Key, o => o.Value!.Value);
+        foreach (var (fact, read) in SpanReads(context))
+        {
+            var newest = read.NewestStart;
+            if (newest is { } ahead && ahead > AlertReadings.Bound(read.At) && ahead > now
+                && (!raise.TryGetValue(fact, out var reported) || reported < ahead - now))
+                raise[fact] = ahead - now;
+            observed[fact] = newest ?? now;
+        }
+        return ReconcileAsync(raise, observed, now, ct);
+    }
+
+    /// <summary>The span reads a live pass made, each under the fact the engine reads it as.</summary>
+    private static IEnumerable<(string Fact, SpansRead Read)> SpanReads(SensorContext context)
+    {
+        if (context.PumpModesRead is { } pumpModes)
+            yield return (PumpModesFact, pumpModes);
+        if (context.OverridesRead is { } overrides)
+            yield return (OverrideFact, overrides);
+    }
 
     public Task ReportReadingAsync(AlertReadingSelection selection, DateTime now, CancellationToken ct)
     {
@@ -137,14 +156,10 @@ internal sealed class ClockAnomalyNotice(
         return ReconcileAsync(raise, observed, now, ct);
     }
 
-    public async Task RefreshAsync(DateTime now, CancellationToken ct)
-    {
-        if (log.TryGetStanding(tenantAccessor.TenantId, out var standing)
-            && !standing.ContainsKey(ReadingFact)
-            && !standing.Any(f => Passed(f.Key, f.Value, now)))
-            return;
-        await ReportReadingAsync(await AlertReadings.SelectAsync(canonicalGlucose, now, ct), now, ct);
-    }
+    public bool NeedsReadingReport(DateTime now) =>
+        !log.TryGetStanding(tenantAccessor.TenantId, out var standing)
+        || standing.ContainsKey(ReadingFact)
+        || standing.Any(f => Passed(f.Key, f.Value, now));
 
     /// <summary>
     /// A fact other than the reading's whose stored instant is no longer ahead: whatever the
@@ -263,9 +278,8 @@ internal sealed class ClockAnomalyNotice(
         ["last_bolus_at"] = context.LastBolusAt,
         ["aps_determination"] = context.ApsDetermination?.At,
         ["active_pump_suspension"] = context.ActivePumpSuspension?.StartedAt,
-        ["active_override"] = context.ActiveOverride?.StartedAt,
+        [OverrideFact] = context.ActiveOverride?.StartedAt,
         ["active_do_not_disturb"] = context.ActiveDoNotDisturb?.StartedAt,
-        [PumpModesFact] = context.ActivePumpModes.Select(m => (DateTime?)m.StartedAt).Max(),
         ["active_state_spans"] = context.ActiveStateSpans.Values.Select(s => (DateTime?)s.StartedAt).Max(),
         ["active_trackers"] = context.ActiveTrackers.Values.Where(t => !t.IsScheduled)
             .Select(t => (DateTime?)t.ReferenceAt).Max(),
@@ -285,7 +299,7 @@ internal static class ClockAnomalyNoticeIsolation
         {
             await notice.ReportReadingAsync(selection, now, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "The clock-anomaly notice could not be updated for a reading selection");
         }
@@ -299,7 +313,7 @@ internal static class ClockAnomalyNoticeIsolation
         {
             await notice.ReportAsync(context, anomalies, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "The clock-anomaly notice could not be updated for an evaluation pass");
         }

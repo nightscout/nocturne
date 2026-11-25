@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Infrastructure.Outbound;
 using Nocturne.Infrastructure.Shared.Services;
 
 namespace Nocturne.API.Tests.Services.Alerts.Webhooks;
@@ -31,15 +32,26 @@ internal static class WebhookTestHarness
             .Build(),
         NullLogger<SecretEncryptionService>.Instance);
 
-    public static WebhookRequestSender Sender(CapturingWebhookHandler handler)
+    public static WebhookRequestSender Sender(
+        HttpMessageHandler handler,
+        TimeSpan? timeout = null,
+        TimeProvider? timeProvider = null,
+        OutboundDestination.AddressResolver? resolver = null)
     {
         var httpClientFactory = new Mock<IHttpClientFactory>();
+        var client = new HttpClient(handler);
+        if (timeout is { } limit)
+            client.Timeout = limit;
+
         httpClientFactory
             .Setup(f => f.CreateClient(WebhookRequestSender.HttpClientName))
-            .Returns(new HttpClient(handler));
+            .Returns(client);
 
         return new WebhookRequestSender(
-            httpClientFactory.Object, NullLogger<WebhookRequestSender>.Instance, TimeProvider.System);
+            httpClientFactory.Object,
+            NullLogger<WebhookRequestSender>.Instance,
+            timeProvider ?? TimeProvider.System,
+            resolver);
     }
 
     internal sealed class CapturingWebhookHandler : HttpMessageHandler

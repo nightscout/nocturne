@@ -10,6 +10,7 @@ using Nocturne.Connectors.Gluroo.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Xunit;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -26,6 +27,8 @@ public class NightscoutBackgroundSyncAuthTests
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(startupDefaults, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisher: null);
     }
 
@@ -40,6 +43,8 @@ public class NightscoutBackgroundSyncAuthTests
             Mock.Of<ILogger<GlurooConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<GlurooConnectorConfiguration>(startupDefaults, "Gluroo"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisher: null);
     }
 
@@ -48,6 +53,29 @@ public class NightscoutBackgroundSyncAuthTests
         {
             Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
         });
+
+    /// <summary>A site that reads only for a request carrying a secret.</summary>
+    private static HttpMessageHandler RespondOkOnlyWithASecret() =>
+        new FuncHandler(request => request.Headers.Contains("api-secret")
+            ? new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", System.Text.Encoding.UTF8, "application/json")
+            }
+            : new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+    /// <summary>
+    ///     Nightscout can be readable without a secret, so its connector does not require one.
+    ///     Gluroo Global Connect reads nothing without one, so its connector still does, and an
+    ///     enabled Gluroo connector with no secret is not polled.
+    /// </summary>
+    [Fact]
+    public void Only_Gluroo_requires_the_api_secret()
+    {
+        new NightscoutConnectorConfiguration { Url = "https://ns.example" }
+            .MissingRequiredProperties().Should().BeEmpty();
+        new GlurooConnectorConfiguration { Url = "https://app.gluroo.com" }
+            .MissingRequiredProperties().Should().ContainSingle().Which.Should().Be("ApiSecret");
+    }
 
     [Fact]
     public async Task Nightscout_BackgroundSync_UsesTenantConfigUrl_NotStartupDefaults()
@@ -118,7 +146,7 @@ public class NightscoutBackgroundSyncAuthTests
     public async Task Nightscout_RequestedSync_ReportsExactlyOneTerminalMessage(
         string apiSecret, SyncPhase expectedPhase)
     {
-        var service = CreateNightscoutService(RespondOkJson(), new NightscoutConnectorConfiguration());
+        var service = CreateNightscoutService(RespondOkOnlyWithASecret(), new NightscoutConnectorConfiguration());
         var config = new NightscoutConnectorConfiguration
         {
             Url = "https://tenant.nightscout.example.com",
@@ -136,7 +164,7 @@ public class NightscoutBackgroundSyncAuthTests
 
     /// <summary>
     ///     Gluroo inherits <see cref="NightscoutConnectorServiceBase{TConfig}"/> whole, so the same
-    ///     auth guard applies — asserted directly rather than inferred.
+    ///     hand-shake applies — asserted directly rather than inferred.
     /// </summary>
     [Theory]
     [InlineData("gluroo-secret", SyncPhase.Completed)]
@@ -144,7 +172,7 @@ public class NightscoutBackgroundSyncAuthTests
     public async Task Gluroo_RequestedSync_ReportsExactlyOneTerminalMessage(
         string apiSecret, SyncPhase expectedPhase)
     {
-        var service = CreateGlurooService(RespondOkJson(), new GlurooConnectorConfiguration());
+        var service = CreateGlurooService(RespondOkOnlyWithASecret(), new GlurooConnectorConfiguration());
         var config = new GlurooConnectorConfiguration
         {
             Url = "https://app.gluroo.com",

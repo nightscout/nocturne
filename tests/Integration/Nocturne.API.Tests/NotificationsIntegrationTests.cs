@@ -7,6 +7,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -274,9 +275,9 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
         var created = await CreateMealMatchAsync(foodEntryId, carbIntakeId);
 
         // The service scope has no request, so the handler reads no granted scope.
-        var succeeded = await WithServiceAsync(s => s.ExecuteActionAsync(created.Id, "accept", OwnerUserId));
+        var result = await WithServiceAsync(s => s.ExecuteActionAsync(created.Id, "accept", OwnerUserId));
 
-        succeeded.Should().BeFalse();
+        result.Should().Be(NotificationActionResult.RefusedFor(Scope.TreatmentsReadWrite));
         (await StoredFoodEntryAsync(foodEntryId)).Should().Be((ConnectorFoodEntryStatus.Pending, (Guid?)null));
         (await LinkedFoodRowsAsync(carbIntakeId)).Should().Be(0);
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
@@ -471,7 +472,7 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
         var executed = await WithServiceAsync(s => s.ExecuteActionAsync(others.Id, "dismiss", OwnerUserId));
 
         // Assert
-        executed.Should().BeFalse();
+        executed.Handled.Should().BeFalse();
         (await WithServiceAsync(s => s.GetActiveNotificationsAsync(OtherUserId)))
             .Should().Contain(n => n.Id == others.Id);
     }

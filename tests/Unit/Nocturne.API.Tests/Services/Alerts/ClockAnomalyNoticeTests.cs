@@ -4,7 +4,6 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -26,7 +25,6 @@ public class ClockAnomalyNoticeTests
     private const string Owner = "owner-subject";
 
     private readonly Mock<IInAppNotificationService> _notifications = new();
-    private readonly Mock<ICanonicalGlucoseService> _canonical = new();
     private readonly List<InAppNotificationDto> _active = [];
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(T0, TimeSpan.Zero));
     private readonly ClockAnomalyNotice _notice;
@@ -78,10 +76,17 @@ public class ClockAnomalyNoticeTests
 
         _notice = new ClockAnomalyNotice(
             _notifications.Object, owner.Object, Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
-            _canonical.Object, new ClockAnomalyNoticeLog(_clock), _clock, NullLogger<ClockAnomalyNotice>.Instance);
+            new ClockAnomalyNoticeLog(_clock), _clock, NullLogger<ClockAnomalyNotice>.Instance);
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    /// <summary>What <see cref="AlertSweepJob"/>'s clock-anomaly pass does with the run's reading selection.</summary>
+    private async Task SweepRefreshAsync(AlertReadingSelection? selection = null)
+    {
+        if (_notice.NeedsReadingReport(Now))
+            await _notice.ReportReadingAsync(selection ?? new AlertReadingSelection(null, null), Now, CancellationToken.None);
+    }
 
     private static AlertReadingSelection NewestAt(DateTime at)
     {
@@ -138,11 +143,9 @@ public class ClockAnomalyNoticeTests
     public async Task A_sweep_refresh_clears_it_when_time_passes_with_no_new_reading()
     {
         await _notice.ReportReadingAsync(NewestAt(Now.AddMinutes(30)), Now, CancellationToken.None);
-        _canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SensorGlucose { Timestamp = T0.AddMinutes(30), Mgdl = 120 });
         _clock.Advance(TimeSpan.FromMinutes(31));
 
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync(NewestAt(T0.AddMinutes(30)));
 
         Standing.Should().BeEmpty();
     }
@@ -182,11 +185,11 @@ public class ClockAnomalyNoticeTests
 
         _clock.Advance(TimeSpan.FromMinutes(30));
         await _notice.ReportAsync(Context(), [], CancellationToken.None);
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().Equal("last_site_change_at");
 
         _clock.Advance(TimeSpan.FromMinutes(30));
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().BeEmpty("the instant it reported is no longer ahead");
     }
 
@@ -204,8 +207,8 @@ public class ClockAnomalyNoticeTests
             },
         });
 
-    private static SensorContext PumpModesStartingAt(DateTime start) =>
-        Context() with { ActivePumpModes = [new PumpModeSnapshot("Suspended", start)] };
+    private SensorContext PumpModesStartingAt(DateTime? newest) =>
+        Context() with { PumpModesRead = new SpansRead(Now, newest) };
 
     [Fact]
     public async Task A_notice_raised_under_the_retired_pump_fact_stands_for_the_same_span_and_is_not_raised_again()
@@ -249,21 +252,219 @@ public class ClockAnomalyNoticeTests
     public async Task The_pump_modes_are_observed_at_their_newest_start()
     {
         IReadOnlyCollection<ClockAnomaly> ahead = [new(PumpModesFact, TimeSpan.FromMinutes(30))];
-        var context = Context() with
-        {
-            ActivePumpModes =
-            [
-                new PumpModeSnapshot("Automatic", T0.AddMinutes(-60)),
-                new PumpModeSnapshot("Suspended", T0.AddMinutes(30)),
-            ],
-        };
+        var context = PumpModesStartingAt(T0.AddMinutes(30));
         await _notice.ReportAsync(context, ahead, CancellationToken.None);
         Standing.Should().Equal(PumpModesFact);
 
         _clock.Advance(TimeSpan.FromMinutes(31));
         await _notice.ReportAsync(context, [], CancellationToken.None);
 
-        Standing.Should().BeEmpty("the newest start is no longer ahead, whatever the older one is");
+        Standing.Should().BeEmpty("the newest start is no longer ahead");
+    }
+
+    [Fact]
+    public async Task A_pump_mode_span_beyond_the_tolerance_raises_the_notice_with_no_engine_anomaly()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(Now.AddMinutes(20)), [], CancellationToken.None);
+
+        Standing.Should().Equal(PumpModesFact);
+        _created.Should().Be(1);
+        _active.Single().Type.Should().Be(ClockAnomalyNotice.NotificationType);
+    }
+
+    [Fact]
+    public async Task A_pump_mode_span_within_the_tolerance_raises_nothing()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(Now.AddMinutes(3)), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+        _created.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task The_pump_mode_notice_is_raised_once_across_passes_and_kept_while_the_span_is_ahead()
+    {
+        for (var pass = 0; pass < 6; pass++)
+        {
+            await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _created.Should().Be(1);
+        _archived.Should().Be(0);
+        Standing.Should().Equal(PumpModesFact);
+    }
+
+    [Fact]
+    public async Task The_pump_mode_notice_is_kept_once_the_span_comes_within_the_tolerance_and_archived_when_time_passes_it()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(17));
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { PumpModesFact }, "the span is still ahead, inside the tolerance");
+
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-60)]
+    public async Task The_pump_mode_notice_is_archived_at_once_when_the_span_is_removed_or_ended(int? newestStartMinutes)
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(PumpModesFact);
+
+        await _notice.ReportAsync(
+            PumpModesStartingAt(newestStartMinutes is { } m ? Now.AddMinutes(m) : null), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty("no stored open pump-mode span is ahead of now, though the span's start is 20 minutes away");
+    }
+
+    [Theory]
+    [InlineData(10, 20, 20)]
+    [InlineData(30, 20, 30)]
+    public async Task The_larger_of_the_engines_and_the_hosts_distance_ahead_is_the_one_stored(
+        int engineMinutes, int hostMinutes, int storedMinutes)
+    {
+        IReadOnlyCollection<ClockAnomaly> engine = [new(PumpModesFact, TimeSpan.FromMinutes(engineMinutes))];
+
+        await _notice.ReportAsync(PumpModesStartingAt(Now.AddMinutes(hostMinutes)), engine, CancellationToken.None);
+
+        _active.Single().Metadata![ClockAnomalyNotice.AheadUntilKey].Should()
+            .Be(Now.AddMinutes(storedMinutes).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public async Task A_span_the_enrichment_judged_beyond_the_bound_is_reported_though_the_clock_has_moved_within_it()
+    {
+        var enrichedAt = Now;
+        var start = enrichedAt.AddMinutes(5).AddSeconds(5);
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        await _notice.ReportAsync(
+            Context() with { PumpModesRead = new SpansRead(enrichedAt, start) }, [], CancellationToken.None);
+
+        Standing.Should().Equal(PumpModesFact);
+    }
+
+    [Fact]
+    public async Task A_span_the_enrichment_sent_is_not_reported_though_the_clock_is_behind_the_bound_it_used()
+    {
+        var enrichedAt = Now.AddMinutes(1);
+
+        await _notice.ReportAsync(
+            Context() with { PumpModesRead = new SpansRead(enrichedAt, Now.AddMinutes(6)) },
+            [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_pass_that_reads_no_pump_modes_leaves_the_pump_mode_notice_to_its_instant()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { PumpModesFact }, "the pass did not read pump modes, so it cannot say the span is gone");
+
+        _clock.Advance(TimeSpan.FromMinutes(21));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_later_pass_reporting_a_span_further_ahead_moves_the_notice_forward()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(45)), [], CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(30));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+
+        Standing.Should().Equal(new[] { PumpModesFact }, "the notice stands for the latest start, 45 minutes in");
+        _created.Should().Be(1);
+    }
+
+    private const string OverrideFact = "active_override";
+
+    private SensorContext OverridesStartingAt(DateTime? newest) =>
+        Context() with { OverridesRead = new SpansRead(Now, newest) };
+
+    [Fact]
+    public async Task A_device_status_override_beyond_the_tolerance_raises_its_own_notice()
+    {
+        await _notice.ReportAsync(OverridesStartingAt(Now.AddMinutes(20)), [], CancellationToken.None);
+
+        Standing.Should().Equal(OverrideFact);
+        _active.Single().Metadata![ClockAnomalyNotice.AheadUntilKey].Should()
+            .Be(Now.AddMinutes(20).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(null)]
+    public async Task An_override_read_with_nothing_beyond_the_tolerance_raises_nothing(int? newestStartMinutes)
+    {
+        await _notice.ReportAsync(
+            OverridesStartingAt(newestStartMinutes is { } m ? Now.AddMinutes(m) : null), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+        _created.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task An_override_and_a_pump_mode_span_ahead_raise_one_notice_each()
+    {
+        await _notice.ReportAsync(
+            Context() with { OverridesRead = new SpansRead(Now, Now.AddMinutes(20)), PumpModesRead = new SpansRead(Now, Now.AddMinutes(30)) },
+            [], CancellationToken.None);
+
+        Standing.Should().BeEquivalentTo([OverrideFact, PumpModesFact]);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-60)]
+    public async Task The_override_notice_is_archived_at_once_when_no_device_status_override_is_ahead(int? newestStartMinutes)
+    {
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(OverrideFact);
+
+        await _notice.ReportAsync(
+            OverridesStartingAt(newestStartMinutes is { } m ? Now.AddMinutes(m) : null), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty("no device-status override is ahead of now, though the one reported starts 20 minutes away");
+    }
+
+    [Fact]
+    public async Task The_override_notice_is_kept_once_the_override_comes_within_the_tolerance_and_archived_when_time_passes_it()
+    {
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(17));
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { OverrideFact }, "the override is still ahead, inside the tolerance");
+
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_pass_that_no_longer_reads_overrides_leaves_the_override_notice_to_its_instant()
+    {
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { OverrideFact }, "the pass did not read overrides, so it cannot say the override is gone");
+
+        _clock.Advance(TimeSpan.FromMinutes(21));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
     }
 
     /// <summary>
@@ -281,7 +482,7 @@ public class ClockAnomalyNoticeTests
             for (var minute = 0; minute < 5; minute++)
             {
                 _clock.Advance(TimeSpan.FromMinutes(1));
-                await _notice.RefreshAsync(Now, CancellationToken.None);
+                await SweepRefreshAsync();
                 await _notice.ReportReadingAsync(NewestAt(Now), Now, CancellationToken.None);
                 await _notice.ReportAsync(Context(loopCycle: cycleAt), [], CancellationToken.None);
             }
@@ -300,11 +501,11 @@ public class ClockAnomalyNoticeTests
         await _notice.ReportAsync(Context(), [new ClockAnomaly("last_aps_cycle_at", TimeSpan.FromMinutes(6))], CancellationToken.None);
 
         _clock.Advance(TimeSpan.FromMinutes(5));
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().Equal(new[] { "last_aps_cycle_at" }, "the latest instant, 11 minutes in, is still ahead");
 
         _clock.Advance(TimeSpan.FromMinutes(1));
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().BeEmpty();
         _created.Should().Be(1);
     }
@@ -336,5 +537,43 @@ public class ClockAnomalyNoticeTests
         _clock.Advance(ClockAnomalyNoticeLog.Freshness);
         await _notice.ReportReadingAsync(NewestAt(Now), Now, CancellationToken.None);
         _reads.Should().Be(2);
+    }
+
+    [Fact]
+    public void A_tenant_whose_notices_are_not_known_needs_the_reading_reported()
+    {
+        _notice.NeedsReadingReport(Now).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task With_nothing_ahead_and_nothing_standing_the_reading_needs_no_report_within_the_freshness_window()
+    {
+        await _notice.ReportReadingAsync(NewestAt(Now), Now, CancellationToken.None);
+        _notice.NeedsReadingReport(Now).Should().BeFalse();
+
+        _clock.Advance(ClockAnomalyNoticeLog.Freshness);
+        _notice.NeedsReadingReport(Now).Should().BeTrue("the last read of the notices is no longer trusted");
+    }
+
+    [Fact]
+    public async Task A_standing_reading_notice_needs_the_reading_reported_so_time_can_archive_it()
+    {
+        await _notice.ReportReadingAsync(NewestAt(Now.AddHours(1)), Now, CancellationToken.None);
+
+        _notice.NeedsReadingReport(Now).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_standing_engine_fact_needs_the_reading_reported_only_once_its_instant_has_passed()
+    {
+        IReadOnlyCollection<ClockAnomaly> ahead = [new("last_site_change_at", TimeSpan.FromHours(1))];
+        await _notice.ReportAsync(Context(T0.AddHours(1)), ahead, CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(58));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        _notice.NeedsReadingReport(Now).Should().BeFalse();
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        _notice.NeedsReadingReport(Now).Should().BeTrue();
     }
 }

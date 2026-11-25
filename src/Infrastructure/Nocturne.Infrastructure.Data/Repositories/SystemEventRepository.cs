@@ -59,11 +59,7 @@ public class SystemEventRepository : ISystemEventRepository
         if (!string.IsNullOrEmpty(source))
             query = query.Where(e => e.Source == source);
 
-        if (from.HasValue)
-            query = query.Where(e => e.Mills >= from.Value);
-
-        if (to.HasValue)
-            query = query.Where(e => e.Mills <= to.Value);
+        query = query.InWindow(e => e.Mills, from, to);
 
         var entities = await query
             .OrderByDescending(e => e.Mills)

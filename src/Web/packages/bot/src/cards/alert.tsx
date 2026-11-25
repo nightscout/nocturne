@@ -3,23 +3,10 @@ import { AlertConditionType, AlertPayloadKind, AlertRuleSeverity, type ActiveExc
 import type { AlertPayload } from "../types.js";
 import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 import { encodeActionValue } from "../lib/action-value.js";
-import { isKnownSeverity } from "../lib/severity.js";
+import { SEVERITY_TITLES, isKnownSeverity } from "../lib/severity.js";
+import { CARD_TEXT } from "../lib/alert-card-text.js";
 import { describeHeldFacts } from "../lib/held-facts.js";
 import { describeMetBy } from "../lib/met-by.js";
-
-/**
- * Card titles per severity. Every platform gets this, including the ones with
- * no colour to carry (Telegram, WhatsApp, e-mail); on Discord and Slack it sits
- * alongside the coloured bar that `../adapters/accented-discord.ts` applies.
- *
- * Labels mirror `severity.ts` in `@nocturne/app`, and an unrecognised value
- * degrades to a neutral title as the app degrades to a muted style.
- */
-const SEVERITY_TITLES: Record<AlertRuleSeverity, string> = {
-  [AlertRuleSeverity.Critical]: "CRITICAL",
-  [AlertRuleSeverity.Warning]: "Warning",
-  [AlertRuleSeverity.Info]: "Info",
-};
 
 /**
  * The condition kinds that fire on readings stopping, so a payload of one with no glucose value
@@ -94,9 +81,7 @@ function UnevaluableCard(props: { payload: AlertPayload }) {
 
   return (
     <Card title={`${titlePrefix}: ${payload.ruleName}`}>
-      <CardText>
-        This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.
-      </CardText>
+      <CardText>{CARD_TEXT.unevaluable}</CardText>
     </Card>
   );
 }
@@ -105,9 +90,7 @@ function HeldCard(props: { payload: AlertPayload; closed: boolean }) {
   const { payload, closed } = props;
   const severity = isKnownSeverity(payload.severity) ? payload.severity : undefined;
   const titlePrefix = severity ? SEVERITY_TITLES[severity] : "Alert";
-  const text = closed
-    ? "This alert had no usable data for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until usable data comes back."
-    : "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back.";
+  const text = closed ? CARD_TEXT.heldClosed : CARD_TEXT.held;
 
   return (
     <Card title={`${titlePrefix}: ${payload.ruleName}`}>

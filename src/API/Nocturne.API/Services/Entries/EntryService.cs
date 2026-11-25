@@ -138,7 +138,10 @@ internal class EntryService : IEntryService
         for (var i = 0; i < processed.Count; i++)
         {
             var entry = processed[i];
-            var match = duplicates[i];
+            // NIGHTSCOUT-COMPAT: Nightscout upserts an entry onto the one stored at its time and type,
+            // so an isValid:false upload under another id would hide that reading. Here it names a
+            // reading only by its id (InvalidUploads in Services/V4).
+            var match = entry.IsValid == false ? null : duplicates[i];
 
             if (match is null)
             {
@@ -263,14 +266,17 @@ internal class EntryService : IEntryService
 
         var result = await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
 
-        return new BulkWrite<Entry>(validEntries, result.SkippedDeleted);
+        return new BulkWrite<Entry>(validEntries, result.SkippedDeleted)
+        {
+            Invalidated = [.. validEntries.Where(result.Invalidated.Contains)],
+        };
     }
 
     /// <inheritdoc />
-    public Task<DecompositionResult> ImportEntriesAsync(
+    public async Task<DecompositionResult> ImportEntriesAsync(
         IReadOnlyList<Entry> entries,
         CancellationToken cancellationToken = default) =>
-        _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill, cancellationToken);
+        await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill, cancellationToken);
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Entry"/>, or <see langword="null"/> if no entry with the given <paramref name="id"/> exists.</returns>

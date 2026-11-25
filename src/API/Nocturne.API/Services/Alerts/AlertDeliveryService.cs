@@ -131,14 +131,7 @@ internal sealed class AlertDeliveryService(
         // the hub's subscribers are not its recipients.
         if (!notice)
         {
-            try
-            {
-                await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
-            }
+            await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
         }
 
         await alarmRelay.RaiseAsync(payload, ct);
@@ -189,7 +182,7 @@ internal sealed class AlertDeliveryService(
             {
                 await DispatchToProviderAsync(delivery, channel, states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Failed to dispatch delivery {DeliveryId} via {ChannelType}",
                     delivery.Id, delivery.ChannelType);
@@ -246,7 +239,7 @@ internal sealed class AlertDeliveryService(
         }
     }
 
-    public async Task<Guid> TestFireAsync(
+    public async Task<AlertTestFire> TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
@@ -297,20 +290,13 @@ internal sealed class AlertDeliveryService(
 
         // Broadcast so the firing toast renders for SignalR-connected web clients —
         // mirrors the real-fire UX so users learn what a real fire feels like.
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_test_fire for rule {RuleId}", alertRuleId);
-        }
+        await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
 
         if (channels.Count == 0)
         {
             db.AlertDeliveries.Add(NoChannelAnchor(tenantId, instance.Id, JsonSerializer.Serialize(payload), now, isTest: true));
             await db.SaveChangesAsync(ct);
-            return instance.Id;
+            return new AlertTestFire(instance.Id, []);
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);
@@ -336,6 +322,7 @@ internal sealed class AlertDeliveryService(
         await db.SaveChangesAsync(ct);
 
         var states = await StatesAsync(channels, ct);
+        var notSent = NotSent(channels, states);
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
@@ -343,7 +330,7 @@ internal sealed class AlertDeliveryService(
             {
                 await DispatchToProviderAsync(delivery, channels[i], states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Test-fire delivery {DeliveryId} via {ChannelType} failed",
                     delivery.Id, delivery.ChannelType);
@@ -351,7 +338,7 @@ internal sealed class AlertDeliveryService(
             }
         }
 
-        return instance.Id;
+        return new AlertTestFire(instance.Id, notSent);
     }
 
     public async Task<IReadOnlyList<AlertChannelNotSent>> TestFireDryRunAsync(
@@ -359,28 +346,20 @@ internal sealed class AlertDeliveryService(
         AlertPayload payload,
         CancellationToken ct)
     {
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_test_fire (dry-run)");
-        }
+        await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
 
         // Push directly to providers without persisting delivery rows. Failures are logged
         // but not retryable — there's no row to mark failed. Dry-run callers know this is
         // an editor preview, not an audit-tracked send.
         var states = await StatesAsync(channels, ct);
-        var notSent = new List<AlertChannelNotSent>();
-        foreach (var (channel, index) in channels.Select((c, i) => (c, i)))
+        var notSent = NotSent(channels, states);
+        var skipped = notSent.Select(n => n.Index).ToHashSet();
+        for (var i = 0; i < channels.Count; i++)
         {
-            if (states.Of(channel) is { IsActive: false } verdict)
-            {
-                notSent.Add(new AlertChannelNotSent(index, channel.ChannelType, verdict.State));
+            if (skipped.Contains(i))
                 continue;
-            }
 
+            var channel = channels[i];
             try
             {
                 var fauxDelivery = new AlertDeliveryEntity
@@ -391,12 +370,28 @@ internal sealed class AlertDeliveryService(
                 };
                 await DispatchToProviderAsync(fauxDelivery, channel, states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Test-fire dry-run dispatch via {ChannelType} failed", channel.ChannelType);
             }
         }
 
+        return notSent;
+    }
+
+    /// <summary>
+    /// The channels a test fire does not send to, by position in <paramref name="channels"/>: those
+    /// <see cref="DispatchToProviderAsync"/> skips for their state.
+    /// </summary>
+    private static List<AlertChannelNotSent> NotSent(
+        IReadOnlyList<AlertRuleChannelSnapshot> channels, AlertChannelStates states)
+    {
+        var notSent = new List<AlertChannelNotSent>();
+        for (var i = 0; i < channels.Count; i++)
+        {
+            if (states.Of(channels[i]) is { IsActive: false } verdict)
+                notSent.Add(new AlertChannelNotSent(i, channels[i].ChannelType, verdict.State));
+        }
         return notSent;
     }
 

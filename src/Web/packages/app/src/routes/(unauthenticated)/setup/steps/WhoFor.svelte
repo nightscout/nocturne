@@ -85,11 +85,7 @@
                 : 'border-border'}"
             ></span>
 
-            <span
-              class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
-            >
-              <option.icon class="h-6 w-6 text-primary" />
-            </span>
+            <option.icon class="size-6 text-primary" aria-hidden="true" />
 
             <span class="font-brand text-xl font-normal leading-snug text-foreground">
               {option.title}

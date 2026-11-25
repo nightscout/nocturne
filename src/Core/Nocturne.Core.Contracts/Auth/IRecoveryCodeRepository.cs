@@ -32,4 +32,7 @@ public interface IRecoveryCodeRepository
 
     /// <summary>Whether any of the subject's codes was invalidated.</summary>
     Task<bool> AnyInvalidatedAsync(Guid subjectId, CancellationToken ct);
+
+    /// <summary>Whether the subject holds any code at all: live, used or invalidated.</summary>
+    Task<bool> AnyAsync(Guid subjectId, CancellationToken ct);
 }

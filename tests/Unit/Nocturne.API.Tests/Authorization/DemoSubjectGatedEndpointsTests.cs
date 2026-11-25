@@ -61,6 +61,12 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(TeamsController), nameof(TeamsController.DeleteTeam) },
         { typeof(TeamsController), nameof(TeamsController.CreateAccessLink) },
         { typeof(TeamsController), nameof(TeamsController.RevokeAccessLink) },
+        { typeof(TeamsController), nameof(TeamsController.CreateStaffInvite) },
+        { typeof(TeamsController), nameof(TeamsController.RevokeStaffInvite) },
+        { typeof(TeamsController), nameof(TeamsController.GetStaffInviteInfo) },
+        { typeof(TeamsController), nameof(TeamsController.AcceptStaffInvite) },
+        { typeof(TeamsController), nameof(TeamsController.UpdateStaff) },
+        { typeof(TeamsController), nameof(TeamsController.RemoveStaff) },
         // The demo subject owns the demo site, so it could give any team access to it.
         { typeof(TeamsController), nameof(TeamsController.GetAccessLinkInfo) },
         { typeof(TeamsController), nameof(TeamsController.ApproveAccessLink) },

@@ -116,9 +116,9 @@
     connectorId={selectedConnectorId ?? undefined}
     onComplete={backToHub}
     onCancel={backToSelection}
+    variant="setup"
     showToggle={false}
     showDangerZone={false}
-    showCapabilities={false}
     primaryAction="save-and-finish"
   />
 {:else if viewState === "uploader"}

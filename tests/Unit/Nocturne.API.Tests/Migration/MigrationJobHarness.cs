@@ -85,7 +85,7 @@ internal static class MigrationJobHarness
     /// <summary>Runs the tenant's live job slice by slice until it ends.</summary>
     public static async Task RunToEndAsync(MigrationJobService service, TenantContext tenant)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         while (await service.RunSliceAsync(tenant, timeout.Token))
         {
         }
@@ -96,15 +96,18 @@ internal static class MigrationJobHarness
     /// <param name="profileOutcome">What the profile decomposer reports for each profile; empty when omitted.</param>
     /// <param name="deviceStatusOutcome">What the device status import reports for each page; empty when omitted.</param>
     /// <param name="interceptor">Attached to every <see cref="NocturneDbContext"/> the provider creates.</param>
+    /// <param name="database">Configures the store every context opens; a fresh in-memory one when omitted.</param>
     public static ServiceProvider BuildProvider(
         HttpMessageHandler handler,
         Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
         Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null,
         Func<Profile, DecompositionResult>? profileOutcome = null,
         IInterceptor? interceptor = null,
-        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null)
+        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null,
+        Action<DbContextOptionsBuilder>? database = null)
     {
-        var database = $"migration-{Guid.NewGuid():N}";
+        var inMemory = $"migration-{Guid.NewGuid():N}";
+        database ??= o => o.UseInMemoryDatabase(inMemory);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -138,7 +141,7 @@ internal static class MigrationJobHarness
         return new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o =>
             {
-                o.UseInMemoryDatabase(database);
+                database(o);
                 if (interceptor is not null)
                     o.AddInterceptors(interceptor);
             })
@@ -180,7 +183,8 @@ internal static class MigrationJobHarness
         TimeProvider? time = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
-        TimeSpan? readFirst = null)
+        TimeSpan? readFirst = null,
+        string? apiSecret = null)
     {
         var tenant = owner ?? NewTenant(tenantId);
 
@@ -191,6 +195,7 @@ internal static class MigrationJobHarness
             {
                 Mode = MigrationMode.Api,
                 NightscoutUrl = nightscoutUrl,
+                NightscoutApiSecret = apiSecret,
                 Collections = [.. collections],
                 StartDate = startDate,
                 EndDate = endDate,

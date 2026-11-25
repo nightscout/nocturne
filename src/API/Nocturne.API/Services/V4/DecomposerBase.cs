@@ -139,7 +139,7 @@ public abstract class DecomposerBase
         Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<UnkeyedOwnId>>> FindOwnIds,
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<IV4Record>>> AdoptOwnIds,
         Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation,
-        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<string>>> WriteBackMaySend,
+        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<WriteBackSendable>>> WriteBackMaySend,
         bool PulledOnly = false);
 
     /// <summary>
@@ -226,7 +226,65 @@ public abstract class DecomposerBase
     /// whether a record with no legacy id takes that id first, and whether it is a write-back echo.
     /// <see cref="Fallback"/> is where it points instead when that record no longer can.
     /// </summary>
-    protected sealed record PlannedIdentity(string? Id, bool Adopt, bool Echo, PlannedIdentity? Fallback = null);
+    protected sealed record PlannedIdentity(string? Id, bool Adopt, bool Echo, PlannedIdentity? Fallback = null)
+    {
+        /// <summary>
+        /// The document is an edit made upstream to a record write-back sent: it differs from the
+        /// document that record is known to match. It is applied, keeping the record's
+        /// <see cref="Owner"/>.
+        /// </summary>
+        public bool UpstreamEdit { get; init; }
+
+        /// <summary>The data source of the record an <see cref="UpstreamEdit"/> is applied to.</summary>
+        public string? Owner { get; init; }
+
+        /// <summary>
+        /// The document is one half of a meal write-back split (<see cref="PreBolusSplit.ForWriteBack"/>)
+        /// and changed upstream: the record went or is going upstream split, or the document came back
+        /// under the id write-back sends the carbs under. It names the whole meal's record, which the
+        /// half alone cannot be applied to without dropping the other half, so it stays an
+        /// <see cref="Echo"/>.
+        /// </summary>
+        public bool ChangedSplitHalf { get; init; }
+    }
+
+    /// <summary>
+    /// What the rows a legacy id names say of write-back, across the tables that hold it. Its live rows
+    /// govern; the user's deletions only when no row of it is live, since a deletion keeps what was sent
+    /// before it.
+    /// </summary>
+    private sealed class SentState
+    {
+        private readonly List<string> _live = [];
+        private readonly List<string> _deleted = [];
+        private bool _anyLive;
+
+        public string? Owner { get; private set; }
+
+        public void Add(string? owner, string? stored, bool live)
+        {
+            if (live && !_anyLive)
+                Owner = owner;
+            else if (!_anyLive)
+                Owner ??= owner;
+            _anyLive |= live;
+            if (stored is not null)
+                (live ? _live : _deleted).Add(stored);
+        }
+
+        private List<string> Governing => _anyLive ? _live : _deleted;
+
+        /// <summary>Whether any row keeps what was sent; a record sent before that was kept has none.</summary>
+        public bool Kept => Governing.Count > 0;
+
+        public bool Matches(Func<string, bool> names) => Governing.Any(names);
+
+        /// <summary>
+        /// Whether the record went upstream as the two halves of a split meal in a send upstream may
+        /// hold: the confirmed one, or one begun after it (<see cref="WriteBackFingerprint.Sends"/>).
+        /// </summary>
+        public bool SentSplit => Governing.Any(stored => WriteBackFingerprint.Sends(stored).Any(send => send.Length > 1));
+    }
 
     /// <summary>
     /// Points each incoming document at the stored record it came from, before the legacy-id
@@ -241,9 +299,12 @@ public abstract class DecomposerBase
         CancellationToken ct,
         Func<string, bool>? uploadedNameCanNameRecord = null)
         where TDocument : ProcessableDocumentBase
-        => await ApplyStoredIdentitiesAsync(
+    {
+        var applied = await ApplyStoredIdentitiesAsync(
             await PlanStoredIdentitiesAsync(documents, tables, pulledFromNightscout, ct, uploadedNameCanNameRecord),
             tables, ct);
+        return new HashSet<TDocument>(applied.Where(p => p.Value.Echo).Select(p => p.Key), ReferenceEqualityComparer.Instance);
+    }
 
     /// <summary>
     /// Works out, reading only, which stored record each document names: by its legacy id, or by a
@@ -263,11 +324,15 @@ public abstract class DecomposerBase
     /// <para>
     /// A document the Nightscout connector pulled that names a record write-back may have sent
     /// upstream (<see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/>) is
-    /// that record's write-back echo. The caller writes nothing for it: updating the record would
-    /// re-attribute it to the connector, whose records write-back skips, so a later edit in Nocturne
-    /// would stay local and the next pull would restore the upstream copy over it. Any other record
-    /// a pulled document names, such as one only a Nightscout migration imported, is the upstream's
-    /// own, and the pull updates it.
+    /// that record's write-back echo when the record keeps no fingerprint of the document it matches
+    /// (it was sent before one was kept, or its table keeps none), or when
+    /// <paramref name="sentCopy"/> says what it keeps names the document. The caller writes nothing
+    /// for an echo: updating the record would re-attribute it to the connector, whose records
+    /// write-back skips, so a later edit in Nocturne would stay local and the next pull would restore
+    /// the upstream copy over it. A pulled document with any other fingerprint is an edit made
+    /// upstream (<see cref="PlannedIdentity.UpstreamEdit"/>), which the caller applies under the
+    /// record's own data source. Any other record a pulled document names, such as one only a
+    /// Nightscout migration imported, is the upstream's own, and the pull updates it.
     /// </para>
     /// </remarks>
     /// <param name="pulledFromNightscout">Whether a document came from the Nightscout connector.</param>
@@ -275,12 +340,23 @@ public abstract class DecomposerBase
     /// Which ids of a document another uploader sent may name a stored record; by default its own
     /// uuid or that uuid's prefix (<see cref="MongoObjectId.TryGetOwnIdRange"/>).
     /// </param>
+    /// <param name="sentCopy">
+    /// Whether what a row of its record keeps (<see cref="WriteBackSendable.SentFingerprint"/>) names a
+    /// pulled document as one Nocturne may have sent; with none, every pulled copy of a record
+    /// write-back may have sent is its echo.
+    /// </param>
+    /// <param name="namesSplitHalf">
+    /// Whether a name a pulled document came back under is one write-back sends only a half of the
+    /// record a legacy id names under (<see cref="PlannedIdentity.ChangedSplitHalf"/>).
+    /// </param>
     protected static async Task<Dictionary<TDocument, PlannedIdentity>> PlanStoredIdentitiesAsync<TDocument>(
         IEnumerable<TDocument> documents,
         IReadOnlyList<KeyedTable> tables,
         Func<TDocument, bool> pulledFromNightscout,
         CancellationToken ct,
-        Func<string, bool>? uploadedNameCanNameRecord = null)
+        Func<string, bool>? uploadedNameCanNameRecord = null,
+        Func<TDocument, string, bool>? sentCopy = null,
+        Func<string, string, bool>? namesSplitHalf = null)
         where TDocument : ProcessableDocumentBase
     {
         var all = documents.Distinct<TDocument>(ReferenceEqualityComparer.Instance).ToList();
@@ -344,7 +420,7 @@ public abstract class DecomposerBase
             }
         }
 
-        var own = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var own = new Dictionary<string, UnkeyedOwnId>(StringComparer.Ordinal);
         var ownIds = unsettled
             .Where(n => !resolved.ContainsKey(n) && MongoObjectId.TryGetOwnIdRange(n, out _, out _))
             .ToHashSet(StringComparer.Ordinal);
@@ -354,7 +430,7 @@ public abstract class DecomposerBase
             if (ownIds.Count == 0)
                 break;
             foreach (var hit in await table.FindOwnIds(ownIds, DataSources.NightscoutConnector, ct))
-                own.TryAdd(hit.WireId, hit.WriteBackMaySend);
+                own.TryAdd(hit.WireId, hit);
         }
 
         var keyedIds = new HashSet<string>(StringComparer.Ordinal);
@@ -369,18 +445,24 @@ public abstract class DecomposerBase
             }
         }
 
-        var maySend = new HashSet<string>(StringComparer.Ordinal);
+        var maySend = new Dictionary<string, SentState>(StringComparer.Ordinal);
         if (keyedIds.Count > 0)
         {
             foreach (var table in tables)
-                maySend.UnionWith(await table.WriteBackMaySend(keyedIds, DataSources.NightscoutConnector, ct));
+            {
+                foreach (var sendable in await table.WriteBackMaySend(keyedIds, DataSources.NightscoutConnector, ct))
+                    Track(maySend, sendable.LegacyId, sendable.DataSource, sendable.SentFingerprint, sendable.Live);
+            }
         }
+
+        foreach (var (wireId, hit) in own.Where(o => o.Value.WriteBackMaySend))
+            Track(maySend, wireId, hit.DataSource, hit.SentFingerprint, hit.Live);
 
         foreach (var document in all)
         {
             var isPulled = pulled.Contains(document);
-            var byId = Target(document.Id, isPulled) ?? new PlannedIdentity(document.Id, Adopt: false, Echo: false);
-            var byIdentifier = IdentifierOf(document) is { } identifier ? Target(identifier, isPulled) : null;
+            var byId = Target(document.Id, document, isPulled) ?? new PlannedIdentity(document.Id, Adopt: false, Echo: false);
+            var byIdentifier = IdentifierOf(document) is { } identifier ? Target(identifier, document, isPulled) : null;
             plans[document] = byIdentifier is { Adopt: true }
                 ? byIdentifier with { Fallback = byId }
                 : byIdentifier ?? byId;
@@ -388,18 +470,36 @@ public abstract class DecomposerBase
 
         return plans;
 
-        PlannedIdentity? Target(string? name, bool isPulled)
+        PlannedIdentity? Target(string? name, TDocument document, bool isPulled)
         {
             if (string.IsNullOrEmpty(name))
                 return null;
             if (held.Contains(name))
-                return new PlannedIdentity(name, Adopt: false, Echo: isPulled && maySend.Contains(name));
+                return Sent(new PlannedIdentity(name, Adopt: false, Echo: false), name, name, document, isPulled);
             if (resolved.TryGetValue(name, out var legacyId))
-                return new PlannedIdentity(legacyId, Adopt: false, Echo: isPulled && maySend.Contains(legacyId));
-            if (own.TryGetValue(name, out var sendable))
-                return new PlannedIdentity(name, Adopt: true, Echo: isPulled && sendable);
+                return Sent(new PlannedIdentity(legacyId, Adopt: false, Echo: false), name, legacyId, document, isPulled);
+            if (own.ContainsKey(name))
+                return Sent(new PlannedIdentity(name, Adopt: true, Echo: false), name, name, document, isPulled);
             return null;
         }
+
+        PlannedIdentity Sent(PlannedIdentity planned, string name, string key, TDocument document, bool isPulled)
+        {
+            if (!isPulled || !maySend.TryGetValue(key, out var state))
+                return planned;
+            if (sentCopy is null || !state.Kept || state.Matches(stored => sentCopy(document, stored)))
+                return planned with { Echo = true };
+            if (state.SentSplit || namesSplitHalf?.Invoke(name, key) == true)
+                return planned with { Echo = true, ChangedSplitHalf = true };
+            return planned with { UpstreamEdit = true, Owner = state.Owner };
+        }
+    }
+
+    private static void Track(Dictionary<string, SentState> maySend, string key, string? owner, string? stored, bool live)
+    {
+        if (!maySend.TryGetValue(key, out var state))
+            maySend[key] = state = new SentState();
+        state.Add(owner, stored, live);
     }
 
     private static string? IdentifierOf(ProcessableDocumentBase document)
@@ -418,26 +518,25 @@ public abstract class DecomposerBase
     /// as legacy ids (<see cref="AdoptOwnIdsAsync"/>), then rewrites each document's id to the id it
     /// is stored under.
     /// </summary>
-    /// <returns>The write-back echoes among the planned documents.</returns>
-    protected static async Task<IReadOnlySet<TDocument>> ApplyStoredIdentitiesAsync<TDocument>(
+    /// <returns>Where each planned document was pointed.</returns>
+    protected static async Task<IReadOnlyDictionary<TDocument, PlannedIdentity>> ApplyStoredIdentitiesAsync<TDocument>(
         IReadOnlyDictionary<TDocument, PlannedIdentity> plans, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
         where TDocument : ProcessableDocumentBase
     {
         var adopted = await AdoptOwnIdsAsync(
             plans.Values.Where(p => p.Adopt).Select(p => p.Id!).ToHashSet(StringComparer.Ordinal), tables, ct);
 
-        var echoes = new HashSet<TDocument>(ReferenceEqualityComparer.Instance);
+        var pointed = new Dictionary<TDocument, PlannedIdentity>(ReferenceEqualityComparer.Instance);
         foreach (var (document, planned) in plans)
         {
             var applied = planned.Adopt && !adopted.Contains(planned.Id!)
                 ? planned.Fallback ?? new PlannedIdentity(document.Id, Adopt: false, Echo: false)
                 : planned;
             document.Id = applied.Id;
-            if (applied.Echo)
-                echoes.Add(document);
+            pointed[document] = applied;
         }
 
-        return echoes;
+        return pointed;
     }
 
     /// <summary>

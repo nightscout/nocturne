@@ -293,6 +293,51 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         (await CandidatesAsync(Platform, UserB, default)).Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The bot answers through a link with the instance key, so a deactivated subject's links must
+    /// stop resolving while the rows stay, and resolve again on reactivation.
+    /// </summary>
+    [Fact]
+    public async Task GetCandidatesAsync_stops_returning_a_link_whose_subject_is_deactivated_until_reactivated()
+    {
+        var subjectId = NewSubject();
+        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), subjectId, "lily", "Lily", default);
+        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
+
+        await SetSubjectActiveAsync(subjectId, false);
+
+        (await CandidatesAsync(Platform, UserA, default))
+            .Select(l => l.Label).Should().BeEquivalentTo(["oliver"]);
+        (await _service.GetDefaultAsync(Platform, UserA, default)).Should().BeNull();
+
+        await SetSubjectActiveAsync(subjectId, true);
+
+        (await CandidatesAsync(Platform, UserA, default))
+            .Select(l => l.Label).Should().BeEquivalentTo(["lily", "oliver"]);
+    }
+
+    /// <summary>
+    /// The tenant's list shows what holds each chat account, so a deactivated subject's link stays on it
+    /// while routing ('GetCandidatesAsync') leaves it out.
+    /// </summary>
+    [Fact]
+    public async Task GetByTenantAsync_lists_a_link_whose_subject_is_deactivated_though_routing_does_not()
+    {
+        var tenant = NewTenant();
+        var subjectId = NewSubject();
+        await _service.CreateLinkAsync(Platform, UserA, tenant, subjectId, "lily", "Lily", default);
+        await SetSubjectActiveAsync(subjectId, false);
+
+        (await _service.GetByTenantAsync(tenant, default)).Select(l => l.Label).Should().BeEquivalentTo(["lily"]);
+        (await CandidatesAsync(Platform, UserA, default)).Should().BeEmpty();
+    }
+
+    private async Task SetSubjectActiveAsync(Guid subjectId, bool isActive)
+    {
+        await using var db = _db.CreateContext();
+        await db.Subjects.Where(s => s.Id == subjectId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, isActive));
+    }
+
     // ---- CreateLinkAsync ----
 
     [Fact]

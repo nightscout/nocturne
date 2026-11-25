@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -36,19 +37,30 @@ public class TenantRoleServiceTests : IDisposable
 
         public IAuditContext? Actor { get; set; }
 
+        public IInterceptor[] Interceptors { get; init; } = [];
+
         public NocturneDbContext CreateDbContext()
         {
-            var context = TestDbContextFactory.CreateInMemoryContext(dbName).ActingAs(Actor);
+            var context = TestDbContextFactory.CreateInMemoryContext(dbName, Interceptors).ActingAs(Actor);
             Handed.Add(context);
             return context;
         }
     }
 
     private readonly SharedInMemoryFactory _factory;
+    private readonly string _dbName;
+
+    private sealed class UniqueViolationOnSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            throw UniqueViolation();
+    }
 
     public TenantRoleServiceTests()
     {
         var dbName = Guid.NewGuid().ToString();
+        _dbName = dbName;
         var factory = new SharedInMemoryFactory(dbName);
         _factory = factory;
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
@@ -59,7 +71,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(factory.AsNocturneFactory()));
+        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(factory.AsNocturneFactory()), factory.AsNocturneFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
     }
 
     [Fact]
@@ -225,7 +237,7 @@ public class TenantRoleServiceTests : IDisposable
         repository
             .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(UniqueViolation());
-        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>());
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>(), Moq.Mock.Of<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var result = await service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
@@ -242,7 +254,7 @@ public class TenantRoleServiceTests : IDisposable
             .ThrowsAsync(new DbUpdateException(
                 "foreign key",
                 new PostgresException("foreign key", "ERROR", "ERROR", PostgresErrorCodes.ForeignKeyViolation)));
-        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>());
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>(), Moq.Mock.Of<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var act = () => service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
@@ -351,12 +363,11 @@ public class TenantRoleServiceTests : IDisposable
     public async Task UpdateRoleAsync_LosingARaceOnTheSlugIndex_IsRefusedAsTaken()
     {
         var custom = (await _service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess])).Role!;
-        var repository = new Mock<TenantMembershipRepository>(_factory.AsNocturneFactory(), AccountLinkRoutes.Off) { CallBase = true };
-        repository
-            .Setup(r => r.UpdateRoleAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<TenantRoleEdit>(), It.IsAny<Guid?>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(UniqueViolation());
-        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), Moq.Mock.Of<Nocturne.Core.Contracts.Identity.ITeamRepository>());
+        var racing = new SharedInMemoryFactory(_dbName) { Interceptors = [new UniqueViolationOnSave()] }.AsNocturneFactory();
+        var service = new TenantRoleService(
+            new TenantMembershipRepository(racing, AccountLinkRoutes.Off), TimeProvider.System,
+            Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(racing),
+            racing, new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         var result = await service.UpdateRoleAsync(
             _tenantId, custom.Id, "Day Shift", null, ["glucose.read"], [Scope.FullAccess], null);

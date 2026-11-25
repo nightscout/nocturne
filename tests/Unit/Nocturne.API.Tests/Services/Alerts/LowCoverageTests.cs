@@ -66,6 +66,8 @@ public class LowCoverageTests
     {
         var db = TestDbContextFactory.CreateInMemoryContext($"low_coverage_{Guid.NewGuid()}");
         db.TenantId = Tenant;
+        db.Subjects.AddRange(
+            new SubjectEntity { Id = Live, Name = "Live" }, new SubjectEntity { Id = Departed, Name = "Departed" });
         db.ChatIdentityDirectory.AddRange(
             Link(LiveDiscord, Live),
             Link(DepartedDiscord, Departed));

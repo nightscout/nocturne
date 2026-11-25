@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -132,9 +133,10 @@ public class SignalRWebSocketIntegrationTests : ApiIntegrationTestBase
         }
 
         // Assert - Wait for potential events
-        var eventReceived = await WaitForEventAsync(
+        var eventReceived = await Eventually.HoldsWithinAsync(
             () => receivedEvents.Count > 0,
-            TimeSpan.FromSeconds(2)
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(100)
         );
 
         if (eventReceived)
@@ -195,9 +197,10 @@ public class SignalRWebSocketIntegrationTests : ApiIntegrationTestBase
         }
 
         // Assert - Wait for potential events
-        var eventReceived = await WaitForEventAsync(
+        var eventReceived = await Eventually.HoldsWithinAsync(
             () => receivedEvents.Count > 0,
-            TimeSpan.FromSeconds(2)
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(100)
         );
 
         if (eventReceived)

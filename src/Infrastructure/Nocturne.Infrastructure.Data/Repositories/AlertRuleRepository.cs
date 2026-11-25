@@ -19,10 +19,10 @@ public class AlertRuleRepository : IAlertRuleRepository
     private readonly TimeProvider _time;
 
     /// <summary>A repository whose calls each open their own context and save what they write.</summary>
-    public AlertRuleRepository(INocturneDbContextFactory contexts, TimeProvider? time = null)
+    public AlertRuleRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts;
-        _time = time ?? TimeProvider.System;
+        _time = time;
     }
 
     /// <summary>
@@ -32,10 +32,10 @@ public class AlertRuleRepository : IAlertRuleRepository
     /// A read tracks its rows, so a write on the same unit edits the rows it read in place: no row
     /// is loaded twice, and only the columns the write changed are saved.
     /// </summary>
-    public AlertRuleRepository(DbUnitOfWork unit, TimeProvider? time = null)
+    public AlertRuleRepository(DbUnitOfWork unit, TimeProvider time)
     {
         _unit = unit;
-        _time = time ?? TimeProvider.System;
+        _time = time;
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);

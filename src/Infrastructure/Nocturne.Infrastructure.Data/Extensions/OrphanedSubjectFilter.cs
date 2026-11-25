@@ -76,9 +76,42 @@ public static class OrphanedSubjectFilter
             ? db.WorkingOidcIdentities().Where(i => i.ProviderId != excluded)
             : db.WorkingOidcIdentities();
         return subjects
-            .Where(s => s.IsActive && !s.IsSystemSubject && !s.IsDemoSubject)
+            .Where(HoldsStanding)
             .WithoutSignInFactor(db, linkRoute, identities);
     }
+
+    /// <summary>
+    /// Those of <paramref name="subjects"/> that are active accounts of a person and hold a sign-in
+    /// factor: with the default identities, the complement of <see cref="WhoCannotSignIn"/> within
+    /// the active accounts of a person.
+    /// </summary>
+    /// <param name="subjects">The subjects considered.</param>
+    /// <param name="db">The context <paramref name="subjects"/> is read on.</param>
+    /// <param name="linkRoute">Whether a recovery link can be delivered on this instance.</param>
+    /// <param name="identities">
+    /// The provider identities that count as a factor, as <see cref="WithoutSignInFactor"/> takes them.
+    /// Working identities when null.
+    /// </param>
+    public static IQueryable<SubjectEntity> WhoCanSignIn(
+        this IQueryable<SubjectEntity> subjects,
+        NocturneDbContext db,
+        IAccountLinkRoute linkRoute,
+        IQueryable<SubjectOidcIdentityEntity>? identities = null)
+    {
+        var stuck = subjects.WithoutSignInFactor(db, linkRoute, identities);
+        return subjects
+            .Where(HoldsStanding)
+            .Where(s => !stuck.Any(o => o.Id == s.Id));
+    }
+
+    private static readonly Expression<Func<SubjectEntity, bool>> HoldsStanding =
+        s => s.IsActive && !s.IsSystemSubject && !s.IsDemoSubject;
+
+    /// <summary>
+    /// Whether a loaded subject is an active account of a person: the standing rule that
+    /// <see cref="WhoCannotSignIn"/> and <see cref="WhoCanSignIn"/> apply in SQL.
+    /// </summary>
+    public static readonly Func<SubjectEntity, bool> IsStanding = HoldsStanding.Compile();
 
     /// <summary>
     /// Those of <paramref name="subjects"/> that hold no passkey, none of <paramref name="identities"/>
@@ -93,6 +126,9 @@ public static class OrphanedSubjectFilter
     /// authenticator, an unexpired session and a live login code, which this predicate does not
     /// read. <c>ISubjectRepository.CountStrandedByProviderAsync</c> reaches this through
     /// <see cref="WhoCannotSignIn"/> with the provider that goes away left out of the identities.
+    /// <c>ISubjectRepository.ReplaceStrandedPlatformAdminsAsync</c> reaches it through
+    /// <see cref="WhoCanSignIn"/> with every identity to decide whether an admin keeps the flag, and
+    /// with working identities only to decide whether the successor can take it.
     /// </remarks>
     /// <param name="subjects">The subjects considered.</param>
     /// <param name="db">The context <paramref name="subjects"/> is read on.</param>

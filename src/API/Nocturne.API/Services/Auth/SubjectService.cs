@@ -168,34 +168,6 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
-    public async Task<SubjectChange> DeleteSubjectAsync(Guid subjectId)
-    {
-        var subject = await _subjects.GetAsync(subjectId, CancellationToken.None);
-        if (subject == null)
-        {
-            return new SubjectChange.NotFound();
-        }
-
-        if (subject.IsSystemSubject)
-        {
-            _logger.LogWarning("Attempted to delete system subject {SubjectId}", subjectId);
-            return new SubjectChange.NotFound();
-        }
-
-        var change = await _subjects.DeleteAsync(subjectId, CancellationToken.None);
-        if (change is not SubjectChange.Changed)
-        {
-            return change;
-        }
-
-        _logger.LogInformation("Deleted subject {SubjectId}", subjectId);
-
-        await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
-
-        return change;
-    }
-
-    /// <inheritdoc />
     public async Task<bool> ActivateSubjectAsync(Guid subjectId) =>
         await _subjects.UpdateAsync(subjectId, new SubjectEdit(IsActive: true), CancellationToken.None)
             is SubjectChange.Changed;
@@ -364,6 +336,25 @@ public class SubjectService : ISubjectService
             CancellationToken.None);
         await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
         return (OidcLinkOutcome.Created, identityId);
+    }
+
+    /// <inheritdoc />
+    public async Task<OidcLinkOutcome?> AttachSetupOwnerOidcIdentityAsync(
+        Guid tenantId, Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email,
+        bool emailVerified)
+    {
+        var existing = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
+        if (existing != null)
+            return existing.Identity.SubjectId == subjectId ? null : OidcLinkOutcome.AlreadyLinkedToOther;
+
+        if (await _subjects.AddSetupOwnerOidcIdentityAsync(
+                tenantId,
+                new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, _time.GetUtcNow().UtcDateTime),
+                CancellationToken.None) is null)
+            return null;
+
+        await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
+        return OidcLinkOutcome.Created;
     }
 
     /// <inheritdoc />

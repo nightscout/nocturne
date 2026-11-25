@@ -9,7 +9,7 @@
   import Check from "@lucide/svelte/icons/check";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Send from "@lucide/svelte/icons/send";
-  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import ChannelsNotSent from "../ChannelsNotSent.svelte";
   import HistoryCheck from "../HistoryCheck.svelte";
   import { channelNotSentMessage } from "../channelState.svelte";
   import { summarizeCondition } from "../summarizeCondition.svelte";
@@ -117,17 +117,7 @@
       {/if}
     </div>
     {#if testState === "sent" && notSent.length > 0}
-      <div class="space-y-1" role="status">
-        <p class="text-sm font-medium">The test alert did not go to every channel.</p>
-        <ul class="space-y-1" data-testid="alert-test-not-sent">
-          {#each notSent as message, i (i)}
-            <li class="flex items-start gap-1.5 text-sm text-status-warning">
-              <TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>{message}</span>
-            </li>
-          {/each}
-        </ul>
-      </div>
+      <ChannelsNotSent messages={notSent} />
     {/if}
     {#if testError}
       <p class="text-sm text-destructive" role="alert">{testError}</p>

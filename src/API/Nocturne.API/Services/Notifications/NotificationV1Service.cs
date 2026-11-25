@@ -91,24 +91,7 @@ public class NotificationV1Service : INotificationV1Service
                     Timestamp = currentTime,
                 };
 
-                try
-                {
-                    await _signalRBroadcastService.BroadcastClearAlarmAsync(clearNotification);
-                    _logger.LogDebug(
-                        "Broadcasted clear alarm event for level {Level}, group {Group}",
-                        request.Level,
-                        request.Group
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to broadcast clear alarm event for level {Level}, group {Group}",
-                        request.Level,
-                        request.Group
-                    );
-                }
+                await _signalRBroadcastService.BroadcastClearAlarmAsync(clearNotification);
             }
 
             // If level 2 (URGENT), also acknowledge level 1 (WARN) - legacy behavior

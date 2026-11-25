@@ -136,7 +136,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <see cref="ReportWrittenAsync"/> itself.
     /// <c>vacated</c> holds the stored state of updated records before the write, read only by
     /// <see cref="RaiseEntriesWrittenAsync"/>: it is not a record any more, so the V4 broadcast and the
-    /// legacy projection never see it.
+    /// legacy projection never see it. It may name a row the history clamp hides from the writer
+    /// (<see cref="AsSent"/>), so it reaches only internal sinks and never a client.
     /// </summary>
     protected async Task RaiseBroadcastAsync(
         IReadOnlyList<TModel> created,
@@ -305,6 +306,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entities.Select(ToDomain);
     }
 
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.ILegacyKeyedRepository{T}.GetIncludingDeletedAsync" />
+    /// <remarks>Reads through <see cref="PagedRead"/> over the rows with the soft-delete filter lifted.</remarks>
+    public async Task<IReadOnlyList<HistoryRecord<TModel>>> GetIncludingDeletedAsync(
+        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await PagedRead(
+            ctx.Set<TEntity>().IncludingDeleted().AsNoTracking(),
+            from, to, device: null, source: null, limit, offset: 0, descending).ToListAsync(ct);
+        return entities.Select(e => new HistoryRecord<TModel>(ToDomain(e), e.DeletedAt is not null)).ToList();
+    }
+
     /// <summary>
     /// The read every <c>GetAsync</c> of a record type serves: the time window, device and source,
     /// <paramref name="extra"/>, the duplicate filter (<see cref="ReadVisibilityFilter.ExcludeDuplicatesWhereFlagged{TEntity}"/>),
@@ -387,8 +400,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     internal static IQueryable<TEntity> InWindow(
         IQueryable<TEntity> query, DateTime? from, DateTime? to, string? device)
     {
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
+        query = query.InWindow(from, to);
         if (device != null) query = query.Where(e => e.Device == device);
         return query;
     }
@@ -626,8 +638,44 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return (await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds.ToHashSet(StringComparer.Ordinal), ct)).Held;
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetDeletedLegacyIdsAsync" />
+    public async Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0)
+            return RecreationBlocks<string>.None.Held;
+
+        string[] ids = [.. legacyIds.Distinct(StringComparer.Ordinal)];
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return (await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+                .Where(e => e.DeletedAt != null && e.LegacyId != null && ids.Contains(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.StoreDeletedAsync" />
+    public async Task StoreDeletedAsync(IReadOnlyCollection<TModel> records, CancellationToken ct = default)
+    {
+        if (records.Count == 0)
+            return;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var deletedAt = DateTime.UtcNow;
+        foreach (var record in records)
+        {
+            var row = ToEntity(record);
+            row.DeletedAt = deletedAt;
+            ctx.Set<TEntity>().Add(row);
+        }
+
+        await ctx.SaveChangesAsync(ct);
+        await ReportWrittenAsync();
+    }
+
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync" />
-    public async Task<IEnumerable<string>> GetLegacyIdsWriteBackMaySendAsync(
+    public async Task<IEnumerable<WriteBackSendable>> GetLegacyIdsWriteBackMaySendAsync(
         IReadOnlyCollection<string> legacyIds, string skippedSource, CancellationToken ct = default)
     {
         if (legacyIds.Count == 0 || !IsWriteBackTracked)
@@ -642,10 +690,23 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 e.LegacyId!, e.Id, e.DataSource, e.DeletedAt, EF.Property<bool>(e, nameof(IWriteBackTracked.WrittenLive))))
             .ToListAsync(ct);
 
-        return LegacyWireIdLookups.WriteBackMaySend(rows, skippedSource);
+        var sendable = LegacyWireIdLookups.WriteBackMaySend(rows, skippedSource);
+        if (sendable.Count == 0 || !IsWriteBackSent)
+            return sendable.Select(r => new WriteBackSendable(r.LegacyId, r.Source, null, r.DeletedAt == null)).ToList();
+
+        var rowIds = sendable.Select(r => r.Id).ToList();
+        var fingerprints = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => rowIds.Contains(e.Id))
+            .Select(e => new { e.Id, Fingerprint = EF.Property<string?>(e, nameof(IWriteBackSent.WriteBackSentFingerprint)) })
+            .ToDictionaryAsync(e => e.Id, e => e.Fingerprint, ct);
+        return sendable
+            .Select(r => new WriteBackSendable(r.LegacyId, r.Source, fingerprints.GetValueOrDefault(r.Id), r.DeletedAt == null))
+            .ToList();
     }
 
     private static readonly bool IsWriteBackTracked = typeof(IWriteBackTracked).IsAssignableFrom(typeof(TEntity));
+
+    private static readonly bool IsWriteBackSent = typeof(IWriteBackSent).IsAssignableFrom(typeof(TEntity));
 
     /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.FindUnkeyedOwnIdsAsync" />
     public async Task<IEnumerable<UnkeyedOwnId>> FindUnkeyedOwnIdsAsync(
@@ -677,7 +738,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             .Where(c => c.Value.DeletedAt is not null || !heldLive.Contains(c.Key))
             .Select(c => new UnkeyedOwnId(
                 c.Key,
-                c.Value is IWriteBackTracked { WrittenLive: true } && c.Value.DataSource != skippedSource))
+                c.Value is IWriteBackTracked { WrittenLive: true } && c.Value.DataSource != skippedSource,
+                c.Value.DataSource,
+                (c.Value as IWriteBackSent)?.WriteBackSentFingerprint,
+                c.Value.DeletedAt is null))
             .ToList();
     }
 
@@ -829,7 +893,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         NocturneDbContext ctx, TEntity entity, WriteOrigin origin, CancellationToken ct)
     {
         if (!string.IsNullOrEmpty(entity.LegacyId)
-            && (await ctx.GetBlockingLegacyIdsAsync<TEntity>([entity], ct)).Held.Count > 0)
+            && (await BlockingLegacyIdsAsync(ctx, [entity], ct)).Held.Count > 0)
         {
             throw new RecreationBlockedException(typeof(TModel).Name, RecreationBlockedException.LegacyIdIdentity(entity.LegacyId));
         }
@@ -841,6 +905,64 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await RaiseBroadcastAsync([created], [], [], origin, ct);
         return created;
     }
+
+    /// <summary>
+    /// <see cref="SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync{TEntity}(NocturneDbContext, IEnumerable{TEntity}, CancellationToken)"/>
+    /// with the history clamp lifted. The unique legacy-id index spans the tenant, so a row the clamp hides
+    /// holds its id against an insert as any other row does, and the insert would fail with 23505.
+    /// </summary>
+    private static Task<RecreationBlocks<string>> BlockingLegacyIdsAsync(
+        NocturneDbContext ctx, IEnumerable<TEntity> incoming, CancellationToken ct) =>
+        ctx.WriteWithHistoryClampLiftedAsync(token => ctx.GetBlockingLegacyIdsAsync(incoming, token), ct);
+
+    /// <summary>
+    /// The rows of <paramref name="matched"/> the history clamp hides from the writer. A write matches its
+    /// stored row with the clamp lifted, since the unique index on the key spans the tenant, and a row in
+    /// this set is answered with <see cref="AsSent"/>.
+    /// </summary>
+    protected static async Task<HashSet<TEntity>> HiddenAsync(
+        NocturneDbContext ctx, IReadOnlyCollection<TEntity> matched, CancellationToken ct)
+    {
+        if (!ctx.HistoryClamped || matched.Count == 0)
+            return [];
+
+        var ids = matched.Select(e => e.Id).ToList();
+        var shown = (await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+                .Where(e => ids.Contains(e.Id))
+                .Select(e => e.Id)
+                .ToListAsync(ct))
+            .ToHashSet();
+        return matched.Where(e => !shown.Contains(e.Id)).ToHashSet();
+    }
+
+    /// <summary>
+    /// The answer, and the record broadcast, for a stored row of <see cref="HiddenAsync"/> that a write
+    /// updated: the record as the writer sent it, under the id of the row it reached. That id is the
+    /// write's own result, and as a v7 id it dates the row. Every other field of the row (its legacy id,
+    /// its correlation id, the links a sync upsert keeps) is not the writer's to read.
+    /// </summary>
+    protected TModel AsSent(TEntity sent, TEntity written)
+    {
+        sent.Id = written.Id;
+        return ToDomain(sent);
+    }
+
+    /// <summary>
+    /// Puts <paramref name="stored"/> back as the correlation id of a row of <see cref="HiddenAsync"/> that a
+    /// write updated, and records the one the write carried in <see cref="KeptCorrelationIds"/>. The writer's
+    /// id came from a read the clamp limits too, so writing it would move the row out of its group.
+    /// </summary>
+    protected static void KeepCorrelationId(TEntity written, Guid? stored)
+    {
+        if (stored is not { } kept || written.CorrelationId == kept)
+            return;
+        if (written.CorrelationId is { } sent)
+            KeptCorrelationIds.Record(sent, kept);
+        written.CorrelationId = kept;
+    }
+
+    private TModel Answered(UpsertSplit split, TEntity written) =>
+        split.SentForHidden.TryGetValue(written, out var sent) ? AsSent(sent, written) : ToDomain(written);
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.UpdateAsync" />
     /// <remarks>
@@ -1092,6 +1214,24 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             DuplicateDelete.EveryCopy, origin, ct);
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.InvalidateAsync" />
+    public async Task<int> InvalidateAsync(
+        IReadOnlyCollection<string> legacyIds, IReadOnlyCollection<Guid> ids, WriteOrigin origin,
+        CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0 && ids.Count == 0)
+            return 0;
+
+        string[] keys = [.. legacyIds.Distinct(StringComparer.Ordinal)];
+        Guid[] rows = [.. ids.Distinct()];
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx,
+            ctx.Set<TEntity>().Where(e => (e.LegacyId != null && keys.Contains(e.LegacyId)) || rows.Contains(e.Id)),
+            $"legacy_id={string.Join(",", keys)};id={string.Join(",", rows)}",
+            DuplicateDelete.PromoteSurvivor, origin, ct);
+    }
+
     /// <summary>
     /// Audited soft-delete of <paramref name="rows"/>, with <paramref name="scope"/> naming the key
     /// the delete was issued against on the audit row.
@@ -1163,6 +1303,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// and the rows still to insert. <see cref="MateriallyChanged"/> is a subset of
     /// <see cref="UpdatedInPlace"/>, and <see cref="Vacated"/> holds the state each of them had before
     /// the update. <see cref="Unchanged"/> is disjoint from <see cref="UpdatedInPlace"/>.
+    /// <see cref="SentForHidden"/> maps each matched row the history clamp hides from the writer
+    /// (<see cref="HiddenAsync"/>) to the entity the writer sent for it.
     /// </summary>
     protected readonly record struct UpsertSplit(
         List<TEntity> UpdatedInPlace,
@@ -1170,10 +1312,11 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         List<TModel> Vacated,
         List<TEntity> Unchanged,
         List<TEntity> ToInsert,
-        int SkippedDeleted)
+        int SkippedDeleted,
+        Dictionary<TEntity, TEntity> SentForHidden)
     {
         public static UpsertSplit Empty(List<TEntity> toInsert, int skippedDeleted = 0) =>
-            new([], [], [], [], toInsert, skippedDeleted);
+            new([], [], [], [], toInsert, skippedDeleted, new(ReferenceEqualityComparer.Instance));
 
         /// <summary>
         /// Sorts a matched row the write has just been applied to, <paramref name="before"/> being its
@@ -1181,10 +1324,14 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         /// is unchanged: it is not saved, not reported as written and not broadcast. Any other row is
         /// updated in place, and broadcast only when it changed materially
         /// (<see cref="V4MaterialChange.HasMaterialChange"/>), so a correlation id converging onto its
-        /// anchor's or a fingerprint-only write is saved silently.
+        /// anchor's or a fingerprint-only write is saved silently. <paramref name="sentForHidden"/> is the
+        /// entity the writer sent when the row is one the history clamp hides from it.
         /// </summary>
-        public void Classify(NocturneDbContext ctx, TEntity entity, TModel before)
+        public void Classify(NocturneDbContext ctx, TEntity entity, TModel before, TEntity? sentForHidden = null)
         {
+            if (sentForHidden is not null)
+                SentForHidden[entity] = sentForHidden;
+
             var entry = ctx.Entry(entity);
             if (NocturneDbContext.WritesNothing(entry))
             {
@@ -1200,9 +1347,31 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             }
         }
 
-        /// <summary>Saves the rows updated in place, before the insert path clears the tracker.</summary>
+        /// <summary>
+        /// Saves the rows updated in place, before the insert path clears the tracker. An update of a row
+        /// the clamp hides is checked against the SELECT policies, so that save runs with the clamp lifted.
+        /// </summary>
         public Task SaveAsync(NocturneDbContext ctx, CancellationToken ct) =>
-            UpdatedInPlace.Count > 0 ? ctx.SaveChangesAsync(ct) : Task.CompletedTask;
+            UpdatedInPlace.Count == 0 ? Task.CompletedTask
+            : SentForHidden.Count == 0 ? ctx.SaveChangesAsync(ct)
+            : ctx.WriteWithHistoryClampLiftedAsync(token => ctx.SaveChangesAsync(token), ct);
+
+        /// <summary>
+        /// The rows answered as updated: <see cref="UpdatedInPlace"/>, and the unchanged rows the clamp hides,
+        /// since telling the writer a row it cannot read equals its upload would reveal the row.
+        /// </summary>
+        public IEnumerable<TEntity> AnsweredUpdated =>
+            UpdatedInPlace.Concat(Unchanged.Where(SentForHidden.ContainsKey));
+
+        /// <summary>The rows answered as unchanged: the rest of <see cref="Unchanged"/>.</summary>
+        public IEnumerable<TEntity> AnsweredUnchanged
+        {
+            get
+            {
+                var hidden = SentForHidden;
+                return Unchanged.Where(e => !hidden.ContainsKey(e));
+            }
+        }
     }
 
     /// <summary>Upsert participants override: match existing rows by their key, apply the write to
@@ -1317,7 +1486,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 var (toInsert, blockedSkipped) = await ctx.InsertUnblockedAsync(
                     split.ToInsert,
                     e => e.LegacyId,
-                    (_, t) => ctx.GetBlockingLegacyIdsAsync(split.ToInsert, t),
+                    (_, t) => BlockingLegacyIdsAsync(ctx, split.ToInsert, t),
                     token);
 
                 await OnBulkSavedAsync(
@@ -1332,7 +1501,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                     [.. legacy.Vacated, .. split.Vacated],
                     [.. legacy.Unchanged, .. split.Unchanged],
                     toInsert,
-                    split.SkippedDeleted + blockedSkipped);
+                    split.SkippedDeleted + blockedSkipped,
+                    new(legacy.SentForHidden.Concat(split.SentForHidden), ReferenceEqualityComparer.Instance));
                 return (upserts, toInsert);
             },
             (attempt, token) =>
@@ -1342,8 +1512,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             ct: ct);
 
         var (upserts, inserted) = written;
-        var updated = upserts.UpdatedInPlace.Select(ToDomain).ToList();
-        var unchanged = upserts.Unchanged.Select(ToDomain).ToList();
+        var updated = upserts.AnsweredUpdated.Select(e => Answered(upserts, e)).ToList();
+        var unchanged = upserts.AnsweredUnchanged.Select(ToDomain).ToList();
         var committed = new BulkWrite<TModel>([.. updated, .. unchanged, .. inserted.Select(ToDomain)], upserts.SkippedDeleted)
         {
             Updated = updated,
@@ -1357,7 +1527,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 await DedupCommittedAsync(inserted, ct);
                 await RaiseBroadcastAsync(
                     inserted.Select(ToDomain).ToList(),
-                    upserts.MateriallyChanged.Select(ToDomain).ToList(),
+                    upserts.MateriallyChanged.Select(e => Answered(upserts, e)).ToList(),
                     [],
                     origin, ct,
                     vacated: upserts.Vacated);
@@ -1383,7 +1553,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <remarks>
     /// A stored <see cref="IPatientDeviceLinked.PatientDeviceId"/> is carried onto a record that
     /// resolved none, so a re-send whose attribution has since become ambiguous cannot unattribute
-    /// the row.
+    /// the row. A row the history clamp hides keeps its correlation id (<see cref="KeepCorrelationId"/>).
     /// </remarks>
     private async Task<UpsertSplit> SplitLegacyIdUpdatesAsync(
         NocturneDbContext ctx, List<TModel> records, CancellationToken ct)
@@ -1393,14 +1563,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             lastByLegacyId[record.LegacyId!] = record;
 
         var storedByLegacyId = new Dictionary<string, TEntity>(StringComparer.Ordinal);
+        HashSet<TEntity> hidden = [];
         if (lastByLegacyId.Count > 0)
         {
             var legacyIds = lastByLegacyId.Keys.ToList();
-            var stored = await ctx.Set<TEntity>()
-                .Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId))
-                .ToListAsync(ct);
+            var stored = await ctx.WriteWithHistoryClampLiftedAsync(
+                token => ctx.Set<TEntity>()
+                    .Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId))
+                    .ToListAsync(token),
+                ct);
             foreach (var entity in stored)
                 storedByLegacyId.TryAdd(entity.LegacyId!, entity);
+            hidden = await HiddenAsync(ctx, stored, ct);
         }
 
         var toInsert = new List<TEntity>();
@@ -1422,6 +1596,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 continue;
             }
 
+            var sent = hidden.Contains(entity) ? ToEntity(record) : null;
             if (record is IPatientDeviceLinked { PatientDeviceId: null } attributed
                 && ToDomain(entity) is IPatientDeviceLinked storedAttribution)
             {
@@ -1430,8 +1605,11 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
             record.Id = entity.Id;
             var before = ToDomain(entity);
+            var storedCorrelationId = entity.CorrelationId;
             ApplyUpdate(entity, record);
-            split.Classify(ctx, entity, before);
+            if (sent is not null)
+                KeepCorrelationId(entity, storedCorrelationId);
+            split.Classify(ctx, entity, before, sent);
         }
 
         await split.SaveAsync(ctx, ct);

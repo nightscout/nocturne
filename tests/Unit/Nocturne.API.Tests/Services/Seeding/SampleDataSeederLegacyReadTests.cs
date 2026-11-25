@@ -92,7 +92,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
-            new AlertRuleRepository(contexts),
+            new AlertRuleRepository(contexts, _time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,

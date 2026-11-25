@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -43,6 +44,24 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var id = Stage(db, credential);
+        await SaveAsync(db, ct);
+        return id;
+    }
+
+    /// <inheritdoc/>
+    public virtual Task<Guid?> CreateForSetupOwnerAsync(Guid tenantId, NewPasskeyCredential credential, CancellationToken ct) =>
+        SetupOwnerClaim.StoreClaimingSetupAsync(
+            _contexts ?? throw new InvalidOperationException(
+                "A repository over a unit of work runs inside the unit's commit and cannot open a transaction of its own."),
+            tenantId,
+            credential.SubjectId,
+            db => Stage(db, credential),
+            (db, id, token) => db.PasskeyCredentials.AnyAsync(c => c.Id == id, token),
+            ct);
+
+    private static Guid Stage(NocturneDbContext db, NewPasskeyCredential credential)
+    {
         var entity = new PasskeyCredentialEntity
         {
             Id = Guid.CreateVersion7(),
@@ -56,7 +75,6 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
             CreatedAt = credential.CreatedAt,
         };
         db.PasskeyCredentials.Add(entity);
-        await SaveAsync(db, ct);
         return entity.Id;
     }
 

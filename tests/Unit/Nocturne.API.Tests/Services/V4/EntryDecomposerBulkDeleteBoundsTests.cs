@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -41,14 +41,11 @@ public class EntryDecomposerBulkDeleteBoundsTests : IDisposable
     {
         var factory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
-        return new EntryDecomposer(
-            new SensorGlucoseRepository(factory, Mock.Of<IDuplicateLinker>(), audit, NullLogger<SensorGlucoseRepository>.Instance),
-            new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
-            new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),
-            Mock.Of<IGlucoseProcessingResolver>(),
-            Mock.Of<IPatientDeviceStamper>(),
-            audit,
-            NullLogger<EntryDecomposer>.Instance);
+        return EntryDecomposerDoubles.Build(
+            sensorGlucose: new SensorGlucoseRepository(factory, Mock.Of<IDuplicateLinker>(), audit, NullLogger<SensorGlucoseRepository>.Instance),
+            meterGlucose: new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance),
+            calibration: new CalibrationRepository(factory, audit, NullLogger<CalibrationRepository>.Instance),
+            audit: audit);
     }
 
     private void SeedAround(long mills)

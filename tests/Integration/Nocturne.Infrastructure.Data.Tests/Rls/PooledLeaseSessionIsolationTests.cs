@@ -48,11 +48,7 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
         _tenant = await TenantReaderData.SeedTenantAsync(_fx, _provider);
     }
 
-    public async Task DisposeAsync()
-    {
-        await _provider.GetRequiredService<ContextDataSource>().Source.DisposeAsync();
-        await _provider.DisposeAsync();
-    }
+    public async Task DisposeAsync() => await _provider.DisposeAsync();
 
     [Theory]
     [InlineData(false)]

@@ -11,7 +11,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -28,7 +27,6 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     : IClassFixture<OAuthDeviceCodeDecisionPostgresTests.Database>
 {
     private const string ClientId = "app";
-    private static readonly TimeSpan BarrierTimeout = TimeSpan.FromSeconds(30);
     private static readonly IReadOnlySet<string> FullAccess = new HashSet<string> { Scope.FullAccess };
 
     public sealed class Database : IAsyncLifetime
@@ -44,12 +42,6 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
         }
 
         public Task DisposeAsync() => Task.CompletedTask;
-    }
-
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create(scope));
     }
 
     /// <summary>Runs <paramref name="before"/> once, just before the first statement that writes a device code, however it is issued.</summary>
@@ -92,7 +84,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
                 : [new TenantConnectionInterceptor(), staged])
             .Options) { TenantId = tenant };
 
-    private sealed record Seeded(Guid Tenant, Guid Client, Guid Grant, Guid Subject, Guid OtherSubject, string UserCode, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid Client, Guid Grant, Guid Subject, Guid OtherSubject, string UserCode, SuppliedContextFactory Contexts);
 
     private async Task<Seeded> SeedPendingCodeAsync()
     {
@@ -135,14 +127,14 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             await db.SaveChangesAsync();
         }
 
-        var contexts = new Factory(t => Context(t), tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         await new OAuthTokenRepository(contexts).StoreDeviceCodeAsync(
             new NewDeviceCode(ClientId, $"device-code-hash-{tenant:N}", userCode, [Scope.GlucoseRead, Scope.TreatmentsRead], DateTime.UtcNow.AddMinutes(15), 5),
             CancellationToken.None);
         return new Seeded(tenant, client, grant, subject, otherSubject, userCode, contexts);
     }
 
-    private static OAuthDeviceCodeService ServiceOver(Factory contexts, Seeded seeded)
+    private static OAuthDeviceCodeService ServiceOver(SuppliedContextFactory contexts, Seeded seeded)
     {
         var clients = new Mock<IOAuthClientService>();
         clients.Setup(c => c.GetClientAsync(ClientId, It.IsAny<CancellationToken>()))
@@ -153,30 +145,29 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             clients.Object,
             contexts,
             new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            TimeProvider.System,
             NullLogger<OAuthDeviceCodeService>.Instance);
     }
 
-    private Factory ApprovedByARivalFirst(Seeded seeded, Guid codeId)
+    private SuppliedContextFactory ApprovedByARivalFirst(Seeded seeded, Guid codeId)
     {
         var rival = new OAuthTokenRepository(seeded.Contexts);
-        return new Factory(
-            tenant => Context(tenant, new BeforeDecisionWrite(() =>
-                rival.ApproveDeviceCodeAsync(codeId, seeded.OtherSubject, seeded.Grant, DateTime.UtcNow, CancellationToken.None))),
-            seeded.Tenant);
+        return new SuppliedContextFactory(
+            () => Context(seeded.Tenant, new BeforeDecisionWrite(() =>
+                rival.ApproveDeviceCodeAsync(codeId, seeded.OtherSubject, seeded.Grant, DateTime.UtcNow, CancellationToken.None))));
     }
 
-    private Factory BothReachTheDecisionWrite(Seeded seeded)
+    private SuppliedContextFactory BothReachTheDecisionWrite(Seeded seeded)
     {
         var arrived = 0;
         var bothArrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        return new Factory(
-            tenant => Context(tenant, new BeforeDecisionWrite(() =>
+        return new SuppliedContextFactory(
+            () => Context(seeded.Tenant, new BeforeDecisionWrite(() =>
             {
                 if (Interlocked.Increment(ref arrived) == 2)
                     bothArrived.SetResult();
-                return bothArrived.Task.WaitAsync(BarrierTimeout);
-            })),
-            seeded.Tenant);
+                return bothArrived.Task.WaitAsync(Eventually.DefaultPatience);
+            })));
     }
 
     private async Task<List<OAuthGrantEntity>> GrantsAsync(Seeded seeded)
@@ -194,9 +185,8 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
         var seeded = await SeedPendingCodeAsync();
         var deleter = new OAuthTokenRepository(seeded.Contexts);
         var codeId = (await StoredAsync(seeded))!.Id;
-        var approving = new Factory(
-            tenant => Context(tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))),
-            seeded.Tenant);
+        var approving = new SuppliedContextFactory(
+            () => Context(seeded.Tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))));
 
         var approved = await ServiceOver(approving, seeded)
             .ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess);
@@ -211,9 +201,8 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
         var seeded = await SeedPendingCodeAsync();
         var deleter = new OAuthTokenRepository(seeded.Contexts);
         var codeId = (await StoredAsync(seeded))!.Id;
-        var approving = new Factory(
-            tenant => Context(tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))),
-            seeded.Tenant);
+        var approving = new SuppliedContextFactory(
+            () => Context(seeded.Tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))));
 
         await ServiceOver(approving, seeded).ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess);
 
@@ -226,9 +215,8 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
         var seeded = await SeedPendingCodeAsync();
         var deleter = new OAuthTokenRepository(seeded.Contexts);
         var codeId = (await StoredAsync(seeded))!.Id;
-        var denying = new Factory(
-            tenant => Context(tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))),
-            seeded.Tenant);
+        var denying = new SuppliedContextFactory(
+            () => Context(seeded.Tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))));
 
         var denied = await ServiceOver(denying, seeded).DenyDeviceCodeAsync(seeded.UserCode);
 

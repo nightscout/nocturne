@@ -186,6 +186,7 @@ public class ProfileActivationIntegrationTests : ApiIntegrationTestBase
         var client = CreateAuthenticatedClient();
         var switchMills = MinutesAgo(60);
         await PostV1Async(client, ProfileSwitchV1("6500000000000000000000c1", switchMills));
+        await SettleHistoryAsync();
         var first = (await GetAsync(client, "/api/v3/treatments/history/0"))["result"]!.AsArray();
         var served = first.Should().ContainSingle().Subject!;
         var identifier = served["identifier"]!.GetValue<string>();
@@ -195,6 +196,7 @@ public class ProfileActivationIntegrationTests : ApiIntegrationTestBase
 
         (await client.DeleteAsync($"/api/v3/treatments/{identifier}")).StatusCode.Should().Be(HttpStatusCode.OK);
 
+        await SettleHistoryAsync();
         var after = (await GetAsync(client, $"/api/v3/treatments/history/{cursor + 1}"))["result"]!.AsArray();
         var tombstone = after.Should().ContainSingle().Subject!;
         tombstone["identifier"]!.GetValue<string>().Should().Be(identifier);

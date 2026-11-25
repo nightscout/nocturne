@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -298,7 +299,7 @@ public class MigrationProgressTests
         var handler = new RecordingNightscout((path, _) => path == "/api/v1/food.json" ? Json(foods) : NotFound());
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
-        var status = await MigrationJobHarness.RunAsync(provider, "food").WaitAsync(TimeSpan.FromMinutes(2));
+        var status = await MigrationJobHarness.RunAsync(provider, "food").WaitAsync(Eventually.DefaultPatience);
 
         handler.Requests.Count(r => r.StartsWith("/api/v1/food.json")).Should().Be(2);
         var food = status.CollectionProgress["food"];

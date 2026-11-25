@@ -72,17 +72,17 @@ public class MealMatchActionHandlerTests
     }
 
     [Fact]
-    public async Task Accept_withoutTheTreatmentsWriteScopeDeclinesAndLinksNothing()
+    public async Task Accept_withoutTheTreatmentsWriteScopeIsRefusedForThatScopeAndLinksNothing()
     {
         var result = await Accept(
             Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()), Scope.FoodReadWrite, Scope.DeviceNotify);
 
-        result.Should().Be(NotificationActionResult.NotHandled);
+        result.Should().Be(NotificationActionResult.RefusedFor(Scope.TreatmentsReadWrite));
         VerifyNothingLinked();
     }
 
     [Fact]
-    public async Task Accept_withoutARequestDeclinesAndLinksNothing()
+    public async Task Accept_withoutARequestIsRefusedForTheTreatmentsWriteScopeAndLinksNothing()
     {
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.SetupGet(a => a.HttpContext).Returns((HttpContext?)null);
@@ -90,7 +90,7 @@ public class MealMatchActionHandlerTests
         var result = await Handler(accessor.Object)
             .HandleAsync(Guid.NewGuid(), "accept", "user-1", Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()));
 
-        result.Should().Be(NotificationActionResult.NotHandled);
+        result.Should().Be(NotificationActionResult.RefusedFor(Scope.TreatmentsReadWrite));
         VerifyNothingLinked();
     }
 

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -110,6 +111,7 @@ public class DeviceStatusGroupRepositoryTests
         var extrasOnly = await r.StatusAsync(T0.AddMinutes(-1), extras: true);
         var pumpLed = await r.StatusAsync(T0.AddMinutes(-2), pump: true, uploader: true);
 
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
         var history = await r.Groups.GetModifiedSinceAsync(0, 100);
 
         history.Select(h => (Shape(h.Record), h.Deleted)).Should().BeEquivalentTo(new[]
@@ -130,12 +132,14 @@ public class DeviceStatusGroupRepositoryTests
         var pump = (await r.Pumps.GetByCorrelationIdsAsync([correlation.Value])).Single();
 
         await r.Aps.DeleteAsync(aps.Id, WriteOrigin.Backfill);
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
 
         (await r.Groups.GetModifiedSinceAsync(0, 100)).Select(h => (Shape(h.Record), h.Deleted))
             .Should().Equal(((correlation, "P"), false));
         (await r.Groups.GetAsync(null, null, null, 10, 0, descending: true)).Select(Shape).Should().Equal((correlation, "P"));
 
         await r.Pumps.DeleteAsync(pump.Id, WriteOrigin.Backfill);
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
 
         (await r.Groups.GetModifiedSinceAsync(0, 100)).Select(h => (Shape(h.Record), h.Deleted))
             .Should().Equal(((correlation, "AP"), true));
@@ -168,21 +172,22 @@ public class DeviceStatusGroupRepositoryTests
         using var scope = await _fx.BeginTenantScopeAsync(Guid.NewGuid());
         var r = new Repos(scope);
         var correlation = await r.StatusAsync(T0, aps: true, pump: true);
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
         var created = (await r.Groups.GetModifiedSinceAsync(0, 100)).Single().Record.ModifiedAt;
         var cursor = new DateTimeOffset(created, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var aps = (await r.Aps.GetByCorrelationIdsAsync([correlation!.Value])).Single();
         var pump = (await r.Pumps.GetByCorrelationIdsAsync([correlation.Value])).Single();
-        await Task.Delay(5);
 
         await r.Aps.DeleteAsync(aps.Id, WriteOrigin.Backfill);
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
 
         var afterApsRemoved = (await r.Groups.GetModifiedSinceAsync(cursor, 100)).Should().ContainSingle().Subject;
         (Shape(afterApsRemoved.Record), afterApsRemoved.Deleted).Should().Be(((correlation, "P"), false));
         afterApsRemoved.Record.ModifiedAt.Should().BeAfter(created);
         cursor = new DateTimeOffset(afterApsRemoved.Record.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        await Task.Delay(5);
 
         await r.Pumps.DeleteAsync(pump.Id, WriteOrigin.Backfill);
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
 
         var afterPumpRemoved = (await r.Groups.GetModifiedSinceAsync(cursor, 100)).Should().ContainSingle().Subject;
         (Shape(afterPumpRemoved.Record), afterPumpRemoved.Deleted).Should().Be(((correlation, "AP"), true));
@@ -199,6 +204,7 @@ public class DeviceStatusGroupRepositoryTests
         for (var i = 0; i < 3; i++)
             statuses.Add(await r.StatusAsync(T0.AddMinutes(10 + i), uploader: true));
 
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
         var seen = new List<Guid?>();
         long cursor = 0;
         for (var page = 0; page < 20; page++)

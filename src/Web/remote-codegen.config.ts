@@ -57,8 +57,9 @@ export default {
     // may not have shared, each 401ing — so the default bounces them to login
     // ("flash of dashboard, then redirect"). On a share host, surface 401 as a
     // normal error instead so unshared categories just fail their widget rather
-    // than navigating away. Commands/forms already throw error(401) and never
-    // redirected.
+    // than navigating away. A command or form throws error(401), since a command
+    // may not redirect; the browser sends the person to sign in from there
+    // (`createRemoteSignInFetch` in `#lib/api/auth-interceptor`).
     //
     // The redirect carries no return address: a query cannot read `event.url`.
     // The (authenticated) layout already sends an anonymous page load to login
@@ -99,11 +100,11 @@ export default {
     // 500 no matter what the response said.
     //
     // 429 and 404 are forwarded too, and with a fixed reason rather than the
-    // extracted message: the rate limiter's body declares no typed schema, so
-    // NSwag supplies its own "status code was not expected" text, and a missing
-    // resource is answered with either an empty body (`NotFound()`) or a `detail`
-    // that echoes back the id it was handed ("Body weight record with ID … not
-    // found") — neither is copy to put in front of a user, while the status is
+    // extracted message: an operation that declares no 429 gets NSwag's
+    // own "status code was not expected" text, and a
+    // missing resource is answered with either an empty body (`NotFound()`) or a
+    // `detail` that echoes back the id it was handed ("Body weight record with
+    // ID … not found") — neither is copy to put in front of a user, while the status is
     // what tells a caller "already gone"/"you were throttled" from "this failed".
     // `describeSubmitError` and `remoteErrorMessage` resolve the wording from
     // the status.

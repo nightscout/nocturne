@@ -15,10 +15,9 @@
     "test:copy-guard": "node --test \"utils/lintUiCopy/*.test.ts\"",
     "lint:copy": "pnpm run test:copy-guard && cd packages/app && wuchale -l warn && cd ../.. && node utils/lintUiCopy/index.ts",
     "clean": "pnpm --recursive clean && rm -rf node_modules",
-    "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",
     "generate-remote-functions": "openapi-remote-codegen",
-    "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas && pnpm run generate-remote-functions",
+    "generate-api": "dotnet build ../API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true",
     "translations:stage": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --no-skip-worktree && git add src/Web/locales/",
     "hide-generated": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --skip-worktree",
     "unhide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/ | xargs git update-index --no-skip-worktree"

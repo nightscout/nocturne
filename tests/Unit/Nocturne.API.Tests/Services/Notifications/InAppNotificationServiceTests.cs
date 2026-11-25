@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -445,7 +446,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(null).ExecuteActionAsync(entity.Id, actionId, "user-1");
 
-        result.Should().BeTrue();
+        result.Handled.Should().BeTrue();
         VerifyArchivedOnce(entity.Id, expected);
     }
 
@@ -460,7 +461,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, actionId, "user-1");
 
-        result.Should().BeTrue();
+        result.Handled.Should().BeTrue();
         handler.Verify(
             h => h.HandleAsync(
                 entity.Id, actionId, "user-1", It.IsAny<string?>(),
@@ -482,7 +483,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
 
-        result.Should().BeTrue();
+        result.Handled.Should().BeTrue();
         foodEntries.Verify(
             r => r.DismissAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -490,7 +491,7 @@ public class InAppNotificationServiceTests
     }
 
     [Fact]
-    public async Task ExecuteActionAsync_AcceptingAMealMatchWithoutTheTreatmentsWriteScope_FailsLinksNothingAndKeepsTheNotification()
+    public async Task ExecuteActionAsync_AcceptingAMealMatchWithoutTheTreatmentsWriteScope_IsRefusedForItLinksNothingAndKeepsTheNotification()
     {
         var entity = Owned("meal_matching.suggested_match");
         entity.SourceId = Guid.NewGuid().ToString();
@@ -503,7 +504,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler).ExecuteActionAsync(entity.Id, "accept", "user-1");
 
-        result.Should().BeFalse();
+        result.Should().Be(NotificationActionResult.RefusedFor(Scope.TreatmentsReadWrite));
         linker.Verify(
             l => l.LinkAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
@@ -522,7 +523,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
 
-        result.Should().BeTrue();
+        result.Handled.Should().BeTrue();
         handler.Verify(
             h => h.HandleAsync(
                 entity.Id, "dismiss", "user-1", It.IsAny<string?>(),
@@ -539,7 +540,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
 
-        result.Should().BeTrue();
+        result.Handled.Should().BeTrue();
         _repository.Verify(
             r => r.ArchiveAsync(
                 It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
@@ -554,7 +555,25 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "accept", "user-1");
 
-        result.Should().BeFalse();
+        result.Should().Be(NotificationActionResult.NotHandled);
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData("dismiss")]
+    [InlineData("navigate")]
+    public async Task ExecuteActionAsync_WhenTheHandlerRefusesABuiltInActionForAScope_ReportsItAndKeepsTheNotification(
+        string actionId)
+    {
+        var entity = Owned(HandledType);
+        var handler = HandlerReturning(NotificationActionResult.RefusedFor("some.scope"));
+
+        var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, actionId, "user-1");
+
+        result.Should().Be(NotificationActionResult.RefusedFor("some.scope"));
         _repository.Verify(
             r => r.ArchiveAsync(
                 It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
@@ -569,7 +588,7 @@ public class InAppNotificationServiceTests
 
         var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "dismiss", "someone-else");
 
-        result.Should().BeFalse();
+        result.Should().Be(NotificationActionResult.NotHandled);
         handler.Verify(
             h => h.HandleAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),

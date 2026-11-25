@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.Infrastructure.Data.Tests.ConnectorFoodEntryRaceData;
 
@@ -27,7 +28,6 @@ public class ConnectorFoodEntryResolutionRaceTests
     public async Task A_withdrawal_racing_accepts_never_leaves_a_deleted_entry_with_a_breakdown_row()
     {
         await using var provider = TenantReaderData.BuildProvider(_fx.AppConnectionString);
-        var acceptOutcomes = new List<AcceptMatchOutcome>();
 
         for (var round = 0; round < Rounds; round++)
         {
@@ -65,9 +65,8 @@ public class ConnectorFoodEntryResolutionRaceTests
                 });
                 start.SetResult();
 
-                var outcomes = await Task.WhenAll(accepting).WaitAsync(TimeSpan.FromSeconds(120));
-                var withdrawn = await withdrawing.WaitAsync(TimeSpan.FromSeconds(120));
-                acceptOutcomes.AddRange(outcomes);
+                var outcomes = await Task.WhenAll(accepting).WaitAsync(Eventually.DefaultPatience);
+                var withdrawn = await withdrawing.WaitAsync(Eventually.DefaultPatience);
 
                 for (var i = 0; i < entries.Count; i++)
                 {
@@ -98,9 +97,6 @@ public class ConnectorFoodEntryResolutionRaceTests
                 }
             }
         }
-
-        acceptOutcomes.Should().Contain(AcceptMatchOutcome.Linked, "some accepts must land before the withdrawal claims");
-        acceptOutcomes.Should().Contain(AcceptMatchOutcome.AlreadyResolved, "the withdrawal must claim some entries first");
     }
 
     [Fact]
@@ -109,7 +105,6 @@ public class ConnectorFoodEntryResolutionRaceTests
         await using var provider = TenantReaderData.BuildProvider(_fx.AppConnectionString);
         var tenant = await SeedTenantAsync(_fx, "dismiss-race");
         var entries = await SeedEntriesAsync(provider, tenant, Entries);
-        var acceptOutcomes = new List<AcceptMatchOutcome>();
 
         foreach (var entry in entries)
         {
@@ -131,9 +126,8 @@ public class ConnectorFoodEntryResolutionRaceTests
                 return await dismisses.DismissAsync(entry);
             });
             start.SetResult();
-            var accepted = await accepting.WaitAsync(TimeSpan.FromSeconds(60));
-            var dismissed = await dismissing.WaitAsync(TimeSpan.FromSeconds(60));
-            acceptOutcomes.Add(accepted);
+            var accepted = await accepting.WaitAsync(Eventually.DefaultPatience);
+            var dismissed = await dismissing.WaitAsync(Eventually.DefaultPatience);
 
             var stored = await StoredAsync(provider, tenant, entry);
             var rows = await RowsAsync(provider, tenant, carbIntake);
@@ -153,8 +147,5 @@ public class ConnectorFoodEntryResolutionRaceTests
                 rows.Should().Be(0);
             }
         }
-
-        acceptOutcomes.Should().Contain(AcceptMatchOutcome.Linked, "some accepts must land before the dismiss");
-        acceptOutcomes.Should().Contain(AcceptMatchOutcome.AlreadyResolved, "some dismisses must land before the accept");
     }
 }

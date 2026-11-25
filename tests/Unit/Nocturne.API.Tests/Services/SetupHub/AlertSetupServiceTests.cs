@@ -58,7 +58,7 @@ public class AlertSetupServiceTests : IDisposable
             .Returns(async (Guid id, CancellationToken ct) => (await tenants.GetAsync(id, ct))?.DefaultGlucoseUnits);
         var units = new TenantGlucoseUnits(MockTenantAccessor.Create(TenantId).Object, appearance.Object, setup.Object);
 
-        return new(_factory, tenants, units, new TenantMembershipRepository(_factory, AccountLinkRoutes.Off), new SubjectRepository(_factory, AccountLinkRoutes.Off), new AlertRuleRepository(_factory), null!, null!, null!, null!, null!, TimeProvider.System);
+        return new(_factory, tenants, units, new TenantMembershipRepository(_factory, AccountLinkRoutes.Off), new SubjectRepository(_factory, AccountLinkRoutes.Off), new AlertRuleRepository(_factory, TimeProvider.System), null!, null!, null!, null!, null!, TimeProvider.System);
     }
 
     private async Task MigrationRun(

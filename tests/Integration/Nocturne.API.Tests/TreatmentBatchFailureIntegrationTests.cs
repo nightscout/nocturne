@@ -8,8 +8,8 @@ using Castle.DynamicProxy;
 using Nocturne.API.Helpers;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Treatments;
-using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -161,7 +161,7 @@ public class TreatmentBatchFailureIntegrationTests(ApiIntegrationTestFixture fix
             Fixture.Services, new TenantContext(Fixture.TenantId, "", "", true, false), "test:treatment-batch");
         var notes = new ProxyGenerator().CreateInterfaceProxyWithTarget(
             scope.ServiceProvider.GetRequiredService<INoteRepository>(), new TimesOutWritingNotes());
-        var decomposer = ActivatorUtilities.CreateInstance<TreatmentDecomposer>(scope.ServiceProvider, notes);
+        var decomposer = TreatmentDecomposerDoubles.Resolved(scope.ServiceProvider, notes);
         var store = ActivatorUtilities.CreateInstance<TreatmentReadService>(scope.ServiceProvider, decomposer);
 
         var act = () => store.CreateAsync(

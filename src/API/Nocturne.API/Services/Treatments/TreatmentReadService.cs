@@ -118,7 +118,11 @@ internal class TreatmentReadService : ITreatmentStore
     private Task<IEnumerable<Treatment>> FetchWindowAsync(
         FindQuery find, int limit, bool descending, CancellationToken ct) =>
         _projection.GetProjectedTreatmentsAsync(
-            find.FromMills, find.ToMills, limit, descending, ct);
+            LegacyTreatmentRange.FromMills(
+                find.FromMills, find.ToMills, limit, descending, includeDeleted: NamesIsValid(find)),
+            ct);
+
+    private static bool NamesIsValid(FindQuery find) => find.Fields.Contains("isValid");
 
     private static IEnumerable<Treatment> OrderByTime(IEnumerable<Treatment> treatments, bool descending) =>
         descending ? treatments.OrderByDescending(t => t.Mills) : treatments.OrderBy(t => t.Mills);
@@ -170,7 +174,8 @@ internal class TreatmentReadService : ITreatmentStore
         // The projection service already orders newest-first internally, but we re-sort here
         // to make the contract explicit at the read boundary.
         var projected = await _projection.GetProjectedTreatmentsAsync(
-            fromMills, toMills, limit: int.MaxValue, ct: ct);
+            LegacyTreatmentRange.FromMills(fromMills, toMills, int.MaxValue, descending: true),
+            ct);
 
         return projected.OrderByDescending(t => t.Mills).ToList();
     }
@@ -197,9 +202,12 @@ internal class TreatmentReadService : ITreatmentStore
         ICollection<StoredTreatment>? stored = null)
     {
         var decomposition = new TreatmentDecomposition();
+        IReadOnlyDictionary<int, Treatment> servedBefore = new Dictionary<int, Treatment>();
         try
         {
-            await _store.KeyToServedAsync(treatments, ct);
+            decomposition.KeyedToServed(await _store.KeyToServedAsync(treatments, ct));
+            if (stored is not null)
+                servedBefore = await ServedBeforeInvalidAsync(treatments, ct);
             await _decomposer.DecomposeBatchAsync(treatments, origin, ct, decomposition);
         }
         catch (Exception ex) when (Stops(ex))
@@ -208,6 +216,7 @@ internal class TreatmentReadService : ITreatmentStore
         }
         catch (Exception) when (stored is not null)
         {
+            RecordInvalidated();
             await ReportCommittedAsync(treatments, decomposition, stored);
             throw;
         }
@@ -229,16 +238,17 @@ internal class TreatmentReadService : ITreatmentStore
             accepted = [.. accepted.TakeWhile(i => i < failedAt)];
             created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
             Record();
+            RecordInvalidated();
             List<Treatment> unread = [treatments[failedAt]];
             if (Wrote(decomposition.Of(failedAt)))
-                stored?.Add(new StoredTreatment.Unnamed(treatments[failedAt]));
+                stored?.Add(Marked(new StoredTreatment.Unnamed(treatments[failedAt]), decomposition, failedAt));
             for (var j = failedAt + 1; j < treatments.Count; j++)
             {
                 var later = decomposition.Of(j);
                 if (later.StoredRecords.Any())
                     unread.Add(treatments[j]);
                 if (Wrote(later))
-                    stored?.Add(new StoredTreatment.Unnamed(treatments[j]));
+                    stored?.Add(Marked(new StoredTreatment.Unnamed(treatments[j]), decomposition, j));
             }
             throw new TreatmentBatchFailedException(
                 new BulkWrite<Treatment>([.. results, .. unread], decomposition.SkippedDeleted) { Rejected = rejected },
@@ -246,6 +256,7 @@ internal class TreatmentReadService : ITreatmentStore
         }
 
         Record();
+        RecordInvalidated();
 
         _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
         return new BulkWrite<Treatment>(results, decomposition.SkippedDeleted) { Rejected = rejected };
@@ -256,13 +267,26 @@ internal class TreatmentReadService : ITreatmentStore
             {
                 results.Add(created[k].Created);
                 if (Wrote(decomposition.Of(accepted[k])))
-                    stored?.Add(created[k] with { Updated = updated.Contains(accepted[k]) });
+                    stored?.Add(Marked(created[k], decomposition, accepted[k]) with { Updated = updated.Contains(accepted[k]) });
+            }
+        }
+
+        // A live treatment an upload deleted, as reads served it before: its delete commits before the
+        // batch's other writes, so it is announced whatever ends the batch.
+        void RecordInvalidated()
+        {
+            foreach (var index in decomposition.Invalidated.Order())
+            {
+                var deleted = servedBefore.GetValueOrDefault(index) ?? treatments[index];
+                deleted.IsValid = false;
+                stored?.Add(new StoredTreatment.Deleted(deleted));
             }
         }
 
         TreatmentBatchFailedException Stopped(Exception ex, TreatmentDecomposition committed)
         {
             _logger.LogError(ex, "Failed to store a batch of {Count} treatments", treatments.Count);
+            RecordInvalidated();
             var written = new List<Treatment>();
             int? failedIndex = null;
             for (var i = 0; i < treatments.Count; i++)
@@ -272,7 +296,7 @@ internal class TreatmentReadService : ITreatmentStore
                 {
                     written.Add(treatments[i]);
                     if (Wrote(of))
-                        stored?.Add(new StoredTreatment.Unnamed(treatments[i]));
+                        stored?.Add(Marked(new StoredTreatment.Unnamed(treatments[i]), committed, i));
                 }
                 else if (failedIndex is null && !committed.StoresNothing(i))
                 {
@@ -295,23 +319,47 @@ internal class TreatmentReadService : ITreatmentStore
     private async Task ReportCommittedAsync(
         IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition, ICollection<StoredTreatment> stored)
     {
-        var wrote = Enumerable.Range(0, Math.Min(treatments.Count, decomposition.Groups.Count))
+        var indices = Enumerable.Range(0, Math.Min(treatments.Count, decomposition.Groups.Count))
             .Where(i => Wrote(decomposition.Of(i)))
-            .Select(i => (treatments[i], decomposition.Of(i)))
             .ToList();
+        var wrote = indices.Select(i => (treatments[i], decomposition.Of(i))).ToList();
         try
         {
-            foreach (var created in await _store.ToCreatedAsync(wrote, CancellationToken.None))
-                stored.Add(created);
+            var created = await _store.ToCreatedAsync(wrote, CancellationToken.None);
+            for (var k = 0; k < created.Count; k++)
+                stored.Add(Marked(created[k], decomposition, indices[k]));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex, "Stored treatments {Ids} could not be read back", wrote.Select(w => w.Item1.Id));
-            foreach (var (treatment, _) in wrote)
-                stored.Add(new StoredTreatment.Unnamed(treatment));
+            foreach (var i in indices)
+                stored.Add(Marked(new StoredTreatment.Unnamed(treatments[i]), decomposition, i));
         }
     }
+
+    /// <summary>
+    /// The treatments reads serve under the ids of the batch's uploads with <c>isValid: false</c>, by
+    /// batch index: one of those that names a live treatment deletes it, and its delete is announced as
+    /// the treatment that was served.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<int, Treatment>> ServedBeforeInvalidAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        var served = new Dictionary<int, Treatment>();
+        for (var i = 0; i < treatments.Count; i++)
+        {
+            if (treatments[i] is { IsValid: false } treatment
+                && (treatment.Id ?? treatment.SyncIdentifier) is { Length: > 0 } id
+                && await GetByIdAsync(id, ct) is { } found)
+                served[i] = found;
+        }
+
+        return served;
+    }
+
+    private static StoredTreatment Marked(StoredTreatment stored, TreatmentDecomposition decomposition, int index) =>
+        stored with { UpstreamEdit = decomposition.IsUpstreamEdit(index) };
 
     /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
     private static bool Stops(Exception ex) =>
@@ -378,8 +426,7 @@ internal class TreatmentReadService : ITreatmentStore
         {
             // Field filters only exist on the projected shape; count matches within the
             // (bounded) window instead of delegating to per-repo counts.
-            var projected = (await _projection.GetProjectedTreatmentsAsync(
-                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, ct: ct)).ToList();
+            var projected = (await FetchWindowAsync(findQuery, MaxFilterFetch, descending: true, ct)).ToList();
             if (projected.Count >= MaxFilterFetch)
                 _logger.LogWarning(
                     "Find-filtered treatment count hit the {MaxFetch}-row window; older matches are not counted",

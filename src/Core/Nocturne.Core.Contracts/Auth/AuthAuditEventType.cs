@@ -230,6 +230,28 @@ public static class AuthAuditEventType
     /// <summary>Event type when a manager revokes a team's invite link.</summary>
     public const string TeamInviteRevoked = "team_invite_revoked";
 
+    /// <summary>Event type when a manager makes a link that makes whoever opens it staff of a team.</summary>
+    public const string TeamStaffInviteCreated = "team_staff_invite_created";
+
+    /// <summary>
+    /// Event type when a team's staff invite is revoked: by a manager, or because its maker left the team.
+    /// </summary>
+    public const string TeamStaffInviteRevoked = "team_staff_invite_revoked";
+
+    /// <summary>Event type when a subject becomes staff of a team. The target is that subject.</summary>
+    public const string TeamStaffAdded = "team_staff_added";
+
+    /// <summary>
+    /// Event type when a manager edits what narrows a staff member. The target is that staff member, and
+    /// the details hold the ceiling, limit and end before and after.
+    /// </summary>
+    public const string TeamStaffChanged = "team_staff_changed";
+
+    /// <summary>
+    /// Event type when a staff member leaves a team or is removed from it. The target is that staff member.
+    /// </summary>
+    public const string TeamStaffRemoved = "team_staff_removed";
+
     /// <summary>Event type when a manager makes a link that gives the team access to a site.</summary>
     public const string TeamAccessLinkCreated = "team_access_link_created";
 
@@ -245,8 +267,32 @@ public static class AuthAuditEventType
     public const string TeamAccessGiven = "team_access_given";
 
     /// <summary>
+    /// Event type when an owner of a site changes what a team's access to it gives: its roles, its 24-hour
+    /// limit or its end. The row names the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamAccessChanged = "team_access_changed";
+
+    /// <summary>
     /// Event type when a team's access to a site stops: the site stopped it, or the team was deleted.
     /// The row names the tenant and the team, and no target.
     /// </summary>
     public const string TeamAccessStopped = "team_access_stopped";
+
+    /// <summary>
+    /// Event type when an owner of a site approves a staff member of a team with access to it, or the
+    /// switch approves them. The row names the tenant and the team, and targets the staff member.
+    /// </summary>
+    public const string TeamStaffApproved = "team_staff_approved";
+
+    /// <summary>
+    /// Event type when an owner of a site declines a staff member of a team with access to it. The row
+    /// names the tenant and the team, and targets the staff member.
+    /// </summary>
+    public const string TeamStaffDeclined = "team_staff_declined";
+
+    /// <summary>
+    /// Event type when an owner of a site turns "the team manages its own staff" on or off for a team
+    /// with access to it. The row names the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamStaffRuleChanged = "team_staff_rule_changed";
 }

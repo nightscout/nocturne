@@ -6,7 +6,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -38,12 +37,6 @@ public class SubjectUnclaimedTeamRowsPostgresTests(SubjectUnclaimedTeamRowsPostg
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(string connectionString, Guid scope) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(Context(connectionString, scope));
-    }
-
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(connectionString)
@@ -59,7 +52,7 @@ public class SubjectUnclaimedTeamRowsPostgresTests(SubjectUnclaimedTeamRowsPostg
         var home = await TenantAsync("home");
         var elsewhere = await TenantAsync("elsewhere");
         var subjects = new SubjectRepository(
-            new Factory(database.AppConnectionString, home), AccountLinkRoutes.Off);
+            new SuppliedContextFactory(() => Context(database.AppConnectionString, home)), AccountLinkRoutes.Off);
         var provider = Guid.CreateVersion7();
         var team = Guid.CreateVersion7();
         var taker = await subjects.CreateAsync(new NewSubject("taker"), Ct);
@@ -122,6 +115,22 @@ public class SubjectUnclaimedTeamRowsPostgresTests(SubjectUnclaimedTeamRowsPostg
         var scene = await SceneAsync();
         var (holder, identity) = await HolderAsync(scene, "member", (db, subject) =>
             db.TeamMembers.Add(new TeamMemberEntity { Id = Guid.CreateVersion7(), TeamId = scene.Team, SubjectId = subject }));
+
+        (await scene.Subjects.TakeUnclaimedOidcIdentityAsync(identity, scene.Taker, null, Ct)).Should().BeNull();
+
+        (await ExistsAsync(holder)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_holder_who_made_a_staff_invite_is_kept()
+    {
+        var scene = await SceneAsync();
+        var (holder, identity) = await HolderAsync(scene, "staff-invite-maker", (db, subject) =>
+            db.TeamStaffInvites.Add(new TeamStaffInviteEntity
+            {
+                Id = Guid.CreateVersion7(), TeamId = scene.Team, CreatedBySubjectId = subject,
+                TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddDays(1),
+            }));
 
         (await scene.Subjects.TakeUnclaimedOidcIdentityAsync(identity, scene.Taker, null, Ct)).Should().BeNull();
 

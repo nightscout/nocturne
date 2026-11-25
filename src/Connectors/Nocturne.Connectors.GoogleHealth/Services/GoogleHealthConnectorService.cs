@@ -23,7 +23,6 @@ public sealed class GoogleHealthConnectorService(
     IGoogleHealthReadingWriter writer,
     IGoogleHealthSyncCoordinator coordinator,
     IConnectorConfigurationService connectorConfigurations,
-    IConnectorSyncCursorStore cursorStore,
     ITenantAccessor tenantAccessor,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ILogger<GoogleHealthConnectorService> logger,
@@ -38,26 +37,18 @@ public sealed class GoogleHealthConnectorService(
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 
-    // The base's resume points read records published through IConnectorPublisher, which Google
-    // Health never publishes through, so its own resume point is persisted here instead.
-    private const string LastSyncedToKey = "lastSyncedTo";
-    public const string RuntimeStateResource = "health";
-
     // Matches GoogleHealthService.ValidateOptions' floor for an explicit ImportFrom.
-    private static readonly DateTimeOffset EarliestSupportedDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
-
-    private const string BackfillCursorKey = "backfillCursorDate";
-    private const string BackfillFloorKey = "backfillFloorDate";
-    private const string BackfillCompleteKey = "backfillComplete";
-    private const string BackfillChunkDaysKey = "backfillChunkDays";
+    private static readonly DateTimeOffset EarliestSupportedDate = new(GoogleHealthState.EarliestSupportedDate);
 
     /// <summary>
     ///     Persisted backfill progress: <see cref="CursorDate"/> is the oldest UTC day already
     ///     imported (null before the very first sync), <see cref="FloorDate"/> is the oldest day the
     ///     backfill is aiming for.
     /// </summary>
-    private readonly record struct BackfillState(
-        DateTimeOffset? CursorDate, DateTimeOffset FloorDate, bool Complete, int? ChunkDays);
+    private readonly record struct BackfillState(DateTimeOffset? CursorDate, DateTimeOffset FloorDate, int? ChunkDays)
+    {
+        public bool Complete => GoogleHealthState.BackfillComplete(CursorDate?.UtcDateTime, FloorDate.UtcDateTime);
+    }
 
     private readonly record struct GoogleHealthSyncWindow(DateTimeOffset From, DateTimeOffset To, bool IsBackfillDay, bool IsManaged);
 
@@ -86,7 +77,7 @@ public sealed class GoogleHealthConnectorService(
         if (state.CursorDate is null)
         {
             var floor = ComputeBackfillFloor(config, today);
-            state = new BackfillState(today, floor, floor >= today, state.ChunkDays);
+            state = new BackfillState(today, floor, state.ChunkDays);
         }
         if (state.Complete)
             return new GoogleHealthSyncWindow(today, today, IsBackfillDay: false, IsManaged: true);
@@ -115,29 +106,25 @@ public sealed class GoogleHealthConnectorService(
         {
             var today = window.To;
             var floor = ComputeBackfillFloor(config, today);
-            state = new BackfillState(today, floor, false, state.ChunkDays);
+            state = new BackfillState(today, floor, state.ChunkDays);
             if (!window.IsBackfillDay)
             {
-                var complete = floor >= today;
-                await SaveBackfillStateAsync(state with { Complete = complete }, ct);
-                return complete;
+                await SaveBackfillStateAsync(state, ct);
+                return state.Complete;
             }
         }
         if (window.IsBackfillDay)
         {
-            var reachedFloor = window.From <= state.FloorDate;
             var monthStart = new DateTimeOffset(window.To.Year, window.To.Month, 1, 0, 0, 0, TimeSpan.Zero);
             if (monthStart == window.To) monthStart = monthStart.AddMonths(-1);
             var completedMonth = window.From <= monthStart;
-            await SaveBackfillStateAsync(
-                state with
-                {
-                    CursorDate = window.From,
-                    Complete = reachedFloor,
-                    ChunkDays = completedMonth ? null : state.ChunkDays
-                },
-                ct);
-            return reachedFloor && !state.Complete;
+            var advanced = state with
+            {
+                CursorDate = window.From,
+                ChunkDays = completedMonth ? null : state.ChunkDays
+            };
+            await SaveBackfillStateAsync(advanced, ct);
+            return advanced.Complete && !state.Complete;
         }
         return false;
     }
@@ -159,94 +146,51 @@ public sealed class GoogleHealthConnectorService(
                 DateTimeOffset.Parse(config.ImportFrom, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).UtcDateTime.Date,
                 DateTimeKind.Utc));
 
-    private async Task<Dictionary<string, JsonElement>> LoadRuntimeStateAsync(CancellationToken ct)
-    {
-        var cursor = await cursorStore.GetAsync(ConnectorName, RuntimeStateResource, ct);
-        return ParseRuntimeState(cursor?.LastGuid);
-    }
-
-    public static Dictionary<string, JsonElement> ParseRuntimeState(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return [];
-        try { return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? []; }
-        catch (JsonException) { return []; }
-    }
-
-    private Task SaveRuntimeStateAsync(Dictionary<string, JsonElement> state, CancellationToken ct) =>
-        cursorStore.SetAsync(ConnectorName, RuntimeStateResource,
-            new(null, JsonSerializer.Serialize(state)), ct);
-
-    private async Task<BackfillState> LoadBackfillStateAsync(CancellationToken ct)
-    {
-        var configuration = await LoadRuntimeStateAsync(ct);
-        return new BackfillState(
-            ParseStoredDate(configuration, BackfillCursorKey),
-            ParseStoredDate(configuration, BackfillFloorKey) ?? EarliestSupportedDate,
-            configuration.TryGetValue(BackfillCompleteKey, out var complete) && complete.ValueKind == JsonValueKind.True,
-            configuration.TryGetValue(BackfillChunkDaysKey, out var chunkDays) &&
-                chunkDays.ValueKind == JsonValueKind.Number && chunkDays.TryGetInt32(out var days)
+    private async Task<BackfillState> LoadBackfillStateAsync(CancellationToken ct) =>
+        new(
+            AsOffset(await ResumeStampAsync(GoogleHealthState.BackfillCursor, ct)),
+            AsOffset(await ResumeStampAsync(GoogleHealthState.BackfillFloor, ct)) ?? EarliestSupportedDate,
+            await VendorStateAsync<int?>(GoogleHealthState.BackfillChunkDays, ct) is { } days
                 ? Math.Clamp(days, 1, 31)
                 : null);
-    }
 
-    private static DateTimeOffset? ParseStoredDate(Dictionary<string, JsonElement> configuration, string key) =>
-        configuration.TryGetValue(key, out var element) && element.ValueKind == JsonValueKind.String &&
-        DateTime.TryParse(element.GetString(), CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var value)
-            ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
-            : null;
+    private static DateTimeOffset? AsOffset(DateTime? value) =>
+        value is { } at ? new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)) : null;
 
+    /// <remarks>The range's two ends go in one write; a floor is stored only beside a cursor, which is all it bounds.</remarks>
     private async Task SaveBackfillStateAsync(BackfillState state, CancellationToken ct)
     {
-        var configuration = await LoadRuntimeStateAsync(ct);
-        configuration[BackfillCursorKey] = state.CursorDate is { } cursor
-            ? JsonSerializer.SerializeToElement(cursor.UtcDateTime.ToString("o", CultureInfo.InvariantCulture))
-            : JsonSerializer.SerializeToElement<string?>(null);
-        configuration[BackfillFloorKey] = JsonSerializer.SerializeToElement(state.FloorDate.UtcDateTime.ToString("o", CultureInfo.InvariantCulture));
-        configuration[BackfillCompleteKey] = JsonSerializer.SerializeToElement(state.Complete);
-        if (state.ChunkDays is { } chunkDays)
-            configuration[BackfillChunkDaysKey] = JsonSerializer.SerializeToElement(chunkDays);
-        else
-            configuration.Remove(BackfillChunkDaysKey);
-        await SaveRuntimeStateAsync(configuration, ct);
+        await SetResumeStampsAsync(new Dictionary<string, DateTime?>
+        {
+            [GoogleHealthState.BackfillCursor] = state.CursorDate?.UtcDateTime,
+            [GoogleHealthState.BackfillFloor] = state.CursorDate is null ? null : state.FloorDate.UtcDateTime
+        }, ct);
+        await SetVendorStateAsync(GoogleHealthState.BackfillChunkDays, state.ChunkDays, ct);
     }
 
     private async Task TryReduceBackfillWindowAsync(GoogleHealthSyncWindow window)
     {
         var days = Math.Max(1, (int)Math.Ceiling((window.To - window.From).TotalDays / 2));
-        try
-        {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
-            var state = await LoadBackfillStateAsync(cleanup.Token);
-            await SaveBackfillStateAsync(state with { ChunkDays = days }, cleanup.Token);
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
+        if (await WriteStateBestEffortAsync(
+                $"persist a smaller Google Health retry window for {window.From:O} to {window.To:O}",
+                () => SetVendorStateAsync<int?>(GoogleHealthState.BackfillChunkDays, days, cleanup.Token),
+                CancellationToken.None))
             logger.LogWarning(
                 "Google Health historical window {From} to {To} did not complete; retrying with at most {ChunkDays} day(s)",
                 window.From, window.To, days);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "Could not persist a smaller Google Health retry window for {From} to {To}",
-                window.From, window.To);
-        }
     }
 
     private async Task<DateTime?> LoadWatermarkAsync(CancellationToken ct) =>
-        ParseStoredDate(await LoadRuntimeStateAsync(ct), LastSyncedToKey)?.UtcDateTime;
+        AsOffset(await ResumeStampAsync(GoogleHealthState.LastSyncedTo, ct))?.UtcDateTime;
 
     private async Task PersistWatermarkAsync(DateTimeOffset to, CancellationToken ct)
     {
-        var configuration = await LoadRuntimeStateAsync(ct);
         // Never move the resume point backwards: a manual/admin resync of an older window must
         // not widen every later periodic sync back into a re-crawl of everything since.
-        if (configuration.TryGetValue(LastSyncedToKey, out var existing) &&
-            existing.ValueKind == JsonValueKind.String &&
-            DateTime.TryParse(existing.GetString(), CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var existingValue) &&
-            existingValue >= to.UtcDateTime)
+        if (await LoadWatermarkAsync(ct) is { } existing && existing >= to.UtcDateTime)
             return;
-        configuration[LastSyncedToKey] = JsonSerializer.SerializeToElement(to.UtcDateTime.ToString("o", CultureInfo.InvariantCulture));
-        await SaveRuntimeStateAsync(configuration, ct);
+        await SetResumeStampAsync(GoogleHealthState.LastSyncedTo, to.UtcDateTime, ct);
     }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -275,6 +219,7 @@ public sealed class GoogleHealthConnectorService(
 
             await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var session = await sessions.RefreshAsync(config, force: false, cancellationToken);
+            await SignedInAsync(config, cancellationToken);
             var active = selected
                 .Where(type => session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
                 .ToArray();

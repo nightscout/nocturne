@@ -387,38 +387,26 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
 
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        await ExecuteAsync(conn, $"""
+        await conn.ExecuteAsync($"""
             UPDATE refresh_tokens SET login_code_id = NULL
              WHERE subject_id = '{_memberId}' AND device_description = 'Login handoff'
             """);
-        (await ExecuteAsync(conn, AddLoginCodeIdToRefreshTokens.RevokeUnmarkedHandoffsSql)).Should().Be(1);
-        var auditRowsBefore = await ScalarAsync(conn, $"SELECT count(*) FROM auth_audit_log WHERE target_subject_id = '{_memberId}' OR actor_subject_id = '{_memberId}'");
+        (await conn.ExecuteAsync(AddLoginCodeIdToRefreshTokens.RevokeUnmarkedHandoffsSql)).Should().Be(1);
+        var auditRowsBefore = await conn.ScalarAsync<long>($"SELECT count(*) FROM auth_audit_log WHERE target_subject_id = '{_memberId}' OR actor_subject_id = '{_memberId}'");
 
         var refused = await handedOff.PostAsync("/api/auth/oidc/refresh", null);
 
         refused.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         JsonSerializer.Deserialize<JsonElement>(await refused.Content.ReadAsStringAsync())
             .GetProperty("error").GetString().Should().Be("invalid_refresh_token");
-        (await ScalarAsync(conn, $"""
+        (await conn.ScalarAsync<long>($"""
             SELECT count(*) FROM refresh_tokens
              WHERE subject_id = '{_memberId}' AND revoked_at IS NULL AND device_description = 'integration-test'
             """)).Should().BeGreaterThan(0, "the member's other session is not revoked as a reused family");
-        (await ScalarAsync(conn, $"SELECT count(*) FROM refresh_tokens WHERE subject_id = '{_memberId}' AND revoked_reason = 'Token reuse detected'"))
+        (await conn.ScalarAsync<long>($"SELECT count(*) FROM refresh_tokens WHERE subject_id = '{_memberId}' AND revoked_reason = 'Token reuse detected'"))
             .Should().Be(0);
-        (await ScalarAsync(conn, $"SELECT count(*) FROM auth_audit_log WHERE target_subject_id = '{_memberId}' OR actor_subject_id = '{_memberId}'"))
+        (await conn.ScalarAsync<long>($"SELECT count(*) FROM auth_audit_log WHERE target_subject_id = '{_memberId}' OR actor_subject_id = '{_memberId}'"))
             .Should().Be(auditRowsBefore);
-    }
-
-    private static async Task<int> ExecuteAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<long> ScalarAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
     }
 
     private static byte[] Base32Decode(string encoded)
@@ -570,17 +558,12 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     private async Task MakePlatformAdminOwnerAsync(NpgsqlConnection conn, Guid subjectId)
     {
         var ownerRole = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantId, "owner");
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             UPDATE subjects SET is_platform_admin = true WHERE id = @subjectId;
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
             SELECT gen_random_uuid(), id, @roleId FROM tenant_members
              WHERE tenant_id = @tenantId AND subject_id = @subjectId;
-            """;
-        cmd.Parameters.AddWithValue("subjectId", subjectId);
-        cmd.Parameters.AddWithValue("tenantId", _tenantId);
-        cmd.Parameters.AddWithValue("roleId", ownerRole);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("subjectId", subjectId), ("tenantId", _tenantId), ("roleId", ownerRole));
     }
 
     private static string Sha1(string value) =>

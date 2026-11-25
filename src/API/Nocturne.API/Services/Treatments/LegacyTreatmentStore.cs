@@ -178,12 +178,13 @@ internal sealed class LegacyTreatmentStore(
     /// every legacy id. Each table is read once for all of them, the meal halves of what they name once
     /// per meal table, and the state spans once for those no record holds.
     /// </summary>
-    internal async Task KeyToServedAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    /// <returns>The treatments it keyed.</returns>
+    internal async Task<IReadOnlyList<Treatment>> KeyToServedAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
     {
         var ids = treatments.Select(t => t.Id).Where(MongoObjectId.IsGuidPrefixShaped).OfType<string>()
             .Distinct(StringComparer.Ordinal).ToList();
         if (ids.Count == 0)
-            return;
+            return [];
 
         var found = new Dictionary<ILegacyKeyedTreatmentTable, IReadOnlyList<IV4Record>>();
         foreach (var table in LegacyTreatmentTables.ByServedPrecedence)
@@ -208,13 +209,19 @@ internal sealed class LegacyTreatmentStore(
             keys[stored.Id] = await UpsertKeyAsync(halves.GetValueOrDefault(stored) ?? [stored], ct);
 
         var spanKeys = await _projection.GetStateSpanTreatmentIdsAsync([.. ids.Where(id => !named.ContainsKey(id))], ct);
+        List<Treatment> keyed = [];
         foreach (var treatment in treatments)
         {
             if (treatment.Id is not { } id)
                 continue;
             if (keys.TryGetValue(id, out var key) || (!named.ContainsKey(id) && spanKeys.TryGetValue(id, out key)))
+            {
                 treatment.Id = key;
+                keyed.Add(treatment);
+            }
         }
+
+        return keyed;
     }
 
     /// <summary>
@@ -527,6 +534,17 @@ internal sealed class LegacyTreatmentStore(
     private static InvalidOperationException ReadBackFailed(string id) =>
         new($"Treatment {id} did not read back after the update");
 
+    /// <summary>
+    /// Deletes the treatment an update sent with <c>isValid: false</c> names, as Nightscout stores the
+    /// document it replaces deleted, and answers it as served before, marked deleted.
+    /// </summary>
+    private async Task<Treatment> InvalidateAsync(string upsertKey, Treatment served, CancellationToken ct)
+    {
+        await _decomposer.InvalidateAsync([upsertKey], WriteOrigin.Live, ct);
+        served.IsValid = false;
+        return served;
+    }
+
     /// <summary>A record of a keyed table, resolved from the client-sent id <paramref name="Id"/>.</summary>
     private sealed record StoredRecord(LegacyTreatmentStore Store, ILegacyKeyedTreatmentTable Table, IV4Record Record, string Id)
         : LegacyResolvedTreatment
@@ -552,6 +570,9 @@ internal sealed class LegacyTreatmentStore(
             TreatmentClientId.KeepStored(treatment, existing);
 
             var upsertKey = await Store.UpsertKeyAsync(this, ct);
+            if (treatment.IsValid == false)
+                return await Store.InvalidateAsync(upsertKey, existing, ct);
+
             treatment.Id = upsertKey;
             (await Store._decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live, ct)).ThrowIfRejected(0);
             return await Store.ReadAsync(upsertKey, ct) ?? throw ReadBackFailed(Id);
@@ -612,6 +633,9 @@ internal sealed class LegacyTreatmentStore(
             if (Served.Id is not { } servedId
                 || await Store._projection.GetStateSpanTreatmentIdAsync(SpanId, ct) is not { } upsertKey)
                 return null;
+
+            if (treatment.IsValid == false)
+                return await Store.InvalidateAsync(upsertKey, Served, ct);
 
             treatment.Id = upsertKey;
             (await Store._decomposer.DecomposeBatchAsync([treatment], WriteOrigin.Live, ct)).ThrowIfRejected(0);

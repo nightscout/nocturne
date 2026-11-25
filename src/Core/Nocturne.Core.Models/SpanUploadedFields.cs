@@ -7,6 +7,10 @@ namespace Nocturne.Core.Models;
 /// <c>pumpType</c>, <c>pumpSerial</c>) into the metadata of the state span or profile activation it
 /// is stored as, so the projected treatment returns them as uploaded.
 /// </summary>
+/// <remarks>
+/// Only <c>isValid: true</c> is kept: a treatment uploaded with <c>isValid: false</c> is stored
+/// deleted.
+/// </remarks>
 public static class SpanUploadedFields
 {
     private const string IsValid = "isValid";
@@ -16,8 +20,8 @@ public static class SpanUploadedFields
 
     public static void Keep(Dictionary<string, object> metadata, Treatment treatment)
     {
-        if (treatment.IsValid is { } isValid)
-            metadata[IsValid] = isValid;
+        if (treatment.IsValid is true)
+            metadata[IsValid] = true;
         if (treatment.PumpId is { } pumpId)
             metadata[PumpId] = pumpId;
         if (!string.IsNullOrEmpty(treatment.PumpType))
@@ -30,9 +34,8 @@ public static class SpanUploadedFields
     {
         treatment.IsValid = (metadata is not null && metadata.TryGetValue(IsValid, out var isValid) ? isValid : null) switch
         {
-            bool flag => flag,
+            true => true,
             JsonElement { ValueKind: JsonValueKind.True } => true,
-            JsonElement { ValueKind: JsonValueKind.False } => false,
             _ => null,
         };
         treatment.PumpId = (long?)metadata.TryReadDecimal(PumpId);

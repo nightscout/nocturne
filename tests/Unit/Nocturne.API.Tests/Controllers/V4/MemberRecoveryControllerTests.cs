@@ -87,9 +87,11 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     private void SignIn(AuthType authType, params string[] scopes)
     {
         var http = _controller.ControllerContext.HttpContext;
+        http.RequestServices ??= TestRequestServices.Build(clamped: false);
         http.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true, AuthType = authType, SubjectId = _adminId, TenantId = _tenantId,
+            SessionId = LiveSession.Id,
         };
         http.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(scopes);
     }
@@ -118,6 +120,18 @@ public sealed class MemberRecoveryControllerTests : IDisposable
             It.IsAny<NocturneDbContext>(), _orphanId, LoginCodePurpose.Recovery,
             It.IsAny<string?>(), It.IsAny<string?>(),
             It.Is<AuthAuditActor>(a => a.SubjectId == _adminId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task An_inactive_caller_is_refused_and_no_code_is_issued()
+    {
+        new RequestMembership(_adminId, _tenantId, null) { SubjectIsInactive = true }
+            .StoreOn(_controller.ControllerContext.HttpContext);
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        result.Should().BeOfType<ChallengeResult>();
+        NoCodeIssued();
     }
 
     [Fact]
@@ -192,7 +206,7 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         new RequestMembership(
                 _adminId,
                 _tenantId,
-                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, accessEndsAt), null))
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, accessEndsAt), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, accessEndsAt), null))
             .StoreOn(_controller.ControllerContext.HttpContext);
 
     private void OrphanAccessEndsAt(DateTime? accessEndsAt)
@@ -238,6 +252,48 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(HttpContextExtensions.HistoryCeilingDetail);
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task A_mixed_member_cannot_recover_a_member_holding_what_only_the_team_gives()
+    {
+        _controller.HttpContext.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.MembersManage }, null, false));
+
+        (await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None)).Should().BeOfType<ForbidResult>();
+        (await Listed()).Refusal.Should().Be(RecoveryIssueRefusal.MissingPermissions);
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task A_mixed_member_whose_direct_reason_is_clamped_or_ends_cannot_recover_a_member_who_outreaches_it()
+    {
+        var http = _controller.HttpContext;
+        http.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.MembersManage, Scope.GlucoseRead }, null, true));
+        (await Listed()).Refusal.Should().Be(RecoveryIssueRefusal.HistoryClamped);
+
+        http.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.MembersManage, Scope.GlucoseRead }, DateTime.UtcNow.AddDays(10), false));
+        (await Listed()).Refusal.Should().Be(RecoveryIssueRefusal.AccessOutlasts);
+        (await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None))
+            .Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task A_mixed_member_recovers_a_member_within_the_direct_reason()
+    {
+        _controller.HttpContext.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.MembersManage, Scope.GlucoseRead }, null, false));
+
+        (await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_team_only_member_recovers_no_one()
+    {
+        _controller.HttpContext.SetGrantCeiling(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None));
+        (await Listed()).Refusal.Should().Be(RecoveryIssueRefusal.MissingPermissions);
         NoCodeIssued();
     }
 

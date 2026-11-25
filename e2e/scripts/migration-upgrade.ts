@@ -83,6 +83,15 @@ function psql(sql: string): string {
 
 const host = (slug: string) => `${slug}.${BASE_DOMAIN}`;
 
+/**
+ * The host of the stored connector address. Reads mask everything after it (and a newer release
+ * may show it in another form), so the host is what stays comparable across releases.
+ */
+function connectorHost(url: unknown): unknown {
+  if (typeof url !== "string") return url;
+  return url.replace(/^[a-z]+:\/\//i, "").split("/")[0];
+}
+
 async function snapshot(slug: string, auth: { token?: string; secret?: string }): Promise<Snapshot> {
   const h = { host: host(slug), ...auth };
   const entries = await call<Array<{ date: number }>>("GET", "/api/v1/entries.json?count=5000", h);
@@ -96,7 +105,7 @@ async function snapshot(slug: string, auth: { token?: string; secret?: string })
     treatments: [...new Set(treatments.map((t) => `${t.eventType}@${Date.parse(t.created_at)}`))].sort(),
     alertRules: rules.map((r) => r.name).sort(),
     share: share && { enabled: share.enabled, fullHistory: share.fullHistory, scopes: [...share.scopes].sort() },
-    connectorUrl: connector.configuration.url,
+    connectorUrl: connectorHost(connector.configuration.url),
     connectorActive: connector.isActive,
     labResults: labs && labs.length,
   };

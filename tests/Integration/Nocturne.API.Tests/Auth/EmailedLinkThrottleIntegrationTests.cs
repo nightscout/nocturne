@@ -49,7 +49,7 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Throttled Member");
-        await ExecuteAsync(conn, "UPDATE subjects SET email = @email, email_confirmed_at = now() WHERE id = @id;",
+        await conn.ExecuteAsync("UPDATE subjects SET email = @email, email_confirmed_at = now() WHERE id = @id;",
             ("email", Address), ("id", memberId));
         var delivery = new RecordingDelivery();
         var tenant = new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false);
@@ -69,15 +69,14 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
             })));
 
             delivery.Sent.Should().ContainSingle();
-            (await ScalarAsync<long>(conn,
-                    "SELECT count(*) FROM login_codes WHERE subject_id = @id AND purpose = 'EmailRecovery';",
+            (await conn.ScalarAsync<long>("SELECT count(*) FROM login_codes WHERE subject_id = @id AND purpose = 'EmailRecovery';",
                     ("id", memberId)))
                 .Should().Be(1);
         }
         finally
         {
-            await ExecuteAsync(conn, "DELETE FROM login_codes WHERE subject_id = @id;", ("id", memberId));
-            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM login_codes WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }
 
@@ -125,22 +124,22 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
                     db, memberId, LoginCodePurpose.RecoverySession, null, null,
                     new AuthAuditActor(null, "test"), cancel.Token);
             });
-            (await session.WaitAsync(TimeSpan.FromSeconds(15))).Should().NotBeNull();
+            (await session.WaitAsync(Eventually.DefaultPatience)).Should().NotBeNull();
             mint.IsCompleted.Should().BeFalse("the link request still waits on the redemption's claim");
 
             await claim.CommitAsync();
 
-            (await mint.WaitAsync(TimeSpan.FromSeconds(30))).Should().NotBeNull();
-            (await ScalarAsync<long>(conn, "SELECT count(*) FROM login_codes WHERE id = @id;", ("id", spentId)))
+            (await mint.WaitAsync(Eventually.DefaultPatience)).Should().NotBeNull();
+            (await conn.ScalarAsync<long>("SELECT count(*) FROM login_codes WHERE id = @id;", ("id", spentId)))
                 .Should().Be(0);
         }
         finally
         {
             await claim.DisposeAsync();
             cancel.Cancel();
-            await Task.WhenAny(Task.WhenAll(new Task?[] { mint, session }.OfType<Task>()), Task.Delay(TimeSpan.FromSeconds(30)));
-            await ExecuteAsync(conn, "DELETE FROM login_codes WHERE subject_id = @id;", ("id", memberId));
-            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+            await Task.WhenAny(Task.WhenAll(new Task?[] { mint, session }.OfType<Task>()), Task.Delay(Eventually.DefaultPatience));
+            await conn.ExecuteAsync("DELETE FROM login_codes WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }
 
@@ -148,7 +147,7 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
         NpgsqlConnection conn, Guid tenantId, Guid subjectId, string purpose, string? email, int createdMinutesAgo, bool consumed)
     {
         var id = Guid.CreateVersion7();
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, email, expires_at, created_at, consumed_at)
             VALUES (@id, @tenantId, @subjectId, @hash, @purpose, @email, now() + interval '20 minutes',
                 now() - make_interval(mins => @ago), CASE WHEN @consumed THEN now() END);
@@ -156,25 +155,5 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
             ("id", id), ("tenantId", tenantId), ("subjectId", subjectId), ("hash", $"{id:N}"),
             ("purpose", purpose), ("email", (object?)email ?? DBNull.Value), ("ago", createdMinutesAgo), ("consumed", consumed));
         return id;
-    }
-
-    private static async Task<T> ScalarAsync<T>(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        return (T)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
     }
 }

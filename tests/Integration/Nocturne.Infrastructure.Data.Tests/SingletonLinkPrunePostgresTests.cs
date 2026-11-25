@@ -90,15 +90,15 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var prune = service.PruneSingletonLinksAsync(100, 1);
         await PostgresLockWaits.UntilBlockedAsync(fx.AppConnectionString, prune);
         prune.IsCompleted.Should().BeFalse("the dedup write lock is held");
 
         release.SetResult();
-        await holding.WaitAsync(TimeSpan.FromSeconds(30));
-        (await prune.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
+        await holding.WaitAsync(Eventually.DefaultPatience);
+        (await prune.WaitAsync(Eventually.DefaultPatience)).Should().Be(1);
     }
 
     private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());

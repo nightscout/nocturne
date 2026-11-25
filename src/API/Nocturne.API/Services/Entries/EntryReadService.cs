@@ -107,7 +107,7 @@ internal class EntryReadService : IEntryStore
                 return new ModifiedSearch.Page<Entry>(page.Records, page.CursorMills, page.CursorMills is null);
             },
             entry => entry.IsValid == false,
-            entry => entry.Id,
+            entry => entry.Id is { } id ? $"{entry.Type}:{id}" : null,
             after,
             ModifiedSearch.ArrivesInOrder(query.SortField, descending) ? (long)query.Count + query.Skip : null,
             ModifiedSearch.MaxRead,

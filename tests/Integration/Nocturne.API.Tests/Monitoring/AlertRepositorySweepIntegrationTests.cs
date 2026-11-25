@@ -88,7 +88,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
             .UseNpgsql(dataSource)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options);
-        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant));
+        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant), TimeProvider.System);
         var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
         static NewAlertRule Rule(string name, string? onUnknown) => new(
             onUnknown is null
@@ -148,7 +148,8 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         NpgsqlDataSource dataSource, Guid tenantId, string conditionType, string severity)
     {
         var id = Guid.CreateVersion7();
-        await using var cmd = dataSource.CreateCommand($"""
+        await using var conn = await dataSource.OpenConnectionAsync();
+        await conn.ExecuteAsync($"""
             SELECT set_config('app.current_tenant_id', '{tenantId}', false);
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
@@ -156,7 +157,6 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
             VALUES ('{id}', '{tenantId}', 'Stale', '{conditionType}', '{"{}"}', false,
                     '{severity}', '{"{}"}', true, false, 'undirected', 1, now(), now());
             """);
-        await cmd.ExecuteNonQueryAsync();
         return id;
     }
 

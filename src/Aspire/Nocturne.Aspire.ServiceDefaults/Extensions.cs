@@ -127,7 +127,9 @@ public static class Extensions
                     )
                     // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
                     //.AddGrpcClientInstrumentation()
-                    .AddHttpClientInstrumentation();
+                    .AddHttpClientInstrumentation(http =>
+                        http.EnrichWithHttpRequestMessage = OutboundDisplayUrl.Apply
+                    );
             });
 
         builder.AddOpenTelemetryExporters();

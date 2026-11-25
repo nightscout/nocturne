@@ -1,5 +1,6 @@
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -54,6 +55,7 @@ public sealed class DemoTenantService
     private readonly ITenantRepository _tenants;
     private readonly ITenantMembershipRepository _members;
     private readonly ISubjectRepository _subjects;
+    private readonly ISubjectDeletion _deletion;
     private readonly IFirstPartyTokenRepository _sessions;
     private readonly ITenantService _tenantService;
     private readonly PublicAccessCacheService _publicAccessCache;
@@ -61,34 +63,41 @@ public sealed class DemoTenantService
     private readonly TimeProvider _time;
     private readonly ILogger<DemoTenantService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
+    private readonly GrantRevocationService _grantRevocation;
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="tenants">Finds the demo tenant and reads its row.</param>
-    /// <param name="members">Finds the demo member, and removes the memberships of a retired one.</param>
-    /// <param name="subjects">Checks that a retired demo member is a demo subject, then deletes it.</param>
+    /// <param name="members">Finds the demo member.</param>
+    /// <param name="subjects">Checks that a retired demo member is a demo subject.</param>
+    /// <param name="deletion">Deletes a retired demo member with its memberships and what it made.</param>
     /// <param name="sessions">The first-party sessions a retired demo visitor's rows are deleted from.</param>
     /// <param name="tenantService">Re-seeds the roles and the Public membership after a reset.</param>
     /// <param name="publicAccessCache">Evicted when the Public membership's grant is rewritten.</param>
     /// <param name="cache">The tenant cache a reset clears of the demo tenant's entries.</param>
     /// <param name="time">The clock that stamps onboarding, the reset and membership changes.</param>
     /// <param name="logger">Logs each reset and what provisioning or retiring the demo member found amiss.</param>
+    /// <param name="linkRoute">Where an account-link sign-in is routed, for the repositories a provision opens.</param>
+    /// <param name="grantRevocation">Evicts the sessions a rewrite of the demo role caps.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
         ITenantRepository tenants,
         ITenantMembershipRepository members,
         ISubjectRepository subjects,
+        ISubjectDeletion deletion,
         IFirstPartyTokenRepository sessions,
         ITenantService tenantService,
         PublicAccessCacheService publicAccessCache,
         ITenantCache cache,
         TimeProvider time,
         ILogger<DemoTenantService> logger,
-        IAccountLinkRoute linkRoute)
+        IAccountLinkRoute linkRoute,
+        GrantRevocationService grantRevocation)
     {
         _factory = factory;
         _tenants = tenants;
         _members = members;
         _subjects = subjects;
+        _deletion = deletion;
         _sessions = sessions;
         _tenantService = tenantService;
         _publicAccessCache = publicAccessCache;
@@ -96,6 +105,7 @@ public sealed class DemoTenantService
         _time = time;
         _logger = logger;
         _linkRoute = linkRoute;
+        _grantRevocation = grantRevocation;
     }
 
     /// <summary>
@@ -137,7 +147,20 @@ public sealed class DemoTenantService
         if (tenant is null)
             return;
 
-        // One unit, pinned to the tenant: the role, the Public grant and the demo member, with its
+        if (await _members.FindRoleIdBySlugAsync(tenantId, DemoRoleSlug, ct) is { } existingRoleId)
+        {
+            var edited = await TeamReasonWrites.EditRoleAsync(
+                _factory, _grantRevocation, tenantId, existingRoleId, DemoRoleEdit, editorSubjectId: null,
+                _time.GetUtcNow().UtcDateTime, ct);
+            if (edited.Outcome != RoleChangeOutcome.Changed)
+            {
+                _logger.LogWarning(
+                    "The demo role of tenant {TenantId} was not restored: the edit found {Outcome}",
+                    tenantId, edited.Outcome);
+            }
+        }
+
+        // One unit, pinned to the tenant: a new role, the Public grant and the demo member, with its
         // subject, land together.
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var tenants = new TenantRepository(unit);
@@ -266,7 +289,7 @@ public sealed class DemoTenantService
     /// <summary>
     /// Retires the demo member the reset has just unseated: deletes its refresh tokens, so no
     /// visitor session outlives the reset, then deletes the subject itself along with any
-    /// membership it picked up.
+    /// membership it picked up and what it made (<see cref="ISubjectDeletion"/>).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -315,15 +338,15 @@ public sealed class DemoTenantService
         }
 
         await _sessions.DeleteAllForSubjectAsync(subjectId.Value, ct);
-        var removal = await _members.RemoveMembershipsOfSubjectAsync(subjectId.Value, ct);
-        foreach (var tenant in removal.TenantsLeftWithoutOwner)
+        var deletion = await _deletion.DeleteAsync(subjectId.Value, evenLastOwner: true, ct);
+        foreach (var tenant in deletion.TenantsLeftWithoutOwner)
         {
             _logger.LogWarning(
                 "Retiring demo member {SubjectId} left tenant {Slug} with no owner who can sign in",
                 subjectId, tenant.Slug);
         }
 
-        switch (await _subjects.DeleteAsync(subjectId.Value, ct))
+        switch (deletion.Change)
         {
             case SubjectChange.LastOwnerOf stillOwner:
                 _logger.LogError(
@@ -339,31 +362,30 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Ensures the demo tenant's own role exists, carrying
-    /// <see cref="Scope.DemoVisitorPermissions"/>, and rewrites its permissions
-    /// to that list on every call so the role cannot drift.
+    /// The demo tenant's own role as it always reads, carrying <see cref="Scope.DemoVisitorPermissions"/>:
+    /// <see cref="ConfigureAccessAsync"/> rewrites an existing role to it on every call so the role cannot
+    /// drift, through the role edit every team reason follows (<see cref="TeamReasonWrites.EditRoleAsync"/>).
     /// </summary>
+    private static TenantRoleEdit DemoRoleEdit => new("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]);
+
+    /// <summary>Ensures the demo tenant's own role exists (<see cref="DemoRoleEdit"/>).</summary>
     /// <remarks>
     /// Deliberately not the seed <c>admin</c> role: that includes <c>members.manage</c> and
     /// <c>roles.manage</c>, and role and direct permissions are unioned into a member's
     /// effective set, so holding either is the ability to grant oneself <c>*</c>. Anyone can
     /// get a session for the demo member, so it must not hold an escalation primitive.
     /// </remarks>
-    private async Task<Guid> EnsureDemoRoleAsync(
+    private static async Task<Guid> EnsureDemoRoleAsync(
         ITenantMembershipRepository members, Guid tenantId, CancellationToken ct)
     {
         var roleId = await members.FindRoleIdBySlugAsync(tenantId, DemoRoleSlug, ct);
         if (roleId is null)
         {
             var created = await members.CreateRoleAsync(
-                new NewTenantRole(tenantId, "Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions], IsSystem: true), ct);
+                new NewTenantRole(tenantId, DemoRoleEdit.Name, DemoRoleSlug, null, [.. DemoRoleEdit.Permissions], IsSystem: true), ct);
             return created.Id;
         }
 
-        await members.UpdateRoleAsync(
-            tenantId, roleId.Value,
-            new TenantRoleEdit("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]),
-            null, _time.GetUtcNow().UtcDateTime, ct);
         return roleId.Value;
     }
 

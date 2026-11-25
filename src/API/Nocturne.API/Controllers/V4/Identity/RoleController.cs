@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -54,11 +55,12 @@ public class RoleController : ControllerBase
         [FromServices] ITenantMembershipRepository members, [FromServices] TimeProvider time, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
+        var ceiling = HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing;
         var roles = HttpContext.HasScope(Scope.RolesManage)
-            ? await _roleService.GetRolesAsync(tenantId, HttpContext.GetGrantedScopes(), ct)
-            : await _roleService.GetAssignableRolesAsync(tenantId, HttpContext.GetGrantedScopes(), ct);
+            ? await _roleService.GetRolesAsync(tenantId, ceiling.Scopes, ct)
+            : await _roleService.GetAssignableRolesAsync(tenantId, ceiling.Scopes, ct);
 
-        var holders = await _roleService.GetRoleHoldersAsync(tenantId, HttpContext.CallerAccessEndsAt(), ct);
+        var holders = await _roleService.GetRoleHoldersAsync(tenantId, ceiling.AccessEndsAt, ct);
         var callerIsOwner = HttpContext.GetSubjectId() is { } subjectId
             && await members.FindMemberAsync(tenantId, subjectId, ct) is { IsOwner: true } member
             && !MembershipLiveness.HasEnded(member.AccessEndsAt, time.GetUtcNow().UtcDateTime);
@@ -72,6 +74,7 @@ public class RoleController : ControllerBase
                 TeamRefusedPermissions = holders.HeldByTeam.Contains(r.Id)
                     ? Scope.AdministrativePermissions.Order(StringComparer.Ordinal).ToList()
                     : [],
+                CanGiveToTeam = TeamAccessRules.MayGiveToTeam(r),
                 CoveredPermissions = holders.HeldByTeam.Contains(r.Id) && !callerIsOwner
                     ? Scope.PermissionAtoms.Where(a => Scope.Satisfies(r.Permissions, a)).Order(StringComparer.Ordinal).ToList()
                     : null,
@@ -91,7 +94,10 @@ public class RoleController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
-        var grantedScopes = HttpContext.GetGrantedScopes();
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        var grantedScopes = ceiling.Scopes;
         var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
             return GrantProblem(violation);
@@ -120,12 +126,17 @@ public class RoleController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        var holders = await _roleService.GetRoleHoldersAsync(
-            _tenantAccessor.TenantId, HttpContext.CallerAccessEndsAt(), ct);
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        var holders = await _roleService.GetRoleHoldersAsync(_tenantAccessor.TenantId, ceiling.AccessEndsAt, ct);
         if (RoleHeldPastCallerRefusal(holders, id) is { } heldPast)
             return heldPast;
 
-        var grantedScopes = HttpContext.GetGrantedScopes();
+        var grantedScopes = ceiling.Scopes;
         var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
             return GrantProblem(violation);
@@ -165,8 +176,10 @@ public class RoleController : ControllerBase
     public async Task<IActionResult> DeleteRole(
         Guid id, [FromServices] PublicAccessCacheService publicAccessCache, CancellationToken ct)
     {
-        var holders = await _roleService.GetRoleHoldersAsync(
-            _tenantAccessor.TenantId, HttpContext.CallerAccessEndsAt(), ct);
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        var holders = await _roleService.GetRoleHoldersAsync(_tenantAccessor.TenantId, ceiling.AccessEndsAt, ct);
         if (RoleHeldPastCallerRefusal(holders, id) is { } heldPast)
             return heldPast;
 

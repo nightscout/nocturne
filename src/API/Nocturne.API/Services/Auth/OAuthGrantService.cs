@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -146,12 +147,13 @@ public class OAuthGrantService : IOAuthGrantService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default) =>
-        _grants.RecordUseAsync(grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), ct);
+        _grants.RecordUseAsync(grantId, _time.GetUtcNow().UtcDateTime, new GrantPresentation(ipAddress, userAgent), ct);
 
     /// <inheritdoc />
     public async Task<OAuthGrantInfo?> UpdateGrantAsync(
         Guid grantId,
         Guid ownerSubjectId,
+        GrantScopeBounds bounds,
         string? label = null,
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default)
@@ -160,6 +162,9 @@ public class OAuthGrantService : IOAuthGrantService
 
         if (grant == null)
             return null;
+
+        if (Scope.ValidateDelegation(scopes, bounds.OwnCredential) is { } exceedsOwner)
+            throw new GrantCeilingViolationException(exceedsOwner);
 
         // Validated before anything is written, so a rejected update leaves the stored grant
         // untouched. This method filters on the grant id and the owning subject with no GrantType
@@ -175,6 +180,15 @@ public class OAuthGrantService : IOAuthGrantService
         if (validatedScopes is { Count: 0 })
         {
             throw new ArgumentException("A grant needs at least one scope.");
+        }
+
+        if (validatedScopes is not null && grant.GrantType == OAuthGrantTypes.Guest)
+        {
+            var violation = bounds.GivenToOthers is null
+                ? new GrantCeilingViolation(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail)
+                : Scope.ValidateDelegation(validatedScopes, bounds.GivenToOthers);
+            if (violation is not null)
+                throw new GrantCeilingViolationException(violation);
         }
 
         var updated = await _grants.UpdateAsync(grant.Id, new OAuthGrantEdit(label, validatedScopes), ct)

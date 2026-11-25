@@ -96,7 +96,7 @@ public sealed class ProfileActivationWriter
                 ? new[] { w.Activation.StartTimestamp, stored.StartTimestamp }
                 : [w.Activation.StartTimestamp]),
             ct);
-        var moved = Plan(family, writes);
+        Plan(family, writes);
 
         var inserted = writes.Where(w => w.Stored is null).Select(w => w.Activation.Id).ToHashSet();
         var confirmations = writes
@@ -116,12 +116,13 @@ public sealed class ProfileActivationWriter
         if (accepted.Count < writes.Count)
         {
             family.Reset();
-            moved = Plan(family, accepted);
+            Plan(family, accepted);
         }
 
         await family.SaveAsync(_repository, ct);
+        var replaced = accepted.Select(w => w.Stored).OfType<ProfileActivation>();
         await _tempBasalRates.AfterActivationsChangedAsync(
-            [.. written.OfType<ProfileActivation>().Select(Span), .. moved.Select(Span)], ct);
+            [.. written.OfType<ProfileActivation>().Select(Span), .. replaced.Select(Span)], ct);
         return written;
     }
 
@@ -129,10 +130,8 @@ public sealed class ProfileActivationWriter
     /// Settles each of <paramref name="writes"/> in turn over <paramref name="family"/>, as written one
     /// at a time in that order.
     /// </summary>
-    /// <returns>The stored rows the writes moved.</returns>
-    private static List<ProfileActivation> Plan(Family family, IEnumerable<ProfileActivationWrite> writes)
+    private static void Plan(Family family, IEnumerable<ProfileActivationWrite> writes)
     {
-        var moved = new List<ProfileActivation>();
         foreach (var (activation, stored) in writes)
         {
             var settlement = family.Plan(activation);
@@ -140,14 +139,9 @@ public sealed class ProfileActivationWriter
             activation.RequestedActivationId = settlement.Confirms.GetValueOrDefault(activation.Id);
             family.Put(activation);
             family.Apply(settlement, except: activation.Id);
-            if (stored is not null && MovedFrom(stored, activation))
-            {
+            if (stored is not null && (MovedFrom(stored, activation) || BecameBounded(stored, activation)))
                 family.Resettle([stored], family.Members);
-                moved.Add(stored);
-            }
         }
-
-        return moved;
     }
 
     /// <summary>
@@ -466,6 +460,9 @@ public sealed class ProfileActivationWriter
         stored.StartTimestamp != written.StartTimestamp
         || stored.Phase != written.Phase
         || ProfileActivationSource.KeyOf(stored) != ProfileActivationSource.KeyOf(written);
+
+    private static bool BecameBounded(ProfileActivation stored, ProfileActivation written) =>
+        !stored.IsBounded && written.IsBounded;
 
     private static bool Runs(ProfileActivation a, ProfileActivation b) =>
         a.BaseProfileName == b.BaseProfileName && a.Percentage == b.Percentage && a.TimeshiftMs == b.TimeshiftMs;

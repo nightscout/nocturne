@@ -1,16 +1,19 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Identity;
@@ -46,6 +49,8 @@ public class SetupControllerTests : IDisposable
     private readonly Mock<ISessionService> _sessionService;
     private readonly Mock<ISubjectService> _subjectService;
     private readonly Mock<IOidcAuthService> _oidcAuthService;
+    private readonly Mock<ITotpService> _totpService;
+    private readonly Mock<IAuthAuditService> _auditService;
     private readonly PlatformOptions _platformOptions;
     private readonly Mock<IDbContextFactory<NocturneDbContext>> _dbFactory;
     private readonly IOptions<OidcOptions> _oidcOptions;
@@ -64,6 +69,14 @@ public class SetupControllerTests : IDisposable
         _sessionService = new Mock<ISessionService>();
         _subjectService = new Mock<ISubjectService>();
         _oidcAuthService = new Mock<IOidcAuthService>();
+        _totpService = new Mock<ITotpService>();
+        _totpService.Setup(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
+        _auditService = new Mock<IAuthAuditService>();
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid subjectId, SessionContext _, CancellationToken _) =>
+                new SessionTokenPair("access", "refresh", 3600, subjectId));
 
         _oidcOptions = Options.Create(new OidcOptions
         {
@@ -108,7 +121,14 @@ public class SetupControllerTests : IDisposable
             _tenantService.Object,
             _passkeyService.Object,
             _recoveryCodeService.Object,
-            _sessionService.Object,
+            new SignInCompletion(
+                _totpService.Object,
+                new TenantMemberService(
+                    new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+                    TimeProvider.System),
+                _sessionService.Object,
+                _subjectService.Object,
+                _auditService.Object),
             _subjectService.Object,
             new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
@@ -929,14 +949,14 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task OwnerComplete_WhenTheSignInTimeCannotBeRecorded_IssuesNoSessionAndSetsNoCookie()
+    public async Task OwnerComplete_WhenTheSignInTimeCannotBeRecorded_LeavesAnUndeliveredSessionAndSetsNoCookie()
     {
         var ownerSubjectId = await SeedOwnerlessTenantWithOwnerSubjectAsync();
         StubRegistrationChallengeMintedFor(ownerSubjectId);
         _subjectService.Setup(s => s.UpdateLastLoginAsync(ownerSubjectId))
             .ThrowsAsync(new DbUpdateException("the update failed"));
 
-        var result = await _controller.OwnerComplete(
+        var act = () => _controller.OwnerComplete(
             new SetupOwnerCompleteRequest
             {
                 AttestationResponseJson = "{}",
@@ -944,11 +964,14 @@ public class SetupControllerTests : IDisposable
             },
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>().Subject.StatusCode.Should().Be(400);
+        await act.Should().ThrowAsync<DbUpdateException>();
         _sessionService.Verify(
-            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+            s => s.IssueSessionAsync(ownerSubjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once,
+            "the session is issued before last-login, and its refresh token is never delivered");
         _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+        VerifyNoLoginRow();
     }
 
     [Fact]
@@ -1124,11 +1147,8 @@ public class SetupControllerTests : IDisposable
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync(
-                "auth-code", "expected-state", "expected-state",
-                It.IsAny<string?>(), It.IsAny<string?>()))
-            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(
-                subjectId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 }));
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(subjectId, Guid.CreateVersion7(), "sid"));
 
         await _controller.OidcCallback(
             code: "auth-code", state: "expected-state", error: null, error_description: null,
@@ -1144,9 +1164,7 @@ public class SetupControllerTests : IDisposable
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(s => s.HandleSetupCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
             .ReturnsAsync(OidcSetupCallbackResult.Failed("invalid_grant"));
 
         await _controller.OidcCallback(
@@ -1158,21 +1176,39 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task OwnerComplete_EndsTheSetupOwnerRecord()
+    public async Task OwnerComplete_WhenAnotherCompletionHasClaimedTheSetup_AnswersAsTheOpenCheckAndSignsNoOneIn()
     {
         var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         StubPasskeyCompletion(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, tenantId, subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new SetupOwnerTakenException());
 
         var result = await CompleteOwnerSetupAsync();
 
-        result.Should().BeOfType<OkObjectResult>();
-        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+        _auditService.VerifyNoOtherCalls();
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should().BeEmpty();
+        (await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeFalse();
+
+        await GiveOwnerAPasskeyAsync(subjectId);
+        var afterSetupClosed = await CompleteOwnerSetupAsync();
+        result.Should().BeOfType<ConflictObjectResult>();
+        afterSetupClosed.Should().BeOfType<ConflictObjectResult>();
+        System.Text.Json.JsonSerializer.Serialize(((ConflictObjectResult)result).Value)
+            .Should().Be(System.Text.Json.JsonSerializer.Serialize(((ConflictObjectResult)afterSetupClosed).Value))
+            .And.Be("""{"error":"owner_already_exists"}""");
     }
 
     [Fact]
-    public async Task OwnerComplete_WhenThePlatformAdminGrantThrows_HasAlreadyEndedTheSetupOwnerRecord()
+    public async Task OwnerComplete_WhenThePlatformAdminGrantThrows_IssuesNoSession()
     {
-        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         StubPasskeyCompletion(subjectId);
         var failingSubjects = new Mock<ISubjectRepository>();
         failingSubjects
@@ -1189,37 +1225,49 @@ public class SetupControllerTests : IDisposable
                 Options.Create(_platformOptions),
                 NullLogger<PlatformAdminBootstrapService>.Instance));
 
-        var result = await controller.OwnerComplete(
+        var act = () => controller.OwnerComplete(
             new SetupOwnerCompleteRequest { AttestationResponseJson = "{}", ChallengeToken = "challenge-token" },
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        await act.Should().ThrowAsync<InvalidOperationException>("only the passkey proof's refusals are answered as one");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
         failingSubjects.Verify(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()), Times.Once);
-        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task OidcCallback_EndsTheSetupOwnerRecordOnlyWhenSetupCompletes(bool succeeds)
+    [Fact]
+    public async Task OidcCallback_ClaimsTheSetupOfTheTenantTheOpenCheckFound()
     {
         var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync(
-                "auth-code", "expected-state", "expected-state",
-                It.IsAny<string?>(), It.IsAny<string?>()))
-            .ReturnsAsync(succeeds
-                ? OidcSetupCallbackResult.Succeeded(
-                    subjectId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 })
-                : OidcSetupCallbackResult.Failed("invalid_grant"));
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", tenantId))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(subjectId, Guid.CreateVersion7(), "sid"));
 
-        await _controller.OidcCallback(
-            code: "auth-code", state: "expected-state", error: null, error_description: null,
-            ct: CancellationToken.None);
+        var result = await CallBackAsync(_controller);
 
-        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId
-            .Should().Be(succeeds ? null : subjectId);
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup");
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenAnotherCompletionHasClaimedTheSetup_AnswersAsTheOpenCheckAndSignsNoOneIn()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Failed("setup_already_complete", "Another completion has claimed the setup"));
+
+        var result = await CallBackAsync(_controller);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup?error=setup_already_complete");
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should().NotContain(".Nocturne.AccessToken");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _auditService.VerifyNoOtherCalls();
+        (await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeFalse();
     }
 
     [Fact]
@@ -1238,9 +1286,7 @@ public class SetupControllerTests : IDisposable
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Contain("setup_already_complete");
         _oidcAuthService.Verify(
-            s => s.HandleSetupCallbackAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<string?>()),
+            s => s.HandleSetupCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()),
             Times.Never);
     }
 
@@ -1260,11 +1306,8 @@ public class SetupControllerTests : IDisposable
 
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync(
-                "auth-code", "expected-state", "expected-state",
-                It.IsAny<string?>(), It.IsAny<string?>()))
-            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(
-                bystanderId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 }));
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(bystanderId, Guid.CreateVersion7(), "sid"));
 
         await _controller.OidcCallback(
             code: "auth-code", state: "expected-state", error: null, error_description: null,
@@ -1273,6 +1316,542 @@ public class SetupControllerTests : IDisposable
         var bystander = await FreshContext().Subjects.SingleAsync(s => s.Id == bystanderId);
         bystander.IsPlatformAdmin.Should().BeFalse();
     }
+
+    // ── Setup signs the owner in through the sign-in completion ──────────
+
+    private const string ClientIp = "203.0.113.7";
+    private const string Agent = "Firefox";
+    private const string SetupPasskeyRow = """{"method":"passkey","enrolment":"setup"}""";
+    private const string SetupOidcRow = """{"method":"oidc","enrolment":"setup"}""";
+
+    [Fact]
+    public async Task OwnerComplete_EndsSetupThenSignsInThenMakesRecoveryCodes()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        var steps = RecordSteps(tenantId);
+        StubStoredPasskey(subjectId, steps);
+        AsBrowser(_controller);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(new SetupOwnerCompleteResponse
+        {
+            Success = true,
+            RecoveryCodes = ["code-1", "code-2"],
+            AccessToken = "access",
+            RefreshToken = "refresh",
+            ExpiresIn = 3600,
+        });
+        steps.Should().Equal(
+            "proof", "session (setup ended)", "last-login",
+            $"audit:{AuthAuditEventType.Login}:True:{SetupPasskeyRow}", "recovery-codes (setup ended)");
+        var expectedContext = new SessionContext(DeviceDescription: "Setup Passkey", IpAddress: ClientIp, UserAgent: Agent);
+        _sessionService.Verify(s => s.IssueSessionAsync(subjectId, expectedContext, It.IsAny<CancellationToken>()));
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, true, ClientIp, Agent, null, SetupPasskeyRow, null, null, null));
+    }
+
+    [Fact]
+    public async Task OwnerComplete_SetsTheSessionCookiesAndThePasskeySignInHint()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+
+        await CompleteOwnerSetupAsync();
+
+        var cookies = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        cookies.Should().Contain(".Nocturne.AccessToken=access");
+        cookies.Should().Contain(".Nocturne.RefreshToken=refresh");
+        cookies.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=passkey");
+    }
+
+    [Fact]
+    public async Task OwnerComplete_OverAHandedOffSession_EndsIt()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        var previousHolder = Guid.CreateVersion7();
+        var refreshTokens = PresentHandedOffSession(_controller, previousHolder);
+
+        (await CompleteOwnerSetupAsync()).Should().BeOfType<OkObjectResult>();
+
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(previousHolder, "previous-session", It.IsAny<string>()), Times.Once);
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Logout, previousHolder, true, It.IsAny<string?>(), It.IsAny<string?>(), null,
+            """{"reason":"replaced_by_sign_in"}""", null, null, null));
+    }
+
+    public static TheoryData<Exception> PasskeyProofRefusals => new()
+    {
+        new InvalidOperationException("Registration challenge was not issued for the enrolling subject."),
+        new JsonException("The attestation is not JSON."),
+        new PasskeyRegistrationRefusedException(
+            "The attestation was refused.", new System.Formats.Asn1.AsnContentException("Must be a primitive")),
+    };
+
+    [Theory]
+    [MemberData(nameof(PasskeyProofRefusals))]
+    public async Task OwnerComplete_AnswersEachRefusalOfThePasskeyProofAsAFailedRegistration(Exception refusal)
+    {
+        await SeedSoleTenantWithOwnerRoleAsync();
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ThrowsAsync(refusal);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("Registration Failed");
+        details.Detail.Should().Be("Passkey registration failed during setup");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+        VerifyNoLoginRow();
+    }
+
+    [Fact]
+    public async Task OwnerComplete_DoesNotAnswerAFailureOfThePasskeyStoreAsARefusedProof()
+    {
+        await SeedSoleTenantWithOwnerRoleAsync();
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteOwnerSetupAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task OwnerComplete_OnceSetupHasEnded_IsRefusedAndIssuesNoSecondSession()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        (await CompleteOwnerSetupAsync()).Should().BeOfType<OkObjectResult>();
+
+        var again = await CompleteOwnerSetupAsync();
+
+        again.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
+            .BeEquivalentTo(new { error = "owner_already_exists" });
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<PasskeyRegistrationFlow>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+            Times.Once);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// The owner holds no authenticator, so no code is owed. Were one owed, the owner is not
+    /// signed in, and setup has still ended with an owner who signs in on the login page.
+    /// </summary>
+    [Fact]
+    public async Task OwnerComplete_WhenACodeWereOwed_SignsNoOneInAndLeavesAnOwnerWhoCanSignIn()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        _totpService.Setup(t => t.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subjectId, tenantId, false)).ReturnsAsync("step-up");
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
+            .BeEquivalentTo(new { error = "owner_already_exists" });
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        var cookies = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        cookies.Should().NotContain(".Nocturne.AccessToken");
+        cookies.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=passkey");
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, false, It.IsAny<string?>(), It.IsAny<string?>(), null,
+            """{"method":"passkey","enrolment":"setup","secondFactorPending":true}""", null, null, null));
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+
+        await AssertOwnerCanSignInAsync(tenantId, subjectId);
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenTheOwnerIsNoLongerAMember_IsRefusedWithNoSession()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        await RemoveMembershipAsync(subjectId);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, subjectId, false, It.IsAny<string?>(), It.IsAny<string?>(), null,
+            """{"method":"passkey","enrolment":"setup","reason":"not_a_member"}""", null, null, null));
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+        VerifyNoLoginRow();
+    }
+
+    /// <summary>
+    /// The session cookies are already on the response when the codes fail; the exception handler
+    /// clears the response before it writes the 500, so none is delivered.
+    /// </summary>
+    [Fact]
+    public async Task OwnerComplete_WhenTheRecoveryCodesCannotBeMade_LeavesAnUndeliveredSessionAndAnOwnerWhoSignsInWithThePasskey()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(subjectId))
+            .ThrowsAsync(new DbUpdateException("the codes were not stored"));
+
+        var act = () => CompleteOwnerSetupAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        await AssertOwnerCanSignInAsync(tenantId, subjectId);
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenTheSessionCannotBeIssued_MakesNoRecoveryCodesAndLeavesAnOwnerWhoSignsInWithThePasskey()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the session was not stored"));
+
+        var act = () => CompleteOwnerSetupAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+        VerifyNoLoginRow();
+        await AssertOwnerCanSignInAsync(tenantId, subjectId);
+    }
+
+    /// <summary>
+    /// The session cookies are already on the response when the end fails; the exception handler
+    /// clears the response before it writes the 500, so none is delivered.
+    /// </summary>
+    [Fact]
+    public async Task OwnerComplete_WhenTheHandedOffSessionCannotBeEnded_LeavesTheLoginRowAnUndeliveredSessionAndNoHint()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubStoredPasskey(subjectId);
+        var previousHolder = Guid.CreateVersion7();
+        var refreshTokens = PresentHandedOffSession(_controller, previousHolder);
+        refreshTokens
+            .Setup(r => r.RevokeSessionForSubjectAsync(previousHolder, "previous-session", It.IsAny<string>()))
+            .ThrowsAsync(new DbUpdateException("the revoke failed"));
+
+        var act = () => CompleteOwnerSetupAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, true, It.IsAny<string?>(), It.IsAny<string?>(), null,
+            SetupPasskeyRow, null, null, null), Times.Once);
+        _auditService.Verify(
+            a => a.LogAsync(
+                AuthAuditEventType.Logout, It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should()
+            .NotContain(SessionCookieExtensions.LastSignInCookieName);
+        await AssertOwnerCanSignInAsync(tenantId, subjectId);
+    }
+
+    [Fact]
+    public async Task OidcCallback_EndsSetupBeforeTheSessionThenLastLoginThenTheLoginRow()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        var steps = RecordSteps(tenantId);
+        var providerId = StubSetupCallback(_controller, subjectId);
+        AsBrowser(_controller);
+
+        var result = await CallBackAsync(_controller);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup");
+        steps.Should().Equal(
+            "session (setup ended)", "last-login", $"audit:{AuthAuditEventType.Login}:True:{SetupOidcRow}");
+        var expectedContext = new SessionContext(OidcSessionId: "sid", DeviceDescription: "Setup OIDC", IpAddress: ClientIp, UserAgent: Agent);
+        _sessionService.Verify(s => s.IssueSessionAsync(subjectId, expectedContext, It.IsAny<CancellationToken>()));
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, true, ClientIp, Agent, null, SetupOidcRow, null, null, null));
+        var cookies = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        cookies.Should().Contain(".Nocturne.AccessToken=access");
+        cookies.Should().Contain(".Nocturne.RefreshToken=refresh");
+        cookies.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=oidc%3A{providerId}");
+    }
+
+    [Fact]
+    public async Task OidcCallback_OverAHandedOffSession_EndsIt()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubSetupCallback(_controller, subjectId);
+        var previousHolder = Guid.CreateVersion7();
+        var refreshTokens = PresentHandedOffSession(_controller, previousHolder);
+
+        await CallBackAsync(_controller);
+
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(previousHolder, "previous-session", It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenThePlatformAdminGrantThrows_IssuesNoSession()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        var failingSubjects = new Mock<ISubjectRepository>();
+        failingSubjects
+            .Setup(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("grant failed"));
+        var controller = BuildController(
+            new OperatorConfiguration(),
+            new Mock<IHttpClientFactory>().Object,
+            new Mock<ILogger<SetupController>>().Object,
+            new PlatformAdminBootstrapService(
+                new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+                new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+                failingSubjects.Object,
+                Options.Create(_platformOptions),
+                NullLogger<PlatformAdminBootstrapService>.Instance));
+        StubSetupCallback(controller, subjectId);
+
+        var act = () => CallBackAsync(controller);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the owner step runs before the sign-in, so its failure leaves no undelivered session");
+        controller.HttpContext.Response.Headers.SetCookie.ToString().Should().NotContain(".Nocturne.AccessToken");
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenTheSessionCannotBeIssued_LeavesAnOwnerWhoSignsInWithTheIdentityAndNoLoginRow()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubSetupCallback(_controller, subjectId);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the session was not stored"));
+
+        var act = () => CallBackAsync(_controller);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should().NotContain(".Nocturne.AccessToken");
+        VerifyNoLoginRow();
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+        (await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenACodeWereOwed_SignsNoOneInAndLeavesAnOwnerWhoCanSignIn()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        var providerId = StubSetupCallback(_controller, subjectId);
+        _totpService.Setup(t => t.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subjectId, tenantId, false)).ReturnsAsync("step-up");
+
+        var result = await CallBackAsync(_controller);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup?error=setup_already_complete");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        var cookies = _controller.HttpContext.Response.Headers.SetCookie.ToString();
+        cookies.Should().NotContain(".Nocturne.AccessToken");
+        cookies.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=oidc%3A{providerId}");
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+        (await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenTheOwnerIsNoLongerAMember_IsRefusedWithNoSession()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubSetupCallback(_controller, subjectId);
+        await RemoveMembershipAsync(subjectId);
+
+        var result = await CallBackAsync(_controller);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup?error=not_a_member");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should().NotContain(".Nocturne.AccessToken");
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, subjectId, false, It.IsAny<string?>(), It.IsAny<string?>(), null,
+            """{"method":"oidc","enrolment":"setup","reason":"not_a_member"}""", null, null, null));
+    }
+
+    private static void AsBrowser(SetupController controller)
+    {
+        controller.HttpContext.Connection.RemoteIpAddress = IPAddress.Parse(ClientIp);
+        controller.HttpContext.Request.Headers.UserAgent = Agent;
+    }
+
+    /// <summary>
+    /// Records the steps after the proof in order, each marked with whether setup had ended (the
+    /// tenant's setup owner record cleared) when it ran.
+    /// </summary>
+    private List<string> RecordSteps(Guid tenantId)
+    {
+        var steps = new List<string>();
+        string Ended() =>
+            FreshContext().Tenants.Single(t => t.Id == tenantId).SetupOwnerSubjectId == null ? " (setup ended)" : "";
+
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(It.IsAny<Guid>()))
+            .Callback(() => steps.Add("recovery-codes" + Ended()))
+            .ReturnsAsync(["code-1", "code-2"]);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .Callback(() => steps.Add("session" + Ended()))
+            .ReturnsAsync((Guid subjectId, SessionContext _, CancellationToken _) =>
+                new SessionTokenPair("access", "refresh", 3600, subjectId));
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()))
+            .Callback(() => steps.Add("last-login"))
+            .Returns(Task.CompletedTask);
+        _auditService
+            .Setup(a => a.LogAsync(
+                It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()))
+            .Callback((string type, Guid? _, bool success, string? _, string? _, string? _, string? details, Guid? _,
+                AuthAuditActor? _, Guid? _) => steps.Add($"audit:{type}:{success}:{details}"))
+            .Returns(Task.CompletedTask);
+        return steps;
+    }
+
+    /// <summary>
+    /// Stands in for the passkey proof for <paramref name="subjectId"/>: stores the passkey and ends
+    /// the setup owner record as the real store does, which is what ends setup.
+    /// </summary>
+    private void StubStoredPasskey(Guid subjectId, List<string>? steps = null) =>
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(() =>
+            {
+                steps?.Add("proof");
+                using var db = FreshContext();
+                db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    SubjectId = subjectId,
+                    CredentialId = Guid.NewGuid().ToByteArray(),
+                    PublicKey = [],
+                    SignCount = 0,
+                });
+                EndSetupOwnerRecord(db, subjectId);
+                db.SaveChanges();
+                return new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId);
+            });
+
+    /// <summary>
+    /// Makes the provider callback prove an identity for <paramref name="subjectId"/> and end the
+    /// setup owner record, as the real link does.
+    /// </summary>
+    private Guid StubSetupCallback(SetupController controller, Guid subjectId)
+    {
+        var providerId = Guid.CreateVersion7();
+        controller.HttpContext.Request.Headers.Cookie = ".Nocturne.OidcState=expected-state";
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
+            .ReturnsAsync(() =>
+            {
+                using var db = FreshContext();
+                EndSetupOwnerRecord(db, subjectId);
+                db.SaveChanges();
+                return OidcSetupCallbackResult.Succeeded(subjectId, providerId, "sid");
+            });
+        return providerId;
+    }
+
+    private static void EndSetupOwnerRecord(NocturneDbContext db, Guid subjectId)
+    {
+        foreach (var tenant in db.Tenants.Where(t => t.SetupOwnerSubjectId == subjectId))
+            tenant.SetupOwnerSubjectId = null;
+    }
+
+    private async Task GiveOwnerAPasskeyAsync(Guid subjectId)
+    {
+        await using var db = FreshContext();
+        db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectId,
+            CredentialId = Guid.NewGuid().ToByteArray(),
+            PublicKey = [],
+            SignCount = 0,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static Task<IActionResult> CallBackAsync(SetupController controller) =>
+        controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+    private Mock<IRefreshTokenService> PresentHandedOffSession(SetupController controller, Guid holder)
+    {
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ReturnsAsync(new RefreshTokenSession(holder, "previous-session", true));
+        controller.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(_auditService.Object).BuildServiceProvider();
+        var presented = ".Nocturne.RefreshToken=presented";
+        var existing = controller.HttpContext.Request.Headers.Cookie.ToString();
+        controller.HttpContext.Request.Headers.Cookie = existing.Length == 0 ? presented : $"{existing}; {presented}";
+        return refreshTokens;
+    }
+
+    private async Task RemoveMembershipAsync(Guid subjectId)
+    {
+        await using var db = FreshContext();
+        var memberIds = await db.TenantMembers.Where(m => m.SubjectId == subjectId).Select(m => m.Id).ToListAsync();
+        await db.Set<TenantMemberRoleEntity>().Where(r => memberIds.Contains(r.TenantMemberId)).ExecuteDeleteAsync();
+        await db.TenantMembers.Where(m => m.SubjectId == subjectId).ExecuteDeleteAsync();
+    }
+
+    /// <summary>
+    /// Setup has ended with an owner who holds a passkey, the owner role and platform admin, so the
+    /// owner signs in on the login page and setup answers that an owner exists.
+    /// </summary>
+    private async Task AssertOwnerCanSignInAsync(Guid tenantId, Guid subjectId)
+    {
+        await using var db = FreshContext();
+        (await db.Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+        (await db.Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeTrue();
+        (await db.PasskeyCredentials.CountAsync(c => c.SubjectId == subjectId)).Should().Be(1);
+        (await db.TenantMembers.CountAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId)).Should().Be(1);
+        (await CompleteOwnerSetupAsync()).Should().BeOfType<ConflictObjectResult>();
+    }
+
+    private void VerifyNoLoginRow() =>
+        _auditService.Verify(
+            a => a.LogAsync(
+                AuthAuditEventType.Login, It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()),
+            Times.Never);
 
     // ── Helpers ──────────────────────────────────────────────────────────
 

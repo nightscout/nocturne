@@ -139,7 +139,7 @@ public class UISettingsControllerDemoModeTests
     {
         var demoService = StubDemoService.Hanging();
 
-        var settings = await ProxiedGet(demoService).WaitAsync(DemoUISettingsProxy.ProxyTimeout * 10);
+        var settings = await ProxiedGet(demoService).WaitAsync(Eventually.DefaultPatience);
 
         settings.Devices!.ConnectedDevices.Should().NotBeEmpty();
         demoService.Cancelled.Should().BeTrue();

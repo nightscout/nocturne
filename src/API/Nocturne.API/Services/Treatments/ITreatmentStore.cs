@@ -141,6 +141,12 @@ internal abstract record StoredTreatment(Treatment Created)
     public bool Updated { get; init; }
 
     /// <summary>
+    /// Whether the create applied a pulled treatment as an upstream edit of a record write-back sent,
+    /// which keeps the record's data source.
+    /// </summary>
+    public bool UpstreamEdit { get; init; }
+
+    /// <summary>
     /// A temp basal, mapped from the record <paramref name="RecordId"/> as written. A later write of
     /// the batch can change that record: a re-send of it, or a Profile Switch that re-resolves its
     /// rate from the schedule.
@@ -155,6 +161,12 @@ internal abstract record StoredTreatment(Treatment Created)
 
     /// <summary><paramref name="Created"/> keeps the id it was sent with, which a read resolves.</summary>
     internal sealed record Unnamed(Treatment Created) : StoredTreatment(Created);
+
+    /// <summary>
+    /// A live treatment the create deleted, being sent under its id with <c>isValid: false</c>;
+    /// <paramref name="Created"/> is it as reads served it before.
+    /// </summary>
+    internal sealed record Deleted(Treatment Created) : StoredTreatment(Created);
 }
 
 /// <param name="Served">

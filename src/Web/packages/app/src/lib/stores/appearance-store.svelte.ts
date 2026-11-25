@@ -44,7 +44,7 @@ import { ENERGY_UNITS, type EnergyUnit } from "@nocturne/ui/energy";
 // Type Definitions
 // ==========================================
 
-const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic"] as const;
+const COLOR_THEMES = ["nocturne", "trio", "aaps", "classic", "nightscout"] as const;
 
 /** Color theme - visual styling */
 export type ColorTheme = (typeof COLOR_THEMES)[number];
@@ -214,6 +214,8 @@ function writeThroughReporting(prefs: UserDisplayPreferences): void {
   }
 }
 
+export const PREFERENCES_WRITE_THROUGH_DELAY_MS = 400;
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Mirror to cookie immediately and debounce the backend write-through. */
@@ -225,7 +227,7 @@ function schedulePersist(): void {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     writeThroughReporting(prefs);
-  }, 400);
+  }, PREFERENCES_WRITE_THROUGH_DELAY_MS);
 }
 
 /**
@@ -562,7 +564,7 @@ export const hiddenLegacyFallbacks = new SyncedPref<LegacyConsumableKind[]>(
 // ==========================================
 
 /** All theme CSS classes that can be applied to the document root */
-const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme"] as const;
+const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme", "nightscout-theme"] as const;
 
 /**
  * Apply color theme class to document
@@ -576,6 +578,7 @@ function applyColorTheme(theme: ColorTheme): void {
   if (theme === "trio") root.classList.add("trio-theme");
   else if (theme === "aaps") root.classList.add("aaps-theme");
   else if (theme === "classic") root.classList.add("classic-theme");
+  else if (theme === "nightscout") root.classList.add("nightscout-theme");
 
   // Classic theme uses minimal border radius (2015 utilitarian aesthetic)
   if (theme === "classic") {

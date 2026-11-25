@@ -113,6 +113,12 @@ public interface IStateSpanService
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.RewriteFromUpstreamAsync"/>
+    Task<IReadOnlyList<string>> RewriteFromUpstreamAsync(
+        string source,
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
     /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansAroundAsync"/>
     Task<IReadOnlyList<StateSpan>> GetStateSpansAroundAsync(
         StateSpanCategory category,
@@ -162,6 +168,13 @@ public interface IStateSpanService
         StateSpanCategory category,
         string? state,
         DateTime at,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetAllCopiesAsync"/>
+    Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime? to,
         CancellationToken cancellationToken = default);
 
     /// <summary>

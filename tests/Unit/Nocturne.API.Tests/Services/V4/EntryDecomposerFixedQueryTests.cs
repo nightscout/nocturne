@@ -2,7 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Audit;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -99,13 +99,11 @@ public class EntryDecomposerFixedQueryTests
         _doubles.Add(stamper);
         var config = new Mock<IGlucoseProcessingConfigProvider>();
         config.Setup(c => c.GetSourceDefaultsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        return new EntryDecomposer(
-            Table<ISensorGlucoseRepository, SensorGlucose>().Object,
-            Table<IMeterGlucoseRepository, MeterGlucose>().Object,
-            Table<ICalibrationRepository, Calibration>().Object,
-            new GlucoseProcessingResolver(config.Object),
-            stamper.Object,
-            Mock.Of<IAuditContext>(),
-            NullLogger<EntryDecomposer>.Instance);
+        return EntryDecomposerDoubles.Build(
+            sensorGlucose: Table<ISensorGlucoseRepository, SensorGlucose>().Object,
+            meterGlucose: Table<IMeterGlucoseRepository, MeterGlucose>().Object,
+            calibration: Table<ICalibrationRepository, Calibration>().Object,
+            glucoseResolver: new GlucoseProcessingResolver(config.Object),
+            stamper: stamper.Object);
     }
 }

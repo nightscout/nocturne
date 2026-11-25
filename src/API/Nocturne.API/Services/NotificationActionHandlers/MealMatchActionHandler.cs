@@ -16,8 +16,9 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// as the meals page does: the entry's current carbs, at the carb intake's time. It reads only the
 /// carb intake id from the notification, so carbs the entry has changed since are not written
 /// from a stale snapshot. It needs <see cref="Scope.TreatmentsReadWrite"/>, the scope
-/// <c>MealMatchingController.AcceptMatch</c> requires. The handler declines, so the notification
-/// stays and the caller is told the action failed, for a caller without that scope, a notification
+/// <c>MealMatchingController.AcceptMatch</c> requires. A caller without that scope is refused
+/// through <see cref="NotificationActionResult.RefusedFor"/>. The handler declines, so the notification
+/// stays and the caller is told the action failed, for a notification
 /// that lacks the carb intake, and a food entry or carb intake that is missing. A food entry
 /// already resolved elsewhere archives the stale suggestion as
 /// <see cref="NotificationArchiveReason.ConditionMet"/>.
@@ -36,7 +37,7 @@ public class MealMatchActionHandler(
     ILogger<MealMatchActionHandler> logger
 ) : INotificationActionHandler
 {
-    public string NotificationType => "meal_matching.suggested_match";
+    public string NotificationType => IMealMatchingService.SuggestedMatchNotificationType;
 
     public async Task<NotificationActionResult> HandleAsync(
         Guid notificationId,
@@ -51,7 +52,7 @@ public class MealMatchActionHandler(
             case "accept":
                 if (httpContextAccessor.HttpContext?.HasScope(Scope.TreatmentsReadWrite) != true)
                 {
-                    return NotificationActionResult.NotHandled;
+                    return NotificationActionResult.RefusedFor(Scope.TreatmentsReadWrite);
                 }
 
                 if (!Guid.TryParse(sourceId, out var acceptedFoodEntryId)

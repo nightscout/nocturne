@@ -49,7 +49,7 @@ public sealed class TenantServiceShareLinkEvictionTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private ShareTokenCacheService ShareLinks() =>
         new(_cache, Tenants(), Mock.Of<ILogger<ShareTokenCacheService>>());

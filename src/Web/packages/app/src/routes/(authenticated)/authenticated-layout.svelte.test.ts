@@ -88,6 +88,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     refusedAsDemoSubject: false,
     onboardingComplete: true,
     pillRows: { desktop: 1, mobile: 1 },
+    sidebarOpen: true,
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,
@@ -217,6 +218,50 @@ describe("authenticated layout", () => {
 
       expect(stripOf().getBoundingClientRect().top).toBe(0);
       expect(barTop()).toBeCloseTo(stripOf().getBoundingClientRect().height, 0);
+    });
+  });
+
+  describe("sidebar", () => {
+    const original = [window.innerWidth, window.innerHeight] as const;
+    const sidebarState = () =>
+      document.querySelector<HTMLElement>("[data-slot=sidebar]")?.dataset.state;
+
+    afterEach(async () => {
+      await page.viewport(original[0], original[1]);
+    });
+
+    it("starts collapsed when the browser last left it collapsed", async () => {
+      await page.viewport(1024, 768);
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: false }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      expect(sidebarState()).toBe("collapsed");
+    });
+
+    it("starts expanded when the browser last left it open", async () => {
+      await page.viewport(1024, 768);
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: true }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      expect(sidebarState()).toBe("expanded");
+    });
+
+    it("remembers a toggle for a year", async () => {
+      await page.viewport(1024, 768);
+      const written: string[] = [];
+      const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie")!;
+      vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
+        written.push(value);
+        cookie.set!.call(document, value);
+      });
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: true }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true }));
+
+      await vi.waitFor(() => expect(sidebarState()).toBe("collapsed"));
+      expect(written).toContain("sidebar:state=false; path=/; max-age=31536000");
+      document.cookie = "sidebar:state=; path=/; max-age=0";
     });
   });
 

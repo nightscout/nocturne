@@ -1,0 +1,74 @@
+name: Translator merge
+
+# Lands a pull request that changes only one locale catalog when its author is that catalog's
+# translator in .github/translators.json, after Tests passes on its head commit. Translators need no
+# write access. .github/scripts/translator-merge.cjs has the rules: it writes the checked
+# translations onto main as one commit, rather than merging the branch, and closes the pull request.
+#
+# This runs in the base repository with a write token, so it never checks out or runs anything from
+# the pull request: it checks out the default branch for the script and the allowlist, and reads the
+# pull request's tested commit through the API.
+#
+# A commit pushed with this workflow's token starts no push workflow, so it dispatches the image
+# publish on main itself. Workflow_run only fires for a workflow file on the default branch.
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: translator-merge-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  land:
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.path == '.github/workflows/tests.yml'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: read
+    steps:
+      # The default branch, never the pull request.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts
+            .github/translators.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Land an allowlisted translator's pull request
+        uses: actions/github-script@v8
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+        with:
+          script: |
+            const fs = require("fs");
+            const allowlist = JSON.parse(fs.readFileSync(".github/translators.json", "utf8"));
+            const { run } = require("./.github/scripts/translator-merge.cjs");
+            const landed = await run({
+              github,
+              context,
+              core,
+              allowlist,
+              headSha: process.env.HEAD_SHA,
+              headRepository: process.env.HEAD_REPOSITORY,
+            });
+            if (landed) {
+              const { owner, repo } = context.repo;
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: "docker-publish.yml",
+                ref: context.payload.repository.default_branch,
+              });
+            }

@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
@@ -8,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
+using NoticeSubjectPointer = Nocturne.Core.Models.NoticeSubjectPointer;
+using NotificationSubjectNaming = Nocturne.Core.Models.NotificationSubjectNaming;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -99,17 +102,6 @@ public class SubjectRepository : ISubjectRepository
         return id;
     }
 
-    /// <inheritdoc/>
-    public virtual async Task ClearSetupOwnerAsync(Guid subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var tenants = await db.Tenants.Where(t => t.SetupOwnerSubjectId == subjectId).ToListAsync(ct);
-        foreach (var tenant in tenants)
-            tenant.SetupOwnerSubjectId = null;
-        await SaveAsync(db, ct);
-    }
-
     private async Task<Guid> StageSubjectAsync(NocturneDbContext db, NewSubject subject, CancellationToken ct)
     {
         var entity = new SubjectEntity
@@ -131,7 +123,7 @@ public class SubjectRepository : ISubjectRepository
 
         if (subject.RoleNames is { Count: > 0 } names)
         {
-            var wanted = names.Select(n => n.Trim()).Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var wanted = names.Select(n => n.Trim()).Where(n => n.Length > 0).Distinct(StringComparer.Ordinal).ToList();
             var roles = await db.Roles.Where(r => wanted.Contains(r.Name)).ToListAsync(ct);
             foreach (var role in roles.DistinctBy(r => r.Id))
             {
@@ -243,28 +235,40 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);
         var now = Now;
+        var liveCodes = LiveCodes(db.LoginCodes, now, SetupOwnerRefusedCodePurposes);
         var candidates = db.Subjects.AsNoTracking()
             .ExcludeDemo()
             .Where(s => db.Tenants.Any(t => t.Id == tenantId && t.SetupOwnerSubjectId == s.Id)
                 && !s.IsSystemSubject && s.IsActive
                 && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
                 && !db.RefreshTokens.Any(t => t.SubjectId == s.Id && t.ExpiresAt > now)
-                && !db.LoginCodes.Any(c => c.SubjectId == s.Id && c.ConsumedAt == null && c.ExpiresAt > now
-                    && SetupOwnerRefusedCodePurposes.Contains(c.Purpose)))
+                && !liveCodes.Any(c => c.SubjectId == s.Id))
             .WithoutSignInFactor(db, _linkRoute, db.SubjectOidcIdentities);
         return ToRecord(await candidates.FirstOrDefaultAsync(ct));
     }
 
+    /// <summary>The codes of <paramref name="purposes"/> neither redeemed nor expired at <paramref name="now"/>.</summary>
+    private static IQueryable<LoginCodeEntity> LiveCodes(
+        IQueryable<LoginCodeEntity> codes, DateTime now, LoginCodePurpose[] purposes) =>
+        codes.Where(c => c.ConsumedAt == null && c.ExpiresAt > now && purposes.Contains(c.Purpose));
+
     /// <summary>
-    /// The login code purposes that let their holder into the account: a recovery code an
-    /// administrator or the operator issued, an emailed recovery link, the recovery session one of
-    /// those starts, and a login code handed to another browser.
+    /// The login code purposes that bring an account with no factor back in: a recovery code an
+    /// administrator or the operator issued, an emailed recovery link, and the recovery session one
+    /// of those starts.
     /// </summary>
-    private static readonly LoginCodePurpose[] SetupOwnerRefusedCodePurposes =
+    private static readonly LoginCodePurpose[] RecoveryCodePurposes =
     [
         LoginCodePurpose.Recovery, LoginCodePurpose.OperatorRecovery,
-        LoginCodePurpose.EmailRecovery, LoginCodePurpose.RecoverySession, LoginCodePurpose.Login,
+        LoginCodePurpose.EmailRecovery, LoginCodePurpose.RecoverySession,
     ];
+
+    /// <summary>
+    /// The login code purposes that let their holder into the account: the recovery purposes, and a
+    /// login code handed to another browser.
+    /// </summary>
+    private static readonly LoginCodePurpose[] SetupOwnerRefusedCodePurposes =
+        [.. RecoveryCodePurposes, LoginCodePurpose.Login];
 
     /// <inheritdoc/>
     public virtual async Task<Guid?> FindDeviceSubjectAsync(CancellationToken ct)
@@ -505,6 +509,7 @@ public class SubjectRepository : ISubjectRepository
         return await db.Database.CreateExecutionStrategy().ExecuteAsync<SubjectChange>(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync(ct);
+            await db.LockSubjectRowAsync(subjectId, ct);
 
             if (entity.IsActive)
             {
@@ -544,10 +549,10 @@ public class SubjectRepository : ISubjectRepository
             db.Subjects.Remove(entity);
             await db.SaveChangesAsync(ct);
 
-            await ScrubTenantRowsAsync(db, subjectId, ct);
+            var removed = await ScrubTenantRowsAsync(db, subjectId, ct);
 
             await tx.CommitAsync(ct);
-            return new SubjectChange.Changed();
+            return new SubjectChange.Changed { RemovedNotices = removed };
         });
     }
 
@@ -555,17 +560,24 @@ public class SubjectRepository : ISubjectRepository
     /// Clears the subject's client address and user agent from the audit trail of every tenant, not
     /// only those it still belongs to: a member removed earlier, or a platform admin who never
     /// joined, has rows there too. Removes the subject's membership requests there as well, which
-    /// carry its own message and would otherwise sit in an owner's list naming no one.
+    /// carry its own message and would otherwise sit in an owner's list naming no one, the notices
+    /// <see cref="NotificationSubjectNaming"/> declares as naming the subject, and the notices the
+    /// subject held, which nobody can read once it is gone. Returns the removed notices someone else
+    /// held. The subject's own are left out: its sessions end with the account.
     /// </summary>
     /// <remarks>
-    /// Both tables force row level security, so each tenant's statements run with its id set local
-    /// to the transaction, which the commit discards. The tenant query filter reads the context's
-    /// tenant, so it is lifted and the tenant named in the predicate. Runs after the subject delete,
-    /// so the last tenant set governs no other statement.
+    /// Every table the loop writes forces row level security, so each tenant's statements run with its
+    /// id set local to the transaction, which the commit discards. The tenant query filter reads the
+    /// context's tenant, so it is lifted and the tenant named in the predicate. The notice delete also
+    /// lifts the member history clamp, which would otherwise hide the older notices from it. Runs after
+    /// the subject delete, so the last tenant set governs no other statement. Only PostgreSQL translates
+    /// the metadata match (<see cref="NamedInMetadata"/>); the other providers serve tests.
     /// </remarks>
-    private static async Task ScrubTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    private static async Task<List<RemovedNotice>> ScrubTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         var tenantIds = await db.Tenants.AsNoTracking().Select(t => t.Id).ToListAsync(ct);
+        var subjectKey = subjectId.ToString();
+        var removed = new List<RemovedNotice>();
         foreach (var tenantId in tenantIds)
         {
             if (db.Database.IsNpgsql())
@@ -584,12 +596,61 @@ public class SubjectRepository : ISubjectRepository
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(a => a.IpAddress, (string?)null)
                     .SetProperty(a => a.UserAgent, (string?)null), ct);
-            await db.MembershipRequests
+
+            var requests = db.MembershipRequests
                 .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
-                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId)
-                .ExecuteDeleteAsync(ct);
+                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId);
+            var requestIds = (await requests.Select(r => r.Id).ToListAsync(ct)).Select(id => id.ToString()).ToList();
+            var tenantNotices = db.InAppNotifications
+                .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
+                .Where(n => n.TenantId == tenantId);
+            var named = tenantNotices
+                .Where(n => n.UserId == subjectKey
+                    || (n.SourceId != null
+                        && ((NotificationSubjectNaming.PointingAtRequests.Contains(n.Type) && requestIds.Contains(n.SourceId))
+                            || (NotificationSubjectNaming.PointingAtSubject.Contains(n.Type) && n.SourceId == subjectKey))));
+            var othersHeld = await db.WriteWithHistoryClampLiftedAsync(
+                async token =>
+                {
+                    var held = await RemoveNoticesAsync(named, subjectKey, token);
+                    if (db.Database.IsNpgsql())
+                        held.AddRange(await RemoveNoticesAsync(NamedInMetadata(tenantNotices, subjectId), subjectKey, token));
+                    return held;
+                },
+                ct);
+            removed.AddRange(othersHeld.Select(n => new RemovedNotice(tenantId, n.UserId, InAppNotificationRepository.ToDto(n))));
+            await requests.ExecuteDeleteAsync(ct);
         }
+
+        return removed;
     }
+
+    /// <summary>
+    /// Deletes <paramref name="notices"/> by the ids read, so every notice deleted is reported, and
+    /// returns those someone other than <paramref name="subjectKey"/> held.
+    /// </summary>
+    private static async Task<List<InAppNotificationEntity>> RemoveNoticesAsync(
+        IQueryable<InAppNotificationEntity> notices, string subjectKey, CancellationToken ct)
+    {
+        var read = await notices.AsNoTracking().ToListAsync(ct);
+        var ids = read.Select(n => n.Id).ToList();
+        await notices.Where(n => ids.Contains(n.Id)).ExecuteDeleteAsync(ct);
+        return read.Where(n => n.UserId != subjectKey).ToList();
+    }
+
+    /// <summary>The <see cref="NoticeSubjectPointer.MetadataSubject"/> notices whose metadata names <paramref name="subjectId"/>.</summary>
+    private static IQueryable<InAppNotificationEntity> NamedInMetadata(
+        IQueryable<InAppNotificationEntity> notices, Guid subjectId)
+    {
+        var member = MetadataProbe(NotificationSubjectNaming.MemberSubjectIdKey, subjectId);
+        var adder = MetadataProbe(NotificationSubjectNaming.AddedBySubjectIdKey, subjectId);
+        return notices.Where(n => NotificationSubjectNaming.PointingAtMetadata.Contains(n.Type)
+            && n.MetadataJson != null
+            && (EF.Functions.JsonContains(n.MetadataJson, member) || EF.Functions.JsonContains(n.MetadataJson, adder)));
+    }
+
+    private static string MetadataProbe(string key, Guid subjectId) =>
+        JsonSerializer.Serialize(new Dictionary<string, string> { [key] = subjectId.ToString() });
 
     /// <inheritdoc/>
     public virtual async Task<bool?> IsDemoSubjectAsync(Guid subjectId, CancellationToken ct)
@@ -639,6 +700,76 @@ public class SubjectRepository : ISubjectRepository
 
         await db.SaveChangesAsync(ct);
         return subjects.Count;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> EveryPlatformAdminIsStrandedAsync(CancellationToken ct)
+    {
+        await using var db = await Pinnable.CreatePlatformAsync(ct);
+        return await LoadStrandedPlatformAdminsAsync(db, ct) is { Count: > 0 };
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<Guid>> ReplaceStrandedPlatformAdminsAsync(Guid successorId, CancellationToken ct)
+    {
+        await using var db = await Pinnable.CreatePlatformAsync(ct);
+        if (await LoadStrandedPlatformAdminsAsync(db, ct) is not { Count: > 0 } stranded)
+            return [];
+
+        var successor = await db.Subjects.WhoCanSignIn(db, _linkRoute)
+            .FirstOrDefaultAsync(s => s.Id == successorId, ct);
+        if (successor is null)
+            return [];
+
+        foreach (var subject in stranded)
+            subject.IsPlatformAdmin = false;
+        successor.IsPlatformAdmin = true;
+
+        await db.SaveChangesAsync(ct);
+        return stranded.Select(s => s.Id).ToList();
+    }
+
+    /// <summary>
+    /// The platform admins, tracked, when every one of them is stranded
+    /// (<see cref="ISubjectRepository.ReplaceStrandedPlatformAdminsAsync"/>); empty when there are
+    /// none, null when any is not stranded.
+    /// </summary>
+    private async Task<List<SubjectEntity>?> LoadStrandedPlatformAdminsAsync(NocturneDbContext db, CancellationToken ct)
+    {
+        var admins = db.Subjects.Where(s => s.IsPlatformAdmin);
+        var reachable = admins.WhoCanSignIn(db, _linkRoute, db.SubjectOidcIdentities);
+        if (await reachable.AnyAsync(ct))
+            return null;
+
+        var stranded = await admins.Where(s => !reachable.Any(r => r.Id == s.Id)).ToListAsync(ct);
+        foreach (var codeHolder in stranded.Where(OrphanedSubjectFilter.IsStanding))
+        {
+            if (await HoldsPendingRecoveryAsync(codeHolder.Id, ct))
+                return null;
+        }
+
+        return stranded;
+    }
+
+    /// <summary>
+    /// Whether the subject holds an unredeemed, unexpired recovery code or recovery session on any
+    /// tenant it belongs to. Each tenant is read under its own pin, since a code is tenant-scoped.
+    /// </summary>
+    private async Task<bool> HoldsPendingRecoveryAsync(Guid subjectId, CancellationToken ct)
+    {
+        List<Guid> tenantIds;
+        await using (var memberships = await Pinnable.CreateForSubjectAsync(subjectId, ct))
+            tenantIds = await memberships.TenantMembers.AsNoTracking().TenantIdsOf(subjectId).ToListAsync(ct);
+
+        var now = Now;
+        foreach (var tenantId in tenantIds)
+        {
+            await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);
+            if (await LiveCodes(db.LoginCodes, now, RecoveryCodePurposes).AnyAsync(c => c.SubjectId == subjectId, ct))
+                return true;
+        }
+
+        return false;
     }
 
     /// <inheritdoc/>
@@ -733,6 +864,23 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var id = StageOidcIdentity(db, identity);
+        await SaveAsync(db, ct);
+        return id;
+    }
+
+    /// <inheritdoc/>
+    public virtual Task<Guid?> AddSetupOwnerOidcIdentityAsync(Guid tenantId, NewSubjectOidcIdentity identity, CancellationToken ct) =>
+        SetupOwnerClaim.StoreClaimingSetupAsync(
+            Transactional,
+            tenantId,
+            identity.SubjectId,
+            db => StageOidcIdentity(db, identity),
+            (db, id, token) => db.SubjectOidcIdentities.AnyAsync(o => o.Id == id, token),
+            ct);
+
+    private static Guid StageOidcIdentity(NocturneDbContext db, NewSubjectOidcIdentity identity)
+    {
         var entity = new SubjectOidcIdentityEntity
         {
             Id = Guid.CreateVersion7(),
@@ -744,7 +892,6 @@ public class SubjectRepository : ISubjectRepository
             LinkedAt = identity.LinkedAt,
         };
         db.SubjectOidcIdentities.Add(entity);
-        await SaveAsync(db, ct);
         return entity.Id;
     }
 
@@ -776,13 +923,25 @@ public class SubjectRepository : ISubjectRepository
         {
             db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            // The membership it adds names the holder, so the holder's row comes before the setup and
+            // membership locks (MembershipLock): a deletion of the holder either finishes first, and the
+            // retry finds no holder, or waits for this commit.
+            await db.LockSubjectRowSharedAsync(holderId, ct);
 
             var tenantId = await db.Tenants.AsNoTracking()
                 .Where(t => t.Slug == tenantSlug).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
+            // Still serializable: the setup lock orders setup stores only, and the holder's and the
+            // created subject's rows are read by predicates that other writers take no lock for. The
+            // snapshot is taken before the lock is granted, so a store that committed in between
+            // fails this transaction's write of the tenant row as a serialization failure, and the
+            // retry reads the ended record.
+            if (tenantId is null || !await db.ClaimSetupAsync(tenantId.Value, createdId, ct))
+                return false;
+
             var holder = await AdoptableBySetup(db, identityId).FirstOrDefaultAsync(s => s.Id == holderId, ct);
             var memberships = await db.TenantMembers.Include(m => m.MemberRoles)
                 .Where(m => m.SubjectId == createdId).Take(2).ToListAsync(ct);
-            if (tenantId is null || holder is null || memberships.Count != 1)
+            if (holder is null || memberships.Count != 1)
                 return false;
 
             var created = await Unclaimed(db, identityId: null, ownerOf: tenantId)
@@ -918,6 +1077,7 @@ public class SubjectRepository : ISubjectRepository
             && !db.TeamMembers.Any(m => m.SubjectId == s.Id)
             && !db.Teams.Any(t => t.CreatedBySubjectId == s.Id)
             && !db.TeamInvites.Any(i => i.CreatedBySubjectId == s.Id)
+            && !db.TeamStaffInvites.Any(i => i.CreatedBySubjectId == s.Id)
             && !db.TeamAccessLinks.Any(l => l.CreatedBySubjectId == s.Id)
             && !db.SubjectRoles.Any(r => r.AssignedById == s.Id));
 
@@ -984,6 +1144,7 @@ public class SubjectRepository : ISubjectRepository
         yield return db.AlertInvites.IgnoreQueryFilters().Where(i => i.TenantId == tenantId && (i.CreatedBy == subjectId || i.UsedBy == subjectId)).Select(i => i.Id);
         yield return db.AlertExcursionReceipts.IgnoreQueryFilters().Where(r => r.TenantId == tenantId && r.ActorKind == AlertReceiptActorKind.Member && r.ActorId == subjectId).Select(r => r.Id);
         yield return db.TeamTenantAccess.Where(a => a.TenantId == tenantId && a.ApprovedBySubjectId == subjectId).Select(a => a.Id);
+        yield return db.TeamSiteDeclines.Where(d => d.TeamTenantAccess!.TenantId == tenantId && d.SubjectId == subjectId).Select(d => d.Id);
     }
 
     /// <inheritdoc/>

@@ -38,6 +38,11 @@ public class DemoDataPurgeRepository(
 
     private static readonly IReadOnlyList<V4RecordTable> DeviceStatusTables = V4RecordTables.OfKind(V4RecordKind.DeviceStatus);
 
+    private static readonly IReadOnlyList<V4RecordTable> PurgedTables =
+        [.. GlucoseTables, .. TreatmentTables, .. DeviceStatusTables];
+
+    private const string DemoLabResultNote = "Demo lab result";
+
     private static readonly Type[] GlucoseModels = [.. GlucoseTables.Select(t => t.Model)];
 
     private static readonly Type[] TreatmentModels =
@@ -61,6 +66,20 @@ public class DemoDataPurgeRepository(
         {
             await ReportAsync(written, changes);
         }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> HoldsDataAsync(CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        foreach (var table in PurgedTables)
+        {
+            if (await table.HoldsDataSourceAsync(db, DataSources.DemoService, ct))
+                return true;
+        }
+
+        return await db.CompressionLowSuggestions.AnyAsync(s => s.DataSource == DataSources.DemoService, ct)
+            || await db.LabHbA1cResults.AnyAsync(result => result.Note == DemoLabResultNote, ct);
     }
 
     /// <inheritdoc/>
@@ -122,7 +141,7 @@ public class DemoDataPurgeRepository(
         deleted += await db.CompressionLowSuggestions.PurgeAsync(
             s => s.DataSource == DataSources.DemoService, ct);
         deleted += await db.LabHbA1cResults
-            .Where(result => result.Note == "Demo lab result")
+            .Where(result => result.Note == DemoLabResultNote)
             .ExecuteUpdateAsync(update => update.SetProperty(
                 result => result.DeletedAt, time.GetUtcNow().UtcDateTime), ct);
         return deleted;

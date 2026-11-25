@@ -24,6 +24,7 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
+    colorTheme,
     type GlucoseUnits,
     type PredictionDisplayMode,
   } from "#lib/stores/appearance-store.svelte.js";
@@ -116,7 +117,38 @@
   const compact = $derived(cardWidth > 0 ? cardWidth < 672 : isMobile.current);
   const print = new PrintMode();
 
-  const chartPadding = $derived(plotPadding(compact, print.active));
+  // The Nightscout theme draws cgm-remote-monitor's focus and context charts: no card chrome,
+  // no legend, ticks inside the right edge. Paper keeps the default chart.
+  const nightscout = $derived(colorTheme.current === "nightscout" && !print.active);
+  /** Below this the focus chart has no room for its treatment bubbles. */
+  const NIGHTSCOUT_MIN_HEIGHT = 360;
+
+  // index.js: the charts fill the window below the header, 70% focus and 30% context (chart.js).
+  let nightscoutFrame = $state<HTMLDivElement>();
+  let nightscoutHeight = $state(0);
+  $effect(() => {
+    const frame = nightscoutFrame;
+    if (!frame) return;
+    const measure = () => {
+      const top = frame.getBoundingClientRect().top + window.scrollY;
+      nightscoutHeight = Math.max(NIGHTSCOUT_MIN_HEIGHT, window.innerHeight - top - 10);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  });
+
+  const chartPadding = $derived(
+    nightscout
+      ? { left: 0, right: 0, top: 0, bottom: 30 }
+      : plotPadding(compact, print.active)
+  );
+
 
   $effect(() => {
     if (!recordsPlotSize || print.active || plotWidth === 0 || plotHeight === 0 || cardWidth === 0) return;
@@ -250,14 +282,15 @@
 </script>
 
 {#snippet chartBody()}
-  <CardHeader class="pb-2 px-1 @2xl/chart-card:px-6">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2">
-        Blood glucose
-        {#if displayDemoMode}
-          <Badge variant="demo">
-            Demo
-          </Badge>
+  {#if !nightscout}
+    <CardHeader class="pb-2 px-1 @2xl/chart-card:px-6">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <CardTitle class="flex items-center gap-2">
+          Blood glucose
+          {#if displayDemoMode}
+            <Badge variant="demo">
+              Demo
+            </Badge>
         {/if}
       </CardTitle>
 
@@ -279,11 +312,14 @@
       </div>
     </div>
   </CardHeader>
+  {/if}
 
   <!-- The bare plot reaches into the page's gutter only while <main> is phone-width, where
        pages pad p-3: a narrow chart on a wide page, e.g. a clock builder preview, stays in
        its box. -->
-  <CardContent class="p-0 @max-md/main:-mx-2 @2xl/chart-card:p-2">
+  <CardContent
+    class={nightscout ? "p-0" : "p-0 @max-md/main:-mx-2 @2xl/chart-card:p-2"}
+  >
     <ZoomIndicator {isZoomed} brushXDomain={brushDomain} onResetZoom={resetZoom} />
 
     <GlucoseChartView
@@ -297,7 +333,8 @@
       printing={print.active}
       padding={chartPadding}
       {brushDomain}
-      {heightClass}
+      heightClass={heightClass ?? (nightscout ? "h-(--ns-focus-height)" : undefined)}
+      variant={nightscout ? "nightscout" : "default"}
       draw={plotDrawn}
       bind:plotWidth
       bind:plotHeight
@@ -329,6 +366,7 @@
       {#snippet belowPlot()}
         {#if engine.glucoseData.length > 0}
           <MiniOverviewChart
+            variant={nightscout ? "nightscout" : "default"}
             data={engine.glucoseData}
             fullXDomain={[engine.fullXDomain.from, engine.fullXDomain.to]}
             selectedXDomain={miniSelectedDomain}
@@ -346,8 +384,8 @@
             padding={{
               left: chartPadding.left,
               right: chartPadding.right,
-              top: 20,
-              bottom: 20,
+              top: nightscout ? 4 : 20,
+              bottom: nightscout ? 30 : 20,
             }}
           />
         {/if}
@@ -357,9 +395,21 @@
 {/snippet}
 
 <div class="@container/chart-card" bind:clientWidth={cardWidth}>
-  <Card bareWhenNarrow class="@container">
-    {@render chartBody()}
-  </Card>
+  {#if nightscout}
+    <div
+      bind:this={nightscoutFrame}
+      class="@container bg-(--ns-chart-bg)"
+      style:--ns-focus-height="{Math.round((nightscoutHeight || 600) * 0.7)}px"
+      style:--ns-context-height="{Math.round((nightscoutHeight || 600) * 0.3)}px"
+      data-testid="nightscout-chart"
+    >
+      {@render chartBody()}
+    </div>
+  {:else}
+    <Card bareWhenNarrow class="@container">
+      {@render chartBody()}
+    </Card>
+  {/if}
 </div>
 
 <!-- The picker step of point inspection, marker disambiguation, and the entry editor. -->

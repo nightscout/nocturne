@@ -113,7 +113,7 @@ public class GlookoAuthTokenProvider(
 
         GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin);
 
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var response = await SendSignInRequestAsync(request, config, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -173,9 +173,12 @@ public class GlookoAuthTokenProvider(
         // V3 sign-in doesn't return user data — fetch it from /api/v3/session/users.
         if (config.UseV3Api)
         {
+            var profileShouldRetry = false;
             try
             {
-                var v3User = await FetchV3UserDataAsync(baseUrl, webOrigin, sessionCookie, cancellationToken);
+                var (v3User, shouldRetry) =
+                    await FetchV3UserDataAsync(config, baseUrl, webOrigin, sessionCookie, cancellationToken);
+                profileShouldRetry = shouldRetry;
                 if (v3User != null && !string.IsNullOrEmpty(v3User.GlookoCode))
                 {
                     userData = new GlookoUserData { User = new GlookoUserLogin { GlookoCode = v3User.GlookoCode } };
@@ -183,7 +186,7 @@ public class GlookoAuthTokenProvider(
                         "V3 user profile loaded. Glooko code: {GlookoCode}, MeterUnits: {Units}",
                         v3User.GlookoCode, v3User.MeterUnits);
                 }
-                else
+                else if (v3User != null)
                 {
                     _logger.LogWarning("V3 sign-in succeeded but the user profile carried no Glooko code");
                 }
@@ -191,15 +194,17 @@ public class GlookoAuthTokenProvider(
             catch (Exception ex) when (ConnectorFaults.IsSourceFailure(ex, cancellationToken))
             {
                 _logger.LogError(ex, "Failed to fetch V3 user profile after sign-in");
+                profileShouldRetry = ex is HttpRequestException http
+                                     && (http.StatusCode is null
+                                         || HttpResponseExtensions.IsRetryableStatusCode(http.StatusCode));
             }
 
-            // The Glooko code is what every patient-scoped data URL is built from, so a session
-            // without it is unusable. Caching it as a success silently poisons the token cache: the
-            // cookie stays "valid" for its whole lifetime, so the sync never re-authenticates and
-            // logs "Missing Glooko user code" every cycle instead. Fail the sign-in as retryable so a
-            // transient profile-fetch hiccup is retried and never cached without the code.
+            // Every patient-scoped data URL is built from the Glooko code, so a session without it is
+            // never cached. A profile that answered 200 without one is final: it is not a refusal a
+            // second sign-in could act on. A transport failure or retryable status is retried as for
+            // the sign-in request, and no profile failure is a refusal of the credentials.
             if (string.IsNullOrEmpty(userData?.GlookoCode))
-                return (null, null, true);
+                return (null, null, profileShouldRetry);
         }
 
         var metadata = new Dictionary<string, string> { ["SessionCookie"] = sessionCookie };
@@ -214,23 +219,24 @@ public class GlookoAuthTokenProvider(
     ///     The V3 sign-in response only contains { success, two_fa_required } —
     ///     the glookoCode and meter units come from this follow-up call.
     /// </summary>
-    private async Task<GlookoV3User?> FetchV3UserDataAsync(
-        string baseUrl, string webOrigin, string sessionCookie, CancellationToken cancellationToken)
+    private async Task<(GlookoV3User? User, bool ShouldRetry)> FetchV3UserDataAsync(
+        GlookoConnectorConfiguration config, string baseUrl, string webOrigin, string sessionCookie,
+        CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{GlookoConstants.V3UsersPath}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{GlookoConstants.V3UsersPath}");
         GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin, sessionCookie);
 
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var response = await SendSignInRequestAsync(request, config, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogWarning("Failed to fetch V3 user profile: {StatusCode}", response.StatusCode);
-            return null;
+            return (null, response.IsRetryableError());
         }
 
         var json = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
         var profile = JsonSerializer.Deserialize<GlookoV3UsersResponse>(json);
 
-        return profile?.CurrentUser ?? profile?.CurrentPatient;
+        return (profile?.CurrentUser ?? profile?.CurrentPatient, false);
     }
 }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -40,8 +41,14 @@ namespace Nocturne.Connectors.Nightscout.Tests.TestSupport;
 /// string <c>_id</c> only. From 15.0.7 each 24-hex value is cast to an ObjectId and any other is
 /// compared as a string.</item>
 /// </list>
-/// Reads serve an ObjectId as lowercase hex, as a string <c>_id</c> is served, and honour
-/// <c>count</c>.
+/// A find on <c>id</c> (equal to, or <c>[$in]</c>) matches that field. Reads serve an ObjectId as
+/// lowercase hex, as a string <c>_id</c> is served, newest <c>created_at</c> first, and honour
+/// <c>count</c>. Entries are always empty.
+/// </para>
+/// <para>
+/// A document seeded with <c>asObjectId: false</c> keeps a string <c>_id</c>, as 15.0.6 stored the one
+/// a client sent. Under 15.0.8 a 24-hex one is then found by no find by <c>_id</c>, as at 15.0.7 and
+/// 15.0.8, which have no <c>matchEitherForm</c>.
 /// </para>
 /// </remarks>
 internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHandler
@@ -56,8 +63,22 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
     public int Refusals { get; private set; }
 
-    /// <summary>Every find the upstream was asked, in order.</summary>
+    /// <summary>Every treatments find the upstream was asked, in order.</summary>
     public List<Uri> Reads { get; } = [];
+
+    /// <summary>The finds that named an id rather than reading a time range, as unescaped queries.</summary>
+    public IEnumerable<string> IdReads => Reads
+        .Select(uri => Uri.UnescapeDataString(uri.Query.TrimStart('?')))
+        .Where(NamesAnId);
+
+    /// <summary>When set, the status every find naming an id answers with.</summary>
+    public HttpStatusCode? IdReadAnswer { get; set; }
+
+    /// <summary>Finds whose unescaped query this matches find nothing, as a source that cannot answer them.</summary>
+    public Func<string, bool>? FindsNothing { get; set; }
+
+    /// <summary>Finds whose unescaped query this matches answer 502, as a proxy in front of a failing source.</summary>
+    public Func<string, bool>? FailsWithBadGateway { get; set; }
 
     /// <summary>The method of every write the upstream was sent, in order.</summary>
     public List<HttpMethod> Writes { get; } = [];
@@ -66,7 +87,18 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
     {
         if (request.Method == HttpMethod.Get)
         {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/api/v1/entries.json", StringComparison.Ordinal))
+                return Json(HttpStatusCode.OK, new JsonArray());
+
             Reads.Add(request.RequestUri!);
+            var query = Uri.UnescapeDataString(request.RequestUri!.Query.TrimStart('?'));
+            if (IdReadAnswer is { } answer && NamesAnId(query))
+                return Json(answer, new JsonObject());
+            if (FailsWithBadGateway?.Invoke(query) == true)
+                return Json(HttpStatusCode.BadGateway, new JsonObject());
+            if (FindsNothing?.Invoke(query) == true)
+                return Json(HttpStatusCode.OK, new JsonArray());
+
             var found = Find(request.RequestUri!);
             return found is null
                 ? Json(HttpStatusCode.InternalServerError, new JsonObject { ["message"] = "Argument passed in must be a string of 12 bytes or a string of 24 hex characters" })
@@ -75,7 +107,14 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
         Writes.Add(request.Method);
 
-        var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+        if (request.Method == HttpMethod.Delete)
+        {
+            var removed = Find(request.RequestUri!) ?? [];
+            Documents.RemoveAll(d => removed.Contains(d.Document));
+            return Json(HttpStatusCode.OK, new JsonObject { ["n"] = removed.Count });
+        }
+
+        var body =JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         var docs = body is JsonArray array ? array.Select(d => d!.AsObject()).ToList() : [body.AsObject()];
         foreach (var doc in docs)
         {
@@ -120,6 +159,10 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
             .Where(p => p.Key == "find[identifier]" || p.Key.StartsWith("find[identifier][$in]", StringComparison.Ordinal))
             .Select(p => p.Value)
             .ToList();
+        var clientIds = find
+            .Where(p => p.Key == "find[id]" || p.Key.StartsWith("find[id][$in]", StringComparison.Ordinal))
+            .Select(p => p.Value)
+            .ToList();
         var id = find.Where(p => p.Key == "find[_id]").Select(p => p.Value).FirstOrDefault();
         if (id is not null && version != "15.0.8" && !ObjectIdShape.IsMatch(id) && id.Length != 12)
             return null;
@@ -129,7 +172,9 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
             .Select(d => d.Document)
             .Where(d =>
                 (identifiers.Count == 0 || identifiers.Contains((string?)d["identifier"] ?? ""))
+                && (clientIds.Count == 0 || clientIds.Contains((string?)d["id"] ?? ""))
                 && bounds.All(b => InBound(DateTimeOffset.Parse((string)d["created_at"]!), b.Op, b.At)))
+            .OrderByDescending(d => DateTimeOffset.Parse((string)d["created_at"]!))
             .Take(count)
             .ToList();
     }
@@ -166,6 +211,29 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
     /// <summary>Stores <paramref name="doc"/> under a string or ObjectId <c>_id</c>, as a client other than Nocturne would.</summary>
     public void Seed(JsonObject doc, bool asObjectId) =>
         Documents.Add(new Stored((string)doc["_id"]!, asObjectId, doc));
+
+    /// <summary>Seeds a treatment created at <paramref name="createdAt"/> under <paramref name="id"/>.</summary>
+    public JsonObject Add(string id, DateTimeOffset createdAt, Action<JsonObject> fill, bool asObjectId = true)
+    {
+        var doc = new JsonObject
+        {
+            ["_id"] = id,
+            ["created_at"] = createdAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+        };
+        fill(doc);
+        Seed(doc, asObjectId);
+        return doc;
+    }
+
+    /// <summary>Changes the treatment stored under <paramref name="id"/> in place, as an upsert keeping its <c>_id</c> does.</summary>
+    public void Edit(string id, Action<JsonObject> edit) => edit(Documents.Single(d => d.Id == id).Document);
+
+    public void Remove(string id) => Documents.RemoveAll(d => d.Id == id);
+
+    private static bool NamesAnId(string query) =>
+        query.Contains("find[_id]", StringComparison.Ordinal)
+        || query.Contains("find[id]", StringComparison.Ordinal)
+        || query.Contains("find[identifier]", StringComparison.Ordinal);
 
     private bool Upsert1508(JsonObject doc)
     {

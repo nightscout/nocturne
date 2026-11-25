@@ -61,7 +61,10 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             {
                 t.Id,
                 t.Name,
-                CallerKind = t.Members.Where(m => m.SubjectId == callerSubjectId).Select(m => m.Kind).First(),
+                Caller = t.Members
+                    .Where(m => m.SubjectId == callerSubjectId)
+                    .Select(m => new { m.Kind, m.RoleCeilingSlug, m.LimitTo24Hours, m.EndsAt })
+                    .First(),
                 Managers = t.Members
                     .Where(m => m.Kind == TeamMemberKind.Manager)
                     .OrderBy(m => m.SysCreatedAt)
@@ -73,7 +76,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         if (team is null)
             return null;
 
-        var isManager = await IsManagerAsync(db, teamId, callerSubjectId, ct);
+        var isManager = team.Caller.Kind == TeamMemberKind.Manager;
         IReadOnlyList<TeamManagerInvite> invites = isManager
             ? await LiveLinks(db, db.TeamInvites, teamId, now)
                 .OrderBy(i => i.SysCreatedAt)
@@ -85,14 +88,22 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         return new TeamDetail(
             team.Id,
             team.Name,
-            team.Managers,
+            isManager ? team.Managers : [],
+            team.Managers.Select(m => m.DisplayName).ToList(),
             invites,
+            isManager ? await StaffOfAsync(db, teamId, now, ct) : [],
+            isManager ? await LiveStaffInvitesAsync(db, teamId, now, ct) : [],
             isManager ? await LiveAccessLinksAsync(db, teamId, now, ct) : [],
             isManager ? await SitesOfAsync(db, teamId, now, ct) : [],
-            isManager ? TeamSuggestableRoles.All : [],
+            TeamSuggestableRoles.All,
             await db.IsLastManagerAsync(teamId, callerSubjectId, ct),
             await CanDeleteAsync(db, teamId, callerSubjectId, ct),
-            team.CallerKind);
+            team.Caller.Kind,
+            team.Caller.Kind == TeamMemberKind.Staff
+                ? new TeamStaffSelf(
+                    new TeamStaffNarrowing(team.Caller.RoleCeilingSlug, team.Caller.LimitTo24Hours, Utc(team.Caller.EndsAt)),
+                    MembershipLiveness.HasEnded(team.Caller.EndsAt, now))
+                : null);
     }
 
     /// <inheritdoc/>
@@ -134,23 +145,9 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             db.TeamMembers.Remove(manager);
             TeamAudit.StageManagerRemoved(db, teamId, managerSubjectId);
 
-            var madeByThem = await LiveLinks(db, db.TeamInvites, teamId, now)
-                .Where(i => i.CreatedBySubjectId == managerSubjectId)
-                .ToListAsync(token);
-            foreach (var invite in madeByThem)
-            {
-                invite.RevokedAt = now;
-                TeamAudit.StageInviteRevoked(db, teamId, invite.Id);
-            }
-
-            var linksByThem = await LiveLinks(db, db.TeamAccessLinks, teamId, now)
-                .Where(l => l.CreatedBySubjectId == managerSubjectId)
-                .ToListAsync(token);
-            foreach (var link in linksByThem)
-            {
-                link.RevokedAt = now;
-                TeamAudit.StageAccessLinkRevoked(db, teamId, link.Id);
-            }
+            await RevokeLinksMadeByAsync(db, db.TeamInvites, teamId, managerSubjectId, now, TeamAudit.StageInviteRevoked, token);
+            await RevokeLinksMadeByAsync(db, db.TeamStaffInvites, teamId, managerSubjectId, now, TeamAudit.StageStaffInviteRevoked, token);
+            await RevokeLinksMadeByAsync(db, db.TeamAccessLinks, teamId, managerSubjectId, now, TeamAudit.StageAccessLinkRevoked, token);
 
             await db.SaveChangesAsync(token);
             return ManagerGuardedChange.Changed;
@@ -182,21 +179,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
     /// <inheritdoc/>
     public virtual Task<bool> RevokeInviteAsync(
         Guid teamId, Guid callerSubjectId, Guid inviteId, DateTime now, CancellationToken ct) =>
-        AsManagerAsync(teamId, callerSubjectId, false, async (db, token) =>
-        {
-            var invite = await db.TeamInvites.FirstOrDefaultAsync(i => i.Id == inviteId && i.TeamId == teamId, token);
-            if (invite is null)
-                return false;
-
-            if (invite.RevokedAt is null)
-            {
-                invite.RevokedAt = now;
-                TeamAudit.StageInviteRevoked(db, teamId, inviteId);
-                await db.SaveChangesAsync(token);
-            }
-
-            return true;
-        }, ct);
+        RevokeLinkAsync(teamId, callerSubjectId, inviteId, now, db => db.TeamInvites, TeamAudit.StageInviteRevoked, ct);
 
     /// <inheritdoc/>
     public virtual async Task<TeamInviteInfo?> GetInviteInfoAsync(
@@ -235,6 +218,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             if (teamId is not { } id)
                 return new TeamInviteAcceptance(null, TeamInviteRefusal.NotFound);
 
+            await db.LockSubjectRowSharedAsync(subjectId, token);
             await db.LockTeamManagersAsync(id, token);
 
             var invite = await db.TeamInvites.FirstOrDefaultAsync(i => i.TokenHash == tokenHash, token);
@@ -251,7 +235,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
                 Id = Guid.CreateVersion7(),
                 TeamId = id,
                 SubjectId = subjectId,
-                Kind = invite.Kind,
+                Kind = TeamMemberKind.Manager,
             });
             TeamAudit.StageManagerAdded(db, id, subjectId, invite.Id);
             await db.SaveChangesAsync(token);
@@ -259,32 +243,12 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         }, ct: ct);
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<TeamDeletion> DeleteAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct)
-    {
-        await using var db = await contexts.CreatePlatformAsync(ct);
-        return await db.ExecuteInTransactionAsync(async token =>
-        {
-            await db.LockTeamManagersAsync(teamId, token);
-
-            var team = await db.Teams.FirstOrDefaultAsync(
-                t => t.Id == teamId && t.Members.Any(m => m.SubjectId == callerSubjectId), token);
-            if (team is null)
-                return TeamDeletion.NotFound;
-
-            if (!await CanDeleteAsync(db, teamId, callerSubjectId, token))
-                return TeamDeletion.Refused;
-
-            await RemoveAsync(db, team, token);
-            await db.SaveChangesAsync(token);
-            return TeamDeletion.Deleted;
-        }, ct: ct);
-    }
-
     /// <summary>
     /// Removes the team, whose members, invites, access links and access to sites go with it by
     /// cascade, and stages its audit row and a stopped row for each site it had access to. The caller
-    /// holds the team's manager lock and an open transaction.
+    /// holds the team's manager lock and an open transaction, and has removed every team reason that
+    /// stands on the team's access: a deletion (<see cref="LockTeamDeletionAsync"/>) removes them, and
+    /// account deletion removes only teams with no member but the subject, whose memberships it removed.
     /// </summary>
     internal static async Task RemoveAsync(NocturneDbContext db, TeamEntity team, CancellationToken ct)
     {
@@ -309,7 +273,9 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
     /// <summary>
     /// Runs <paramref name="write"/> under the team's manager lock, in one transaction with the check
     /// that the caller manages the team, so a manager removed meanwhile cannot write once the removal
-    /// commits. <paramref name="notManager"/> is the answer when the caller does not manage it.
+    /// commits. <paramref name="notManager"/> is the answer when the caller does not manage it. The
+    /// caller's subject row is locked first, since a write may name the caller as its maker
+    /// (<see cref="MembershipLock"/>).
     /// </summary>
     private async Task<T> AsManagerAsync<T>(
         Guid teamId, Guid callerSubjectId, T notManager,
@@ -318,6 +284,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         await using var db = await contexts.CreatePlatformAsync(ct);
         return await db.ExecuteInTransactionAsync(async token =>
         {
+            await db.LockSubjectRowSharedAsync(callerSubjectId, token);
             await db.LockTeamManagersAsync(teamId, token);
             return await IsManagerAsync(db, teamId, callerSubjectId, token)
                 ? await write(db, token)
@@ -326,7 +293,51 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
     }
 
     /// <summary>
-    /// The team's links of one kind that can still be used at <paramref name="now"/>, made by a manager
+    /// Revokes the team's link <paramref name="linkId"/> as a manager of the team, once: a link already
+    /// revoked is found and left as it was. False when the caller does not manage the team or it has no
+    /// such link.
+    /// </summary>
+    private Task<bool> RevokeLinkAsync<T>(
+        Guid teamId, Guid callerSubjectId, Guid linkId, DateTime now,
+        Func<NocturneDbContext, DbSet<T>> links, Action<NocturneDbContext, Guid, Guid> stageRevoked, CancellationToken ct)
+        where T : class, ITeamLink =>
+        AsManagerAsync(teamId, callerSubjectId, false, async (db, token) =>
+        {
+            var link = await links(db).FirstOrDefaultAsync(l => l.Id == linkId && l.TeamId == teamId, token);
+            if (link is null)
+                return false;
+
+            if (link.RevokedAt is null)
+            {
+                link.RevokedAt = now;
+                stageRevoked(db, teamId, linkId);
+                await db.SaveChangesAsync(token);
+            }
+
+            return true;
+        }, ct);
+
+    /// <summary>
+    /// Revokes at <paramref name="now"/> the live links of one kind that <paramref name="makerSubjectId"/>
+    /// made, since a link lives only while its maker manages the team. The caller saves.
+    /// </summary>
+    private static async Task RevokeLinksMadeByAsync<T>(
+        NocturneDbContext db, DbSet<T> links, Guid teamId, Guid makerSubjectId, DateTime now,
+        Action<NocturneDbContext, Guid, Guid> stageRevoked, CancellationToken ct)
+        where T : class, ITeamLink
+    {
+        var madeByThem = await LiveLinks(db, links, teamId, now)
+            .Where(l => l.CreatedBySubjectId == makerSubjectId)
+            .ToListAsync(ct);
+        foreach (var link in madeByThem)
+        {
+            link.RevokedAt = now;
+            stageRevoked(db, teamId, link.Id);
+        }
+    }
+
+    /// <summary>
+    /// The team's links of one kind (a manager invite, a staff invite or an access link) that can still be used at <paramref name="now"/>, made by a manager
     /// who still manages the team: the query form of <see cref="RefusalAsync"/>.
     /// </summary>
     private static IQueryable<T> LiveLinks<T>(NocturneDbContext db, IQueryable<T> links, Guid teamId, DateTime now)
@@ -340,8 +351,8 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
                 && m.Kind == TeamMemberKind.Manager));
 
     /// <summary>
-    /// Why a team's link, a manager invite or an access link, cannot be used at <paramref name="now"/>,
-    /// or null when it can. A link lives only while the manager who made it manages the team.
+    /// Why a team's link, a manager invite, a staff invite or an access link, cannot be used at
+    /// <paramref name="now"/>, or null when it can. A link lives only while the manager who made it manages the team.
     /// </summary>
     private static async Task<TeamInviteRefusal?> RefusalAsync(
         NocturneDbContext db, ITeamLink link, DateTime now, CancellationToken ct) =>

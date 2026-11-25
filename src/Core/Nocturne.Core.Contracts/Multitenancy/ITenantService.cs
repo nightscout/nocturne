@@ -98,7 +98,7 @@ public interface ITenantService
 
     /// <summary>
     /// Sets when a member's access ends, or clears it with null, as
-    /// <see cref="ITenantMembershipRepository.SetAccessEndUnlessOwnerAsync"/> does. When a date is set,
+    /// <c>TenantMembershipRepository.SetAccessEndUnlessOwnerAsync</c> does. When a date is set,
     /// every live guest link and device credential the member made in the tenant that would outlive
     /// the membership's end, the sum of its reasons, has its expiry lowered to it, and so does the
     /// stop of every alert channel they added, in the same transaction; when the sum has no end, none
@@ -107,6 +107,16 @@ public interface ITenantService
     /// <param name="now">The instant the change is made at, which decides which grants are live.</param>
     Task<OwnerGuardedChange> SetMemberAccessEndAsync(
         Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Replaces the roles of a member's direct reason, as
+    /// <c>TenantMembershipRepository.ReplaceRolesUnlessLastOwnerAsync</c> does, and in the same
+    /// transaction brings the member's team reasons on the tenant into line, since an owner holds none:
+    /// one who loses the owner role gains what the team's rows give, and one who gains it loses them.
+    /// </summary>
+    Task<OwnerGuardedChange> ReplaceMemberRolesAsync(
+        Guid tenantId, Guid memberId, IReadOnlyCollection<Guid> removedRoleIds, IReadOnlyCollection<Guid> addedRoleIds,
+        CancellationToken ct);
 
     /// <summary>
     /// Returns all tenants that the specified subject is a member of: tenants the subject owns

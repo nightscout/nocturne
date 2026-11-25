@@ -37,6 +37,19 @@ public interface IPasskeyService
     /// one the request supplied.
     /// </param>
     /// <param name="label">Optional user-assigned label for the credential.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The challenge token does not read, has expired, was issued for another flow or subject, or has
+    /// been presented already; its options carry no challenge; the attestation response is the JSON
+    /// literal <c>null</c>; or the subject holds the most credentials allowed.
+    /// </exception>
+    /// <exception cref="System.Text.Json.JsonException">The attestation response is not JSON of its shape.</exception>
+    /// <exception cref="PasskeyRegistrationRefusedException">
+    /// The attestation verifier refused the attestation, or the credential is already registered.
+    /// </exception>
+    /// <exception cref="SetupOwnerTakenException">
+    /// <paramref name="flow"/> is <see cref="PasskeyRegistrationFlow.SetupOwner"/> and another
+    /// completion has claimed the setup (<see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>).
+    /// </exception>
     Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId, Guid expectedSubjectId, string? label = null);
 
     /// <summary>
@@ -114,3 +127,18 @@ public record PasskeyCredentialResult(Guid CredentialId, Guid SubjectId);
 /// <param name="LastUsedAt">When the credential was last used for authentication, if ever.</param>
 /// <param name="AaGuid">Authenticator Attestation GUID identifying the authenticator model, if available.</param>
 public record PasskeyCredentialInfo(Guid Id, string? Label, DateTime CreatedAt, DateTime? LastUsedAt, Guid? AaGuid);
+
+/// <summary>
+/// Thrown when the first-run setup owner's passkey is not stored because another completion has
+/// already claimed the setup (<see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>).
+/// </summary>
+public sealed class SetupOwnerTakenException()
+    : Exception("Another completion has claimed the setup.");
+
+/// <summary>
+/// Thrown when the attestation verifier refuses a passkey registration, or the credential it
+/// presents is already registered. The verifier's own failure, whatever its type, is the inner
+/// exception.
+/// </summary>
+public sealed class PasskeyRegistrationRefusedException(string message, Exception? innerException = null)
+    : Exception(message, innerException);

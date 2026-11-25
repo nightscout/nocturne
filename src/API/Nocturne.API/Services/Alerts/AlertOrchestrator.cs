@@ -85,7 +85,7 @@ internal sealed class AlertOrchestrator(
             {
                 // The rule is skipped; IUnevaluableRuleNotice has reported why.
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 outcome = AlertPassOutcome.Failed;
                 logger.LogError(ex, "Error evaluating alert rule {AlertRuleId} for tenant {TenantId}",

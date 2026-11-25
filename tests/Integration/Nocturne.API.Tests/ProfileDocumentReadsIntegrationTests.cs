@@ -154,6 +154,7 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
     {
         var client = await SeedDocumentThenSwitchAsync();
 
+        await SettleHistoryAsync();
         var history = await GetAsync(client, "/api/v3/profile/history/0?limit=10");
 
         var profile = history.EnumerateArray().Should().ContainSingle().Subject;

@@ -40,6 +40,7 @@
   <ItemGroup>
     <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/FakeNightscoutTreatments.cs" Link="TestSupport/FakeNightscoutTreatments.cs" />
     <Compile Include="../../Unit/Nocturne.Connectors.Nightscout.Tests/TestSupport/PreBolusSplittingNightscout.cs" Link="TestSupport/PreBolusSplittingNightscout.cs" />
+    <Compile Include="../../Unit/Nocturne.API.Tests/Services/V4/TreatmentDecomposerDoubles.Resolved.cs" Link="TestSupport/TreatmentDecomposerDoubles.Resolved.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Migration\Fixtures\*.json">

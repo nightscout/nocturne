@@ -36,6 +36,9 @@ public class TenantCreationInviteAdminController(ITenantCreationInviteService in
     public async Task<IActionResult> Create(
         [FromBody] CreateTenantCreationInviteRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Problem(detail: "Sign in as a person to make an invite link.", statusCode: 400, title: "Bad Request");
 

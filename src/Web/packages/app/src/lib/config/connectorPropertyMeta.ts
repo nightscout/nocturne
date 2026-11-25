@@ -24,7 +24,7 @@ export const connectorPropertyMeta = {
   TimezoneOffset: {
     label: 'Timezone offset',
     description: 'Hours offset from UTC for timestamp adjustments',
-    category: 'General',
+    category: 'Advanced',
   },
   Enabled: {
     label: 'Enabled',
@@ -231,7 +231,7 @@ export const connectorPropertyMeta = {
   },
   ApiSecret: {
     label: 'API secret',
-    description: 'Nightscout API_SECRET for authentication',
+    description: 'The API_SECRET of the site',
     category: 'Credentials',
   },
   MaxCount: {
@@ -315,11 +315,6 @@ export const connectorPropertyMeta = {
     description: 'How many days back each sync reaches',
     category: 'Sync',
   },
-  LastFullWalkAt: {
-    label: 'Last full walk',
-    description: 'When the diary was last read back to its first entry',
-    category: 'Advanced',
-  },
 
   // CareLink-specific
   CountryCode: {
@@ -352,7 +347,7 @@ export const connectorPropertyMeta = {
   TimeZoneId: {
     label: 'Pump time zone',
     description:
-      'The IANA time zone of the pump clock, for example America/Los_Angeles. Daylight saving time changes apply automatically. If you leave this empty, the timezone offset applies.',
+      'The IANA time zone of the pump clock, for example America/Los_Angeles. Daylight saving time changes apply automatically. If you leave this empty, the timezone offset applies. If that is 0 too, your Timezone history applies. If you have no history, your Timezone setting applies.',
     category: 'General',
   },
   // OAuth and Webhooks
@@ -396,7 +391,7 @@ export const connectorPropertyMeta = {
   GlucoseProcessing: {
     label: 'Glucose processing',
     description: 'How the connector labels its glucose readings (smoothed or unsmoothed)',
-    category: 'General',
+    category: 'Advanced',
   },
 } satisfies Record<string, PropertyMeta>;
 

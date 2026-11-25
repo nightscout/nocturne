@@ -1,11 +1,11 @@
 using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Time.Testing;
-using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -21,9 +21,9 @@ public class GlookoConnectorServiceBackgroundWindowTests
 {
     private static readonly DateTimeOffset Instant = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly FakeTimeProvider Clock = new(Instant);
-    private static readonly string Completed = GlookoConstants.FullWalkCursorResource;
-    private static readonly string Attempted = GlookoConstants.FullWalkAttemptCursorResource;
-    private static readonly string LookbackRead = GlookoConstants.LookbackReadCursorResource;
+    private static readonly string Completed = GlookoConstants.FullWalkStamp;
+    private static readonly string Attempted = GlookoConstants.FullWalkAttemptStamp;
+    private static readonly string LookbackRead = GlookoConstants.LookbackReadStamp;
 
     /// <summary>
     /// The harness serves the state-span, temp-basal, device-event and profile feeds; the rest of
@@ -46,18 +46,17 @@ public class GlookoConnectorServiceBackgroundWindowTests
 
     private static RecordingGlookoConnectorService Service(
         GlookoEndpointHandler handler,
-        IConnectorSyncCursorStore? cursorStore = null,
+        IConnectorStateStore? state = null,
         IConnectorPublisher? publisher = null) =>
-        GlookoSyncHarness.Service(handler, publisher: publisher, cursorStore: cursorStore, clock: Clock);
+        GlookoSyncHarness.Service(handler, publisher: publisher, state: state, clock: Clock);
 
-    private static ConnectorSyncCursor StampAgo(TimeSpan ago) =>
-        new(FullWalkSchedule.Stamp(Instant - ago), null);
+    private static DateTime StampAgo(TimeSpan ago) => (Instant - ago).UtcDateTime;
 
-    private static FakeCursorStore StoreWith(params (string Resource, ConnectorSyncCursor Cursor)[] stamps)
+    private static InMemoryConnectorStateStore StoreWith(params (string Key, DateTime At)[] stamps)
     {
-        var store = new FakeCursorStore();
-        foreach (var (resource, cursor) in stamps)
-            store.Saved[resource] = cursor;
+        var store = new InMemoryConnectorStateStore();
+        foreach (var (key, at) in stamps)
+            store.Resume[key] = at;
         return store;
     }
 
@@ -69,33 +68,33 @@ public class GlookoConnectorServiceBackgroundWindowTests
     public async Task ScheduledRun_OnTheFirstRun_WalksTheFullHistoryAndRecordsIt()
     {
         var handler = new GlookoEndpointHandler();
-        var store = new FakeCursorStore();
+        var store = new InMemoryConnectorStateStore();
 
-        var result = await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         result.Success.Should().BeTrue();
         handler.WindowCount.Should().Be(FullWalkChunks());
         Parse(handler.Windows[0].Start).Should().Be(
             Instant.UtcDateTime.AddMonths(-GlookoConstants.FullWalkMonths).AddDays(-1));
 
-        store.Saved.Keys.Should().BeEquivalentTo([Completed, Attempted, LookbackRead]);
-        store.Saved[LookbackRead].LastUpdatedAt.Should().Be(
-            FullWalkSchedule.Stamp(Instant), "a completed walk covers the lookback too");
-        store.Saved[Completed].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
-        store.Saved[Attempted].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
-        FullWalkSchedule.IsDue(store.Saved[Completed].LastUpdatedAt, GlookoConstants.FullWalkInterval, Instant)
+        store.Resume.Keys.Should().BeEquivalentTo([Completed, Attempted, LookbackRead]);
+        store.Resume[LookbackRead].Should().Be(
+            Instant.UtcDateTime, "a completed walk covers the lookback too");
+        store.Resume[Completed].Should().Be(Instant.UtcDateTime);
+        store.Resume[Attempted].Should().Be(Instant.UtcDateTime);
+        FullWalkSchedule.IsDue(store.Resume[Completed], GlookoConstants.FullWalkInterval, Instant)
             .Should().BeFalse("the walk that just completed is what the next run stands on");
     }
 
     [Fact]
     public async Task ScheduledSyncTwice_SecondRunReachesBackOnlyTheShortWindow()
     {
-        var store = new FakeCursorStore();
+        var store = new InMemoryConnectorStateStore();
         var first = new GlookoEndpointHandler();
         var second = new GlookoEndpointHandler();
 
-        (await Scheduled(Service(first, cursorStore: store), ScheduledConfig())).Success.Should().BeTrue();
-        (await Scheduled(Service(second, cursorStore: store), ScheduledConfig())).Success.Should().BeTrue();
+        (await Scheduled(Service(first, state: store), ScheduledConfig())).Success.Should().BeTrue();
+        (await Scheduled(Service(second, state: store), ScheduledConfig())).Success.Should().BeTrue();
 
         first.WindowCount.Should().Be(FullWalkChunks());
         second.WindowCount.Should().Be(1);
@@ -113,7 +112,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var walked = StampAgo(TimeSpan.FromMinutes(30));
         var read = StampAgo(TimeSpan.FromMinutes(5));
         var store = StoreWith((Completed, walked), (LookbackRead, read));
-        var service = Service(handler, cursorStore: store);
+        var service = Service(handler, state: store);
 
         var result = await Scheduled(service, ScheduledConfig(useV3Api));
 
@@ -121,9 +120,9 @@ public class GlookoConnectorServiceBackgroundWindowTests
         handler.WindowCount.Should().Be(1);
         Parse(handler.Windows[0].Start).Should().Be(
             Instant.UtcDateTime - GlookoConstants.ShortWindow - TimeSpan.FromDays(1));
-        store.Saved.Should().HaveCount(2);
-        store.Saved[Completed].Should().BeSameAs(walked, "a short run leaves the stamps alone");
-        store.Saved[LookbackRead].Should().BeSameAs(read, "a short run leaves the stamps alone");
+        store.Resume.Should().HaveCount(2);
+        store.Resume[Completed].Should().Be(walked, "a short run leaves the stamps alone");
+        store.Resume[LookbackRead].Should().Be(read, "a short run leaves the stamps alone");
         service.Published.Should().Contain(PublishKind.StateSpans);
     }
 
@@ -139,15 +138,15 @@ public class GlookoConnectorServiceBackgroundWindowTests
             (LookbackRead, StampAgo(GlookoConstants.LookbackReadInterval + TimeSpan.FromMinutes(1))));
         var config = ScheduledConfig(useV3Api);
 
-        var result = await Scheduled(Service(handler, cursorStore: store), config);
+        var result = await Scheduled(Service(handler, state: store), config);
 
         result.Success.Should().BeTrue();
         // The lookback plus the day of padding on each side is one chunk.
         handler.WindowCount.Should().Be(1);
         Parse(handler.Windows[0].Start).Should().Be(Instant.UtcDateTime.AddDays(-config.LookbackDays - 1));
-        store.Saved[LookbackRead].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
-        store.Saved[Completed].Should().BeSameAs(walked, "a lookback read is not a walk");
-        store.Saved.Should().NotContainKey(Attempted);
+        store.Resume[LookbackRead].Should().Be(Instant.UtcDateTime);
+        store.Resume[Completed].Should().Be(walked, "a lookback read is not a walk");
+        store.Resume.Should().NotContainKey(Attempted);
     }
 
     [Theory]
@@ -162,7 +161,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
             (Completed, StampAgo(TimeSpan.FromMinutes(30))),
             (LookbackRead, StampAgo(GlookoConstants.LookbackReadInterval - TimeSpan.FromTicks(ticksShort))));
 
-        await Scheduled(Service(handler, cursorStore: store), config);
+        await Scheduled(Service(handler, state: store), config);
 
         var reach = lookback ? TimeSpan.FromDays(config.LookbackDays) : GlookoConstants.ShortWindow;
         Parse(handler.Windows[0].Start).Should().Be(Instant.UtcDateTime - reach - TimeSpan.FromDays(1));
@@ -180,17 +179,17 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var store = StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))), (LookbackRead, stale));
 
         var failed = await Scheduled(
-            Service(new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]), cursorStore: store),
+            Service(new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]), state: store),
             config);
 
         failed.Success.Should().BeFalse();
-        store.Saved[LookbackRead].Should().BeSameAs(stale);
+        store.Resume[LookbackRead].Should().Be(stale);
 
         var next = new GlookoEndpointHandler();
-        await Scheduled(Service(next, cursorStore: store), config);
+        await Scheduled(Service(next, state: store), config);
 
         Parse(next.Windows[0].Start).Should().Be(Instant.UtcDateTime.AddDays(-config.LookbackDays - 1));
-        store.Saved[LookbackRead].LastUpdatedAt.Should().Be(FullWalkSchedule.Stamp(Instant));
+        store.Resume[LookbackRead].Should().Be(Instant.UtcDateTime);
     }
 
     [Fact]
@@ -198,13 +197,13 @@ public class GlookoConnectorServiceBackgroundWindowTests
     {
         using var cancellation = new CancellationTokenSource();
         var store = StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))));
-        var service = Service(new GlookoEndpointHandler(), cursorStore: store);
+        var service = Service(new GlookoEndpointHandler(), state: store);
         await cancellation.CancelAsync();
 
         var run = () => service.SyncDataAsync(ScheduledConfig(), cancellation.Token);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
-        store.Saved.Should().NotContainKey(LookbackRead);
+        store.Resume.Should().NotContainKey(LookbackRead);
     }
 
     [Fact]
@@ -215,7 +214,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
         config.LookbackDays = 30;
 
         await Scheduled(
-            Service(handler, cursorStore: StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))))),
+            Service(handler, state: StoreWith((Completed, StampAgo(TimeSpan.FromMinutes(30))))),
             config);
 
         handler.WindowCount.Should().Be(3, "30 days plus two of padding is three fortnightly chunks");
@@ -229,11 +228,11 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var overdue = GlookoConstants.FullWalkInterval + TimeSpan.FromMinutes(1);
         var store = StoreWith((Completed, StampAgo(overdue)), (Attempted, StampAgo(overdue)));
 
-        await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         handler.WindowCount.Should().Be(FullWalkChunks());
-        store.Saved[Completed].LastUpdatedAt.Should().Be(
-            FullWalkSchedule.Stamp(Instant), "the new walk replaces the stale stamp");
+        store.Resume[Completed].Should().Be(
+            Instant.UtcDateTime, "the new walk replaces the stale stamp");
     }
 
     [Theory]
@@ -245,7 +244,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var handler = new GlookoEndpointHandler();
         var store = StoreWith((Completed, StampAgo(GlookoConstants.FullWalkInterval - TimeSpan.FromTicks(ticksShort))));
 
-        await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         handler.WindowCount.Should().Be(walks ? FullWalkChunks() : 1);
     }
@@ -262,7 +261,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
             (Completed, StampAgo(overdue)),
             (Attempted, StampAgo(GlookoConstants.FullWalkRetryInterval - TimeSpan.FromTicks(ticksShort))));
 
-        await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         handler.WindowCount.Should().Be(walks ? FullWalkChunks() : 1);
     }
@@ -277,27 +276,27 @@ public class GlookoConnectorServiceBackgroundWindowTests
     {
         var failing = new GlookoEndpointHandler(failingPaths: [GlookoConstants.V3GraphDataPath]);
         var requestsWhenAttemptLanded = -1;
-        var store = new FakeCursorStore
+        var store = new InMemoryConnectorStateStore
         {
-            OnSet = resource =>
+            OnWrite = resource =>
             {
                 if (resource == Attempted)
                     requestsWhenAttemptLanded = failing.RequestsFor(GlookoConstants.V3GraphDataPath);
             },
         };
 
-        var result = await Scheduled(Service(failing, cursorStore: store), ScheduledConfig());
+        var result = await Scheduled(Service(failing, state: store), ScheduledConfig());
 
         result.Success.Should().BeFalse();
-        store.Saved.Keys.Should().BeEquivalentTo([Attempted]);
+        store.Resume.Keys.Should().BeEquivalentTo([Attempted]);
         requestsWhenAttemptLanded.Should().Be(0,
             "the attempt is stamped before the walk starts, so a walk that never finishes still counts");
 
         var next = new GlookoEndpointHandler();
-        await Scheduled(Service(next, cursorStore: store), ScheduledConfig());
+        await Scheduled(Service(next, state: store), ScheduledConfig());
 
         next.WindowCount.Should().Be(1, "the retry interval has not elapsed");
-        store.Saved.Should().NotContainKey(Completed);
+        store.Resume.Should().NotContainKey(Completed);
     }
 
     [Fact]
@@ -306,79 +305,143 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var handler = new GlookoEndpointHandler();
         var store = StoreWith((Attempted, StampAgo(GlookoConstants.FullWalkRetryInterval + TimeSpan.FromMinutes(1))));
 
-        await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         handler.WindowCount.Should().Be(FullWalkChunks());
-        store.Saved.Should().ContainKey(Completed);
+        store.Resume.Should().ContainKey(Completed);
     }
 
     [Fact]
     public async Task ScheduledRun_WhenReadingTheScheduleTimesOut_Walks()
     {
         var handler = new GlookoEndpointHandler();
-        var store = new FakeCursorStore
+        var store = new InMemoryConnectorStateStore
         {
-            BeforeGet = _ => throw new TaskCanceledException("The store timed out."),
+            BeforeRead = _ => throw new TaskCanceledException("The store timed out."),
         };
 
-        var result = await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         result.Success.Should().BeTrue();
         handler.WindowCount.Should().Be(FullWalkChunks());
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenTheStoreIsDownForTheScheduleRead_Walks()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore
+        {
+            BeforeRead = _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()),
+        };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenTheStoreIsDownForTheWalkRecord_StillSucceeds()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore
+        {
+            BeforeWrite = _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()),
+        };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Resume.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenReadingTheScheduleHitsADefect_FailsInsteadOfWalking()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore { BeforeRead = _ => throw new InvalidCastException("defect") };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeFalse();
+        handler.WindowCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenRecordingTheWalkHitsADefect_FailsInsteadOfCarryingOn()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore { BeforeWrite = _ => throw new InvalidCastException("defect") };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeFalse();
     }
 
     [Fact]
     public async Task ScheduledRun_WhenTheCallerCancelsDuringTheScheduleRead_Propagates()
     {
         using var cancellation = new CancellationTokenSource();
-        var store = new FakeCursorStore
+        var storeSawTheCancellation = false;
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore
         {
-            BeforeGet = token =>
+            BeforeRead = token =>
             {
                 cancellation.Cancel();
+                storeSawTheCancellation = token.IsCancellationRequested;
                 token.ThrowIfCancellationRequested();
             },
         };
 
-        var run = () => Service(new GlookoEndpointHandler(), cursorStore: store)
+        var run = () => Service(handler, state: store)
             .SyncDataAsync(ScheduledConfig(), cancellation.Token);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
+        storeSawTheCancellation.Should().BeTrue("the store is handed the run's token");
+        handler.WindowCount.Should().Be(0);
     }
 
     [Fact]
     public async Task ScheduledRun_WhenRecordingTheWalkTimesOut_StillSucceeds()
     {
         var handler = new GlookoEndpointHandler();
-        var store = new FakeCursorStore
+        var store = new InMemoryConnectorStateStore
         {
-            BeforeSet = _ => throw new TaskCanceledException("The store timed out."),
+            BeforeWrite = _ => throw new TaskCanceledException("The store timed out."),
         };
 
-        var result = await Scheduled(Service(handler, cursorStore: store), ScheduledConfig());
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
 
         result.Success.Should().BeTrue();
         handler.WindowCount.Should().Be(FullWalkChunks());
-        store.Saved.Should().BeEmpty();
+        store.Resume.Should().BeEmpty();
     }
 
     [Fact]
     public async Task ScheduledRun_WhenTheCallerCancelsDuringTheWalkRecord_Propagates()
     {
         using var cancellation = new CancellationTokenSource();
-        var store = new FakeCursorStore
+        var storeSawTheCancellation = false;
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore
         {
-            BeforeSet = token =>
+            BeforeWrite = token =>
             {
                 cancellation.Cancel();
+                storeSawTheCancellation = token.IsCancellationRequested;
                 token.ThrowIfCancellationRequested();
             },
         };
 
-        var run = () => Service(new GlookoEndpointHandler(), cursorStore: store)
+        var run = () => Service(handler, state: store)
             .SyncDataAsync(ScheduledConfig(), cancellation.Token);
 
         await run.Should().ThrowAsync<OperationCanceledException>();
+        storeSawTheCancellation.Should().BeTrue("the store is handed the run's token");
+        handler.WindowCount.Should().Be(0);
     }
 
     /// <summary>
@@ -389,14 +452,14 @@ public class GlookoConnectorServiceBackgroundWindowTests
     public async Task ScheduledRun_WithACallerSince_HonoursItAndLeavesTheScheduleAlone()
     {
         var handler = new GlookoEndpointHandler();
-        var store = new FakeCursorStore();
+        var store = new InMemoryConnectorStateStore();
 
-        await Service(handler, cursorStore: store).SyncDataAsync(
+        await Service(handler, state: store).SyncDataAsync(
             ScheduledConfig(), CancellationToken.None, since: Instant.UtcDateTime.AddDays(-3));
 
         handler.WindowCount.Should().Be(1);
         Parse(handler.Windows[0].Start).Should().Be(Instant.UtcDateTime.AddDays(-4));
-        store.Saved.Should().BeEmpty();
+        store.Resume.Should().BeEmpty();
     }
 
     /// <summary>
@@ -408,52 +471,14 @@ public class GlookoConnectorServiceBackgroundWindowTests
     public async Task RequestedRun_WithNoBounds_ReadsTheFloorAndLeavesTheScheduleAlone()
     {
         var handler = new GlookoEndpointHandler();
-        var store = new FakeCursorStore();
+        var store = new InMemoryConnectorStateStore();
 
-        var result = await Service(handler, cursorStore: store).SyncDataAsync(
+        var result = await Service(handler, state: store).SyncDataAsync(
             new SyncRequest(), ScheduledConfig(), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         handler.WindowCount.Should().Be(FullWalkChunks());
-        store.Saved.Should().BeEmpty();
-    }
-
-    /// <summary>
-    /// Nothing can remember a walk without a store, so a detached service (dry-run tooling) resumes
-    /// from what is stored, which for an account with nothing stored is the floor.
-    /// </summary>
-    [Fact]
-    public async Task ScheduledRun_WithoutACursorStore_TakesTheBaseWindow()
-    {
-        var handler = new GlookoEndpointHandler();
-
-        await Scheduled(Service(handler), ScheduledConfig());
-
-        handler.WindowCount.Should().Be(FullWalkChunks());
-    }
-
-    /// <summary>
-    /// Every family is fetched inside one window, so a run resuming from what is stored starts at the
-    /// family furthest behind. Glucose from a chunk that published ahead of a failed one sits days
-    /// past the treatments that chunk never published; the glucose watermark alone would leave those
-    /// treatments below every later run's bound.
-    /// </summary>
-    [Fact]
-    public async Task ScheduledRun_WithoutACursorStore_ResumesFromTheFamilyFurthestBehind()
-    {
-        var now = Instant.UtcDateTime;
-        var publisher = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
-        publisher.SetupGet(p => p.IsAvailable).Returns(true);
-        publisher.Setup(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(now.AddDays(-1));
-        publisher.Setup(p => p.Treatments.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(now.AddDays(-20));
-        var handler = new GlookoEndpointHandler();
-
-        await Scheduled(Service(handler, publisher: publisher.Object), ScheduledConfig());
-
-        Parse(handler.Windows[0].Start).Should().Be(now.AddDays(-21).AddMinutes(-5),
-            "the treatment watermark, the base's five minute overlap and a day of padding below it, not the glucose watermark");
+        store.Resume.Should().BeEmpty();
     }
 
     /// <summary>

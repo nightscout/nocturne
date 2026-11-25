@@ -14,6 +14,7 @@
     <ConnectorConfigForm
       schema={{ type: "object", properties, secrets: [] }}
       bind:configuration
+      storedConfiguration={{}}
       onSave={async () => {}}
     />
   </div>

@@ -7,6 +7,7 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Networks;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
@@ -14,10 +15,11 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// Manages a Nightscout 15.0.3 container with its MongoDB dependency for parity testing.
 /// Follows the same lifecycle pattern as SharedContainerState in TestDatabaseFixture.
 /// </summary>
-public class NightscoutContainer : IAsyncDisposable
+/// <param name="image">The Nightscout image to run, the pinned release unless a test names another.</param>
+public class NightscoutContainer(string image = NightscoutContainer.PinnedImage) : IAsyncDisposable
 {
-    private const string NightscoutImage = "nightscout/cgm-remote-monitor:15.0.3";
-    private const string ApiSecret = "test-api-secret-12chars";
+    public const string PinnedImage = "nightscout/cgm-remote-monitor:15.0.3";
+    public const string ApiSecret = "test-api-secret-12chars";
     private const int NightscoutPort = 1337;
     private const string MongoNetworkAlias = "mongodb";
 
@@ -95,7 +97,7 @@ public class NightscoutContainer : IAsyncDisposable
         var internalMongoUri = $"mongodb://{MongoNetworkAlias}:27017/nightscout";
 
         // Start Nightscout connected to MongoDB via internal network
-        _nightscoutContainer = new ContainerBuilder(NightscoutImage)
+        _nightscoutContainer = new ContainerBuilder(image)
             .WithNetwork(_network)
             .WithPortBinding(NightscoutPort, true)
             .WithEnvironment("MONGODB_URI", internalMongoUri)
@@ -148,23 +150,23 @@ public class NightscoutContainer : IAsyncDisposable
     /// </summary>
     private async Task WaitUntilLoadedAsync(CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow.AddMinutes(2);
         string? state = null;
-        while (DateTime.UtcNow < deadline)
-        {
-            using var response = await _httpClient!.GetAsync("/api/v1/status.json", cancellationToken);
-            if (response.IsSuccessStatusCode)
+        await Eventually.UntilAsync(
+            "Nightscout to reach runtimeState 'loaded'",
+            async () =>
             {
+                using var response = await _httpClient!.GetAsync("/api/v1/status.json", cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    return false;
+
                 using var status = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
                 state = status.RootElement.TryGetProperty("runtimeState", out var s) ? s.GetString() : null;
-                if (state == "loaded")
-                    return;
-            }
-
-            await Task.Delay(250, cancellationToken);
-        }
-
-        throw new TimeoutException($"Nightscout did not reach runtimeState 'loaded' (last seen: {state ?? "none"}).");
+                return state == "loaded";
+            },
+            patience: TimeSpan.FromMinutes(2),
+            step: TimeSpan.FromMilliseconds(250),
+            lastSeen: () => state ?? "none",
+            cancellationToken: cancellationToken);
     }
 
     private async Task FetchJwtTokenAsync(CancellationToken cancellationToken)

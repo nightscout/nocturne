@@ -3,6 +3,7 @@ using Nocturne.API.Multitenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
@@ -1220,7 +1221,7 @@ public class SampleDataSeeder
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
                 UserId = userId,
-                Type = "alert.firing",
+                Type = InAppProvider.NotificationType,
                 Category = NotificationCategory.Alert,
                 Urgency = episode.RuleName.Contains("Urgent", StringComparison.OrdinalIgnoreCase)
                     ? NotificationUrgency.Urgent

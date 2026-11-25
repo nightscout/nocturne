@@ -10,16 +10,19 @@
   import {
     getAuthState,
     getOidcProviders,
-    setAuthCookies,
   } from "#routes/(unauthenticated)/auth/auth.remote.js";
+  import { settleSignIn } from "#lib/components/auth/sign-in-result.js";
   import {
     setupOwnerOptions,
     setupOwnerComplete,
     setupOwnerOidc,
     validateSetupUsername,
   } from "../setup.remote";
+  import { getAuthStatus } from "#lib/api/generated/passkeys.generated.remote.js";
+  import { resolve } from "$app/paths";
   import {
     describeSubmitError,
+    errorStatus,
     FormError,
     FormField,
     useAvailability,
@@ -107,6 +110,24 @@
   let registrationComplete = $state(false);
   let recoveryCodes = $state<string[]>([]);
   let passkeyError = $state<string | null>(null);
+  let ownerSignInNeeded = $state(false);
+  const loginUrl = resolve(`auth/login?${new URLSearchParams({ returnUrl: "/setup" })}`);
+
+  /**
+   * Setup closes when the owner's passkey is stored, and the API refuses another owner after that.
+   * A failure past that point is finished by signing in with the passkey, which also gives the
+   * owner their recovery codes, so another attempt here cannot help.
+   */
+  async function ownerPasskeyStored(err: unknown): Promise<boolean> {
+    const status = errorStatus(err);
+    if (status === undefined || (status < 500 && status !== 409)) return false;
+    try {
+      return (await getAuthStatus()).setupRequired === false;
+    } catch {
+      // Whether setup closed is unknown, so the owner may try again.
+      return false;
+    }
+  }
 
   /**
    * Creates the owner account. The WebAuthn ceremony runs in the browser, so
@@ -136,18 +157,20 @@
         challengeToken,
       });
 
-      if (result.accessToken) {
-        await setAuthCookies({
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken ?? undefined,
-          expiresIn: result.expiresIn ?? undefined,
-        });
+      const outcome = await settleSignIn(result);
+      if (outcome.state !== "signed-in") {
+        ownerSignInNeeded = true;
+        return;
       }
 
       registrationComplete = true;
-      recoveryCodes = result.recoveryCodes ?? [];
+      recoveryCodes = outcome.recoveryCodes;
     } catch (err) {
       console.error("Owner passkey registration failed:", err);
+      if (await ownerPasskeyStored(err)) {
+        ownerSignInNeeded = true;
+        return;
+      }
       passkeyError = describePasskeyError(
         err,
         "register",
@@ -197,6 +220,14 @@
           onContinue={onComplete}
           continueLabel="Continue Setup"
         />
+      </div>
+    {:else if ownerSignInNeeded}
+      <div class="space-y-4 text-center" role="status">
+        <p class="text-sm text-muted-foreground">
+          Your passkey is saved, but setup did not finish. Sign in with the passkey you made to
+          continue.
+        </p>
+        <Button class="w-full" size="lg" href={loginUrl}>Go to sign in</Button>
       </div>
     {:else if authStateQuery.loading}
       <div class="flex items-center justify-center py-12">

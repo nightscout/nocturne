@@ -52,6 +52,18 @@ public abstract class TokenConnectorService<TConfig, TTokenProvider> : BaseConne
         Task.CompletedTask;
 
     /// <summary>
+    ///     The rest of the sign-in once the source has issued a token, such as reading which account
+    ///     the token belongs to. Answering <c>false</c> fails the run as a refused sign-in, with the
+    ///     reason recorded through <see cref="BaseConnectorService{TConfig}.TrackFailedAuthentication"/>.
+    /// </summary>
+    protected virtual Task<bool> CompleteSignInAsync(
+        TConfig config, TokenSession session, CancellationToken cancellationToken) =>
+        Task.FromResult(true);
+
+    /// <summary>The sign-in is <see cref="PerformSyncInternalAsync"/>'s, so the run has signed in only once it says so.</summary>
+    protected sealed override bool SignsInBeforeSync => false;
+
+    /// <summary>
     ///     The sync, with the sign-in already done. Everything <see cref="BaseConnectorService{TConfig}.PerformSyncInternalAsync"/>
     ///     says of a sync holds here.
     /// </summary>
@@ -76,11 +88,12 @@ public abstract class TokenConnectorService<TConfig, TTokenProvider> : BaseConne
         if (token is null)
             return AuthenticationFailedResult();
 
-        return await SyncWithTokenAsync(
-            request,
-            config,
-            new TokenSession(token, () => SignInAgainAsync(config, cancellationToken)),
-            cancellationToken);
+        var session = new TokenSession(token, () => SignInAgainAsync(config, cancellationToken));
+        if (!await CompleteSignInAsync(config, session, cancellationToken))
+            return AuthenticationFailedResult();
+
+        await SignedInAsync(config, cancellationToken);
+        return await SyncWithTokenAsync(request, config, session, cancellationToken);
     }
 
     /// <summary>

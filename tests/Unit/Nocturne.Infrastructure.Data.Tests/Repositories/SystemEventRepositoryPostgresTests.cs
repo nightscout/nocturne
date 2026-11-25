@@ -34,16 +34,12 @@ public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTes
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(string connectionString, Guid tenant, params IInterceptor[] interceptors)
-        : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .AddInterceptors(interceptors)
-                .Options) { TenantId = tenant });
-    }
+    private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.AppConnectionString)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .AddInterceptors(interceptors)
+            .Options) { TenantId = tenant };
 
     /// <summary>Runs <paramref name="competitor"/> once, just before the first save it sees.</summary>
     private sealed class CommitBeforeFirstSave(Func<Task> competitor) : SaveChangesInterceptor
@@ -76,11 +72,11 @@ public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTes
     }
 
     private SystemEventRepository Repository(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new Factory(database.AppConnectionString, tenant, interceptors));
+        new(new SuppliedContextFactory(() => Context(tenant, interceptors)));
 
     private async Task<List<(string? OriginalId, string? Code)>> RowsAsync(Guid tenant)
     {
-        await using var db = await new Factory(database.AppConnectionString, tenant).CreateAsync();
+        await using var db = Context(tenant);
         return (await db.SystemEvents.AsNoTracking().Select(e => new { e.OriginalId, e.Code }).ToListAsync())
             .Select(e => (e.OriginalId, e.Code))
             .ToList();
@@ -163,7 +159,7 @@ public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTes
         var tenant = await NewTenantAsync();
         await Repository(tenant).UpsertSystemEventAsync(Event("evt-1", "stored"));
 
-        await using var db = await new Factory(database.AppConnectionString, tenant).CreateAsync();
+        await using var db = Context(tenant);
         db.SystemEvents.Add(SystemEventMapper.ToEntity(Event("evt-1", "second")));
         var save = () => db.SaveChangesAsync();
 

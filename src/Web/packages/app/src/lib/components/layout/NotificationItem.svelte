@@ -74,6 +74,11 @@
   const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
   const renamedFrom = $derived(notification.metadata?.["oldName"]?.toString());
   const renamedTo = $derived(notification.metadata?.["newName"]?.toString());
+  const staffWaiting = $derived(notification.type === "team.staff_waiting");
+  const staffJoined = $derived(notification.type === "team.staff_joined");
+  const staffTeam = $derived(notification.metadata?.["team"]?.toString());
+  const staffTeamId = $derived(notification.metadata?.["teamId"]?.toString());
+  const staffCount = $derived(Number(notification.metadata?.["count"]) || 0);
 </script>
 
 <div
@@ -126,10 +131,33 @@
           platform={notification.type === "system.instance_key_changed_platform"}
         />
       </div>
+    {:else if staffWaiting && staffTeam && staffCount === 1}
+      <p class="text-xs mt-0.5 opacity-75">
+        1 staff member of the team {staffTeam} is waiting for your approval. They cannot see this site's data until an owner approves them.
+      </p>
+    {:else if staffWaiting && staffTeam && staffCount > 1}
+      <p class="text-xs mt-0.5 opacity-75">
+        {staffCount} staff members of the team {staffTeam} are waiting for your approval. They cannot see this site's data until an owner approves them.
+      </p>
+    {:else if staffJoined && staffTeam}
+      <p class="text-xs mt-0.5 opacity-75">
+        The team {staffTeam} has new staff who can now see this site's data.
+      </p>
     {:else if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
         {subtitle}
       </p>
+    {/if}
+    {#if (staffWaiting || staffJoined) && staffTeamId}
+      <Button
+        variant="outline"
+        size="sm"
+        class="mt-2"
+        href={resolve(`settings/members?team=${staffTeamId}`)}
+        onclick={() => onAction?.("open_team")}
+      >
+        Open the team
+      </Button>
     {/if}
     {#if channelNotice && noticeRuleId}
       <Button

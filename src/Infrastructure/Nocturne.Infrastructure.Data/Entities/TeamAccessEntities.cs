@@ -102,6 +102,13 @@ public class TeamTenantAccessEntity : ISystemTimestamped
 
     public TeamAccessLinkEntity? CreatedFromLink { get; set; }
 
+    /// <summary>
+    /// Whether the team's managers decide which of their staff reach the site: its staff are approved
+    /// here as they join. When false each waits for the site to approve them.
+    /// </summary>
+    [Column("team_manages_staff")]
+    public bool TeamManagesStaff { get; set; } = true;
+
     public List<TeamTenantAccessRoleEntity> AccessRoles { get; set; } = [];
 
     [Column("sys_created_at")]
@@ -131,6 +138,79 @@ public class TeamTenantAccessRoleEntity : ISystemCreated
     public Guid TenantRoleId { get; set; }
 
     public TenantRoleEntity? TenantRole { get; set; }
+
+    [Column("sys_created_at")]
+    public DateTime SysCreatedAt { get; set; }
+}
+
+/// <summary>
+/// Whether a site has approved one staff member of a team that has access to it: one row for each
+/// pair, written when the staff member joins or the site approves the team. Not <c>ITenantScoped</c>,
+/// like <see cref="TeamTenantAccessEntity"/>; its <c>tenant_pin</c> policy reads the site off the access.
+/// </summary>
+/// <remarks>
+/// Holds no subject: the staff member is read through <see cref="TeamMemberEntity"/>. It does not
+/// itself give access to the site.
+/// </remarks>
+[Table("team_site_staff")]
+public class TeamSiteStaffEntity : ISystemTimestamped
+{
+    [Key]
+    [Column("id")]
+    public Guid Id { get; set; }
+
+    [Column("team_tenant_access_id")]
+    public Guid TeamTenantAccessId { get; set; }
+
+    public TeamTenantAccessEntity? TeamTenantAccess { get; set; }
+
+    [Column("team_member_id")]
+    public Guid TeamMemberId { get; set; }
+
+    public TeamMemberEntity? TeamMember { get; set; }
+
+    /// <summary>A <see cref="Nocturne.Core.Models.Identity.TeamSiteStaffStatus"/>.</summary>
+    [Required]
+    [MaxLength(32)]
+    [Column("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [Column("sys_created_at")]
+    public DateTime SysCreatedAt { get; set; }
+
+    [Column("sys_updated_at")]
+    public DateTime SysUpdatedAt { get; set; }
+}
+
+/// <summary>
+/// An owner's decline of one subject as staff of a team at a site, for as long as the team's access to
+/// the site lasts. Not <c>ITenantScoped</c>, like <see cref="TeamSiteStaffEntity"/>; its <c>tenant_pin</c>
+/// policy reads the site off the access.
+/// </summary>
+/// <remarks>
+/// A staff member's <see cref="TeamSiteStaffEntity"/> row goes with their team membership, and the
+/// decline must outlast it: a staff member removed and invited again is still declined. So the row's
+/// <see cref="Nocturne.Core.Models.Identity.TeamSiteStaffStatus.Declined"/> is what every read, the sync
+/// and the switch go by, and this memory is read only when a staff row is made. The owner's decision is
+/// the one writer of both. It goes with the access: a site that stops the team and approves it again
+/// decides afresh.
+/// </remarks>
+[Table("team_site_declines")]
+public class TeamSiteDeclineEntity : ISystemCreated
+{
+    [Key]
+    [Column("id")]
+    public Guid Id { get; set; }
+
+    [Column("team_tenant_access_id")]
+    public Guid TeamTenantAccessId { get; set; }
+
+    public TeamTenantAccessEntity? TeamTenantAccess { get; set; }
+
+    [Column("subject_id")]
+    public Guid SubjectId { get; set; }
+
+    public SubjectEntity? Subject { get; set; }
 
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; }

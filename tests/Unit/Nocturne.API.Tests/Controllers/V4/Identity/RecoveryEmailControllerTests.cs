@@ -10,6 +10,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -72,15 +73,17 @@ public class RecoveryEmailControllerTests : IDisposable
     private SubjectRepository Repository() => new(_contexts, AccountLinkRoutes.Off);
 
     private RecoveryEmailController Controller(
-        Guid? signedIn, AuthType authType = AuthType.SessionCookie, bool deliveryConfigured = true)
+        Guid? signedIn, AuthType authType = AuthType.SessionCookie, bool deliveryConfigured = true,
+        string sessionId = LiveSession.Id)
     {
         _delivery.IsConfigured = deliveryConfigured;
         var subjects = Repository();
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.SetTenantContext(_tenant);
         http.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true, AuthType = authType, SubjectId = signedIn, TenantId = _tenantId,
+            SessionId = sessionId,
         };
         var links = new AccountLinkService(
             _contexts, _loginCodes, subjects, _delivery,
@@ -210,6 +213,20 @@ public class RecoveryEmailControllerTests : IDisposable
         message.Kind.Should().Be(AccountLinkKind.EmailConfirmation);
         message.Email.Should().Be(Address);
         message.Link.Should().StartWith("https://alpha.nocturne.example/auth/confirm-email?code=");
+    }
+
+    [Fact]
+    public async Task Put_FromAnEndedSession_IsChallengedChangesNothingAndSendsNothing()
+    {
+        var id = await SeedMemberAsync(Address, confirmed: true);
+
+        var result = await Controller(id, sessionId: "ended-session").SetRecoveryEmail(Request(Other), default);
+
+        result.Should().BeOfType<ChallengeResult>();
+        var stored = await StoredAsync(id);
+        stored.Email.Should().Be(Address);
+        stored.EmailConfirmedAt.Should().NotBeNull();
+        _delivery.Sent.Should().BeEmpty();
     }
 
     [Fact]

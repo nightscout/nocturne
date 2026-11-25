@@ -62,6 +62,22 @@ public interface ISubjectService
         bool emailVerified);
 
     /// <summary>
+    /// For a setup caller who has just proved the identity: links it to <paramref name="subjectId"/>,
+    /// the owner the setup run for <paramref name="tenantId"/> recorded, as the first credential
+    /// store, which claims the setup (<see cref="ISubjectRepository.AddSetupOwnerOidcIdentityAsync"/>).
+    /// </summary>
+    /// <returns>
+    /// <see cref="OidcLinkOutcome.Created"/> when linked, the address handled as
+    /// <see cref="AttachOidcIdentityAsync"/> handles it; <see cref="OidcLinkOutcome.AlreadyLinkedToOther"/>,
+    /// with nothing written, when another subject holds the identity; null, with nothing written,
+    /// when another completion has claimed the setup, which includes the identity already being
+    /// <paramref name="subjectId"/>'s, since only a completion links it there.
+    /// </returns>
+    Task<OidcLinkOutcome?> AttachSetupOwnerOidcIdentityAsync(
+        Guid tenantId, Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email,
+        bool emailVerified);
+
+    /// <summary>
     /// For a setup caller who has just proved the identity: makes the subject holding it the one
     /// setup completes, in place of <paramref name="createdSubjectId"/>, the owner the setup run for
     /// tenant <paramref name="tenantSlug"/> created, and returns its id; null when either does not
@@ -121,14 +137,6 @@ public interface ISubjectService
 
     /// <returns>Updated subject or null if not found</returns>
     Task<Subject?> UpdateSubjectAsync(Subject subject);
-
-    /// <returns>
-    /// <see cref="SubjectChange.Changed"/> when deleted, <see cref="SubjectChange.LastOwnerOf"/> naming
-    /// the tenants when the subject is the last owner of any, <see cref="SubjectChange.LastManagerOf"/>
-    /// naming the teams when the subject is the last manager of any with other members,
-    /// <see cref="SubjectChange.NotFound"/> when it does not exist or is a system subject
-    /// </returns>
-    Task<SubjectChange> DeleteSubjectAsync(Guid subjectId);
 
     /// <returns>True if activated, false if not found</returns>
     Task<bool> ActivateSubjectAsync(Guid subjectId);

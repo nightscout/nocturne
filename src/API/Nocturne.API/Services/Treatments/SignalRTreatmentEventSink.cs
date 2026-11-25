@@ -14,7 +14,6 @@ namespace Nocturne.API.Services.Treatments;
 /// This sink does not perform cache invalidation or V4 decomposition: the repositories clear the
 /// legacy read caches (<see cref="Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation"/>), and
 /// <see cref="TreatmentReadService"/> decomposes.
-/// Broadcast failures are caught and logged without propagating.
 /// </remarks>
 /// <seealso cref="IDataEventSink{T}"/>
 /// <seealso cref="ISignalRBroadcastService"/>
@@ -22,33 +21,21 @@ namespace Nocturne.API.Services.Treatments;
 internal class SignalRTreatmentEventSink : IDataEventSink<Treatment>
 {
     private readonly ISignalRBroadcastService _broadcast;
-    private readonly ILogger<SignalRTreatmentEventSink> _logger;
     private const string Collection = "treatments";
 
     /// <summary>
     /// Initializes a new instance of <see cref="SignalRTreatmentEventSink"/>.
     /// </summary>
     /// <param name="broadcast">The SignalR broadcast service for real-time event delivery.</param>
-    /// <param name="logger">The logger instance.</param>
-    public SignalRTreatmentEventSink(
-        ISignalRBroadcastService broadcast,
-        ILogger<SignalRTreatmentEventSink> logger)
+    public SignalRTreatmentEventSink(ISignalRBroadcastService broadcast)
     {
         _broadcast = broadcast;
-        _logger = logger;
     }
 
     public async Task OnCreatedAsync(Treatment treatment, CancellationToken ct)
     {
-        try
-        {
-            await _broadcast.BroadcastStorageCreateAsync(
-                Collection, new StorageDocumentEvent(Collection, treatment));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to broadcast create for treatment {Id}", treatment.Id);
-        }
+        await _broadcast.BroadcastStorageCreateAsync(
+            Collection, new StorageDocumentEvent(Collection, treatment));
     }
 
     public async Task OnCreatedAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
@@ -59,27 +46,13 @@ internal class SignalRTreatmentEventSink : IDataEventSink<Treatment>
 
     public async Task OnUpdatedAsync(Treatment treatment, CancellationToken ct)
     {
-        try
-        {
-            await _broadcast.BroadcastStorageUpdateAsync(
-                Collection, new StorageDocumentEvent(Collection, treatment));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to broadcast update for treatment {Id}", treatment.Id);
-        }
+        await _broadcast.BroadcastStorageUpdateAsync(
+            Collection, new StorageDocumentEvent(Collection, treatment));
     }
 
     public async Task OnDeletedAsync(Treatment? treatment, CancellationToken ct)
     {
-        try
-        {
-            await _broadcast.BroadcastStorageDeleteAsync(
-                Collection, new StorageDeleteEvent(Collection, treatment?.Id, treatment));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to broadcast delete for treatment {Id}", treatment?.Id);
-        }
+        await _broadcast.BroadcastStorageDeleteAsync(
+            Collection, new StorageDeleteEvent(Collection, treatment?.Id, treatment));
     }
 }

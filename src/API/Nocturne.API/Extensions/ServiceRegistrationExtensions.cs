@@ -59,6 +59,7 @@ using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
@@ -590,8 +591,10 @@ public static class ServiceRegistrationExtensions
         services.AddOperatorWebhookClient(OperatorWebhook.SlugValidationClient);
         services.AddOperatorWebhookClient(OperatorWebhook.UsernameValidationClient);
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<CallerSessionLiveness>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<ISubjectService, SubjectService>();
+        services.AddScoped<ISubjectDeletion, SubjectDeletion>();
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<SignInCompletion>();
         services.AddScoped<IRoleService, RoleService>();
@@ -614,6 +617,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
         services.AddScheduledJob<OAuthCodeCleanupJob>();
         services.AddScheduledJob<OAuthStepUpTokenCleanupJob>();
+        services.AddScheduledJob<SpentPasskeyChallengeCleanupJob>();
         services.AddScheduledJob<TrustedDeviceCleanupJob>();
         services.AddScheduledJob<MembershipLapseJob>();
 
@@ -694,7 +698,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<TeamAccessService>();
+        services.AddScoped<SiteNotices>();
         services.AddScoped<TeamRenameAnnouncer>();
+        services.AddScoped<TeamStaffAnnouncer>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
@@ -984,11 +990,14 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ILoopClosedLoopStamper, LoopClosedLoopStamper>();
         services.AddScheduledJob<ProfileVersionsMovedJob>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
+        services.AddScheduledJob<RetireInvalidTreatmentsJob>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddScheduledJob<ApsSnapshotCurvesJob>();
         services.AddScheduledJob<TempBasalOriginCorroborationJob>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
+        services.AddScoped<IRawMmolProfileDetector, RawMmolProfileDetector>();
+        services.AddSingleton<RawMmolProfileNotifier>();
 
         return services;
     }
@@ -1093,7 +1102,7 @@ public static class ServiceRegistrationExtensions
         // redirects are off outright rather than followed by a guard — a target answering 307 with
         // http://169.254.169.254/ or an internal service name would otherwise be fetched from
         // inside the deployment network.
-        services.AddHttpClient(WebhookRequestSender.HttpClientName)
+        services.AddAlertDeliveryClient(WebhookRequestSender.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,
@@ -1148,7 +1157,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.HomeAssistantProvider>();
         services.AddSingleton<Nocturne.API.Hubs.HomeAssistantConnections>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.DeviceActionProvider>();
-        services.AddHttpClient("ChatBot");
+        services.AddAlertDeliveryClient(Nocturne.API.Services.Alerts.Providers.ChatBotProvider.HttpClientName);
 
         // Chat identity
         services.AddScoped<Nocturne.API.Services.Chat.ChatIdentityService>();
@@ -1205,7 +1214,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectionService, ConnectionService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
-        services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();
+        services.AddScoped<IConnectorStateStore, ConnectorStateStore>();
         services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
         services.AddScoped<IConnectorCursorResetService, ConnectorCursorResetService>();
@@ -1306,10 +1315,11 @@ public static class ServiceRegistrationExtensions
 
         // The Nightscout to migrate from is a tenant-admin-supplied URL, the same shape as a
         // connector base URL, so it takes the connector client. That also puts redirects under the
-        // guard, which drops the tenant's api-secret when a hop crosses origin — .NET's own redirect
+        // guard, which drops the tenant's api-secret when a hop crosses origin. .NET's own redirect
         // handling strips Authorization but not api-secret.
         services.AddHttpClient(Nocturne.API.Services.Migration.MigrationJobService.HttpClientName)
-            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0");
+            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0")
+            .KeepNightscoutPathOutOfTelemetry();
 
         return services;
     }

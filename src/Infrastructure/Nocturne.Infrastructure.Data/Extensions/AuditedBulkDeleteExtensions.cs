@@ -334,7 +334,7 @@ public static class AuditedBulkDeleteExtensions
 
         List<Guid> written = [.. ids, .. hidden];
         if (typeof(T) == typeof(StateSpanEntity))
-            await context.ClearSupersededByAsync(written, ct);
+            await context.ReopenSupersededAsync(written, purged: false, ct);
 
         IReadOnlyList<Guid> promoted = recordType is { } type && duplicates == DuplicateDelete.PromoteSurvivor
             ? await DuplicateGroupPrimaries.RepointAwayFromAsync(

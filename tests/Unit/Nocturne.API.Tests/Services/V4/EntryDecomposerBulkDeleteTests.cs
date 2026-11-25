@@ -1,9 +1,6 @@
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Moq;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -32,7 +29,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
     }
 
     private EntryDecomposer CreateDecomposer() =>
-        new(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _logger.Object);
+        EntryDecomposerDoubles.Build(_sgRepo.Object, _mgRepo.Object, _calRepo.Object, logger: _logger.Object);
 
     [Fact]
     [Trait("Category", "Unit")]

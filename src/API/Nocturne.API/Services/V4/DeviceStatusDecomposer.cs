@@ -13,6 +13,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -107,9 +108,10 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             await RetractOverrideAsync(group, ct);
         }
 
-        return await DecomposeAsync(
-            [new BatchStatus(ds, group.LegacyId, group.CorrelationId, ResolveTimestamp(ds))], source: null, group, origin,
-            new DeviceStatusDecomposition(), ct);
+        BatchStatus status = new(ds, group.LegacyId, group.CorrelationId, ResolveTimestamp(ds));
+        var result = new DeviceStatusDecomposition { CorrelationId = status.CorrelationId };
+        result.Begin([status.CorrelationId]);
+        return await DecomposeAsync([status], source: null, group, origin, result, ct);
     }
 
     /// <inheritdoc />
@@ -223,9 +225,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// whose source happens to equal the device.
     /// </summary>
     private static bool IsUploaderSpan(StateSpan span, string? device) =>
-        span.Source == device
-        && span.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
-            != StateSpanMetadataExtensions.TreatmentsCollection;
+        span.Source == device && !span.Metadata.IsFromTreatment();
 
     /// <summary>
     /// Moves a span's start to a status and keys the span to that status. Upserts match on
@@ -464,7 +464,83 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var batch = statuses
             .Select(ds => new BatchStatus(ds, ds.Id, CorrelationIdFor(ds.Id, correlationIds), ResolveTimestamp(ds)))
             .ToList();
-        return await DecomposeAsync(batch, source, group: null, origin, into ?? new DeviceStatusDecomposition(), ct);
+        var result = into ?? new DeviceStatusDecomposition();
+        result.CorrelationId = batch[0].CorrelationId;
+        result.Begin([.. batch.Select(s => s.CorrelationId)]);
+
+        var writing = await SettleInvalidAsync(batch, source, origin, result, ct);
+        return writing.Count == 0 ? result : await DecomposeAsync(writing, source, group: null, origin, result, ct);
+    }
+
+    /// <summary>
+    /// Settles the statuses of <paramref name="batch"/> sent with <c>isValid: false</c> by
+    /// <see cref="InvalidUploads{TUpload}"/>: a status whose id holds a live group deletes it, and one
+    /// whose id holds none is stored as snapshots already deleted. A status is named only by its id.
+    /// </summary>
+    /// <remarks>
+    /// A status stored deleted keeps its snapshots alone: its extras and sensor state are read only
+    /// with a live snapshot, and resolving its devices would mark them in use.
+    /// </remarks>
+    /// <returns>The statuses that write as usual.</returns>
+    private async Task<IReadOnlyList<BatchStatus>> SettleInvalidAsync(
+        IReadOnlyList<BatchStatus> batch, string? source, WriteOrigin origin, DeviceStatusDecomposition result,
+        CancellationToken ct)
+    {
+        var ids = batch.Where(s => s.Status.IsValid == false).Select(s => s.LegacyId).OfType<string>()
+            .Distinct(StringComparer.Ordinal).ToList();
+        if (!batch.Any(s => s.Status.IsValid == false))
+            return batch;
+
+        var live = (await _apsRepo.GetByLegacyIdsAsync(ids, ct)).Select(r => r.LegacyId)
+            .Concat((await _pumpRepo.GetByLegacyIdsAsync(ids, ct)).Select(r => r.LegacyId))
+            .Concat((await _uploaderRepo.GetByLegacyIdsAsync(ids, ct)).Select(r => r.LegacyId))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        var indexed = batch.Select((status, index) => (Status: status, Index: index)).ToList();
+        var sorted = await InvalidUploads<(BatchStatus Status, int Index)>.SortAsync(indexed, indexed, new(
+            s => s.Status.LegacyId,
+            s => s.Index,
+            s => s.Status.Status.IsValid,
+            (s, valid) => s.Status.Status.IsValid = valid,
+            s => live.Contains(s.Status.LegacyId!),
+            _ => true,
+            async (unstored, token) =>
+            {
+                var deleted = new HashSet<string>(await _apsRepo.GetDeletedLegacyIdsAsync(unstored, token), StringComparer.Ordinal);
+                deleted.UnionWith(await _pumpRepo.GetDeletedLegacyIdsAsync(unstored, token));
+                deleted.UnionWith(await _uploaderRepo.GetDeletedLegacyIdsAsync(unstored, token));
+                return deleted;
+            }), ct);
+
+        using (SystemAttributedBatchWrites(_auditContext))
+        {
+            foreach (var (status, _) in sorted.Invalidating.DistinctBy(s => s.Status.LegacyId, StringComparer.Ordinal))
+            {
+                if (await DeleteStoredAsync(status.LegacyId!, origin, ct) > 0)
+                    result.AddInvalidated(status.Status);
+            }
+
+            var models = sorted.StoredDeleted
+                .Select(s => BuildModels(s.Status, source, pumpDeviceId: null, uploaderDeviceId: null, NoLinks.Instance, group: null))
+                .ToList();
+            if (models.Select(m => m.Aps).OfType<V4Models.ApsSnapshot>().ToList() is { Count: > 0 } aps)
+                await _apsRepo.StoreDeletedAsync(aps, ct);
+            if (models.Select(m => m.Pump).OfType<V4Models.PumpSnapshot>().ToList() is { Count: > 0 } pumps)
+                await _pumpRepo.StoreDeletedAsync(pumps, ct);
+            if (models.Select(m => m.Uploader).OfType<V4Models.UploaderSnapshot>().ToList() is { Count: > 0 } uploaders)
+                await _uploaderRepo.StoreDeletedAsync(uploaders, ct);
+        }
+
+        return [.. sorted.Writing.Select(s => s.Status)];
+    }
+
+    /// <summary>The links of a status that resolved no device.</summary>
+    private sealed class NoLinks : IPatientDeviceLinks
+    {
+        public static readonly NoLinks Instance = new();
+
+        public Guid? Resolve(Guid? deviceId, long mills) => null;
     }
 
     /// <summary>
@@ -524,9 +600,6 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         IReadOnlyList<BatchStatus> batch, string? source, StoredGroup? group, WriteOrigin origin,
         DeviceStatusDecomposition result, CancellationToken ct)
     {
-        result.CorrelationId = batch[0].CorrelationId;
-        result.Begin([.. batch.Select(s => s.CorrelationId)]);
-
         var devices = await ResolveDevicesAsync(batch, ct);
         var links = await _deviceService.GetPatientDeviceLinksAsync(devices.Select(d => d.Pump), ct);
         var spans = await PreloadSpansAsync(batch, ct);
@@ -639,6 +712,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var uploaderList = models.Select(m => m.Uploader).OfType<V4Models.UploaderSnapshot>().ToList();
         var extrasList = models.Select(m => m.Extras).OfType<V4Models.DeviceStatusExtras>().ToList();
         var sensorStates = models.Select(m => m.SensorState).OfType<V4Models.SensorStateReport>().ToList();
+        using var kept = KeptCorrelationIds.Open();
 
         if (group is not null)
         {
@@ -661,9 +735,18 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         }
 
         // A sensor state report is a part of its status's extras: written only with them, under the
-        // correlation id its repository holds a re-send off by.
+        // correlation id its repository holds a re-send off by. That is the id the group's stored
+        // snapshots kept when the history clamp hides them (KeptCorrelationIds).
         async Task WriteExtrasAsync(List<V4Models.DeviceStatusExtras> extras)
         {
+            foreach (var e in extras)
+                e.CorrelationId = kept.Resolve(e.CorrelationId);
+            foreach (var s in sensorStates)
+            {
+                if (s.CorrelationId is { } id)
+                    s.CorrelationId = kept.Resolve(id);
+            }
+
             await BulkCreateAsync(_extrasRepo, extras, result, origin, ct);
             var groups = extras.Select(e => e.CorrelationId).ToHashSet();
             await BulkCreateAsync(

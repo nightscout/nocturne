@@ -19,14 +19,16 @@ namespace Nocturne.API.Services.Alerts;
 /// A reading not yet evaluated selects every enabled rule (docs/alerts/engine-semantics.md §5.2); any
 /// other moved fact selects the rules that read it (<see cref="RuleTrees.Reads"/>), glucose included
 /// when it moved without a reading (<see cref="MovedFacts.GlucoseWithoutReading"/>), and a rule whose
-/// facts the engine cannot read is selected by every write. With no reading selected nothing is
+/// facts the engine cannot read is selected by every write. A saved rule (<see cref="MovedFacts.Rules"/>)
+/// is selected whatever it reads, and alone when nothing else moved. With no reading selected nothing is
 /// evaluated; the sweep then evaluates every wall-clock rule. A selected reading with no glucose value
 /// is evaluated with <see cref="ContextForValueless"/>.
 /// <para>
 /// A reading dated beyond the clock tolerance is not selected, so its arrival evaluates nothing new:
 /// the selected reading is the one evaluated before it, and the watermark skips it as such. The
 /// arrival is reported to <see cref="IClockAnomalyNotice"/> after the evaluation, whatever the
-/// watermark says, and a failure of the notice is only logged.
+/// watermark says, unless the caller reports it (<see cref="ReadingReport.ByCaller"/>), and a failure
+/// of the notice is only logged.
 /// Writers publish in chunks and re-publish readings they have already stored, so the same
 /// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
 /// those repeats to one pass per reading per <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>,
@@ -113,7 +115,8 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     };
 
     /// <inheritdoc />
-    public async Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+    public async Task<bool> EvaluateAsync(
+        MovedFacts moved, ReadingReport report = ReadingReport.Here, CancellationToken ct = default)
     {
         var ran = false;
         try
@@ -121,9 +124,9 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             var (readAt, now) = _decisions.BeginRead();
             var selection = await AlertReadings.SelectAsync(_canonicalGlucose, now, ct);
             ran = await EvaluateSelectedAsync(selection.Selected, readAt, moved, ct);
-            await _clockAnomalyNotice.ReportReadingIsolatedAsync(selection, now, _logger, ct);
+            if (report == ReadingReport.Here)
+                await _clockAnomalyNotice.ReportReadingIsolatedAsync(selection, now, _logger, ct);
         }
-        catch (OperationCanceledException) { throw; }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
@@ -132,7 +135,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         {
             _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             // The write is already stored, and the evaluation runs off its request: a fault here
             // must not stop the next one.
@@ -145,7 +148,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     /// <returns>Whether this call claimed <paramref name="latest"/> and its pass ran to its end.</returns>
     private async Task<bool> EvaluateSelectedAsync(SensorGlucose? latest, long readAt, MovedFacts moved, CancellationToken ct)
     {
-        if (latest is null || moved.Facts.Count == 0) return false;
+        if (latest is null || moved.IsEmpty) return false;
 
         var tenantId = _tenantAccessor.TenantId;
         if (tenantId == Guid.Empty) return false;
@@ -166,12 +169,12 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             var selecting = moved.Facts
                 .Where(fact => fact != ContextFactWrites.Glucose || moved.GlucoseWithoutReading)
                 .ToHashSet(StringComparer.Ordinal);
-            if (reading || selecting.Count > 0)
+            if (reading || selecting.Count > 0 || moved.Rules.Count > 0)
             {
                 var enabled = await _alertRepository.GetEnabledRulesAsync(ct);
                 var selected = reading
                     ? enabled
-                    : enabled.Where(rule => ReadsAny(rule, selecting)).ToList();
+                    : enabled.Where(rule => moved.Rules.Contains(rule.Id) || (selecting.Count > 0 && ReadsAny(rule, selecting))).ToList();
                 if (selected.Count > 0)
                 {
                     var context = AlertReadings.HasValue(latest)

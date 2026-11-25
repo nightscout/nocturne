@@ -5,6 +5,7 @@ using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -300,6 +301,21 @@ public class InAppNotificationRepository : IInAppNotificationRepository
             .ExecuteDeleteAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<bool> AnyBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.InAppNotifications.AnyAsync(
+            n => n.UserId == userId && n.Type == type && n.SourceId == sourceId,
+            cancellationToken
+        );
+    }
+
     /// <summary>
     /// Find an active notification by source
     /// </summary>
@@ -334,42 +350,8 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     /// <returns>The DTO representation</returns>
     public static InAppNotificationDto ToDto(InAppNotificationEntity entity)
     {
-        var actions = new List<NotificationActionDto>();
-
-        if (!string.IsNullOrEmpty(entity.ActionsJson))
-        {
-            try
-            {
-                var parsed = JsonSerializer.Deserialize<List<NotificationActionDto>>(
-                    entity.ActionsJson,
-                    JsonOptions
-                );
-                if (parsed != null)
-                {
-                    actions = parsed;
-                }
-            }
-            catch
-            {
-                // Ignore deserialization errors, return empty actions list
-            }
-        }
-
-        Dictionary<string, object>? metadata = null;
-        if (!string.IsNullOrEmpty(entity.MetadataJson))
-        {
-            try
-            {
-                metadata = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                    entity.MetadataJson,
-                    JsonOptions
-                );
-            }
-            catch
-            {
-                // Ignore deserialization errors
-            }
-        }
+        var actions = MapperHelpers.DeserializeJson<List<NotificationActionDto>>(entity.ActionsJson, JsonOptions) ?? [];
+        var metadata = DeserializeMetadata(entity.MetadataJson);
 
         return new InAppNotificationDto
         {
@@ -433,18 +415,14 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     /// </summary>
     /// <param name="json">The JSON string to deserialize</param>
     /// <returns>The deserialized conditions, or null if invalid</returns>
-    public static ResolutionConditions? DeserializeConditions(string? json)
-    {
-        if (string.IsNullOrEmpty(json))
-            return null;
+    public static ResolutionConditions? DeserializeConditions(string? json) =>
+        MapperHelpers.DeserializeJson<ResolutionConditions>(json, JsonOptions);
 
-        try
-        {
-            return JsonSerializer.Deserialize<ResolutionConditions>(json, JsonOptions);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    /// <summary>
+    /// Deserialize notification metadata from JSON
+    /// </summary>
+    /// <param name="json">The JSON string to deserialize</param>
+    /// <returns>The deserialized metadata, or null if empty or invalid</returns>
+    public static Dictionary<string, object>? DeserializeMetadata(string? json) =>
+        MapperHelpers.DeserializeJson<Dictionary<string, object>>(json, JsonOptions);
 }

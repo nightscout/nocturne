@@ -340,8 +340,14 @@ public class V4WriteScopeGatingTests
             ["TeamsController.DeleteTeam"] = NotDataCategory.OwnTeams,
             ["TeamsController.CreateAccessLink"] = NotDataCategory.OwnTeams,
             ["TeamsController.RevokeAccessLink"] = NotDataCategory.OwnTeams,
+            ["TeamsController.CreateStaffInvite"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RevokeStaffInvite"] = NotDataCategory.OwnTeams,
+            ["TeamsController.UpdateStaff"] = NotDataCategory.OwnTeams,
+            // A manager removes any staff member, and a staff member only their own row, which is leaving.
+            ["TeamsController.RemoveStaff"] = NotDataCategory.OwnTeams,
             // The invite token is what admits the caller to the team.
             ["TeamsController.AcceptInvite"] = NotDataCategory.CapabilityToken,
+            ["TeamsController.AcceptStaffInvite"] = NotDataCategory.CapabilityToken,
             // The link's token finds the team; the caller's own owner membership of the chosen site,
             // read by the action, is what lets them give it access.
             ["TeamsController.ApproveAccessLink"] = NotDataCategory.CapabilityToken,

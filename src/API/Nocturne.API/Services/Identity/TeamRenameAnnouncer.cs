@@ -3,8 +3,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Identity;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -23,8 +21,7 @@ namespace Nocturne.API.Services.Identity;
 public sealed partial class TeamRenameAnnouncer(
     ITeamRepository teams,
     ITenantMembershipRepository members,
-    ITenantRepository tenants,
-    IServiceProvider services,
+    SiteNotices sites,
     TimeProvider time,
     ILogger<TeamRenameAnnouncer> logger)
 {
@@ -54,71 +51,47 @@ public sealed partial class TeamRenameAnnouncer(
     /// current name as the approvers are read. Never throws for a store failure or a cancellation.
     /// </summary>
     public Task AnnounceAsync(Guid teamId, string oldName) =>
-        BestEffortAsync(teamId, null, async () =>
+        SiteNotices.BestEffortAsync(async () =>
         {
             foreach (var approver in await teams.ListAccessApproversAsync(teamId, CancellationToken.None))
             {
-                await BestEffortAsync(teamId, approver.TenantId, () => AnnounceToAsync(teamId, approver, oldName));
+                await SiteNotices.BestEffortAsync(
+                    () => AnnounceToAsync(teamId, approver, oldName), ex => LogNotAnnounced(ex, teamId, approver.TenantId));
             }
-        });
+        }, ex => LogNotAnnounced(ex, teamId, null));
 
     private async Task AnnounceToAsync(Guid teamId, TeamAccessApprover approver, string oldName)
     {
         if (!await members.IsMemberAsync(approver.TenantId, approver.SubjectId, time.GetUtcNow().UtcDateTime, CancellationToken.None))
             return;
-        if (await tenants.GetAsync(approver.TenantId, CancellationToken.None) is not { } tenant)
-            return;
-
-        await using var scope = TenantJobScope.Open(
-            services,
-            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
-            AuditEndpoint);
-        var notifications = scope.ServiceProvider.GetRequiredService<IInAppNotificationService>();
-        var user = approver.SubjectId.ToString();
-        var source = teamId.ToString();
-
-        for (var attempt = 0; attempt < Attempts; attempt++)
+        await sites.RunAsync<IInAppNotificationService>(approver.TenantId, AuditEndpoint, async notifications =>
         {
-            var live = (await notifications.GetActiveNotificationsAsync(user, CancellationToken.None))
-                .FirstOrDefault(n => n.Type == NotificationType && n.SourceId == source);
-            var known = live?.Metadata?.GetValueOrDefault(OldNameKey)?.ToString() ?? oldName;
-            if (live is not null)
+            var user = approver.SubjectId.ToString();
+            var source = teamId.ToString();
+
+            for (var attempt = 0; attempt < Attempts; attempt++)
             {
-                await notifications.ArchiveBySourceAsync(
-                    user, NotificationType, source,
-                    known == approver.TeamName ? NotificationArchiveReason.ConditionMet : NotificationArchiveReason.Superseded,
-                    CancellationToken.None);
+                var live = (await notifications.GetActiveNotificationsAsync(user, CancellationToken.None))
+                    .FirstOrDefault(n => n.Type == NotificationType && n.SourceId == source);
+                var known = live?.Metadata?.GetValueOrDefault(OldNameKey)?.ToString() ?? oldName;
+                if (live is not null)
+                {
+                    await notifications.ArchiveBySourceAsync(
+                        user, NotificationType, source,
+                        known == approver.TeamName ? NotificationArchiveReason.ConditionMet : NotificationArchiveReason.Superseded,
+                        CancellationToken.None);
+                }
+
+                if (known == approver.TeamName)
+                    return;
+
+                if (await notifications.CreateNotificationUnlessActiveAsync(
+                        user, NotificationType, TitleKey, source,
+                        metadata: new Dictionary<string, object> { [OldNameKey] = known, [NewNameKey] = approver.TeamName },
+                        cancellationToken: CancellationToken.None))
+                    return;
             }
-
-            if (known == approver.TeamName)
-                return;
-
-            if (await notifications.CreateNotificationUnlessActiveAsync(
-                    user, NotificationType, TitleKey, source,
-                    metadata: new Dictionary<string, object> { [OldNameKey] = known, [NewNameKey] = approver.TeamName },
-                    cancellationToken: CancellationToken.None))
-                return;
-        }
-    }
-
-    private async Task BestEffortAsync(Guid teamId, Guid? tenantId, Func<Task> work)
-    {
-        try
-        {
-            await work();
-        }
-        catch (Exception ex) when (StoreFailure.Is(ex))
-        {
-            LogNotAnnounced(ex, teamId, tenantId);
-        }
-        catch (OperationCanceledException ex)
-        {
-            LogNotAnnounced(ex, teamId, tenantId);
-        }
-        catch (InvalidOperationException ex)
-        {
-            LogNotAnnounced(ex, teamId, tenantId);
-        }
+        });
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The rename of team {TeamId} was not announced on site {TenantId}.")]

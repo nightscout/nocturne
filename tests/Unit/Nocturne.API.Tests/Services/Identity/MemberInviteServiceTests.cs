@@ -27,6 +27,7 @@ public class MemberInviteServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IJwtService> _jwtService;
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
+    private readonly Mock<Nocturne.Core.Contracts.Identity.ITeamRepository> _teams = new();
     private readonly MemberInviteService _service;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -60,11 +61,11 @@ public class MemberInviteServiceTests : IDisposable
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
             _jwtService.Object,
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory()), _dbContext.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             _time,
             logger.Object, AccountLinkRoutes.Off,
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer(_teams));
 
         // Seed tenant and subjects
         SeedData();
@@ -134,6 +135,21 @@ public class MemberInviteServiceTests : IDisposable
         (await _dbContext.TenantMembers.AsNoTracking().SingleAsync(m => m.SubjectId == _acceptorSubjectId))
             .AccessEndsAt.Should().Be(end);
     }
+
+    [Fact]
+    public async Task AcceptInviteAsync_recountsTheTeamStaffOfTheSiteAndARefusalDoesNot()
+    {
+        await _service.CreateInviteAsync(_tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], null);
+        (await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, Guid.CreateVersion7())).Success.Should().BeFalse();
+        RecountedSite(Times.Never());
+
+        (await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId)).Success.Should().BeTrue();
+
+        RecountedSite(Times.Once());
+    }
+
+    private void RecountedSite(Times times) =>
+        _teams.Verify(t => t.ListAccessOfTenantAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), times);
 
     [Fact]
     public async Task AcceptInviteAsync_byASubjectWhoseMembershipHasEnded_replacesItWithOneNewMembership()
@@ -674,17 +690,32 @@ public class MemberInviteServiceTests : IDisposable
             [_followerRoleId],
             null,
             maxUses: 1);
-        var unknownSubject = Guid.CreateVersion7();
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE TRIGGER refuse_members BEFORE INSERT ON tenant_members BEGIN SELECT RAISE(ABORT, 'refused'); END;");
 
-        var act = () => _service.AcceptInviteAsync(FakeToken, unknownSubject, _tenantId);
+        var act = () => _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         await act.Should().ThrowAsync<DbUpdateException>();
         (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).UseCount.Should().Be(0);
-        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == unknownSubject)).Should().BeFalse();
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _acceptorSubjectId)).Should().BeFalse();
 
+        await _dbContext.Database.ExecuteSqlRawAsync("DROP TRIGGER refuse_members;");
         var retry = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         retry.Success.Should().BeTrue("the single use is still there for the next accept");
+    }
+
+    [Fact]
+    public async Task AcceptInviteAsync_byAnAccountThatNoLongerExists_isRefusedAndLeavesTheUseUnclaimed()
+    {
+        await _service.CreateInviteAsync(_tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], null, maxUses: 1);
+        var gone = Guid.CreateVersion7();
+
+        var result = await _service.AcceptInviteAsync(FakeToken, gone, _tenantId);
+
+        result.Should().Match<AcceptMemberInviteResult>(r => !r.Success && r.ErrorCode == "not_found");
+        (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).UseCount.Should().Be(0);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == gone)).Should().BeFalse();
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
@@ -45,6 +46,24 @@ public class GlookoAuthTokenProviderRetryTests
 
         token.Should().BeNull();
         handler.CallCount.Should().Be(1, "retrying a rejected credential cannot help and risks lockout");
+    }
+
+    /// <summary>
+    ///     A sign-in changes nothing at Glooko, so the resilience handler may send it again.
+    /// </summary>
+    [Fact]
+    public async Task GetValidTokenAsync_MarksTheSignInPostRepeatable()
+    {
+        var repeatable = new List<bool>();
+        var handler = new ScriptedHandler(request =>
+        {
+            repeatable.Add(request.Method == HttpMethod.Post && RepeatableRequest.IsRepeatable(request));
+            return SignInSuccess();
+        });
+
+        await AuthenticateAsync(handler);
+
+        repeatable.Should().Equal(true);
     }
 
     /// <summary>

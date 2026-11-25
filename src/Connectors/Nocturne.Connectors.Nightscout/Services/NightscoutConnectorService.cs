@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -10,13 +9,14 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.Connectors.Nightscout.Services;
 
-public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TConfig>
+public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TConfig>
     where TConfig : NightscoutConnectorConfiguration
 {
     // Starts as the startup defaults (from IConnectorRegistration); replaced with the
@@ -25,7 +25,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     // tenant sync, and SyncDataAsync is not invoked concurrently on the same instance.
     private TConfig _currentConfig;
     private string? _apiSecretHash;
-    private string? _resolvedBaseUrl;
+    private NightscoutAddress? _address;
+    private readonly NightscoutLookups _lookups;
+    private readonly ITenantAccessor _tenant;
 
     public NightscoutConnectorServiceBase(
         HttpClient httpClient,
@@ -33,12 +35,16 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         ILogger logger,
         IRetryDelayStrategy retryDelayStrategy,
         IConnectorRegistration<TConfig> registration,
+        NightscoutLookups lookups,
+        ITenantAccessor tenant,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
         : base(httpClient, serverResolver, logger, retryDelayStrategy, publisher, timeProvider)
     {
         _currentConfig = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
+        _lookups = lookups;
+        _tenant = tenant;
     }
 
     public override string ServiceName => "Nightscout";
@@ -62,29 +68,20 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async Task<bool> AuthenticateWithConfigAsync(TConfig config, CancellationToken cancellationToken)
     {
         _currentConfig = config;
-        _resolvedBaseUrl = ConnectorUrl.ResolveBase(config.Url, "Nightscout");
-
-        if (string.IsNullOrEmpty(config.ApiSecret))
-        {
-            _logger.LogError(
-                "[{ConnectorSource}] API secret is not configured",
-                ConnectorSource);
-            TrackFailedAuthentication(NightscoutMessages.ApiSecretMissing);
-            return false;
-        }
-
-        _apiSecretHash = ComputeApiSecretHash(config.ApiSecret);
+        _address = NightscoutAddress.Resolve(config.Url);
+        _apiSecretHash = ApiSecretHeaderValue(config.ApiSecret);
 
         _logger.LogDebug(
-            "[{ConnectorSource}] Authenticating with Nightscout at {Url}",
+            "[{ConnectorSource}] Authenticating with Nightscout at {Url} ({Credential})",
             ConnectorSource,
-            _resolvedBaseUrl);
+            _address.Origin,
+            _apiSecretHash is null ? "no API secret" : "API secret");
 
         try
         {
             var headers = GetAuthHeaders();
             var response = await GetWithHeadersAsync(
-                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers, cancellationToken);
+                _address.For("/api/v1/entries.json?count=1"), headers, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -95,7 +92,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     _logger.LogError(
                         "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
                         ConnectorSource,
-                        _resolvedBaseUrl);
+                        _address.Origin);
                     TrackFailedAuthentication(
                         "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
                         "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
@@ -108,7 +105,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (int)response.StatusCode,
                     body);
                 TrackFailedAuthentication(NightscoutMessages.ForStatus(
-                    response.StatusCode, "the connection check", NightscoutRead.ConnectorProbe));
+                    response.StatusCode, "the connection check", NightscoutRead.ConnectorProbe,
+                    secretSent: _apiSecretHash is not null));
                 return false;
             }
 
@@ -133,7 +131,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to Nightscout instance at {Url}",
                 ConnectorSource,
-                _resolvedBaseUrl);
+                _address.Origin);
             return false;
         }
     }
@@ -141,6 +139,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     protected override Task<bool> EnsureAuthenticatedAsync(
         TConfig config,
         CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config, cancellationToken);
+
+    /// <inheritdoc />
+    protected override bool SignsInBeforeSync => true;
 
     private static readonly SyncDataType[] TreatmentTypes =
     [
@@ -196,7 +197,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             try
             {
-                var glucoseFrom = await GlucoseFromAsync(request, "Glucose");
+                var glucoseFrom = await GlucoseFromAsync(request, "Glucose", cancellationToken);
                 var recent = openEnded && glucoseFrom is { } crawlFrom
                     ? new RecentRecords<Entry>(crawlFrom - RecentReconcileWindow, Full: false, EntryTime)
                     : null;
@@ -206,7 +207,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (from, to) => FetchGlucosePagesAsync(Floored(from), to, recent, cancellationToken),
                     timeOf: EntryTime,
                     publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, glucoseFrom!.Value, config, cancellationToken));
@@ -228,12 +230,12 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 // The treatment cursor resolves to a bound rather than to an absent resume point:
                 // with none stored it is this connector's own open InitialSyncFloor.
                 var treatmentFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments), cancellationToken))
                     : request.From;
 
                 var now = Clock.GetUtcNow().UtcDateTime;
                 var recent = openEnded && treatmentFrom is { } crawlFrom
-                    ? await RecentTreatmentsForAsync(crawlFrom, now)
+                    ? await RecentTreatmentsForAsync(crawlFrom, now, cancellationToken)
                     : null;
 
                 var outcome = await CrawlAndPublishAsync(
@@ -241,15 +243,19 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (from, to) => FetchTreatmentPagesAsync(Floored(from), to, recent, cancellationToken),
                     timeOf: t => ParseCreatedAt(t.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                 {
                     var reconciled = await ReconcileRecentTreatmentsAsync(recent, treatmentFrom!.Value, config, cancellationToken);
                     outcome = outcome.Plus(reconciled);
                     if (reconciled.Success && recent.Full)
-                        await RecordFullReconcileAsync(now);
+                        await RecordFullReconcileAsync(now, cancellationToken);
                 }
+
+                if (openEnded && outcome.Success)
+                    outcome = outcome.Plus(await RecheckOpenSpansAsync(recent, config, cancellationToken));
 
                 foreach (var treatmentType in TreatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
@@ -279,7 +285,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var deviceStatusFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus), cancellationToken))
                     : request.From;
 
                 var recent = openEnded && deviceStatusFrom is { } crawlFrom
@@ -294,7 +300,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         observe: page => recent?.Collect(page)),
                     timeOf: d => ParseCreatedAt(d.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, deviceStatusFrom!.Value, config, cancellationToken));
@@ -326,7 +333,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var activityFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity), cancellationToken))
                     : request.From;
 
                 var recent = openEnded && activityFrom is { } crawlFrom
@@ -341,7 +348,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         observe: page => recent?.Collect(page)),
                     timeOf: a => ParseCreatedAt(a.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, activityFrom!.Value, config, cancellationToken));
@@ -535,15 +543,20 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static readonly TimeSpan FullReconcileEvery = TimeSpan.FromHours(1);
 
     /// <summary>
-    ///     The connector-metadata key the last full reconcile's time is kept under. It shares the
-    ///     per-collection timestamp map with the backfill low-water marks, the only durable
-    ///     per-connector timestamp store there is, and no collection is named this.
+    ///     The resume-state key the last full reconcile's time is kept under. No crawled collection is
+    ///     named this.
     /// </summary>
     private const string FullReconcileKey = "TreatmentsFullReconcile";
 
-    private Task<DateTime?> LastFullReconcileAsync() => GetBackfillLowWaterMarkAsync(FullReconcileKey);
+    /// <remarks>The reconcile stamp schedules the treatment batch, which every treatment type shares.</remarks>
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>> { [FullReconcileKey] = TreatmentTypes };
 
-    private Task RecordFullReconcileAsync(DateTime at) => SetBackfillLowWaterMarkAsync(FullReconcileKey, at);
+    private Task<DateTime?> LastFullReconcileAsync(CancellationToken cancellationToken) =>
+        ResumeStampAsync(FullReconcileKey, cancellationToken);
+
+    private Task RecordFullReconcileAsync(DateTime at, CancellationToken cancellationToken) =>
+        SetResumeStampAsync(FullReconcileKey, at, cancellationToken);
 
     /// <summary>
     ///     How much further back than the window the read reaches, and how far either side of a
@@ -562,29 +575,47 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     /// </summary>
     private const int FewMissing = 3;
 
-    /// <summary>
-    ///     Treatments a lookup found upstream although the read missed them, keyed by source URL and
-    ///     id. A treatment the read keeps missing is then looked up once rather than every sync.
-    /// </summary>
-    private static readonly ConcurrentDictionary<string, DateTime> ConfirmedPresent = new();
-
-    private static readonly TimeSpan ConfirmedPresentFor = TimeSpan.FromHours(6);
+    private static readonly TimeSpan LookUpAgainAfter = TimeSpan.FromHours(6);
 
     /// <summary>
     ///     What a catch-up's read of one collection returned from <see cref="ReadFrom"/> on, for
-    ///     <see cref="PublishUncrawledAsync{T}"/>.
+    ///     <see cref="PublishUncrawledAsync{T}"/>, and for the treatment delete pass and the open-span
+    ///     recheck, which match stored rows against <see cref="Served"/>.
     /// </summary>
     /// <param name="Full">Whether this is the hourly full treatment reconcile, which may extend the read.</param>
     /// <param name="TimeOf">The time the collection is read and crawled on.</param>
-    private sealed record RecentRecords<T>(DateTime WindowStart, bool Full, Func<T, DateTime?> TimeOf)
+    /// <param name="KeysOf">The keys a stored row can be matched to a served record by; none are kept when null.</param>
+    private sealed record RecentRecords<T>(
+        DateTime WindowStart, bool Full, Func<T, DateTime?> TimeOf, Func<T, IEnumerable<string?>>? KeysOf = null)
         where T : ProcessableDocumentBase
     {
         public DateTime ReadFrom => WindowStart - ReconcileReadMargin;
 
         public List<T> Records { get; } = [];
 
-        public void Collect(IEnumerable<T> page) =>
-            Records.AddRange(page.Where(r => TimeOf(r) is not { } at || at >= ReadFrom));
+        /// <summary>
+        ///     Each key of a record as the source served it, with the record's time. The first record
+        ///     served keeps its time, and insertion order is kept because the canary is the first key of
+        ///     its kind. A publish rewrites a record's id to the one it is stored under, which the source
+        ///     does not know, so a match against the source reads this and never <see cref="Records"/>.
+        /// </summary>
+        public Dictionary<string, DateTime> Served { get; } = [];
+
+        public void Collect(IEnumerable<T> page)
+        {
+            foreach (var record in page.Where(r => TimeOf(r) is not { } at || at >= ReadFrom))
+            {
+                Records.Add(record);
+                if (TimeOf(record) is not { } at)
+                    continue;
+
+                foreach (var key in KeysOf?.Invoke(record) ?? [])
+                {
+                    if (key is { Length: > 0 })
+                        Served.TryAdd(key, at);
+                }
+            }
+        }
 
         /// <summary>The identified records the crawl from <paramref name="crawledFrom"/> did not publish.</summary>
         public List<T> Uncrawled(DateTime crawledFrom) =>
@@ -624,15 +655,25 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     <see cref="FullReconcileEvery"/> has passed since the last full one, otherwise
     ///     <see cref="RecentReconcileWindow"/> below the crawl's resume point.
     /// </summary>
-    private async Task<RecentRecords<Treatment>> RecentTreatmentsForAsync(DateTime crawlFrom, DateTime now)
+    private async Task<RecentRecords<Treatment>> RecentTreatmentsForAsync(
+        DateTime crawlFrom, DateTime now, CancellationToken cancellationToken)
     {
-        var lastFull = await LastFullReconcileAsync();
+        var lastFull = await LastFullReconcileAsync(cancellationToken);
         return lastFull is { } last && last <= now && now - last < FullReconcileEvery
-            ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime)
-            : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime);
+            ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime, TreatmentKeys)
+            : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime, TreatmentKeys);
     }
 
     private static DateTime? TreatmentTime(Treatment treatment) => ParseCreatedAt(treatment.CreatedAt)?.UtcDateTime;
+
+    /// <summary>
+    ///     The keys a stored treatment can be matched to its served document by: its <c>_id</c>, its
+    ///     uploader's <c>id</c>, and the <c>identifier</c> write-back gave it, which is where a treatment
+    ///     Nocturne wrote back and stores under that key is recognised although the source gave it an
+    ///     <c>_id</c> of its own.
+    /// </summary>
+    private static IEnumerable<string?> TreatmentKeys(Treatment treatment) =>
+        [treatment.Id, TreatmentClientId.Of(treatment), treatment.UpstreamIdentifier];
 
     /// <summary>
     ///     Catches up on what the event-time crawl cannot see, from the treatments the crawl's own read
@@ -657,21 +698,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         if (!republished.Success)
             return republished;
 
-        var read = new Dictionary<string, DateTime>();
-        foreach (var treatment in recent.Records.Where(t => t.Id is { Length: > 0 }))
-        {
-            if (TreatmentTime(treatment) is not { } at)
-                continue;
-
-            read.TryAdd(treatment.Id!, at);
-            if (TreatmentClientId.Of(treatment) is { Length: > 0 } clientId)
-                read.TryAdd(clientId, at);
-            if (treatment.UpstreamIdentifier is { Length: > 0 } identifier)
-                read.TryAdd(identifier, at);
-        }
-
         // Not a publish: the delete pass reads and removes stored rows, which no route covers.
-        await DeleteTreatmentsGoneUpstreamAsync(publisher.Treatments, recent.WindowStart, read, cancellationToken);
+        await DeleteTreatmentsGoneUpstreamAsync(publisher.Treatments, recent.WindowStart, recent.Served, cancellationToken);
 
         return republished;
     }
@@ -686,9 +714,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     <see cref="MaxLookupsPerSync"/> or <see cref="FewMissing"/> allow.
     /// </summary>
     /// <param name="read">
-    ///     The ids, client ids and identifiers the read returned, each with its created_at. The
-    ///     identifier is where write-back put a record's own key, so a treatment Nocturne wrote back
-    ///     and stores under that key is recognised although the source gave it an <c>_id</c> of its own.
+    ///     The keys the read returned (<see cref="TreatmentKeys"/>), each with its created_at, as
+    ///     <see cref="RecentRecords{T}.Served"/> holds them.
     /// </param>
     private async Task DeleteTreatmentsGoneUpstreamAsync(
         ITreatmentPublisher treatments,
@@ -699,7 +726,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         var now = Clock.GetUtcNow().UtcDateTime;
         var stored = await treatments.GetStoredTreatmentIdsAsync(ConnectorSource, windowStart, now, cancellationToken);
         var candidates = stored
-            .Where(s => !read.ContainsKey(s.Key) && !IsConfirmedPresent(s.Key, now))
+            .Where(s => !read.ContainsKey(s.Key) && !LookedUpRecently(s.Key, now))
             .ToList();
 
         if (candidates.Count == 0)
@@ -732,7 +759,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 foreach (var (id, at) in kind)
                 {
                     if (await TreatmentExistsUpstreamAsync(id, at, cancellationToken))
-                        ConfirmedPresent[PresenceKey(id)] = now;
+                        _lookups.Remember(LookupSource, id, now + LookUpAgainAfter);
                     else
                         gone.Add(id);
                 }
@@ -754,18 +781,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             ConnectorSource, deleted, gone.Count);
     }
 
-    private string PresenceKey(string id) => $"{_resolvedBaseUrl}\n{id}";
+    private NightscoutLookupSource LookupSource => new(_tenant.TenantId, ServiceName, _address?.Base ?? string.Empty);
 
-    private bool IsConfirmedPresent(string id, DateTime now)
-    {
-        foreach (var (key, at) in ConfirmedPresent)
-        {
-            if (now - at > ConfirmedPresentFor)
-                ConfirmedPresent.TryRemove(key, out _);
-        }
-
-        return ConfirmedPresent.ContainsKey(PresenceKey(id));
-    }
+    private bool LookedUpRecently(string id, DateTime now) => _lookups.LookedUpRecently(LookupSource, id, now);
 
     /// <summary>
     ///     Looks a treatment up by the field its id came from. A treatment is read under its <c>_id</c>,
@@ -774,31 +792,48 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     an ObjectId is therefore looked up by <c>id</c>. Asking for it by <c>_id</c> is an error on
     ///     Nightscout releases that cast the value to an ObjectId. An ObjectId-shaped id is looked up by
     ///     <c>_id</c> and then by <c>id</c>. Either is then looked up by <c>identifier</c>, where
-    ///     write-back put the key of a treatment Nocturne stores under it (see the <c>read</c> of
-    ///     <see cref="DeleteTreatmentsGoneUpstreamAsync"/>), in one query: as it is, and as
+    ///     write-back put the key of a treatment Nocturne stores under it (see
+    ///     <see cref="TreatmentKeys"/>), in one query: as it is, and as
     ///     <see cref="MongoObjectId.Coerce"/> of it, the uuid prefix or hash write-back has created under
     ///     since. A row relabelled to the connector still holds the key it was stored under before. None
     ///     of these fields is indexed, so the lookup is bounded to the
     ///     created_at range the treatment can sit in: <paramref name="at"/>, give or take
     ///     <see cref="BackwardTimePager.CreatedAtOffsetEnvelope"/> and <see cref="ReconcileReadMargin"/>.
     /// </summary>
-    private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken)
+    private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken) =>
+        (await FindTreatmentUpstreamAsync(id, at, cancellationToken)).Length > 0;
+
+    /// <summary>
+    ///     The documents <see cref="TreatmentExistsUpstreamAsync"/> finds: those of the first field that
+    ///     names <paramref name="id"/>, or none.
+    /// </summary>
+    private async Task<Treatment[]> FindTreatmentUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken) =>
+        IsObjectId(id) && await FindTreatmentByObjectIdAsync(id, at, cancellationToken) is { Length: > 0 } byId
+            ? byId
+            : await FindTreatmentByClientKeysAsync(id, at, cancellationToken);
+
+    /// <summary>The documents <c>find[_id]</c> finds for an ObjectId-shaped <paramref name="id"/>.</summary>
+    private Task<Treatment[]> FindTreatmentByObjectIdAsync(string id, DateTime at, CancellationToken cancellationToken) =>
+        LookUpTreatmentAsync(at, $"&find[_id]={Uri.EscapeDataString(id)}", cancellationToken);
+
+    /// <summary>The documents found by <c>id</c>, else by <c>identifier</c>, as <see cref="TreatmentExistsUpstreamAsync"/> looks.</summary>
+    private async Task<Treatment[]> FindTreatmentByClientKeysAsync(string id, DateTime at, CancellationToken cancellationToken)
     {
-        var reach = BackwardTimePager.CreatedAtOffsetEnvelope + ReconcileReadMargin;
+        if (await LookUpTreatmentAsync(at, $"&find[id]={Uri.EscapeDataString(id)}", cancellationToken) is { Length: > 0 } byClientId)
+            return byClientId;
+
         string[] identifiers = [.. new[] { id, MongoObjectId.Coerce(id)! }.Distinct(StringComparer.Ordinal)];
-        return (IsObjectId(id) && await AnyAsync($"&find[_id]={Uri.EscapeDataString(id)}"))
-            || await AnyAsync($"&find[id]={Uri.EscapeDataString(id)}")
-            || await AnyAsync(string.Concat(identifiers.Select((value, i) =>
-                $"&find[identifier][$in][{i}]={Uri.EscapeDataString(value)}")));
+        return await LookUpTreatmentAsync(at, string.Concat(identifiers.Select((value, i) =>
+            $"&find[identifier][$in][{i}]={Uri.EscapeDataString(value)}")), cancellationToken);
+    }
 
-        async Task<bool> AnyAsync(string find)
-        {
-            const string operation = "LookUpTreatment";
-            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach) + find;
+    private async Task<Treatment[]> LookUpTreatmentAsync(DateTime at, string find, CancellationToken cancellationToken)
+    {
+        const string operation = "LookUpTreatment";
+        var reach = BackwardTimePager.CreatedAtOffsetEnvelope + ReconcileReadMargin;
+        var url = BuildCreatedAtUrl("treatments", at - reach, at + reach) + find;
 
-            var found = await FetchDataAsync<Treatment[]>(url, operation, cancellationToken) ?? throw FetchFailed(operation);
-            return found.Length > 0;
-        }
+        return await FetchDataAsync<Treatment[]>(url, operation, cancellationToken) ?? throw FetchFailed(operation);
     }
 
     private static bool IsObjectId(string id) => id.Length == 24 && id.All(char.IsAsciiHexDigit);
@@ -861,7 +896,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async Task<T?> FetchDataCoreAsync<T>(string url, CancellationToken cancellationToken) where T : class
     {
         var headers = GetAuthHeaders();
-        var absoluteUrl = _resolvedBaseUrl != null ? $"{_resolvedBaseUrl}{url}" : url;
+        var absoluteUrl = _address?.For(url) ?? url;
         var response = await GetWithHeadersAsync(absoluteUrl, headers, cancellationToken);
 
         await response.EnsureSuccessWithBodyAsync(cancellationToken);
@@ -901,13 +936,17 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return url;
     }
 
-    private Dictionary<string, string> GetAuthHeaders()
-    {
-        return new Dictionary<string, string>
-        {
-            ["api-secret"] = _apiSecretHash ?? ComputeApiSecretHash(_currentConfig.ApiSecret)
-        };
-    }
+    private Dictionary<string, string>? GetAuthHeaders() =>
+        (_apiSecretHash ?? ApiSecretHeaderValue(_currentConfig.ApiSecret)) is { } hash
+            ? new Dictionary<string, string> { ["api-secret"] = hash }
+            : null;
+
+    /// <summary>
+    ///     The <c>api-secret</c> header for <paramref name="apiSecret"/>, or null when there is no
+    ///     secret to send: a hash of an empty secret is a wrong secret, not an absent one.
+    /// </summary>
+    public static string? ApiSecretHeaderValue(string? apiSecret) =>
+        string.IsNullOrWhiteSpace(apiSecret) ? null : ComputeApiSecretHash(apiSecret);
 
     internal static string ComputeApiSecretHash(string apiSecret)
     {
@@ -958,7 +997,9 @@ public class NightscoutConnectorService : NightscoutConnectorServiceBase<Nightsc
         ILogger<NightscoutConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IConnectorRegistration<NightscoutConnectorConfiguration> registration,
+        NightscoutLookups lookups,
+        ITenantAccessor tenant,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
-    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, registration, publisher, timeProvider) { }
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, registration, lookups, tenant, publisher, timeProvider) { }
 }

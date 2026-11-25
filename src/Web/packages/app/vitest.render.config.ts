@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { wuchale } from "wuchale/vite";
+import { WUCHALE_CONFIG_PATH } from "./wuchale.dev.js";
 
 /**
  * Server rendering, with the translation transform in the pipeline.
@@ -15,7 +16,7 @@ import { wuchale } from "wuchale/vite";
 export default defineConfig({
   plugins: [
     svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } }),
-    wuchale(),
+    wuchale({ configPath: WUCHALE_CONFIG_PATH }),
   ],
   test: {
     // Its own suffix: `*.ssr.test.ts` already belongs to tests that run under

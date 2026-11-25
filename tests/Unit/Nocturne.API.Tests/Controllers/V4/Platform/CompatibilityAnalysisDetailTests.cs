@@ -142,6 +142,7 @@ public class CompatibilityAnalysisDetailTests : IDisposable
         new(
             Mock.Of<IDiscrepancyPersistenceService>(),
             CreateRepository(),
+            Mock.Of<IHttpClientFactory>(),
             Options.Create(new CompatibilityProxyConfiguration()),
             Mock.Of<ILogger<CompatibilityController>>());
 

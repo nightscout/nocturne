@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
+import { missingScopeError } from "#lib/forms/submit-messages.svelte.js";
 import {
   NotificationUrgency,
   type InAppNotificationDto,
@@ -85,6 +86,34 @@ describe("SidebarNotifications", () => {
     await expect.poll(() => server.read).toEqual(["ch1"]);
     expect(server.executed).toEqual([]);
   });
+
+  it.each(["team.staff_waiting", "team.staff_joined"])(
+    "marks a %s notice read when its link is followed, and runs no server action",
+    async (type) => {
+      render(Harness, {
+        notifications: [
+          {
+            id: "ts1",
+            type,
+            urgency: NotificationUrgency.Info,
+            title: type === "team.staff_waiting" ? "team_staff_waiting" : "team_staff_joined",
+            createdAt: new Date().toISOString(),
+            metadata: { team: "Ward 4", teamId: "0199a1b2-0000-7000-8000-0000000000bb", count: 2 },
+          },
+        ],
+      });
+
+      const stayOnPage = (e: Event) => e.preventDefault();
+      document.addEventListener("click", stayOnPage);
+      onTestFinished(() => document.removeEventListener("click", stayOnPage));
+
+      await page.getByRole("button", { name: "Notifications" }).click();
+      await page.getByRole("link", { name: "Open the team" }).click();
+
+      await expect.poll(() => server.read).toEqual(["ts1"]);
+      expect(server.executed).toEqual([]);
+    },
+  );
 
   it("lists what to enter again after an instance key change and opens the alerts", async () => {
     render(Harness, {
@@ -206,6 +235,26 @@ describe("SidebarNotifications", () => {
 
     await expect.element(page.getByText("Change site")).toBeVisible();
     expect(error).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the notification and names the missing scope when the server refuses the action for it", async () => {
+    const error = vi.spyOn(toast, "error");
+    const answer = pending();
+    render(Harness, { notifications: [changeSite] });
+
+    const bell = page.getByRole("button", { name: "Notifications" });
+    await bell.click();
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await bell.click();
+    await expect.element(page.getByText("No active notifications")).toBeVisible();
+
+    answer.reject({
+      status: 403,
+      body: { message: "This operation requires the 'treatments.readwrite' scope.", code: "missing_scope" },
+    });
+
+    await expect.element(page.getByText("Change site")).toBeVisible();
+    expect(error).toHaveBeenCalledExactlyOnceWith(missingScopeError());
   });
 
   it("leaves a notification off the tray when the server says it is gone", async () => {

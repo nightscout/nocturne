@@ -5,11 +5,11 @@
 -->
 <script lang="ts">
   import { Axis } from "layerchart";
-  import type { ScaleLinear } from "d3-scale";
+  import type { ScaleContinuousNumeric } from "d3-scale";
   import { getGlucoseChartContext } from "../context.svelte.js";
 
   interface Props {
-    scale: ScaleLinear<number, number>;
+    scale: ScaleContinuousNumeric<number, number>;
     unit: string;
   }
 

@@ -44,7 +44,8 @@
   import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
-  import { getEngineHost } from "water-ui";
+  import { getEngineHost, WARM_IDLE_TIMEOUT_MS } from "water-ui";
+  import { whenIdle } from "#lib/utils/when-idle.js";
   import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
   import { CoachMarkProvider, coachmark } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
@@ -218,6 +219,7 @@
   onDestroy(() => {
     realtimeStore.destroy();
     titleFaviconService.destroy();
+    authStore.destroy();
     if (browser) {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("keydown", handleCommandPaletteKeydown);
@@ -236,12 +238,14 @@
    */
   const engineWarmDeferral = deferredWatercolour();
   let engineWarmScheduled = false;
+  let cancelEngineWarm: (() => void) | undefined;
   $effect(() => {
     if (engineWarmScheduled || !engineWarmDeferral.due) return;
     if (data.canViewRealtimeData && !realtimeStore.currentReadingLoaded) return;
     engineWarmScheduled = true;
-    void getEngineHost().warmWhenIdle();
+    cancelEngineWarm = whenIdle(() => void getEngineHost().warm(), { timeout: WARM_IDLE_TIMEOUT_MS });
   });
+  onDestroy(() => cancelEngineWarm?.());
 
   // Track current time for stale calculation - use shared store
   const now = $derived(realtimeStore.now);
@@ -325,7 +329,7 @@
   >
     Skip to main content
   </a>
-  <Sidebar.Provider>
+  <Sidebar.Provider open={data.sidebarOpen}>
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} tenantTargets={data.tenantTargets} />
     <!-- --app-sticky-top is the top of the usable viewport below the app chrome (the visible
          MobileHeader on a phone, where the banner strip scrolls away; the banner strip from md);

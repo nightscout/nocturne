@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Services.Demo.Tests.Services;
@@ -251,15 +252,18 @@ public class DemoDataHostedServiceStartupTests
             NullLogger<DemoDataHostedService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
-        var timeout = Task.Delay(TimeSpan.FromSeconds(30));
-        while (!api.FirstTick.Task.IsCompleted && !timeout.IsCompleted)
+        try
         {
-            clock.Advance(TimeSpan.FromSeconds(1));
-            await Task.WhenAny(api.FirstTick.Task, Task.Delay(5));
+            await Eventually.UntilAsync(
+                "the service to reach its first realtime tick",
+                () => api.FirstTick.Task.IsCompleted,
+                step: TimeSpan.FromMilliseconds(5),
+                eachStep: () => clock.Advance(TimeSpan.FromSeconds(1)));
         }
-
-        await service.StopAsync(CancellationToken.None);
-        api.FirstTick.Task.IsCompleted.Should().BeTrue("the service should reach its first realtime tick");
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
     }
 
     private sealed record StatusPatch(DateTime? NextResetAt, DateTime? LastResetAt);

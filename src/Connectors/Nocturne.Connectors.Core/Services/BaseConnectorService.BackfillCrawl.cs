@@ -28,38 +28,8 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
 
     private bool BackfillBudgetSpent => _backfillDeadline is { } deadline && Clock.GetUtcNow() >= deadline;
 
-    /// <summary>The run's copy of the source's crawl state, read once per run and kept in step with every write.</summary>
-    private Dictionary<string, DateTime>? _marks;
-
-    private async Task<Dictionary<string, DateTime>> MarksAsync() =>
-        _marks ??= _publisher is { IsAvailable: true } p
-            ? new Dictionary<string, DateTime>(
-                await p.Metadata.GetBackfillLowWaterMarksAsync(ConnectorSource) ?? new Dictionary<string, DateTime>())
-            : [];
-
-    private async Task WriteMarksAsync(Dictionary<string, DateTime?> changes)
-    {
-        if (changes.Count == 0)
-            return;
-
-        var marks = await MarksAsync();
-        if (_publisher is { IsAvailable: true } p)
-            await p.Metadata.SetBackfillLowWaterMarksAsync(ConnectorSource, changes);
-
-        foreach (var (key, mark) in changes)
-        {
-            if (mark is { } at)
-                marks[key] = at;
-            else
-                marks.Remove(key);
-        }
-    }
-
-    protected async Task<DateTime?> GetBackfillLowWaterMarkAsync(string key) =>
-        (await MarksAsync()).TryGetValue(key, out var mark) ? mark : null;
-
-    protected Task SetBackfillLowWaterMarkAsync(string key, DateTime? mark) =>
-        WriteMarksAsync(new() { [key] = mark });
+    /// <summary>The run's <see cref="ResumePointAsync"/> of each collection; null until the run asks for one.</summary>
+    private Dictionary<string, DateTime>? _resumedFrom;
 
     /// <summary>
     ///     A family's resume point: the later of <paramref name="stored"/>, read from what the family
@@ -69,18 +39,30 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
     ///     A record can publish without leaving anything its family's stored watermark reads — a
     ///     device status carrying none of the APS, pump or uploader fields writes no snapshot — and
     ///     a family resuming from the stored watermark alone would then crawl its whole history on
-    ///     every run.
+    ///     every run. Everything below the point is stored or owed, so a catch-up that starts at or
+    ///     below it may record how far it reached (<see cref="CatchUpAsync{T}"/>).
     /// </remarks>
-    protected async Task<DateTime?> ResumePointAsync(string collection, DateTime? stored) =>
-        Later(stored, TryCalculateCatchUpSince(await GetBackfillLowWaterMarkAsync(ThroughKey(collection)), collection));
+    protected async Task<DateTime?> ResumePointAsync(
+        string collection, DateTime? stored, CancellationToken cancellationToken)
+    {
+        var point = Later(stored, TryCalculateCatchUpSince(
+            (await ResumeStateAsync(cancellationToken)).TryGetValue(ThroughKey(collection), out var through)
+                ? through
+                : null,
+            collection));
+        if (point is { } at)
+            (_resumedFrom ??= [])[collection] = at;
+        return point;
+    }
 
     /// <summary>
     ///     The glucose family's lower bound: <see cref="ResumePointAsync"/> over its resume point on a
     ///     scheduled run, else the caller's <see cref="SyncRequest.From"/> as given.
     /// </summary>
-    protected async Task<DateTime?> GlucoseFromAsync(SyncRequest request, string collection) =>
+    protected async Task<DateTime?> GlucoseFromAsync(
+        SyncRequest request, string collection, CancellationToken cancellationToken) =>
         request.Resume.Scheduled
-            ? await ResumePointAsync(collection, request.Resume.Point(ResumeFamily.Glucose))
+            ? await ResumePointAsync(collection, request.Resume.Point(ResumeFamily.Glucose), cancellationToken)
             : request.From;
 
     /// <summary>
@@ -102,8 +84,8 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
     ///         </item>
     ///         <item>
     ///             How far the crawls reached, read by <see cref="ResumePointAsync"/>. An open-ended
-    ///             full crawl sets it from its first page; a catch-up moves it on only while it is what
-    ///             the catch-up resumed from.
+    ///             full crawl sets it from its first page; an open-ended catch-up sets it, or moves it
+    ///             on, only when it starts at or below what the crawls already covered.
     ///         </item>
     ///     </list>
     /// </summary>
@@ -116,6 +98,10 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
     /// <param name="pages">The collection's pages between two optional bounds, newest first.</param>
     /// <param name="timeOf">A record's time, or null for a record without a usable one.</param>
     /// <param name="pageSize">The records a full page holds; a page this long may not be the last.</param>
+    /// <param name="cancellationToken">
+    ///     For the crawl state read before the first page. The crawl's writes take none
+    ///     (<see cref="WriteResumeStateAsync"/>).
+    /// </param>
     protected async Task<PagedCrawlOutcome> CrawlAndPublishAsync<T>(
         string collection,
         DateTime? from,
@@ -123,10 +109,12 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
         Func<T, DateTime?> timeOf,
         Func<T[], Task<bool>> publishAsync,
-        int pageSize)
+        int pageSize,
+        CancellationToken cancellationToken)
     {
         var crawl = new PageCrawl<T>(pages, timeOf, publishAsync, pageSize);
-        var marks = await MarksAsync();
+        await ForgetCrawlForResetAsync(collection, cancellationToken);
+        var marks = await ResumeStateAsync(cancellationToken);
         DateTime? mark = marks.TryGetValue(collection, out var held) ? held : null;
         var gap = marks.TryGetValue(GapToKey(collection), out var gapTo)
                   && marks.TryGetValue(GapFromKey(collection), out var gapFrom)
@@ -136,7 +124,8 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         if (from is not { } floor)
             return await CrawlFullAsync(collection, to, mark, gap, crawl, reachesNow: to is null);
 
-        var outcome = await CatchUpAsync(collection, floor, to, gap, crawl);
+        var outcome = await CatchUpAsync(
+            collection, floor, to, gap, marks.TryGetValue(ThroughKey(collection), out var through) ? through : null, crawl);
 
         // A store that is failing right now shouldn't be hammered with the deep history too.
         if (outcome.Success && gap is not null)
@@ -163,7 +152,7 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
                 var changes = new Dictionary<string, DateTime?> { [collection] = progress.Lowest };
                 if (reachesNow && progress.Pages == 1 && progress.Newest is { } newest)
                     changes[ThroughKey(collection)] = newest;
-                return progress.Lowest is null ? Task.CompletedTask : WriteMarksAsync(changes);
+                return progress.Lowest is null ? Task.CompletedTask : WriteResumeStateAsync(changes, CancellationToken.None);
             });
 
         if (progress.Exhausted)
@@ -173,7 +162,7 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
                 changes[collection] = null;
             if (gap is not null)
                 AddGap(changes, collection, null);
-            await WriteMarksAsync(changes);
+            await WriteResumeStateAsync(changes, CancellationToken.None);
         }
 
         return progress.Outcome;
@@ -184,17 +173,40 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
     ///     it published, merged into <paramref name="owed"/>. The same is written ahead once a full
     ///     page has published, or a second page has arrived, so a process killed mid-crawl has
     ///     recorded it too, and restored on finishing; a catch-up of one page that is not full writes
-    ///     nothing.
+    ///     nothing until it finishes.
     /// </summary>
+    /// <remarks>
+    ///     An open-ended catch-up whose floor is at or below what the crawls already covered
+    ///     (<paramref name="through"/>, or the run's <see cref="ResumePointAsync"/>) records the newest
+    ///     record it has published as how far they reached, in the same update as every write of
+    ///     what it owes and on finishing. At each such write <c>[lowest, newest]</c> is published,
+    ///     <c>[from, lowest]</c> is owed, and everything below <c>from</c> was stored or owed before
+    ///     the catch-up started, so everything below the reach mark is stored or owed whichever
+    ///     write is the last. A catch-up that ends anywhere, finished, refused or cancelled, leaves
+    ///     the next run resuming from what it published and working the rest through the budgeted
+    ///     <see cref="ResumeGapAsync{T}"/>, rather than starting again from a stored watermark that
+    ///     lags behind it, and so a reach mark a cursor reset cleared is set again.
+    /// </remarks>
     private async Task<PagedCrawlOutcome> CatchUpAsync<T>(
-        string collection, DateTime from, DateTime? to, Gap? owed, PageCrawl<T> crawl)
+        string collection, DateTime from, DateTime? to, Gap? owed, DateTime? through, PageCrawl<T> crawl)
     {
         var progress = new CrawlProgress();
         var wroteAhead = false;
+        var reaches = to is null
+            && from <= Later(through, _resumedFrom?.TryGetValue(collection, out var point) == true ? point : null);
+
+        async Task WriteAsync(Dictionary<string, DateTime?> changes)
+        {
+            if (reaches && progress.Newest is { } newest && (through is null || newest > through))
+                changes[ThroughKey(collection)] = newest;
+            await WriteResumeStateAsync(changes, CancellationToken.None);
+            if (changes.TryGetValue(ThroughKey(collection), out var reached))
+                through = reached;
+        }
 
         Task OweAsync() =>
             progress.Lowest is { } lowest
-                ? WriteMarksAsync(AddGap([], collection, new Gap(from, lowest).Hull(owed)))
+                ? WriteAsync(AddGap([], collection, new Gap(from, lowest).Hull(owed)))
                 : Task.CompletedTask;
 
         async Task WriteAheadAsync()
@@ -223,13 +235,7 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
             return progress.Outcome;
         }
 
-        var changes = wroteAhead ? AddGap([], collection, owed) : [];
-        var throughKey = ThroughKey(collection);
-        if (to is null
-            && (await MarksAsync()).TryGetValue(throughKey, out var through) && from <= through
-            && progress.Newest > through)
-            changes[throughKey] = progress.Newest;
-        await WriteMarksAsync(changes);
+        await WriteAsync(wroteAhead ? AddGap([], collection, owed) : []);
 
         return progress.Outcome;
     }
@@ -245,7 +251,8 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         Task NarrowAsync() =>
             progress.Lowest is not { } lowest || lowest >= gap.To
                 ? Task.CompletedTask
-                : WriteMarksAsync(AddGap([], collection, lowest <= gap.From ? null : gap with { To = lowest }));
+                : WriteResumeStateAsync(
+                    AddGap([], collection, lowest <= gap.From ? null : gap with { To = lowest }), CancellationToken.None);
 
         try
         {
@@ -258,7 +265,7 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         }
 
         if (progress.Exhausted)
-            await WriteMarksAsync(AddGap([], collection, null));
+            await WriteResumeStateAsync(AddGap([], collection, null), CancellationToken.None);
         else
             await NarrowAsync();
 
@@ -339,6 +346,28 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         public Gap Hull(Gap? other) => other is null
             ? this
             : new(From < other.From ? From : other.From, To > other.To ? To : other.To);
+    }
+
+    /// <summary>
+    ///     On a reset run's first crawl of <paramref name="collection"/>, clears what
+    ///     <see cref="ResetClears"/> names of the collection's crawl state.
+    /// </summary>
+    private Task ForgetCrawlForResetAsync(string collection, CancellationToken cancellationToken)
+    {
+        if (_resetCrawled?.Add(collection) != true)
+            return Task.CompletedTask;
+
+        (string Key, ResumeKeyKind Kind)[] keys =
+        [
+            (collection, ResumeKeyKind.OwedMark),
+            (GapFromKey(collection), ResumeKeyKind.OwedMark),
+            (GapToKey(collection), ResumeKeyKind.OwedMark),
+            (ThroughKey(collection), ResumeKeyKind.ReachMark),
+        ];
+        return WriteResumeStateAsync(keys
+            .Where(key => ResetClears(key.Kind, repulled: true))
+            .ToDictionary(key => key.Key, _ => (DateTime?)null),
+            cancellationToken);
     }
 
     private static string GapFromKey(string collection) => $"{collection}.GapFrom";

@@ -84,14 +84,25 @@ public interface IOAuthGrantService
     /// Update grant label and/or scopes. Returns null if grant not found or not owned.
     /// </summary>
     /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
+    /// <param name="bounds">What bounds new scopes, by the kind of grant.</param>
+    /// <exception cref="GrantCeilingViolationException">New scopes exceed <paramref name="bounds"/>.</exception>
     Task<OAuthGrantInfo?> UpdateGrantAsync(
         Guid grantId,
         Guid ownerSubjectId,
+        GrantScopeBounds bounds,
         string? label = null,
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default
     );
 }
+
+/// <summary>
+/// What bounds the new scopes of a grant its owner edits. An app grant is the owner's own credential,
+/// bounded by <paramref name="OwnCredential"/>, everything the owner holds. A guest link gives another
+/// person access, so it is also bounded by <paramref name="GivenToOthers"/>, what the owner may give
+/// anyone else; null when they may give nothing, which refuses new scopes on a guest link.
+/// </summary>
+public sealed record GrantScopeBounds(IReadOnlySet<string> OwnCredential, IReadOnlySet<string>? GivenToOthers);
 
 public class OAuthGrantInfo
 {

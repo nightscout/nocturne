@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -352,7 +353,7 @@ public class GlookoConnectorServiceStateIsolationTests
                 {
                     // A timeout rather than an indefinite wait, so a run that never reaches this point
                     // fails the test instead of hanging it.
-                    var released = await Task.WhenAny(_otherRunAuthenticated.Task, Task.Delay(30_000));
+                    var released = await Task.WhenAny(_otherRunAuthenticated.Task, Task.Delay(Eventually.DefaultPatience));
                     RunsOverlapped = released == _otherRunAuthenticated.Task;
                 }
                 else if (release)

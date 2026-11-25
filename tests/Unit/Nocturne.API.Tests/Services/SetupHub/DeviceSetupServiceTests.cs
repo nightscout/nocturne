@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
@@ -58,7 +59,7 @@ public class DeviceSetupServiceTests
             _ruleSync.Object,
             _therapySettings.Object,
             new ConsumableTrackerWriter(
-                _deviceEvents.Object, _ruleSync.Object, Mock.Of<IDeviceEventReactor>(),
+                _deviceEvents.Object, _ruleSync.Object, Rearms.Unannounced(), Mock.Of<IDeviceEventReactor>(),
                 _broadcast.Object, _clock,
                 NullLogger<ConsumableTrackerWriter>.Instance),
             _clock,

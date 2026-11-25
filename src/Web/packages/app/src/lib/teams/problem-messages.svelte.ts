@@ -18,6 +18,10 @@ export function teamProblemMessages(): ProblemCodeMessages {
     team_invite_already_member: "You are already a member of this team.",
     team_access_role_invalid: "A link cannot suggest this role. Choose another role.",
     team_access_end_invalid: "The end date must be in the future. Choose a later date.",
+    team_staff_ceiling_invalid: "Staff cannot be limited to this role. Choose another role.",
+    team_staff_end_invalid: "The end date must be in the future. Choose a later date.",
+    team_staff_invite_end_passed:
+      "The end date that this invite gives has passed. Ask a manager of the team for a new link.",
   };
 }
 
@@ -47,5 +51,29 @@ export function teamAccessProblemMessages(): ProblemCodeMessages {
       "The access must end no later than this link allows. Choose an earlier end date.",
     team_access_end_outlasts_approver:
       "The access cannot last longer than your own access. Choose an earlier end date.",
+  };
+}
+
+/**
+ * The sentence for each problem code an owner's decision about a team's staff at their site can meet:
+ * approve, decline, and the switch for the team's own staff decisions.
+ */
+export function teamStaffDecisionProblemMessages(): ProblemCodeMessages {
+  return {
+    team_staff_decision_not_owner: "Only an owner of this site can decide which staff of a team can see this site.",
+    caller_access_from_team:
+      "You have access to this site only through a team, so you cannot change the access of a team or its staff.",
+  };
+}
+
+/**
+ * The sentence for each problem code an owner's edit of a team's access to their site can meet. The
+ * approval's sentences read the same for an edit, except the refusal of a person who is not an owner.
+ */
+export function teamAccessEditProblemMessages(): ProblemCodeMessages {
+  return {
+    ...teamAccessProblemMessages(),
+    ...teamStaffDecisionProblemMessages(),
+    team_access_not_owner: "Only an owner of this site can change the access of a team.",
   };
 }

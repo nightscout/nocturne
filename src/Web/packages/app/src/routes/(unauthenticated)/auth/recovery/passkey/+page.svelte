@@ -19,7 +19,6 @@
     registerComplete,
     discoverableLoginOptions,
     loginOptions,
-    loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
   import { startRecoveryLink } from "#lib/api/generated/oidcs.generated.remote.js";
   import { getOidcProviders } from "../../auth.remote";
@@ -28,10 +27,15 @@
     parseCeremonyOptions,
   } from "#lib/components/auth/passkey-errors.js";
   import { runPasskeyAssertion } from "#lib/components/auth/passkey-login.js";
-  import { settleSignIn, type SignInOutcome } from "#lib/components/auth/sign-in-result.js";
+  import {
+    completePasskeySignIn,
+    settleSignIn,
+    type SignInOutcome,
+  } from "#lib/components/auth/sign-in-result.js";
   import { recoveredDestination } from "#lib/components/auth/recovered-method.js";
   import LoginForm from "#lib/components/auth/LoginForm.svelte";
   import RecoveryNextStep from "#lib/components/auth/RecoveryNextStep.svelte";
+  import FirstRecoveryCodes from "#lib/components/auth/FirstRecoveryCodes.svelte";
   import OidcProviderButtons from "#lib/components/auth/OidcProviderButtons.svelte";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
@@ -48,8 +52,9 @@
   const authStatusQuery = getAuthStatus();
   const emailRecoveryOffered = $derived(authStatusQuery.current?.emailRecoveryOffered ?? false);
 
-  type Phase = "choose" | "signing-in" | "second-factor" | "sign-in-pending";
+  type Phase = "choose" | "signing-in" | "second-factor" | "sign-in-pending" | "recovery-codes";
   let phase = $state<Phase>("choose");
+  let issuedRecoveryCodes = $state<string[]>([]);
   let isRegistering = $state(false);
   let isLinking = $state(false);
   let selectedProvider = $state<string | null>(null);
@@ -122,6 +127,10 @@
     return discoverableLoginOptions();
   }
 
+  function goToSignedInDestination() {
+    return goToReturnUrl(destination, { replace: true, refreshAll: true });
+  }
+
   /**
    * Signs in with the passkey just enrolled. Whatever stops it, the passkey is already saved, so
    * the person is asked to sign in with it rather than told recovery failed.
@@ -130,14 +139,17 @@
     phase = "signing-in";
     let outcome: SignInOutcome | null;
     try {
-      outcome = await settleSignIn(await runPasskeyAssertion(newPasskeyOptions, loginComplete));
+      outcome = await settleSignIn(await runPasskeyAssertion(newPasskeyOptions, completePasskeySignIn));
     } catch {
       // The passkey is already saved, so any failure here asks for the sign-in instead.
       outcome = null;
     }
 
-    if (outcome?.state === "signed-in") {
-      await goToReturnUrl(destination, { replace: true, refreshAll: true });
+    if (outcome?.state === "signed-in" && outcome.recoveryCodes.length > 0) {
+      issuedRecoveryCodes = outcome.recoveryCodes;
+      phase = "recovery-codes";
+    } else if (outcome?.state === "signed-in") {
+      await goToSignedInDestination();
     } else if (outcome?.state === "second-factor") {
       stepUpToken = outcome.stepUpToken;
       phase = "second-factor";
@@ -197,6 +209,8 @@
           Your passkey is ready. Sign in with it to finish.
         {:else if phase === "second-factor"}
           Your passkey is ready. One more step finishes signing in.
+        {:else if phase === "recovery-codes"}
+          Your passkey is ready.
         {:else}
           Your passkey is ready. Confirm it to finish signing in.
         {/if}
@@ -236,6 +250,8 @@
             Create a passkey
           {/if}
         </Button>
+      {:else if phase === "recovery-codes"}
+        <FirstRecoveryCodes codes={issuedRecoveryCodes} onContinue={goToSignedInDestination} />
       {:else}
         <div
           class="flex items-start gap-3 rounded-md border border-success/20 bg-success/5 p-3"

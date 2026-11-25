@@ -63,20 +63,13 @@ internal sealed class AlertSnoozeService(
         // mid-snooze; the resume dispatch creates fresh rows.
         await repository.ExpirePendingDeliveriesAsync([instanceId], ct);
 
-        try
+        await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
-            {
-                tenantId,
-                excursionId = instance.AlertExcursionId,
-                instanceId,
-                snoozedUntil = until,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_snoozed for instance {InstanceId}", instanceId);
-        }
+            tenantId,
+            excursionId = instance.AlertExcursionId,
+            instanceId,
+            snoozedUntil = until,
+        });
 
         await alarmRelay.ClearIfQuietAsync([instance.AlertExcursionId], ct);
 
@@ -146,7 +139,7 @@ internal sealed class AlertSnoozeService(
         {
             context = await contextEnricher.EnrichAsync(baseContext, [rule], ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Failed to enrich context for snooze resume of instance {InstanceId}; delivering without DND check",

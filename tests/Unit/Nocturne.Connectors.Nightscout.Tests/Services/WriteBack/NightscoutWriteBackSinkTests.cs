@@ -10,7 +10,9 @@ using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services.WriteBack;
@@ -71,7 +73,7 @@ public class NightscoutWriteBackSinkTests
             .ToList();
 
     /// <summary>
-    /// Runs write-back off the test thread under a wall-clock deadline. The batching
+    /// Runs write-back off the test thread under the hang guard. The batching
     /// loop is index-driven over a synchronous handler, so a stride bug spins without
     /// ever yielding; without this guard the failure mode is a hung CI job instead of
     /// a red test.
@@ -79,11 +81,11 @@ public class NightscoutWriteBackSinkTests
     private static async Task ShouldFinishPromptly(Func<Task> writeBack)
     {
         var work = Task.Run(writeBack);
-        var first = await Task.WhenAny(work, Task.Delay(TimeSpan.FromSeconds(5)));
+        var first = await Task.WhenAny(work, Task.Delay(Eventually.DefaultPatience));
 
         first.Should().BeSameAs(
             work,
-            "the write-back loop must terminate — it is still sending after 5 seconds");
+            "the write-back loop must terminate: it is still sending after the hang guard");
         await work;
     }
 
@@ -593,6 +595,7 @@ public class NightscoutWriteBackSinkTests
         new HttpClient(handler),
         CreateLoader(_config).Object,
         Breaker,
+        Mock.Of<IWriteBackSentRecords>(),
         NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
     /// <summary>
@@ -953,6 +956,52 @@ public class NightscoutWriteBackSinkTests
         Breaker.IsOpen.Should().BeFalse();
         Breaker.RecordFailure();
         Breaker.IsOpen.Should().BeFalse("the refusal for a status already upstream reset the failure count");
+    }
+
+    /// <summary>
+    /// A batch sent again one item at a time, where one item is refused: what follows a write runs for
+    /// every item upstream accepted or already holds, and only for those.
+    /// </summary>
+    [Fact]
+    public async Task ABatchSentOneByOne_RunsWhatFollowsAWriteForEachItemUpstreamTook()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            RespondTo = (_, body) =>
+                body.StartsWith('[') && JsonSerializer.Deserialize<JsonElement>(body).GetArrayLength() > 1
+                || body.Contains("\"loop_status_1\"", StringComparison.Ordinal)
+                    ? DuplicateKey()
+                    : body.Contains("\"loop_status_2\"", StringComparison.Ordinal)
+                        ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                        : null,
+        };
+        var sut = new AfterWrittenRecordingSink(new HttpClient(handler), CreateLoader(_config).Object, Breaker);
+
+        await sut.OnCreatedAsync(new[]
+        {
+            new DeviceStatus { Id = "loop_status_1", Device = "loop" },
+            new DeviceStatus { Id = "loop_status_2", Device = "loop" },
+            new DeviceStatus { Id = "loop_status_3", Device = "loop" },
+        });
+
+        sut.Written.Select(s => s.Id).Should().Equal("loop_status_1", "loop_status_3");
+    }
+
+    private sealed class AfterWrittenRecordingSink(
+        HttpClient httpClient,
+        IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
+        NightscoutCircuitBreaker circuitBreaker)
+        : NightscoutDeviceStatusWriteBackSink(
+            httpClient, configLoader, circuitBreaker, NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance)
+    {
+        public List<DeviceStatus> Written { get; } = [];
+
+        protected override Task AfterWrittenAsync(
+            NightscoutConnectorConfiguration config, IReadOnlyList<DeviceStatus> items, CancellationToken ct)
+        {
+            Written.AddRange(items);
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]

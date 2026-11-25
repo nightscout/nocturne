@@ -195,13 +195,17 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         await scheduler.EnrolAsync(default);
         clock.Advance(AlertSweepJob.Interval);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (sweep.Runs.Count < 6)
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the sweeps must not wait for the stuck connectors");
-            await scheduler.PollAsync(default);
-            await Task.Delay(20);
-        }
+        await Eventually.UntilAsync(
+            "every sweep to run without waiting for the stuck connectors",
+            async () =>
+            {
+                if (sweep.Runs.Count >= 6)
+                    return true;
+
+                await scheduler.PollAsync(default);
+                return false;
+            },
+            step: TimeSpan.FromMilliseconds(20));
 
         (first.Started + second.Started).Should().Be(8, "every connector together holds the group's cap");
         gate.SetResult();

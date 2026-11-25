@@ -10,6 +10,7 @@ using Nocturne.API.Services.Jobs;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Jobs;
 
@@ -80,16 +81,17 @@ public class JobSchedulerTests
         await scheduler.StartAsync(default);
         try
         {
-            await WaitUntilAsync(() => Volatile.Read(ref completed) == 12);
+            await Eventually.UntilAsync("the backlog of 12 jobs to complete", () => Volatile.Read(ref completed) == 12);
             await scheduler.DrainAsync();
-            await WaitUntilAsync(() => Parked(scheduler));
+            await Eventually.UntilAsync("the scheduler to park", () => Parked(scheduler));
             var settled = _clock.Events.Count;
             _clock.Events.Where(e => e.Step == LoopStep.Claim).Should()
                 .OnlyContain(e => e.At == Now, "the backlog ran without waiting for a tick");
 
             _clock.Advance(JobScheduler.PollInterval - TimeSpan.FromSeconds(1));
             _clock.Advance(TimeSpan.FromSeconds(1));
-            await WaitUntilAsync(() => _clock.Events.Count > settled && Parked(scheduler));
+            await Eventually.UntilAsync(
+                "the scheduler to poll again and park", () => _clock.Events.Count > settled && Parked(scheduler));
 
             _clock.Events.Skip(settled).Should().Equal(
                 [
@@ -127,9 +129,9 @@ public class JobSchedulerTests
         await scheduler.StartAsync(default);
         try
         {
-            await WaitUntilAsync(() => Parked(scheduler));
+            await Eventually.UntilAsync("the scheduler to park", () => Parked(scheduler));
             _clock.Advance(JobScheduler.PollInterval);
-            await WaitUntilAsync(() => Volatile.Read(ref claims) == 2 && Parked(scheduler));
+            await Eventually.UntilAsync("the second claim and the scheduler to park", () => Volatile.Read(ref claims) == 2 && Parked(scheduler));
         }
         finally
         {
@@ -257,17 +259,6 @@ public class JobSchedulerTests
             It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()));
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The condition did not hold within 30 seconds.");
-            await Task.Delay(10);
-        }
-    }
-
     [Fact]
     public async Task A_job_runs_in_a_scope_of_its_tenant_attributed_to_the_system_as_the_job()
     {
@@ -346,7 +337,7 @@ public class JobSchedulerTests
         using var shutdown = new CancellationTokenSource();
 
         await scheduler.PollAsync(shutdown.Token);
-        await job.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await job.Started.Task.WaitAsync(Eventually.DefaultPatience);
         await shutdown.CancelAsync();
         await scheduler.DrainAsync();
 
@@ -387,13 +378,12 @@ public class JobSchedulerTests
                 : Task.FromResult(true));
 
         await scheduler.PollAsync(default);
-        await job.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (Volatile.Read(ref extensions) < 3 && DateTime.UtcNow < deadline)
-        {
-            _clock.Advance(JobScheduler.HeartbeatInterval);
-            await Task.Delay(20);
-        }
+        await job.Started.Task.WaitAsync(Eventually.DefaultPatience);
+        await Eventually.UntilAsync(
+            "three lease extensions",
+            () => Volatile.Read(ref extensions) >= 3,
+            step: TimeSpan.FromMilliseconds(20),
+            eachStep: () => _clock.Advance(JobScheduler.HeartbeatInterval));
 
         job.Gate.SetResult();
         await scheduler.DrainAsync();
@@ -418,9 +408,9 @@ public class JobSchedulerTests
             .ReturnsAsync(false);
 
         await scheduler.PollAsync(default);
-        await job.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await job.Started.Task.WaitAsync(Eventually.DefaultPatience);
         _clock.Advance(JobScheduler.HeartbeatInterval);
-        await scheduler.DrainAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await scheduler.DrainAsync().WaitAsync(Eventually.DefaultPatience);
 
         job.Gate.Task.IsCompleted.Should().BeFalse("the run ended because its lease was lost, not because it finished");
         _ledger.Verify(l => l.CompleteAsync(It.IsAny<JobLease>(), It.IsAny<DateTimeOffset>(), It.IsAny<JobCursor?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Never);

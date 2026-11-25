@@ -147,6 +147,12 @@ public class ConnectorRegistrationAttribute(
     public bool IsImport { get; set; }
 
     /// <summary>
+    ///     What a purge of this connector's data that keeps it from being imported again clears of
+    ///     the connector's state. A purge that allows re-import clears both slots of every connector.
+    /// </summary>
+    public ConnectorStateSlots KeptOutPurgeClears { get; set; } = ConnectorStateSlots.Resume;
+
+    /// <summary>
     ///     Supported data types for this connector.
     /// </summary>
     public SyncDataType[] SupportedDataTypes { get; set; } = [SyncDataType.Glucose];

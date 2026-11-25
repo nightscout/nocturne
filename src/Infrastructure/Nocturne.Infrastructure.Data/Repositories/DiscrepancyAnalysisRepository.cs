@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -153,15 +154,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
             query = query.Where(a => a.OverallMatch == (ResponseMatchType)overallMatch.Value);
         }
 
-        if (fromDate.HasValue)
-        {
-            query = query.Where(a => a.AnalysisTimestamp >= fromDate.Value);
-        }
-
-        if (toDate.HasValue)
-        {
-            query = query.Where(a => a.AnalysisTimestamp <= toDate.Value);
-        }
+        query = query.InWindow(a => a.AnalysisTimestamp, fromDate, toDate);
 
         return await query
             .OrderByDescending(a => a.AnalysisTimestamp)
@@ -205,15 +198,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var query = db.DiscrepancyAnalyses.AsQueryable();
 
-        if (fromDate.HasValue)
-        {
-            query = query.Where(a => a.AnalysisTimestamp >= fromDate.Value);
-        }
-
-        if (toDate.HasValue)
-        {
-            query = query.Where(a => a.AnalysisTimestamp <= toDate.Value);
-        }
+        query = query.InWindow(a => a.AnalysisTimestamp, fromDate, toDate);
 
         var total = await query.CountAsync(cancellationToken);
         var perfect = await query.CountAsync(
@@ -274,15 +259,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var query = db.DiscrepancyAnalyses.AsQueryable();
 
-        if (fromDate.HasValue)
-        {
-            query = query.Where(a => a.AnalysisTimestamp >= fromDate.Value);
-        }
-
-        if (toDate.HasValue)
-        {
-            query = query.Where(a => a.AnalysisTimestamp <= toDate.Value);
-        }
+        query = query.InWindow(a => a.AnalysisTimestamp, fromDate, toDate);
 
         var endpointStats = await query
             .GroupBy(a => a.RequestPath)

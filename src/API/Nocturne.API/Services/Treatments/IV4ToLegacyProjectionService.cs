@@ -16,14 +16,15 @@ internal interface IV4ToLegacyProjectionService
     /// Returns a set of legacy <see cref="Treatment"/> objects synthesised from V4 treatment records
     /// (Bolus, CarbIntake, BGCheck, Note, DeviceEvent).
     /// These supplement the treatments already stored in the legacy treatments table for connectors
-    /// that write V4 directly. The newest <paramref name="limit"/> treatments in the window newest
-    /// first, or, when <paramref name="descending"/> is <c>false</c>, the oldest oldest first.
+    /// that write V4 directly. The newest <see cref="LegacyTreatmentRange.Limit"/> treatments in the
+    /// window newest first, or, when <see cref="LegacyTreatmentRange.Descending"/> is <c>false</c>, the
+    /// oldest oldest first. With <see cref="LegacyTreatmentRange.IncludeDeleted"/> the rows stored
+    /// deleted are read as well as the live ones, a deleted one projected with <c>isValid: false</c>
+    /// and its delete as its modification stamp; the window, the limit and the order apply to live and
+    /// deleted rows together.
     /// </summary>
     Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        bool descending = true,
+        LegacyTreatmentRange range,
         CancellationToken ct = default
     );
 

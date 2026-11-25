@@ -61,7 +61,7 @@ public class StepUpWrongCodeBoundIntegrationTests : ApiIntegrationTestBase
         locked.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         locked.Headers.RetryAfter.Should().NotBeNull();
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT count(*) FROM auth_audit_log
@@ -112,7 +112,7 @@ public class StepUpWrongCodeBoundIntegrationTests : ApiIntegrationTestBase
 
     private async Task<(Guid SubjectId, byte[][] Secrets)> SeedMemberWithAuthenticatorsAsync(string name, int count)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, name);
 
         var secrets = Enumerable.Range(0, count).Select(_ => TotpHelper.GenerateSecret()).ToArray();
@@ -123,13 +123,6 @@ public class StepUpWrongCodeBoundIntegrationTests : ApiIntegrationTestBase
         }
 
         return (subjectId, secrets);
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
     }
 
     private static string CurrentCode(byte[] secret) =>

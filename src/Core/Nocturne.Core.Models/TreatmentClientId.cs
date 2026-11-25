@@ -67,6 +67,10 @@ public static class TreatmentClientId
     /// <summary>Marks a legacy id the decomposer derived from a treatment's content.</summary>
     public const string SyntheticIdPrefix = "syn-";
 
+    /// <summary>Whether <paramref name="legacyId"/> was derived from a treatment's content rather than sent by its client.</summary>
+    public static bool IsSynthetic(string legacyId) =>
+        legacyId.StartsWith(SyntheticIdPrefix, StringComparison.Ordinal);
+
     /// <summary>
     /// Whether two records that share <paramref name="legacyId"/> are nonetheless different client
     /// records. A Trio edit re-uploads under a fresh <c>id</c> with the deleted entry's time and often
@@ -76,7 +80,7 @@ public static class TreatmentClientId
     /// (a pre-upgrade row, an uploader that sends none) is taken to be the same record.
     /// </summary>
     public static bool IsDifferentRecord(string legacyId, string? incoming, string? stored) =>
-        legacyId.StartsWith(SyntheticIdPrefix, StringComparison.Ordinal)
+        IsSynthetic(legacyId)
         && incoming is not null
         && stored is not null
         && !string.Equals(incoming, stored, StringComparison.Ordinal);

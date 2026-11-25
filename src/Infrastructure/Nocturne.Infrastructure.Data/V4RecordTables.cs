@@ -274,7 +274,7 @@ internal static class V4RecordTables
 
     private static V4RecordTable<T> LinkedAs<T>(
         this V4RecordTable<T> table, RecordType recordType, Func<T, MatchCriteria> criteria)
-        where T : class, ITenantScoped, ISoftDeletable, IDuplicateFlagged, ISystemTimestamped, IWriterStamped =>
+        where T : class, ITenantScoped, ISoftDeletable, ILegacyIdentified, IDuplicateFlagged, ISystemTimestamped, IWriterStamped =>
         table.WithDeduplication(t => new DeduplicatedTable<T>(
             recordType, t, e => e.SysCreatedAt, criteria, spanEnd: null,
             DuplicateGroupPrimaries.ByUpdate, DuplicateGroupPrimaries.Touch));
@@ -745,7 +745,7 @@ internal sealed class DeduplicatedTable<T>(
     Func<NocturneDbContext, DbSet<T>, RecordType, int, CancellationToken, IAsyncEnumerable<DisagreeingRow[]>> pages,
     Func<IQueryable<T>, IReadOnlyList<Guid>, DateTime, CancellationToken, Task<int>>? touch)
     : DeduplicatedTable(recordType)
-    where T : class, ITenantScoped, ISoftDeletable, IDuplicateFlagged, IWriterStamped
+    where T : class, ITenantScoped, ISoftDeletable, ILegacyIdentified, IDuplicateFlagged, IWriterStamped
 {
     private V4RecordTable<T> Table => timed.Table;
 
@@ -759,7 +759,11 @@ internal sealed class DeduplicatedTable<T>(
     public override Task<Dictionary<Guid, RecordInfo>> RecordInfoAsync(
         NocturneDbContext db, HashSet<Guid> ids, CancellationToken ct) =>
         LinkedRecordTypes.LoadAsync<T>(
-            db, e => new RecordInfo(criteria(e), e.DeletedAt != null, spanEnd?.Invoke(e) ?? default), ids, ct);
+            db,
+            e => new RecordInfo(
+                criteria(e), e.DeletedAt != null, spanEnd?.Invoke(e) ?? default, e.LegacyId,
+                (e as ISyncDedupable)?.SyncIdentifier, (e as IUpstreamFingerprinted)?.UpstreamFingerprint),
+            ids, ct);
 
     public override Task<int> DeriveFlagsAsync(NocturneDbContext ctx, Guid[] ids, CancellationToken ct) =>
         DuplicateGroupPrimaries.Derive(ctx, Table.Set(ctx), RecordType, ids, ct);

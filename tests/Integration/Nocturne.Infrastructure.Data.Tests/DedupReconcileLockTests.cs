@@ -20,6 +20,14 @@ namespace Nocturne.Infrastructure.Data.Tests;
 public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
     : IClassFixture<DedupReconcileLockTests.Database>
 {
+    // The reconcile pass waits this long for the full job to reach its carb-merge read. An unserialised
+    // pass meets it within; a serialised one waits it out alone. Part of the assertion, not a hang guard.
+    private static readonly TimeSpan JobReachesMergeWithin = TimeSpan.FromSeconds(5);
+
+    // A pass that the tenant lock serialises waits this long for a partner that cannot arrive. Part of
+    // the assertion, not a hang guard.
+    private static readonly TimeSpan SerialisedPassWaits = TimeSpan.FromMilliseconds(500);
+
     public sealed class Database : IAsyncLifetime
     {
         public string AppConnectionString { get; private set; } = string.Empty;
@@ -89,7 +97,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var at = DateTime.UtcNow.AddHours(-1);
         var (first, second) = await SeedDuplicateCarbsAsync(tenant, at);
 
-        var rendezvous = new Rendezvous(TimeSpan.FromMilliseconds(500));
+        var rendezvous = new Rendezvous(SerialisedPassWaits);
         await using var a = Context(tenant, MeetAfterCursorRead(rendezvous));
         await using var b = Context(tenant, MeetAfterCursorRead(rendezvous));
 
@@ -132,7 +140,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, start);
 
         await transaction.CommitAsync();
-        var runId = await start.WaitAsync(TimeSpan.FromSeconds(30));
+        var runId = await start.WaitAsync(Eventually.DefaultPatience);
 
         await using var check = Context(tenant);
         var state = await check.DedupReconcileState.AsNoTracking().SingleAsync();
@@ -148,7 +156,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var (first, second) = await SeedDuplicateCarbsAsync(tenant, at);
 
         // The job counts and links every type before its first merge, well past the reconcile pass's read.
-        var rendezvous = new Rendezvous(TimeSpan.FromSeconds(5));
+        var rendezvous = new Rendezvous(JobReachesMergeWithin);
         await using var full = Context(tenant, MeetAfterFullCarbMergeRead(rendezvous));
         await using var reconcile = Context(tenant, MeetAfterCursorRead(rendezvous));
 

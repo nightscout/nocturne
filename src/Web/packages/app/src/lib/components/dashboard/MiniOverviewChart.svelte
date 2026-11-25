@@ -8,14 +8,22 @@
     BrushContext,
     ChartClipPath,
     LinearGradient,
+    Circle,
   } from "layerchart";
-  import { scaleTime, scaleLinear } from "d3-scale";
+  import { scaleTime, scaleLinear, scaleLog, type ScaleContinuousNumeric } from "d3-scale";
+  import { tv } from "tailwind-variants";
   import { curveMonotoneX } from "d3";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { time, formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import {
+    time,
+    formatDateTimeCompact,
+    formatWeekdayDate,
+    hourLabel,
+  } from "#lib/utils/formatting.js";
   import {
     distinctRangeStops,
+    getGlucoseColor,
     type GlucoseThresholds,
   } from "@nocturne/charts/core";
   import { glucoseRangePalette } from "#lib/stores/appearance-store.svelte.js";
@@ -70,6 +78,12 @@
     lineColor?: string;
     areaMode?: AreaMode;
     areaOpacity?: number;
+    /**
+     * "nightscout" draws cgm-remote-monitor's context chart: each reading as a 2px dot on
+     * a log scale (36-420 mg/dL), half-faded outside the selection, the selection outlined,
+     * and no header, line or forecast.
+     */
+    variant?: "default" | "nightscout";
   }
 
   let {
@@ -88,7 +102,49 @@
     lineColor = "var(--glucose-in-range)",
     areaMode = "off",
     areaOpacity = 0.5,
+    variant = "default",
   }: Props = $props();
+
+  const nightscout = $derived(variant === "nightscout");
+  const yScale = $derived<ScaleContinuousNumeric<number, number>>(
+    nightscout ? scaleLog().clamp(true) : scaleLinear()
+  );
+  /** chart.js: the context chart's log domain. */
+  const NIGHTSCOUT_CONTEXT_DOMAIN: [number, number] = [36, 420];
+
+  const overview = tv({
+    slots: {
+      root: "print:hidden",
+      plot: "px-2 pb-2",
+      range: "bg-primary/20 border border-primary/40 rounded",
+      handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
+      axisLabel: "text-2xs fill-muted-foreground",
+    },
+    variants: {
+      variant: {
+        default: { plot: "h-[96px]" },
+        nightscout: {
+          plot: "h-[var(--ns-context-height,180px)] px-0 pb-0",
+          range: "bg-transparent border-x-2 border-t-2 border-b-0 border-white rounded-none",
+          handle: "bg-transparent hover:bg-transparent",
+          axisLabel: "fill-foreground",
+        },
+      },
+    },
+  });
+  const styles = $derived(overview({ variant }));
+
+  function inSelection(d: GlucosePoint): boolean {
+    const [from, to] = selectedXDomain ?? fullXDomain;
+    const t = d.time.getTime();
+    return t >= from.getTime() && t <= to.getTime();
+  }
+
+  // Past midnight a tick names the day, as Nightscout's context axis does.
+  function nightscoutTickLabel(v: unknown): string {
+    if (!(v instanceof Date)) return String(v);
+    return v.getHours() === 0 && v.getMinutes() === 0 ? formatWeekdayDate(v) : hourLabel(v);
+  }
 
   /** Widest range label at this font, used to keep it inside the strip. */
   const RANGE_LABEL_HALF_WIDTH = 60;
@@ -131,7 +187,8 @@
   }
 </script>
 
-<div class="mini-overview-chart print:hidden">
+<div class={styles.root()} class:mini-overview-chart={!nightscout}>
+  {#if !nightscout}
   <!-- Header with reset button -->
   <div
     class="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground"
@@ -144,19 +201,20 @@
       </Button>
     {/if}
   </div>
+  {/if}
 
   <!-- Mini chart -->
   {#if expanded}
     <!-- Tall enough for the range label to sit in the top gutter above the plot. -->
-    <div class="h-[96px] px-2 pb-2">
+    <div class={styles.plot()}>
       <Chart
         {data}
         x={(d: GlucosePoint) => d.time}
         y="sgv"
         xScale={scaleTime()}
         xDomain={[fullXDomain[0], fullXDomain[1]]}
-        yScale={scaleLinear()}
-        {yDomain}
+        {yScale}
+        yDomain={nightscout ? NIGHTSCOUT_CONTEXT_DOMAIN : yDomain}
         {padding}
       >
         {#snippet children({ context })}
@@ -174,6 +232,30 @@
             areaOpacity
           )}
           <Svg>
+            {#if nightscout}
+              {#each [thresholds.high, thresholds.low] as level (level)}
+                <line
+                  x1={0}
+                  x2={context.width}
+                  y1={context.yScale(level)}
+                  y2={context.yScale(level)}
+                  class="stroke-(--ns-rule-target)"
+                  stroke-dasharray="3,3"
+                  shape-rendering="crispEdges"
+                />
+              {/each}
+              <ChartClipPath>
+                <Circle
+                  {data}
+                  key={(d) => d.time.getTime()}
+                  cx={(d) => d.time}
+                  cy={(d) => d.sgv}
+                  r={2}
+                  fill={(d) => getGlucoseColor(d.sgv, thresholds)}
+                  fillOpacity={(d) => (inSelection(d) ? 1 : 0.5)}
+                />
+              </ChartClipPath>
+            {:else}
             <ChartClipPath>
               {#if fillStops}
                 <LinearGradient
@@ -238,12 +320,17 @@
                 />
               {/if}
             </ChartClipPath>
+            {/if}
             <!-- X axis -->
             <Axis
               placement="bottom"
-              ticks={4}
-              format={(v) => (v instanceof Date ? time(v) : String(v))}
-              tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
+              ticks={nightscout ? 6 : 4}
+              format={(v) =>
+                nightscout ? nightscoutTickLabel(v) : v instanceof Date ? time(v) : String(v)}
+              tickOcclusion={nightscout}
+              tickLabelProps={nightscout
+                ? { class: styles.axisLabel(), fontSize: 16 }
+                : { class: styles.axisLabel() }}
             />
           </Svg>
 
@@ -253,10 +340,7 @@
             x={selectedXDomain ?? fullXDomain}
             onBrushEnd={handleBrush}
             onChange={handleBrush}
-            classes={{
-              range: "bg-primary/20 border border-primary/40 rounded",
-              handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
-            }}
+            classes={{ range: styles.range(), handle: styles.handle() }}
           >
             {#snippet children({ state: bc })}
               <!-- One label for the selected range, centred over the brush.
@@ -265,7 +349,7 @@
                      so add the padding back or the label lands a gutter to the
                      left and above the strip. Clamped to stay inside the strip
                      when the brush hugs an edge, as it does at "now". -->
-              {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
+              {#if !nightscout && bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
                 <div
                   class="absolute text-2xs font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
                   style:--label-left="clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
@@ -285,7 +369,7 @@
     </div>
 
     <!-- Selection info -->
-    {#if hasSelection && selectedXDomain}
+    {#if !nightscout && hasSelection && selectedXDomain}
       <div
         class="flex items-center justify-center gap-2 px-3 py-1 text-2xs text-muted-foreground border-t border-border"
       >

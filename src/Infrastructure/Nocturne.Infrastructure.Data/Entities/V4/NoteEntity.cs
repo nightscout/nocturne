@@ -11,7 +11,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Note
 /// </summary>
 [Table("notes")]
-public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackTracked
+public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFingerprinted, IDuplicateFlagged, IWriteBackSent
 {
     /// <inheritdoc />
     [AuditIgnored]
@@ -22,6 +22,11 @@ public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFinge
     [AuditIgnored]
     [Column("written_live")]
     public bool WrittenLive { get; set; }
+
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("write_back_sent_fingerprint")]
+    public string? WriteBackSentFingerprint { get; set; }
 
     /// <inheritdoc />
     [AuditIgnored]

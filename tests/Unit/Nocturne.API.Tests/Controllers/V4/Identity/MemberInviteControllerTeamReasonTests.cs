@@ -120,7 +120,10 @@ public sealed class MemberInviteControllerTeamReasonTests
 
     private void NothingWasWritten()
     {
-        _members.Verify(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Verify(t => t.ReplaceMemberRolesAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<Guid>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        _members.Verify(m => m.ReplaceRolesAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<Guid>>(),
             It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
         _members.Verify(m => m.SetDirectPermissionsAsync(
@@ -174,20 +177,20 @@ public sealed class MemberInviteControllerTeamReasonTests
     public async Task A_role_change_of_a_mixed_member_is_worked_out_from_the_direct_reasons_roles()
     {
         var member = Given(Mixed(Guid.CreateVersion7()));
-        _members.Setup(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Setup(t => t.ReplaceMemberRolesAsync(
                 TenantId, member.Id, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<Guid>>(),
-                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(OwnerGuardedChange.Changed);
 
         var result = await Controller().SetMemberRoles(
             member.Id, new SetMemberRolesRequest([CaretakerRole]), TestPublicAccessCache.Create(), CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        _members.Verify(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Verify(t => t.ReplaceMemberRolesAsync(
             TenantId, member.Id,
             It.Is<IReadOnlyCollection<Guid>>(removed => removed.SequenceEqual(new[] { ViewerRole })),
             It.Is<IReadOnlyCollection<Guid>>(added => added.SequenceEqual(new[] { CaretakerRole })),
-            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -231,39 +234,39 @@ public sealed class MemberInviteControllerTeamReasonTests
     {
         var member = Given(Member(Caller, [Owner], []));
         _members.Setup(m => m.FindRoleIdBySlugAsync(TenantId, RoleSeeds.Caretaker, It.IsAny<CancellationToken>())).ReturnsAsync(CaretakerRole);
-        _members.Setup(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Setup(t => t.ReplaceMemberRolesAsync(
                 TenantId, member.Id, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<Guid>>(),
-                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(OwnerGuardedChange.Changed);
 
         var result = await Controller().StepDown(CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        _members.Verify(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Verify(t => t.ReplaceMemberRolesAsync(
             TenantId, member.Id,
             It.Is<IReadOnlyCollection<Guid>>(removed => removed.SequenceEqual(new[] { OwnerRole })),
             It.Is<IReadOnlyCollection<Guid>>(added => added.SequenceEqual(new[] { CaretakerRole })),
-            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Giving_a_role_to_a_direct_reason_that_holds_only_a_permission_leaves_the_role_the_team_gives()
     {
         var member = Given(PermissionOnlyDirect(Guid.CreateVersion7()));
-        _members.Setup(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Setup(t => t.ReplaceMemberRolesAsync(
                 TenantId, member.Id, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<Guid>>(),
-                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(OwnerGuardedChange.Changed);
 
         var result = await Controller().SetMemberRoles(
             member.Id, new SetMemberRolesRequest([ViewerRole]), TestPublicAccessCache.Create(), CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        _members.Verify(m => m.ReplaceRolesUnlessLastOwnerAsync(
+        _tenantService.Verify(t => t.ReplaceMemberRolesAsync(
             TenantId, member.Id,
             It.Is<IReadOnlyCollection<Guid>>(removed => removed.Count == 0),
             It.Is<IReadOnlyCollection<Guid>>(added => added.SequenceEqual(new[] { ViewerRole })),
-            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

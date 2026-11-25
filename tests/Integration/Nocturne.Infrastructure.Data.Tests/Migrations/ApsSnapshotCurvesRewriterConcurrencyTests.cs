@@ -100,7 +100,7 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests(ApsSnapshotCurvesRewriter
                 db, Tenant, after: null, int.MaxValue, 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None)).Changed;
         });
 
-        await WaitUntilBlockedOnALockAsync();
+        await PostgresLockWaits.UntilBlockedAsync(fixture.ConnectionString, rewrite);
         rewrite.IsCompleted.Should().BeFalse("the rewrite waits on the upload's row lock");
         await transaction.CommitAsync();
 
@@ -108,28 +108,6 @@ public class ApsSnapshotCurvesRewriterConcurrencyTests(ApsSnapshotCurvesRewriter
         IDictionary<string, JsonNode?> suggested = JsonNode.Parse(await ReadSuggestedAsync())!.AsObject();
         suggested["bg"]!.GetValue<int>().Should().Be(200);
         suggested.Should().NotContainKeys("predBGs", "tick");
-    }
-
-    private async Task WaitUntilBlockedOnALockAsync()
-    {
-        await using var observer = new NpgsqlConnection(fixture.ConnectionString);
-        await observer.OpenAsync();
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            await using var cmd = observer.CreateCommand();
-            cmd.CommandText = """
-                SELECT count(*) FROM pg_stat_activity
-                WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%WITH page AS%';
-                """;
-            if ((long)(await cmd.ExecuteScalarAsync())! > 0)
-            {
-                return;
-            }
-
-            await Task.Delay(50);
-        }
-
-        throw new TimeoutException("The rewrite never waited on the upload's lock.");
     }
 
     private async Task<string> ReadSuggestedAsync()

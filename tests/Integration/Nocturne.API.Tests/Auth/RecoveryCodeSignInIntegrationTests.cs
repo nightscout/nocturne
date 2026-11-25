@@ -32,14 +32,14 @@ public class RecoveryCodeSignInIntegrationTests : ApiIntegrationTestBase
 
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Deactivated Member");
         var username = $"deactivated-{Guid.NewGuid():N}";
-        await ExecuteAsync(conn, "UPDATE subjects SET username = @username WHERE id = @id;",
+        await conn.ExecuteAsync("UPDATE subjects SET username = @username WHERE id = @id;",
             ("username", username), ("id", memberId));
 
         List<string> codes;
         using (var scope = Fixture.Services.CreateScope())
             codes = await scope.ServiceProvider.GetRequiredService<IRecoveryCodeService>().GenerateCodesAsync(memberId);
 
-        await ExecuteAsync(conn, "UPDATE subjects SET is_active = false WHERE id = @id;", ("id", memberId));
+        await conn.ExecuteAsync("UPDATE subjects SET is_active = false WHERE id = @id;", ("id", memberId));
 
         try
         {
@@ -62,20 +62,10 @@ public class RecoveryCodeSignInIntegrationTests : ApiIntegrationTestBase
         }
         finally
         {
-            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }
 
     private static string? Detail(string problemJson) =>
         JsonDocument.Parse(problemJson).RootElement.GetProperty("detail").GetString();
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
 }

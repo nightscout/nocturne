@@ -1,10 +1,14 @@
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
+using System.Collections.Specialized;
+using System.Net.WebSockets;
+using System.Web;
 using SocketIOClient;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -147,18 +151,20 @@ public class NightscoutConnectorBackgroundService
             ? config.Url
             : config.RealtimeUrl;
 
-        if (ResolveListenerBaseUrl(realtimeUrl, tenantSlug) is not { } socketUrl)
+        if (ResolveListenerBaseUrl(realtimeUrl, tenantSlug) is not { } resolvedUrl)
             return;
 
-        var client = new SocketIO(new Uri(socketUrl), new SocketIOOptions
-        {
-            Reconnection = true,
-            ReconnectionAttempts = ReconnectionAttempts,
-            ReconnectionDelayMax = ReconnectionDelayMaxMs,
-        });
+        var address = NightscoutAddress.Resolve(resolvedUrl);
+        var client = NewClient(address, _serviceProvider.GetRequiredService<IHttpClientFactory>());
 
         foreach (var evt in new[] { "dataUpdate", "create", "update" })
             client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
+
+        // Nightscout sends data events only to a socket that has authorized with read access, and
+        // forgets it on every reconnect. It answers authorize with a full dataUpdate, so each
+        // (re)connect syncs once: the catch-up for whatever changed while the socket was down.
+        var authorize = AuthorizeMessage(config.ApiSecret, address.Token);
+        client.OnConnected += (_, _) => Observe(AuthorizeAsync(client, authorize, tenantSlug), tenantSlug);
 
         try
         {
@@ -178,7 +184,7 @@ public class NightscoutConnectorBackgroundService
             Logger.LogWarning(
                 ex,
                 "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
-                tenantSlug, socketUrl);
+                tenantSlug, address.Origin);
 
             return;
         }
@@ -193,6 +199,90 @@ public class NightscoutConnectorBackgroundService
             "Started real-time listener for Nightscout tenant {TenantSlug}",
             tenantSlug);
     }
+
+    /// <summary>
+    /// A client for the Socket.IO endpoint of <paramref name="address"/>. The client reads a URL's
+    /// path as a Socket.IO namespace, so a site under a sub-path is reached by its origin and the
+    /// endpoint path instead. The URL's query goes with the handshake, as it goes with every read.
+    /// Its polling transport sends through the
+    /// <see cref="NightscoutConnectorInstaller.RealtimeHttpClientName"/> connector client, which keeps
+    /// the site's path out of telemetry, in place of the <see cref="HttpClient"/> the library would
+    /// build itself. The WebSocket it upgrades to opens its own connection, outside that client.
+    /// </summary>
+    internal static SocketIO NewClient(NightscoutAddress address, IHttpClientFactory clients)
+    {
+        var options = new SocketIOOptions
+        {
+            Path = address.SocketIoPath,
+            Reconnection = true,
+            ReconnectionAttempts = ReconnectionAttempts,
+            ReconnectionDelayMax = ReconnectionDelayMaxMs,
+        };
+        if (address.Query is { } query)
+            options.Query = HandshakeQuery(query);
+
+        return new SocketIO(
+            new Uri(address.Origin),
+            options,
+            services => services.AddSingleton(_ => clients.CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName)));
+    }
+
+    /// <summary>
+    /// <paramref name="query"/> as SocketIOClient takes it. The client ignores a query on the URL it
+    /// is given and form-encodes each value of <see cref="SocketIOOptions.Query"/> (a space as
+    /// <c>+</c>, a <c>+</c> as <c>%2B</c>), so each value is form-decoded here and the handshake
+    /// carries the bytes the reads send, up to the case of a percent escape. A key given twice is
+    /// the one shape it cannot carry: the client joins its values with a comma.
+    /// </summary>
+    internal static NameValueCollection HandshakeQuery(string query) => HttpUtility.ParseQueryString(query);
+
+    /// <summary>
+    /// The <c>authorize</c> message Nightscout's own web client sends: the SHA-1 of the API secret
+    /// and the access token, each only when there is one. With neither, Nightscout gives the
+    /// socket its default role, which reads on a site that is readable without a secret.
+    /// </summary>
+    internal static Dictionary<string, object> AuthorizeMessage(string? apiSecret, string? token)
+    {
+        var message = new Dictionary<string, object> { ["client"] = "web", ["history"] = 1 };
+        if (NightscoutConnectorService.ApiSecretHeaderValue(apiSecret) is { } secret)
+            message["secret"] = secret;
+        if (!string.IsNullOrEmpty(token))
+            message["token"] = token;
+        return message;
+    }
+
+    private async Task AuthorizeAsync(SocketIO client, Dictionary<string, object> message, string tenantSlug)
+    {
+        try
+        {
+            await client.EmitAsync("authorize", [message]);
+        }
+        catch (Exception ex) when (ex is SocketIOClient.Exceptions.ConnectionException
+                                       or SocketIOClient.Session.ConnectionFailedException
+                                       or InvalidOperationException or ObjectDisposedException or IOException
+                                       or HttpRequestException or WebSocketException or TimeoutException
+                                       or OperationCanceledException)
+        {
+            Logger.LogWarning(
+                ex,
+                "Could not authorize the Socket.IO listener for tenant {TenantSlug}, will rely on polling",
+                tenantSlug);
+        }
+    }
+
+    /// <summary>
+    /// Logs a fault of <paramref name="authorizing"/> that <see cref="AuthorizeAsync"/> did not
+    /// expect. It runs from an event handler that nothing awaits, so the fault is observed here.
+    /// </summary>
+    private void Observe(Task authorizing, string tenantSlug) =>
+        authorizing.ContinueWith(
+            faulted => Logger.LogWarning(
+                faulted.Exception,
+                "Authorizing the Socket.IO listener for tenant {TenantSlug} failed, will rely on polling",
+                tenantSlug),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     private static async Task DisconnectAndDisposeAsync(SocketIO client)
     {

@@ -16,11 +16,11 @@ export function severityLabel(
   s: AlertRuleSeverity | string | undefined
 ): string {
   switch (s) {
-    case "critical":
+    case AlertRuleSeverity.Critical:
       return "Critical";
-    case "warning":
+    case AlertRuleSeverity.Warning:
       return "Warning";
-    case "info":
+    case AlertRuleSeverity.Info:
       return "Info";
     default:
       return s ?? "";

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Connectors;
 
 namespace Nocturne.Core.Models.Services;
 
@@ -227,6 +228,10 @@ public class Connection
 
     [JsonPropertyName("lastRecordAt")]
     public DateTimeOffset? LastRecordAt { get; set; }
+
+    /// <summary>The zone a connector read its source's timestamps in on its last sync, when it records one.</summary>
+    [JsonPropertyName("timeZone")]
+    public ConnectorTimeZone? TimeZone { get; set; }
 
     /// <summary>When the connector last completed a sync.</summary>
     [JsonPropertyName("lastSyncAt")]

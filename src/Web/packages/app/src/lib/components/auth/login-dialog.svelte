@@ -13,6 +13,8 @@
     onCancel?: () => void;
   } = $props();
 
+  let signingIn = $state(false);
+
   /** Handle successful login */
   async function handleLoginSuccess() {
     // Invalidate all data to reload with new auth state
@@ -41,7 +43,12 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
-  <Dialog.Content class="sm:max-w-md">
+  <Dialog.Content
+    class="sm:max-w-md"
+    showClose={!signingIn}
+    escapeKeydownBehavior={signingIn ? "ignore" : "close"}
+    interactOutsideBehavior={signingIn ? "ignore" : "close"}
+  >
     <Dialog.Header>
       <Dialog.Title>Sign in required</Dialog.Title>
       <Dialog.Description>Sign in to continue</Dialog.Description>
@@ -52,6 +59,7 @@
         ? window.location.pathname + window.location.search
         : '/'}
       onSuccess={handleLoginSuccess}
+      onBusyChange={(busy) => (signingIn = busy)}
     />
   </Dialog.Content>
 </Dialog.Root>
