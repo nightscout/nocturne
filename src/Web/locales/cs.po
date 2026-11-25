@@ -1276,8 +1276,9 @@ msgstr "Vlastní"
 #~ msgid "Ascending Volume"
 #~ msgstr "Zesilující hlasitost"
 
-#~ msgid "Telegram"
-#~ msgstr "Telegram"
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Telegram"
+msgstr "Telegram"
 
 #~ msgid "WhatsApp"
 #~ msgstr "WhatsApp"
@@ -1757,6 +1758,7 @@ msgstr "Bazál:"
 #~ msgstr "Kliknutím zobrazíte celodenní přehled"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Calendar"
 msgstr "Kalendář"
@@ -1768,6 +1770,7 @@ msgid "Today"
 msgstr "Dnes"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "TIR"
@@ -1775,6 +1778,7 @@ msgstr "TIR"
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
@@ -2357,6 +2361,7 @@ msgstr "Data byla úspěšně smazána"
 #~ msgid "Failed to trigger sync"
 #~ msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
@@ -2740,6 +2745,7 @@ msgstr "Nepodporováno"
 msgid "Max historical days"
 msgstr "Max. počet dní do historie"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Manual sync"
 msgstr "Ruční synchronizace"
@@ -3274,6 +3280,7 @@ msgid "Insulins"
 msgstr "Inzuliny"
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/constants/scope-labels.svelte.ts
@@ -3329,6 +3336,7 @@ msgstr "Křivky"
 msgid "IOB only"
 msgstr "Pouze IOB"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -4166,6 +4174,7 @@ msgstr "Čas záznamu"
 msgid "Accept"
 msgstr "Přijmout"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Dashboard"
 msgstr "Přehled"
@@ -4175,6 +4184,7 @@ msgstr "Přehled"
 
 #: ../portal/src/routes/features/+page.svelte
 #: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/+layout.svelte
@@ -4193,6 +4203,7 @@ msgstr "Hodiny"
 msgid "Overview"
 msgstr "Souhrn"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
@@ -4200,6 +4211,7 @@ msgstr "Souhrn"
 msgid "Meals"
 msgstr "Jídla"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/tools/+page.svelte
 msgid "Tools"
@@ -4219,6 +4231,7 @@ msgstr "Kompatibilita"
 #~ msgid "Test Endpoint Compatibility"
 #~ msgstr "Otestovat kompatibilitu koncového bodu"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
@@ -4234,6 +4247,7 @@ msgstr "Nastavení"
 msgid "Setup"
 msgstr "Prvotní nastavení"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -4247,11 +4261,13 @@ msgstr "Účet"
 #~ msgid "Patient Record"
 #~ msgstr "Karta pacienta"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Appearance"
 msgstr "Vzhled"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 msgid "Therapy"
@@ -4343,6 +4359,7 @@ msgstr "<0/> Resetovat"
 #~ msgid "Refresh Session"
 #~ msgstr "Obnovit relaci"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/layout/SidebarNotifications.svelte
 #: src/lib/components/layout/SidebarNotifications.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
@@ -4755,6 +4772,7 @@ msgstr "Účel"
 #~ msgid "Duration of Insulin Action"
 #~ msgstr "Doba působení inzulinu (DIA)"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/patient/InsulinFormFields.svelte
 msgid "hours"
 msgstr "hodin"
@@ -5235,6 +5253,7 @@ msgstr "Terapie"
 msgid "Identity"
 msgstr "Identita"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/+page.svelte
@@ -5256,6 +5275,7 @@ msgstr "Správa"
 #~ msgid "Manage Sharing"
 #~ msgstr "Spravovat sdílení"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Audit"
 msgstr "Audit"
@@ -5828,6 +5848,7 @@ msgstr "Bolus: {0} U"
 msgid "Basal: {0}U"
 msgstr "Bazál: {0} U"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -5972,6 +5993,7 @@ msgstr "Medián–75. percentil"
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/clock-builder/DisplaySettings.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -7860,6 +7882,7 @@ msgstr "Žádné"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/routes/features/+page.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -8865,6 +8888,7 @@ msgstr "Nocturne se integruje s různými službami třetích stran pro diabetol
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Dexcom"
 msgstr "Dexcom"
@@ -8874,6 +8898,7 @@ msgstr "Dexcom"
 msgid "FreeStyle Libre"
 msgstr "FreeStyle Libre"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Glooko"
 msgstr "Glooko"
@@ -9399,6 +9424,7 @@ msgstr "Léčba"
 #~ msgid "Blood Glucose <0/>"
 #~ msgstr "Glykémie <0/>"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/widgets/TrackersWidget.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
@@ -9885,6 +9911,7 @@ msgstr "<0/> Glykémie"
 
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/clock-builder/DisplaySettings.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "mmol/L"
@@ -12232,6 +12259,9 @@ msgstr "<0/> Integrace"
 #~ msgstr ""
 
 #: ../portal/src/lib/components/SiteFooter.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "Discord"
@@ -14718,6 +14748,7 @@ msgid "Alarms"
 msgstr "Alarmy"
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/notifications/InstanceKeyChanged.svelte
 msgid "Connectors"
 msgstr "Konektory"
@@ -14773,6 +14804,7 @@ msgid "Installation"
 msgstr "Instalace"
 
 #: ../portal/src/lib/components/SiteFooter.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/community/+page.svelte
@@ -14804,6 +14836,7 @@ msgstr "Zprovozněte Nocturne během několika minut."
 #~ msgstr ""
 
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Libre"
 msgstr "Libre"
 
@@ -15607,6 +15640,7 @@ msgid "Leave blank to keep current value"
 msgstr "Ponechte prázdné pro zachování aktuální hodnoty"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "GitHub"
 msgstr "GitHub"
 
@@ -18119,6 +18153,7 @@ msgstr "Všechny funkce"
 #~ msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
 #: src/lib/components/people/ReviewRow.svelte
 #: src/lib/components/people/ReviewSummary.svelte
@@ -18287,6 +18322,7 @@ msgstr "Oura"
 #~ msgid "MS Teams"
 #~ msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/teams/+page.svelte
@@ -19616,6 +19652,7 @@ msgstr "{0} · posledních 14 dní"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
 #: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/ReviewBar.svelte
@@ -22314,6 +22351,7 @@ msgstr "Pumpa nehlásí"
 msgid "{0} ({1} days)"
 msgstr "{0} ({1} dní)"
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/print/ReportPrintHeader.svelte
 msgid "Patient"
 msgstr "Pacient"
@@ -23772,8 +23810,9 @@ msgstr "<0/> Podmínka"
 msgid "Tenants"
 msgstr "Tenanty"
 
-#~ msgid "Translations"
-#~ msgstr "Překlady"
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Translations"
+msgstr "Překlady"
 
 #~ msgid "Only members who can manage this site's settings can configure or enable this connector."
 #~ msgstr "Tento konektor mohou nastavit nebo zapnout pouze členové s oprávněním ke správě nastavení instance."
@@ -26818,6 +26857,7 @@ msgid "U per hour"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
@@ -26838,6 +26878,7 @@ msgid "Mostly calculated from doses"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
@@ -30196,6 +30237,7 @@ msgstr ""
 msgid "Insulin and carbs"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
@@ -30373,6 +30415,7 @@ msgid "Site age"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Sensor age"
 msgstr ""
 
@@ -32492,6 +32535,7 @@ msgstr ""
 msgid "Connectors & apps"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Sharing & privacy"
@@ -35231,6 +35275,7 @@ msgstr ""
 msgid "Access requests - Settings - Nocturne"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Access requests"
@@ -38124,6 +38169,7 @@ msgstr ""
 msgid "Do the guided setup checklist again."
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/site/+page.svelte
 msgid "Site details"
@@ -38157,6 +38203,7 @@ msgstr ""
 msgid "Identity providers and chat platform settings."
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
@@ -38198,6 +38245,7 @@ msgstr ""
 msgid "Each tracker's dashboard visibility is configured in <0>Trackers</0>"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
@@ -38371,6 +38419,7 @@ msgstr ""
 msgid "Discord OAuth2 is not configured on this instance. Ask the administrator to add the Application ID and Client Secret under Platform > Administration > Integrations. The administrator can also set <0/> and <1/>. Or run <2/> directly from Discord."
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Support"
@@ -38747,6 +38796,7 @@ msgstr ""
 msgid "BasalInjections"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/settings-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 msgid "Invite people"
@@ -39296,6 +39346,7 @@ msgstr ""
 msgid "The date range must not be longer than {0} days."
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Therapy timeline"
@@ -39330,6 +39381,7 @@ msgstr ""
 msgid "{0} average"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 msgid "time in range"
 msgstr ""
@@ -42249,6 +42301,7 @@ msgstr ""
 msgid "No custom reports. <0/>"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "Actions"
 msgstr ""
@@ -44471,6 +44524,7 @@ msgstr ""
 msgid "A1c"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "HbA1c"
@@ -45807,6 +45861,7 @@ msgstr ""
 msgid "unknown"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "meals"
 msgstr ""
@@ -45930,6 +45985,7 @@ msgstr ""
 msgid "food.read"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "food"
@@ -45975,6 +46031,9 @@ msgstr ""
 msgid "alerts.read"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "alerts"
 msgstr ""
@@ -45991,6 +46050,7 @@ msgstr ""
 msgid "BG"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "sensor"
@@ -46051,6 +46111,7 @@ msgstr ""
 msgid "insulin"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "bolus"
@@ -46070,6 +46131,7 @@ msgstr ""
 msgid "temp basal"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "profile"
 msgstr ""
@@ -46159,6 +46221,7 @@ msgstr ""
 msgid "illness"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "gaps"
 msgstr ""
@@ -46167,18 +46230,22 @@ msgstr ""
 msgid "missing data"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "SAGE"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "sensor age"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "site"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "infusion set"
 msgstr ""
@@ -46188,10 +46255,12 @@ msgstr ""
 msgid "cannula"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "CAGE"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "site age"
 msgstr ""
@@ -48497,6 +48566,7 @@ msgstr ""
 msgid "This member's access lasts longer than yours. Ask an owner to create the link."
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "overview"
 msgstr ""
@@ -48545,6 +48615,7 @@ msgstr ""
 msgid "hba1c"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "glycated hemoglobin"
 msgstr ""
@@ -48585,10 +48656,13 @@ msgstr ""
 msgid "glucose readings"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "log"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "history"
 msgstr ""
@@ -48665,6 +48739,8 @@ msgstr ""
 msgid "sleeping"
 msgstr ""
 
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "carbs"
 msgstr ""
@@ -49045,4 +49121,557 @@ msgstr ""
 
 #: src/lib/test-stubs/LoginForm.test-stub.svelte
 msgid "Fail sign-in"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Stats"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Pages"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Quick settings"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "insulin on board"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "active insulin"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "carbs on board"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "active carbs"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "cannula age"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "CGM age"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "estimated A1c"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "percentage"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "dashboard"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "home"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "main"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "nutrition"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "eating"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "dining"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "calendar"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "schedule"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "dates"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "monthly"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "tools"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "utilities"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "notifications"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "messages"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "therapy timeline"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "time spans"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "profile history"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "profile changes"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "trackers"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "consumables"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "site change"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "reminders"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "appointments"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "tenants"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "organizations"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "accounts"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "platform admin"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "invite"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "sign up"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "new site"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "new tenant"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "administration"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "identity providers"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "OIDC"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "SSO"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "bots"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "access requests"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "join"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "approve"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "pending users"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "account"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "email"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "password"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "teams"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "managers"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "invite a manager"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "name"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "avatar"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "appearance"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "theme"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "dark mode"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "light mode"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "alarms"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "urgent"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "warnings"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "grants"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "access"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "permissions"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "sharing"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "connectors"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "migration"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "import"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "transition"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "MongoDB"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "tenant"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "display name"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "address"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "bot"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "chat"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "integrations"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "data quality"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "thresholds"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "therapy"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "treatment"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "insulin type"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "patient"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "demographic"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "details"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "privacy"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "public"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "members"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "users"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "team"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "roles"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "access control"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "followers"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "caregivers"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "audit"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "changes"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "support"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "help"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "contact"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "community"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "documentation"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "foundation"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "translations"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "translate"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "language"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "locale"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "toggle"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "glucose units"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "units"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "lookback"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "time range"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "chart period"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "add treatment"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "add food"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "new food"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "sync"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "refresh"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "fetch"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "update"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Cannula age"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Grants"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Toggle dark mode"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Switch between light and dark themes"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Switch glucose units"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Toggle between mg/dL and mmol/L"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Change chart lookback"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Adjust the time window for charts"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Add treatment"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Log a new treatment entry"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Add food entry"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Add a food item to the database"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "Trigger a manual data sync"
 msgstr ""
