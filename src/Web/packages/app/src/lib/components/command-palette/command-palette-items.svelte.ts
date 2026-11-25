@@ -1,4 +1,8 @@
 import { a1cLabel } from "#lib/utils/a1c-formatting.js";
+import { LegacyConsumableKind } from "#lib/api/index.js";
+import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+import { formatAge } from "#lib/components/trackers/age.svelte.js";
+import { consumableAgeHours } from "./consumable-age";
 import {
 	getColorScheme,
 	getGlucoseUnits,
@@ -232,6 +236,34 @@ function paletteKeywords(key: PaletteKeywordKey, translated: Partial<Record<Pale
 	return withEnglishWords(translated[key] ?? [], ENGLISH_PALETTE_KEYWORDS[key]);
 }
 
+/** The live value each stat shows after its name; absent while the store has none. */
+export interface PaletteStatValues {
+	iob?: string;
+	cob?: string;
+	cage?: string;
+	sage?: string;
+}
+
+/** The stats' live values, read from the realtime store. */
+export function paletteStatValues(
+	store: Pick<RealtimeStore, "pillsData" | "legacyFallbacks" | "legacyCoverage" | "trackerInstances" | "nowMinute">,
+): PaletteStatValues {
+	const age = (kind: LegacyConsumableKind) => {
+		const hours = consumableAgeHours(kind, store.legacyFallbacks, store.legacyCoverage, store.trackerInstances, store.nowMinute);
+		return hours === undefined ? undefined : formatAge(hours);
+	};
+	return {
+		iob: store.pillsData.iob?.display ?? undefined,
+		cob: store.pillsData.cob?.display ?? undefined,
+		cage: age(LegacyConsumableKind.Site),
+		sage: age(LegacyConsumableKind.Sensor),
+	};
+}
+
+function statLabel(name: string, value: string | undefined): string {
+	return value ? `${name}: ${value}` : name;
+}
+
 function darkModeState(): string {
 	const scheme = getColorScheme();
 	return scheme === "dark" ? "On" : scheme === "light" ? "Off" : "System";
@@ -241,12 +273,15 @@ function darkModeState(): string {
  * Built per call so the labels and words are read in the current locale: wuchale translates strings
  * inside a function on each call, and a module-level constant only once.
  */
-export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>> = paletteKeywordWords()): CommandPaletteItem[] {
+export function paletteItems(
+	words: Partial<Record<PaletteKeywordKey, string[]>> = paletteKeywordWords(),
+	stats: PaletteStatValues = {},
+): CommandPaletteItem[] {
 	return [
 		// ─── Stats ───────────────────────────────────────────────────────────
 		{
 			id: "stat-iob",
-			label: "IOB",
+			label: statLabel("IOB", stats.iob),
 			group: "stats",
 			description: "Insulin on board",
 			keywords: paletteKeywords("statIob", words),
@@ -255,7 +290,7 @@ export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>>
 		},
 		{
 			id: "stat-cob",
-			label: "COB",
+			label: statLabel("COB", stats.cob),
 			group: "stats",
 			description: "Carbs on board",
 			keywords: paletteKeywords("statCob", words),
@@ -264,7 +299,7 @@ export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>>
 		},
 		{
 			id: "stat-cage",
-			label: "CAGE",
+			label: statLabel("CAGE", stats.cage),
 			group: "stats",
 			description: "Cannula age",
 			keywords: paletteKeywords("statCage", words),
@@ -273,7 +308,7 @@ export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>>
 		},
 		{
 			id: "stat-sage",
-			label: "SAGE",
+			label: statLabel("SAGE", stats.sage),
 			group: "stats",
 			description: "Sensor age",
 			keywords: paletteKeywords("statSage", words),
@@ -634,7 +669,8 @@ export function paletteItemsFor(
 	tenantless: boolean,
 	viewer: ReportViewer,
 	words: Partial<Record<PaletteKeywordKey, string[]>> = paletteKeywordWords(),
+	stats: PaletteStatValues = {},
 ): CommandPaletteItem[] {
-	const all = [...paletteItems(words), ...reportItems(viewer)];
+	const all = [...paletteItems(words, stats), ...reportItems(viewer)];
 	return tenantless ? filterTenantlessNav(all) : all;
 }
