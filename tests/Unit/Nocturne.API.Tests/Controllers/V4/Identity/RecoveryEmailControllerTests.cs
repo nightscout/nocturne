@@ -60,7 +60,7 @@ public class RecoveryEmailControllerTests : IDisposable
             .Returns(Task.CompletedTask);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
         _contexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
 
         using var seed = _db.CreateContext(Guid.Empty);

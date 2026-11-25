@@ -89,7 +89,7 @@ public class PasskeyControllerTests : IDisposable
 
         var jwtService = new Mock<IJwtService>();
         jwtService.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwtService.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwtService.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
         // Login codes are tenant-scoped, so the session's contexts are on the request's tenant, as
         // the request pipeline hands them out.
         _recoverySession = new RecoverySession(
@@ -706,6 +706,55 @@ public class PasskeyControllerTests : IDisposable
         var response = (PasskeyRegisterCompleteResponse)Assert.IsType<OkObjectResult>(result.Result).Value!;
         response.CredentialId.Should().Be(credentialId);
         response.SubjectId.Should().Be(subjectId);
+    }
+
+    [Theory]
+    [MemberData(nameof(RefusedRegistrations))]
+    public async Task RegisterComplete_WhenSignedInAndTheRegistrationIsRefused_AnswersRegistrationFailed(Exception refusal)
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(refusal);
+
+        var result = await CompleteRegistrationAsync();
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be("Passkey registration failed");
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenSignedInAndTheStoreTimesOut_IsAnErrorAndNotARefusal()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteRegistrationAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenARecoverySessionEnrolsAndTheStoreTimesOut_IsAnErrorAndLeavesTheSessionUsable()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        var session = await GiveRecoverySessionAsync(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteRegistrationAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        (await IsLiveAsync(session, LoginCodePurpose.RecoverySession)).Should().BeTrue();
     }
 
     [Fact]
