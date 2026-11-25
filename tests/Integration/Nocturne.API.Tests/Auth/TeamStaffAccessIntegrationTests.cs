@@ -10,6 +10,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -63,7 +64,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await MembersAsync(ownerOnSite)).Should().NotContain(m => m.GetProperty("subjectId").GetGuid() == staff);
         await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
-        (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed, "the staff member's access ended");
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, "the staff member's access ended");
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("staff").EnumerateArray().Single()
             .GetProperty("status").GetString().Should().Be("declined");
         await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
-        (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed, "the staff member was declined");
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, "the staff member was declined");
     }
 
     [Fact]
@@ -204,7 +205,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("roles").EnumerateArray()
             .Select(r => r.GetProperty("slug").GetString()).Should().Equal(RoleSeeds.Viewer);
         await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
-        (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed, "the team's access no longer gives alerts");
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, "the team's access no longer gives alerts");
     }
 
     /// <remarks>

@@ -150,7 +150,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
         {
             if (Interlocked.Increment(ref arrived) == 2)
                 bothRead.SetResult();
-            return bothRead.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            return bothRead.Task.WaitAsync(Eventually.DefaultPatience);
         });
 
         var polls = await Task.WhenAll(

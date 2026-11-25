@@ -190,7 +190,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         public async Task SettledAsync()
         {
             Time.Advance(AlertFactEvaluationScheduler.Debounce);
-            await Scheduler.StoppedAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+            await Scheduler.StoppedAsync(CancellationToken.None).WaitAsync(Eventually.DefaultPatience);
         }
 
         public async Task<int> ExcursionsAsync(Guid rule)

@@ -274,7 +274,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var write = site.Members.SetDirectPermissionsAsync(site.Tenant, lapsing.Member, ["glucose.read"], After, Ct);
         await PostgresLockWaits.UntilWaitingAsync(site.App, 2, recompute, write);
         await held.RollbackAsync();
-        await Task.WhenAll(recompute, write).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(recompute, write).WaitAsync(Eventually.DefaultPatience);
 
         var row = (await site.Members.GetMemberAsync(site.Tenant, lapsing.Member, Ct))!;
         row.DirectPermissions.Should().Equal("glucose.read");
@@ -350,7 +350,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
 
         await PostgresLockWaits.UntilBlockedAsync(site.App, write);
         await held.RollbackAsync();
-        await write.WaitAsync(TimeSpan.FromSeconds(30));
+        await write.WaitAsync(Eventually.DefaultPatience);
     }
 
     [Fact]
@@ -503,7 +503,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         await PostgresLockWaits.UntilBlockedAsync(site.App, adoption);
         await held.RollbackAsync();
 
-        (await adoption.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeTrue();
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
         (await site.Members.FindMemberAsync(site.Tenant, holder, Ct)).Should().NotBeNull();
     }
 

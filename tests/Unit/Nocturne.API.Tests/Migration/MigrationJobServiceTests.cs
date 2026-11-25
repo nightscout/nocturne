@@ -244,11 +244,11 @@ public class MigrationJobServiceTests
         using var http = new HttpClient(new StallingHandler(counting)) { BaseAddress = new Uri("https://example-nightscout.invalid/") };
 
         var count = job.FetchCollectionCountAsync(http, "entries", CancellationToken.None);
-        await counting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await counting.Task.WaitAsync(Eventually.DefaultPatience);
         count.IsCompleted.Should().BeFalse();
         clock.Advance(TimeSpan.FromSeconds(30));
 
-        (await count.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull("the run goes on without a total");
+        (await count.WaitAsync(Eventually.DefaultPatience)).Should().BeNull("the run goes on without a total");
     }
 
     [Fact]

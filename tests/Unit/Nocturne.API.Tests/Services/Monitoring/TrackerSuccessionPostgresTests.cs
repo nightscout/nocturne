@@ -28,6 +28,9 @@ namespace Nocturne.API.Tests.Services.Monitoring;
 public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Database database)
     : IClassFixture<TrackerSuccessionPostgresTests.Database>
 {
+    // A writer the definition lock serialises waits this long for a partner that cannot arrive; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan SerialisedWriterWaits = TimeSpan.FromMilliseconds(500);
+
     private static readonly DateTime Now = new(2026, 9, 10, 8, 0, 0, DateTimeKind.Utc);
     private const string OwnerId = "owner";
 
@@ -60,7 +63,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         {
             if (Interlocked.Increment(ref _arrived) == 2)
                 _all.TrySetResult();
-            return Task.WhenAny(_all.Task, Task.Delay(TimeSpan.FromMilliseconds(500)));
+            return Task.WhenAny(_all.Task, Task.Delay(SerialisedWriterWaits));
         }
     }
 

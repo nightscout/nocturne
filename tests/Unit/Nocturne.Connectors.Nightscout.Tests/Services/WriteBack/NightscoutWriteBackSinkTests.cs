@@ -12,6 +12,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services.WriteBack;
@@ -72,7 +73,7 @@ public class NightscoutWriteBackSinkTests
             .ToList();
 
     /// <summary>
-    /// Runs write-back off the test thread under a wall-clock deadline. The batching
+    /// Runs write-back off the test thread under the hang guard. The batching
     /// loop is index-driven over a synchronous handler, so a stride bug spins without
     /// ever yielding; without this guard the failure mode is a hung CI job instead of
     /// a red test.
@@ -80,11 +81,11 @@ public class NightscoutWriteBackSinkTests
     private static async Task ShouldFinishPromptly(Func<Task> writeBack)
     {
         var work = Task.Run(writeBack);
-        var first = await Task.WhenAny(work, Task.Delay(TimeSpan.FromSeconds(5)));
+        var first = await Task.WhenAny(work, Task.Delay(Eventually.DefaultPatience));
 
         first.Should().BeSameAs(
             work,
-            "the write-back loop must terminate — it is still sending after 5 seconds");
+            "the write-back loop must terminate: it is still sending after the hang guard");
         await work;
     }
 

@@ -14,6 +14,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -39,8 +40,6 @@ namespace Nocturne.API.Tests.Integration.Auth;
 [Trait("Category", "Integration")]
 public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
 {
-    private static readonly TimeSpan HoldTimeout = TimeSpan.FromSeconds(30);
-
     private readonly string _issuer = $"https://setup-once-{Guid.NewGuid():N}.example";
     private readonly List<Guid> _deactivated = [];
     private Guid _providerId;
@@ -133,12 +132,12 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
 
         var hold = new Hold();
         var first = Task.Run(() => CompleteAsync(held, heldStep, "held-sub", hold));
-        (await Task.WhenAny(first, hold.Reached.Task.WaitAsync(HoldTimeout)))
+        (await Task.WhenAny(first, hold.Reached.Task.WaitAsync(Eventually.DefaultPatience)))
             .Should().NotBeSameAs(first, "the held caller stops between its setup-open check and its store");
 
         var second = await CompleteAsync(other, otherStep, "other-sub", hold: null);
         hold.Release();
-        var firstAnswer = await first.WaitAsync(HoldTimeout);
+        var firstAnswer = await first.WaitAsync(Eventually.DefaultPatience);
 
         Output.WriteLine($"held ({held}): {firstAnswer}");
         Output.WriteLine($"other ({other}): {second}");
@@ -246,7 +245,7 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
         public async Task PassAsync()
         {
             Reached.TrySetResult();
-            await _released.Task.WaitAsync(HoldTimeout);
+            await _released.Task.WaitAsync(Eventually.DefaultPatience);
         }
 
         public void Release() => _released.TrySetResult();

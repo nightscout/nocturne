@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.Infrastructure.Data.Tests.ConnectorFoodEntryRaceData;
 
@@ -64,8 +65,8 @@ public class ConnectorFoodEntryResolutionRaceTests
                 });
                 start.SetResult();
 
-                var outcomes = await Task.WhenAll(accepting).WaitAsync(TimeSpan.FromSeconds(120));
-                var withdrawn = await withdrawing.WaitAsync(TimeSpan.FromSeconds(120));
+                var outcomes = await Task.WhenAll(accepting).WaitAsync(Eventually.DefaultPatience);
+                var withdrawn = await withdrawing.WaitAsync(Eventually.DefaultPatience);
 
                 for (var i = 0; i < entries.Count; i++)
                 {
@@ -125,8 +126,8 @@ public class ConnectorFoodEntryResolutionRaceTests
                 return await dismisses.DismissAsync(entry);
             });
             start.SetResult();
-            var accepted = await accepting.WaitAsync(TimeSpan.FromSeconds(60));
-            var dismissed = await dismissing.WaitAsync(TimeSpan.FromSeconds(60));
+            var accepted = await accepting.WaitAsync(Eventually.DefaultPatience);
+            var dismissed = await dismissing.WaitAsync(Eventually.DefaultPatience);
 
             var stored = await StoredAsync(provider, tenant, entry);
             var rows = await RowsAsync(provider, tenant, carbIntake);

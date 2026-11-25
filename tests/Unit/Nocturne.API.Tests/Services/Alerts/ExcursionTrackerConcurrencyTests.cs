@@ -6,6 +6,7 @@ using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -18,6 +19,9 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class ExcursionTrackerConcurrencyTests
 {
+    // An evaluation the gate serialises waits this long for a partner that cannot arrive; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan SerialisedEvaluationWaits = TimeSpan.FromMilliseconds(500);
+
     private static readonly DateTimeOffset Now = new(2026, 3, 22, 12, 0, 0, TimeSpan.Zero);
 
     [NativeFact]
@@ -27,7 +31,7 @@ public class ExcursionTrackerConcurrencyTests
         // Both evaluations rendezvous inside the state read, so unguarded they would each
         // observe "idle" and open their own excursion.
         var repository = new RendezvousTrackerRepository(
-            [Rule(ruleId)], participants: 2, rendezvousTimeout: TimeSpan.FromMilliseconds(500));
+            [Rule(ruleId)], participants: 2, rendezvousTimeout: SerialisedEvaluationWaits);
         var gate = new AlertRuleEvaluationGate();
 
         var transitions = await Task.WhenAll(
@@ -51,13 +55,13 @@ public class ExcursionTrackerConcurrencyTests
         // The rendezvous only completes if both rules are inside the state read at once — a
         // gate that isn't striped per rule would hold the second out until the first finished.
         var repository = new RendezvousTrackerRepository(
-            [Rule(first), Rule(second)], participants: 2, rendezvousTimeout: TimeSpan.FromSeconds(5));
+            [Rule(first), Rule(second)], participants: 2, rendezvousTimeout: Eventually.DefaultPatience);
         var gate = new AlertRuleEvaluationGate();
 
+        // Twice the rendezvous's patience, so an unstriped gate reaches the named assertion and a deadlocked one still fails.
         var transitions = await Task.WhenAll(
             Evaluate(repository, gate, first),
-            Evaluate(repository, gate, second))
-            .WaitAsync(TimeSpan.FromSeconds(30));
+            Evaluate(repository, gate, second)).WaitAsync(Eventually.DefaultPatience * 2);
 
         repository.Overlapped.Should().BeTrue("evaluations of different rules must run concurrently");
         transitions.Should().OnlyContain(t => t.Type == ExcursionTransitionType.ExcursionOpened);

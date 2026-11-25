@@ -9,6 +9,7 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -456,7 +457,7 @@ public class MigrationFailureReportingTests
             Timeout = TimeSpan.FromMilliseconds(200),
         };
 
-        using var job = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var job = new CancellationTokenSource(Eventually.DefaultPatience);
         var read = () => MigrationJob.ReadPageFromSourceAsync<Treatment>(
             client, "/api/v1/treatments.json", "treatments", job.Token);
 

@@ -85,7 +85,7 @@ internal static class MigrationJobHarness
     /// <summary>Runs the tenant's live job slice by slice until it ends.</summary>
     public static async Task RunToEndAsync(MigrationJobService service, TenantContext tenant)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         while (await service.RunSliceAsync(tenant, timeout.Token))
         {
         }

@@ -419,15 +419,15 @@ public partial class TeamAccessEndPostgresTests
             return release.Task;
         };
         var ahead = announcer.AnnounceAsync(recount);
-        await reached.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await reached.Task.WaitAsync(Eventually.DefaultPatience);
         if (laterWriteWhileHeld)
             await ApproveRowAsync(site, access, second);
 
         var behind = announcer.AnnounceAsync(recount);
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, behind);
         release.SetResult();
-        await ahead.WaitAsync(TimeSpan.FromSeconds(30));
-        await behind.WaitAsync(TimeSpan.FromSeconds(30));
+        await ahead.WaitAsync(Eventually.DefaultPatience);
+        await behind.WaitAsync(Eventually.DefaultPatience);
 
         CountOf(LiveFor(site.Owner, TeamStaffAnnouncer.WaitingType).Should().ContainSingle().Subject).Should().Be(1);
     }

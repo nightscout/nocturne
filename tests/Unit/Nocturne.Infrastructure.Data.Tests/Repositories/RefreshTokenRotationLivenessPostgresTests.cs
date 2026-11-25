@@ -56,7 +56,7 @@ public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLiven
                 && command.CommandText.Contains("refresh_tokens", StringComparison.Ordinal))
             {
                 Reached.TrySetResult();
-                await Release.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+                await Release.Task.WaitAsync(Eventually.DefaultPatience, cancellationToken);
             }
 
             return result;
@@ -92,7 +92,7 @@ public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLiven
         var gate = new AfterTheRevoke();
 
         var rotation = Tokens(gate).TryRotateAsync(presented.Id, Token(subjectId, sessionId));
-        await gate.Reached.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await gate.Reached.Task.WaitAsync(Eventually.DefaultPatience);
         var liveMidway = await Tokens().HasLiveSessionAsync(subjectId, sessionId, DateTime.UtcNow);
         gate.Release.SetResult();
 

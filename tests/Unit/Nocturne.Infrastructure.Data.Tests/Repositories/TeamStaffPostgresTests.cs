@@ -597,8 +597,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await UntilWaitingAsync(2, join, approval);
         await held.RollbackAsync();
 
-        (await join.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().BeNull();
-        (await approval.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().BeNull();
+        (await join.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().BeNull();
+        (await approval.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().BeNull();
         (await SiteStaffAsync(team)).Should().Equal((site.Id, staff, TeamSiteStaffStatus.Approved));
     }
 
@@ -620,7 +620,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, join);
         await held.CommitAsync();
 
-        (await join.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().BeNull();
+        (await join.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().BeNull();
         (await SiteStaffAsync(team)).Should().Equal((kept.Id, staff, TeamSiteStaffStatus.Approved));
     }
 
@@ -726,7 +726,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, edit);
         await held.CommitAsync();
 
-        (await edit.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(TeamStaffChange.Changed);
+        (await edit.WaitAsync(Eventually.DefaultPatience)).Should().Be(TeamStaffChange.Changed);
         (await SiteStaffAsync(team)).Should().Equal((kept.Id, staff, TeamSiteStaffStatus.Pending));
         (await MemberAsync(team, staff)).LimitTo24Hours.Should().BeFalse();
         (await AuditOfAsync(team, AuthAuditEventType.TeamStaffChanged)).Should().ContainSingle();

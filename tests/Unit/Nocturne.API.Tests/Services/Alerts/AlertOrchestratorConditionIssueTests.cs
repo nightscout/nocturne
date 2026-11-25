@@ -24,6 +24,9 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class AlertOrchestratorConditionIssueTests
 {
+    // Evaluation must not wait on a notice's delivery; this is how long it has, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
     private static readonly Guid Tenant = Guid.Parse("85385385-0000-7000-8000-0000000000aa");
     private static readonly Guid RuleId = Guid.Parse("85385385-0000-7000-8000-0000000000a1");
     private static readonly DateTime Now = new(2026, 10, 22, 8, 0, 0, DateTimeKind.Utc);
@@ -200,7 +203,7 @@ public class AlertOrchestratorConditionIssueTests
 
         var evaluation = harness.EvaluateAsync(Rule(WizardUrgentLow));
 
-        (await Task.WhenAny(evaluation, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(evaluation,
+        (await Task.WhenAny(evaluation, Task.Delay(MustNotWaitLongerThan))).Should().BeSameAs(evaluation,
             "evaluation of a reading never waits on the notice's delivery");
         await evaluation;
         harness.Delivery.VerifyNoOtherCalls();

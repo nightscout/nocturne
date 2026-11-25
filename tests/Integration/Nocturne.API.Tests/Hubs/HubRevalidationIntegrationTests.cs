@@ -12,6 +12,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -164,7 +165,7 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
     }
 
     private static async Task ShouldCloseAsync(Task closed, string because) =>
-        (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed, because);
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, because);
 
     [Fact]
     public async Task A_connection_whose_api_secret_is_revoked_is_closed_and_a_live_one_stays_open()

@@ -589,7 +589,7 @@ public class ApiKeyHandlerTests : IDisposable
         var result = await _handler.AuthenticateAsync(context);
 
         Assert.True(result.Succeeded);
-        await nudged.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await nudged.Task.WaitAsync(Eventually.DefaultPatience);
 
         Assert.True(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(

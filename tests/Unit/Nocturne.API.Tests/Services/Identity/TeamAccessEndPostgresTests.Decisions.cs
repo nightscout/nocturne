@@ -101,7 +101,7 @@ public partial class TeamAccessEndPostgresTests
             (await Members(site.Tenant).FindMemberAsync(site.Tenant, first, Ct)).Should().BeNull();
 
             await held.RollbackAsync(Ct);
-            (await switchOn.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(OwnerDecision.Decided);
+            (await switchOn.WaitAsync(Eventually.DefaultPatience)).Should().Be(OwnerDecision.Decided);
         }
 
         foreach (var staff in new[] { first, second })

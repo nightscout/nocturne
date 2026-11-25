@@ -52,8 +52,8 @@ public partial class TeamAccessEndPostgresTests
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, edit, delete);
         await managerHeld.RollbackAsync(Ct);
 
-        await delete.WaitAsync(TimeSpan.FromSeconds(30));
-        (await edit.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(Edited);
+        await delete.WaitAsync(Eventually.DefaultPatience);
+        (await edit.WaitAsync(Eventually.DefaultPatience)).Should().Be(Edited);
         await IsGoneAsync(joiner);
         (await ReasonAsync(site, staff, access)).Should().BeEquivalentTo(new Held([treatments, site.ViewerRole], null, false, null));
     }

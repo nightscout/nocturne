@@ -18,8 +18,6 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 
 public class GoogleHealthWorkerTests
 {
-    private static readonly TimeSpan HangGuard = InMemoryGoogleHealthCoordinator.HangGuard;
-
     [Fact]
     public async Task Imports_are_concurrent_bounded_and_keep_claims_until_completion_or_shutdown()
     {
@@ -56,7 +54,7 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         foreach (var tenant in tenants) Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var hang = new CancellationTokenSource(HangGuard);
+        using var hang = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
@@ -131,7 +129,7 @@ public class GoogleHealthWorkerTests
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         var scheduled = await coordinator.AcquireAsync(tenant, default);
-        using var timeout = new CancellationTokenSource(HangGuard);
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
@@ -216,7 +214,7 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var timeout = new CancellationTokenSource(HangGuard);
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
@@ -265,7 +263,7 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var hang = new CancellationTokenSource(HangGuard);
+        using var hang = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {
@@ -306,7 +304,7 @@ public class GoogleHealthWorkerTests
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
-        using var timeout = new CancellationTokenSource(HangGuard);
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await worker.StartAsync(default);
         try
         {

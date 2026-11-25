@@ -6,6 +6,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Entries;
 
@@ -66,7 +67,7 @@ public class EntryCacheAdapterTests
             .ToList();
         held.SetResult(new Entry { Id = "current" });
 
-        (await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5)))
+        (await Task.WhenAll(reads).WaitAsync(Eventually.DefaultPatience))
             .Should().AllSatisfy(entry => entry!.Id.Should().Be("current"));
         runs.Should().Be(1);
     }

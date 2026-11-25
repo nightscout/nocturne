@@ -478,29 +478,15 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
             await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec() }), HttpStatusCode.OK);
             await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec(), preview = true }), HttpStatusCode.OK);
 
-            var rows = new List<(string Endpoint, int Status, string? Entities)>();
-            var settled = false;
-            for (var attempt = 0; attempt < 60 && !settled; attempt++)
-            {
-                // Once a row is there, read once more after a pause, so a second row has time to land.
-                settled = rows.Count > 1;
-                await Task.Delay(rows.Count > 1 ? 1000 : 100);
-                rows.Clear();
-                await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-                await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    SELECT set_config('app.current_tenant_id', @t, false);
-                    SELECT endpoint, status_code, entity_type FROM read_access_log
-                    WHERE endpoint LIKE 'POST /api/v4/reports/custom/run%' AND created_at >= @since;
-                    """;
-                cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
-                cmd.Parameters.AddWithValue("since", since);
-                await using var reader = await cmd.ExecuteReaderAsync();
-                await reader.NextResultAsync();
-                while (await reader.ReadAsync())
-                    rows.Add((reader.GetString(0), reader.GetInt32(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
-            }
+            List<(string Endpoint, int Status, string? Entities)> rows = [];
+            await Eventually.UntilAsync(
+                "both run audit rows to land",
+                async () => (rows = await ReadRunAuditRowsAsync(since)).Count > 1,
+                step: TimeSpan.FromMilliseconds(100),
+                lastSeen: () => string.Join(", ", rows.Select(r => r.Endpoint)));
+            // A further row could still be landing, so read once more after a pause.
+            await Task.Delay(1000);
+            rows = await ReadRunAuditRowsAsync(since);
 
             rows.Select(r => r.Endpoint).Should().BeEquivalentTo(
                 ["POST /api/v4/reports/custom/run", "POST /api/v4/reports/custom/run (preview)"],
@@ -512,6 +498,26 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         {
             (await a.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = false })).StatusCode.Should().Be(HttpStatusCode.OK);
         }
+    }
+
+    private async Task<List<(string Endpoint, int Status, string? Entities)>> ReadRunAuditRowsAsync(DateTime since)
+    {
+        var rows = new List<(string Endpoint, int Status, string? Entities)>();
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @t, false);
+            SELECT endpoint, status_code, entity_type FROM read_access_log
+            WHERE endpoint LIKE 'POST /api/v4/reports/custom/run%' AND created_at >= @since;
+            """;
+        cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
+        cmd.Parameters.AddWithValue("since", since);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.NextResultAsync();
+        while (await reader.ReadAsync())
+            rows.Add((reader.GetString(0), reader.GetInt32(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
+        return rows;
     }
 
     [Fact]

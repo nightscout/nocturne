@@ -1,13 +1,12 @@
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Core.Models.Health;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
 public class GoogleHealthCoordinatorTests
 {
-    private static readonly TimeSpan HangGuard = InMemoryGoogleHealthCoordinator.HangGuard;
-
     [Fact]
     public async Task Operation_lock_makes_waiters_wait_and_zero_timeout_callers_refuse()
     {
@@ -29,7 +28,7 @@ public class GoogleHealthCoordinatorTests
         }
 
         await held!.DisposeAsync();
-        await using var next = await waiter.WaitAsync(HangGuard);
+        await using var next = await waiter.WaitAsync(Eventually.DefaultPatience);
         Assert.NotNull(next);
     }
 
@@ -77,7 +76,7 @@ public class GoogleHealthCoordinatorTests
 
         var request = await coordinator.RequestDisconnectAsync(tenant, subject, default);
         await Task.Delay(Timeout.Infinite, running.Token)
-            .ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(HangGuard);
+            .ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(Eventually.DefaultPatience);
         Assert.Equal(request, await coordinator.RequestDisconnectAsync(tenant, Guid.NewGuid(), default));
         Assert.Equal(subject, (await coordinator.DisconnectRequestAsync(tenant, default))!.SubjectId);
         await using (var late = await coordinator.WatchReadsAsync(tenant, default))
@@ -99,7 +98,7 @@ public class GoogleHealthCoordinatorTests
         var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var queued = Guid.NewGuid();
         var disconnecting = Guid.NewGuid();
-        using var timeout = new CancellationTokenSource(HangGuard);
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await using var requests = coordinator.ReadRequestsAsync(timeout.Token).GetAsyncEnumerator();
         var next = requests.MoveNextAsync().AsTask();
         Assert.False(next.IsCompleted);

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.Infrastructure.Data.Tests.ConnectorFoodEntryRaceData;
 
@@ -77,6 +78,6 @@ public class ConnectorFoodEntryAcceptMatchRaceTests
 
         var racing = new[] { Task.Run(() => Accept(a, carbIntakeA)), Task.Run(() => Accept(b, carbIntakeB)) };
         start.SetResult();
-        return await Task.WhenAll(racing).WaitAsync(TimeSpan.FromSeconds(60));
+        return await Task.WhenAll(racing).WaitAsync(Eventually.DefaultPatience);
     }
 }

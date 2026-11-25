@@ -179,7 +179,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, audit);
 
         await transaction.CommitAsync();
-        var drift = await audit.WaitAsync(TimeSpan.FromSeconds(30));
+        var drift = await audit.WaitAsync(Eventually.DefaultPatience);
 
         drift.Should().BeEquivalentTo(new[] { new DuplicateFlagDrift(RecordType.CarbIntake, 0, 1, 0) });
         (await FlaggedAsync(tenant, "carb_intakes")).Should().Equal(primary.Id);

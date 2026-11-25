@@ -57,8 +57,8 @@ public class ConnectorFoodEntryResolutionOrderTests
         await PostgresLockWaits.UntilWaitingAsync(_fx.AppConnectionString, 2, accept, withdraw);
         await hold.CommitAsync();
 
-        (await accept.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(AcceptMatchOutcome.Linked);
-        (await withdraw.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeEmpty();
+        (await accept.WaitAsync(Eventually.DefaultPatience)).Should().Be(AcceptMatchOutcome.Linked);
+        (await withdraw.WaitAsync(Eventually.DefaultPatience)).Should().BeEmpty();
         var stored = await StoredAsync(provider, tenant, entry);
         stored.Status.Should().Be(ConnectorFoodEntryStatus.Matched);
         stored.MatchedCarbIntakeId.Should().Be(carbIntake);

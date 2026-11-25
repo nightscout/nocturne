@@ -968,7 +968,7 @@ public class MemberScopeMiddlewareTests
         }
 
         detached.Release();
-        var writer = await detached.Created.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var writer = await detached.Created.Task.WaitAsync(Eventually.DefaultPatience);
 
         writer.TenantId.Should().Be(TestDatabaseSeeder.TenantId);
         writer.HistoryClamped.Should().BeFalse();

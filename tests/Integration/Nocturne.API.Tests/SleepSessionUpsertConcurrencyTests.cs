@@ -155,7 +155,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
                 await transaction.CommitAsync();
                 return result;
             });
-            return (firstResult, await secondTask!.WaitAsync(TimeSpan.FromSeconds(30)));
+            return (firstResult, await secondTask!.WaitAsync(Eventually.DefaultPatience));
         }
         finally
         {
@@ -163,7 +163,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             {
                 try
                 {
-                    await secondTask.WaitAsync(TimeSpan.FromSeconds(30));
+                    await secondTask.WaitAsync(Eventually.DefaultPatience);
                 }
                 catch (Exception ex)
                 {

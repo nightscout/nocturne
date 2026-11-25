@@ -10,6 +10,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -63,7 +64,7 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
 
         await connection.InvokeAsync("LoadRetro", new { loadedMills = _now.AddMinutes(1).ToUnixTimeMilliseconds() });
 
-        var payload = await retro.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        var payload = await retro.Task.WaitAsync(Eventually.DefaultPatience);
         payload.TryGetProperty("error", out _).Should().BeFalse(payload.GetRawText());
         return payload.GetProperty("entries").EnumerateArray()
             .Select(entry => entry.GetProperty("mills").GetInt64())
