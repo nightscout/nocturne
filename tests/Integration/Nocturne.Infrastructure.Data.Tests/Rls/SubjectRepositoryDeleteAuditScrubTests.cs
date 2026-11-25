@@ -1,4 +1,5 @@
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Services;
@@ -8,9 +9,9 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
 /// <summary>
 /// What <see cref="SubjectRepository.DeleteAsync"/> leaves of the deleted subject in
-/// <c>mutation_audit_log</c>, <c>read_access_log</c> and <c>membership_requests</c>, run as
-/// <c>nocturne_app</c> under the live policies, in a tenant the subject still belongs to and in one
-/// it has left.
+/// <c>mutation_audit_log</c>, <c>read_access_log</c>, <c>membership_requests</c> and
+/// <c>in_app_notifications</c>, run as <c>nocturne_app</c> under the live policies, in a tenant the
+/// subject still belongs to and in one it has left.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -22,6 +23,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     private readonly Guid _formerTenant = Guid.NewGuid();
     private readonly Guid _leaver = Guid.CreateVersion7();
     private readonly Guid _bystander = Guid.CreateVersion7();
+    private readonly Dictionary<(Guid Tenant, Guid Actor), Guid> _requests = [];
 
     public SubjectRepositoryDeleteAuditScrubTests(RlsCompletenessFixture fx) => _fx = fx;
 
@@ -65,11 +67,25 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
                     INSERT INTO read_access_log (id, tenant_id, endpoint, status_code, actor_subject_id, actor_name, ip_address, user_agent, created_at)
                     VALUES (gen_random_uuid(), @tenant, 'GET /api/v4/sensor-glucoses', 200, @actor, @name, @ip, @agent, now())
                     """, ("tenant", tenant), ("actor", actor), ("name", Name(actor)), ("ip", Ip(actor)), ("agent", Agent(actor)));
+                var request = _requests[(tenant, actor)] = Guid.CreateVersion7();
                 await ExecuteAsync(conn, """
                     INSERT INTO membership_requests (id, tenant_id, subject_id, message, status, created_at)
-                    VALUES (gen_random_uuid(), @tenant, @actor, 'let me in', 'pending', now())
-                    """, ("tenant", tenant), ("actor", actor));
+                    VALUES (@id, @tenant, @actor, @message, 'pending', now())
+                    """, ("id", request), ("tenant", tenant), ("actor", actor), ("message", Message(actor)));
+
+                await InsertNoticeAsync(conn, tenant, _bystander, "membership.requested",
+                    $"Membership request from {Name(actor)}", Message(actor), request.ToString());
+                await InsertNoticeAsync(conn, tenant, _bystander, "passkey.anonymous_login_request",
+                    $"Access request from {Name(actor)}", null, actor.ToString());
             }
+
+            await InsertNoticeAsync(conn, tenant, _bystander, "tracker.alert", "Tracker due", null,
+                _requests[(tenant, _leaver)].ToString());
+            await InsertNoticeAsync(conn, tenant, _bystander, "sharing.link_rotated", "share_link_rotated", null,
+                tenant.ToString());
+            await InsertNoticeAsync(conn, tenant, _leaver, "system.update_available", "update_available", null, "1.2.3");
+            await InsertNoticeAsync(conn, tenant, _leaver, "membership.approved", "Your membership request has been approved",
+                null, _requests[(tenant, _leaver)].ToString());
         }
     }
 
@@ -134,6 +150,82 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
             (await RequestersAsync(tenant)).Should().Equal([_bystander], $"tenant {tenant} held a request from each");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Delete_RemovesTheNoticesThatNameTheSubjectAndTheOnesItHeldInEveryTenantAndNoOthers(bool deletedFromTheMemberTenant)
+    {
+        await DeleteLeaverAsync(deletedFromTheMemberTenant);
+
+        foreach (var tenant in Tenants)
+        {
+            var notices = await NoticesAsync(tenant);
+
+            notices.Should().NotContain(
+                n => n.Title.Contains(Name(_leaver)) || n.Subtitle == Message(_leaver) || n.UserId == _leaver.ToString(),
+                $"tenant {tenant} holds a notice naming the deleted subject or held by it");
+            notices.Select(n => (n.UserId, n.Type, n.SourceId)).Should().BeEquivalentTo(
+            [
+                (_bystander.ToString(), "membership.requested", _requests[(tenant, _bystander)].ToString()),
+                (_bystander.ToString(), "passkey.anonymous_login_request", _bystander.ToString()),
+                (_bystander.ToString(), "tracker.alert", _requests[(tenant, _leaver)].ToString()),
+                (_bystander.ToString(), "sharing.link_rotated", tenant.ToString()),
+            ], $"tenant {tenant} kept the other subject's notices, and a type the catalogue does not declare");
+        }
+    }
+
+    [Fact]
+    public async Task Delete_ByAReaderClampedToADay_RemovesTheOldAndTheArchivedNoticesToo()
+    {
+        await using (var conn = await _fx.OpenMigratorConnectionAsync())
+        {
+            foreach (var tenant in Tenants)
+            {
+                await SetTenantAsync(conn, tenant);
+                var request = _requests[(tenant, _leaver)].ToString();
+                await InsertNoticeAsync(conn, tenant, _bystander, "membership.requested",
+                    $"Membership request from {Name(_leaver)}", Message(_leaver), request, createdDaysAgo: 10);
+                await InsertNoticeAsync(conn, tenant, _bystander, "membership.requested",
+                    $"Membership request from {Name(_leaver)}", Message(_leaver), request, createdDaysAgo: 3, archivedDaysAgo: 2);
+            }
+        }
+
+        await DeleteLeaverAsync(fromTheMemberTenant: true, clamped: true);
+
+        foreach (var tenant in Tenants)
+        {
+            (await NoticesAsync(tenant)).Should().NotContain(
+                n => n.Title.Contains(Name(_leaver)) || n.Subtitle == Message(_leaver) || n.UserId == _leaver.ToString(),
+                $"tenant {tenant} holds a notice the clamp hid from the deletion");
+        }
+    }
+
+    private async Task<List<(string UserId, string Type, string? SourceId, string Title, string? Subtitle)>> NoticesAsync(Guid tenant)
+    {
+        var notices = new List<(string, string, string?, string, string?)>();
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await SetTenantAsync(conn, tenant);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT user_id, type, source_id, title, subtitle FROM in_app_notifications WHERE tenant_id = @tenant";
+        cmd.Parameters.AddWithValue("tenant", tenant);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            notices.Add((reader.GetString(0), reader.GetString(1), Text(reader, 2), reader.GetString(3), Text(reader, 4)));
+        return notices;
+    }
+
+    private static Task InsertNoticeAsync(
+        NpgsqlConnection conn, Guid tenant, Guid holder, string type, string title, string? subtitle, string sourceId,
+        int createdDaysAgo = 0, int? archivedDaysAgo = null) =>
+        ExecuteAsync(conn, """
+            INSERT INTO in_app_notifications (id, tenant_id, user_id, type, category, urgency, title, subtitle, source_id, created_at, is_archived, archived_at)
+            VALUES (gen_random_uuid(), @tenant, @holder, @type, 'ActionRequired', 'Info', @title, @subtitle, @source,
+                now() - make_interval(days => @created), @archived::int IS NOT NULL, now() - make_interval(days => @archived::int))
+            """,
+            ("tenant", tenant), ("holder", holder.ToString()), ("type", type), ("title", title),
+            ("subtitle", (object?)subtitle ?? DBNull.Value), ("source", sourceId), ("created", createdDaysAgo),
+            ("archived", (object?)archivedDaysAgo ?? DBNull.Value));
+
     private async Task<List<Guid>> RequestersAsync(Guid tenant)
     {
         var requesters = new List<Guid>();
@@ -152,11 +244,13 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     /// Deletes as a reader with no tenant, as a platform admin on the apex does, or as a reader of the
     /// tenant the subject still belongs to, whose context the tenant query filter would hold there.
     /// </summary>
-    private async Task DeleteLeaverAsync(bool fromTheMemberTenant)
+    private async Task DeleteLeaverAsync(bool fromTheMemberTenant, bool clamped = false)
     {
         await using var scope = _provider.CreateAsyncScope();
         if (fromTheMemberTenant)
             TenantReaderData.Resolve(scope.ServiceProvider, _memberTenant);
+        if (clamped)
+            scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
 
         var repository = new SubjectRepository(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off);
         (await repository.DeleteAsync(_leaver, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
@@ -193,6 +287,8 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
     private static string Name(Guid subject) => $"scrub-{subject:N}";
 
     private string Ip(Guid subject) => subject == _leaver ? "10.0.0.1" : "10.0.0.2";
+
+    private static string Message(Guid subject) => $"message-{subject:N}";
 
     private static string Agent(Guid subject) => $"agent-{subject:N}";
 

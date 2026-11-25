@@ -8,6 +8,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
+using NotificationSubjectNaming = Nocturne.Core.Models.NotificationSubjectNaming;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -557,17 +558,21 @@ public class SubjectRepository : ISubjectRepository
     /// Clears the subject's client address and user agent from the audit trail of every tenant, not
     /// only those it still belongs to: a member removed earlier, or a platform admin who never
     /// joined, has rows there too. Removes the subject's membership requests there as well, which
-    /// carry its own message and would otherwise sit in an owner's list naming no one.
+    /// carry its own message and would otherwise sit in an owner's list naming no one, the notices
+    /// <see cref="NotificationSubjectNaming"/> declares as naming the subject, and the notices the
+    /// subject held, which nobody can read once it is gone.
     /// </summary>
     /// <remarks>
-    /// Both tables force row level security, so each tenant's statements run with its id set local
-    /// to the transaction, which the commit discards. The tenant query filter reads the context's
-    /// tenant, so it is lifted and the tenant named in the predicate. Runs after the subject delete,
-    /// so the last tenant set governs no other statement.
+    /// Every table the loop writes forces row level security, so each tenant's statements run with its
+    /// id set local to the transaction, which the commit discards. The tenant query filter reads the
+    /// context's tenant, so it is lifted and the tenant named in the predicate. The notice delete also
+    /// lifts the member history clamp, which would otherwise hide the older notices from it. Runs after
+    /// the subject delete, so the last tenant set governs no other statement.
     /// </remarks>
     private static async Task ScrubTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         var tenantIds = await db.Tenants.AsNoTracking().Select(t => t.Id).ToListAsync(ct);
+        var subjectKey = subjectId.ToString();
         foreach (var tenantId in tenantIds)
         {
             if (db.Database.IsNpgsql())
@@ -586,10 +591,22 @@ public class SubjectRepository : ISubjectRepository
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(a => a.IpAddress, (string?)null)
                     .SetProperty(a => a.UserAgent, (string?)null), ct);
-            await db.MembershipRequests
+
+            var requests = db.MembershipRequests
                 .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
-                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId)
-                .ExecuteDeleteAsync(ct);
+                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId);
+            var requestIds = (await requests.Select(r => r.Id).ToListAsync(ct)).Select(id => id.ToString()).ToList();
+            await db.WriteWithHistoryClampLiftedAsync(
+                token => db.InAppNotifications
+                    .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
+                    .Where(n => n.TenantId == tenantId
+                        && (n.UserId == subjectKey
+                            || (n.SourceId != null
+                                && ((NotificationSubjectNaming.PointingAtRequests.Contains(n.Type) && requestIds.Contains(n.SourceId))
+                                    || (NotificationSubjectNaming.PointingAtSubject.Contains(n.Type) && n.SourceId == subjectKey)))))
+                    .ExecuteDeleteAsync(token),
+                ct);
+            await requests.ExecuteDeleteAsync(ct);
         }
     }
 
