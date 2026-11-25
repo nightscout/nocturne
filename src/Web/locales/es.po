@@ -50027,43 +50027,43 @@ msgstr "Usar el diseño, los indicadores y el gráfico del panel de Nightscout"
 #. 0: item?.profileName
 #: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 msgid "Correct the values of {0}"
-msgstr ""
+msgstr "Corrige los valores de {0}"
 
 #: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 msgid "The values below are the stored values. They look like mmol/L values stored as mg/dL, about 18 times too small. Enter the correct mg/dL values. Nocturne does not change the values for you."
-msgstr ""
+msgstr "A continuación se muestran los valores guardados. Parecen estar en mmol/L, pero se han guardado como mg/dL, por lo que son aproximadamente 18 veces menores de lo debido. Introduce los valores correctos en mg/dL. Nocturne no los cambia automáticamente."
 
 #: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 msgid "Failed to load the schedule"
-msgstr ""
+msgstr "No se pudo cargar la programación"
 
 #: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 msgid "Failed to save insulin sensitivity"
-msgstr ""
+msgstr "No se pudo guardar la sensibilidad a la insulina"
 
 #: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 msgid "Failed to save your answer"
-msgstr ""
+msgstr "No se pudo guardar tu respuesta"
 
 #: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 msgid "These values are already mg/dL"
-msgstr ""
+msgstr "Estos valores ya están en mg/dL"
 
 #: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 msgid "<0/> Edit values"
-msgstr ""
+msgstr "<0/> Editar valores"
 
 #: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 msgid "These values look like mmol/L values stored as mg/dL. Nocturne uses them as mg/dL, so they change insulin and alert calculations. Check each schedule and correct its values."
-msgstr ""
+msgstr "Estos valores parecen estar en mmol/L, pero se han guardado como mg/dL. Nocturne los interpreta como mg/dL, lo que afecta a los cálculos de insulina y de alertas. Revisa cada programación y corrige sus valores."
 
 #: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 msgid "Some profile values look like mmol/L"
-msgstr ""
+msgstr "Algunos valores del perfil parecen estar en mmol/L"
 
 #: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Each value must be greater than zero."
-msgstr ""
+msgstr "Cada valor debe ser mayor que cero."
 
 #: src/lib/test-stubs/LoginForm.test-stub.svelte
 msgid "Start sign-in"
