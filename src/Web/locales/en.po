@@ -48903,25 +48903,17 @@ msgstr "This member's direct access has no 24-hour limit, so the 24-hour limit o
 msgid "This member has access only through a team. To change it, stop the team's access to this site."
 msgstr "This member has access only through a team. To change it, stop the team's access to this site."
 
-#. 0: memberFirst; 1: entry.team.name
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} joined as staff of the team {1}."
-msgstr "{0} joined as staff of the team {1}."
+#~ msgid "{0} joined as staff of the team {1}."
+#~ msgstr "{0} joined as staff of the team {1}."
 
-#. 0: memberFirst
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} joined as staff of a team. The detail is no longer stored."
-msgstr "{0} joined as staff of a team. The detail is no longer stored."
+#~ msgid "{0} joined as staff of a team. The detail is no longer stored."
+#~ msgstr "{0} joined as staff of a team. The detail is no longer stored."
 
-#. 0: memberFirst; 1: entry.team.name
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} is no longer staff of the team {1}."
-msgstr "{0} is no longer staff of the team {1}."
+#~ msgid "{0} is no longer staff of the team {1}."
+#~ msgstr "{0} is no longer staff of the team {1}."
 
-#. 0: memberFirst
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} is no longer staff of a team. The detail is no longer stored."
-msgstr "{0} is no longer staff of a team. The detail is no longer stored."
+#~ msgid "{0} is no longer staff of a team. The detail is no longer stored."
+#~ msgstr "{0} is no longer staff of a team. The detail is no longer stored."
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "You cannot approve your own request. Ask another member to approve it."
@@ -49675,3 +49667,73 @@ msgstr "Add a food item to the database"
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Trigger a manual data sync"
 msgstr "Trigger a manual data sync"
+
+#. 0: memberFirst; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} now has access through the team {1}."
+msgstr "{0} now has access through the team {1}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} now has access through a team. The detail is no longer stored."
+msgstr "{0} now has access through a team. The detail is no longer stored."
+
+#. 0: memberFirst; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} no longer has access through the team {1}."
+msgstr "{0} no longer has access through the team {1}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} no longer has access through a team. The detail is no longer stored."
+msgstr "{0} no longer has access through a team. The detail is no longer stored."
+
+#. 0: actor; 1: member; 2: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} approved {1} as staff of the team {2}."
+msgstr "{0} approved {1} as staff of the team {2}."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} approved {1} as staff of a team that was deleted."
+msgstr "{0} approved {1} as staff of a team that was deleted."
+
+#. 0: actor; 1: member; 2: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} declined {1} as staff of the team {2}."
+msgstr "{0} declined {1} as staff of the team {2}."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} declined {1} as staff of a team that was deleted."
+msgstr "{0} declined {1} as staff of a team that was deleted."
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} turned off \"the team manages its own staff\" for the team {1}. New staff now wait for an owner's approval."
+msgstr "{0} turned off \"the team manages its own staff\" for the team {1}. New staff now wait for an owner's approval."
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} let the team {1} approve its own staff."
+msgstr "{0} let the team {1} approve its own staff."
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} turned off \"the team manages its own staff\" for a team that was deleted."
+msgstr "{0} turned off \"the team manages its own staff\" for a team that was deleted."
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} let a team that was deleted approve its own staff."
+msgstr "{0} let a team that was deleted approve its own staff."
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed who approves the staff of the team {1}. The detail is no longer stored."
+msgstr "{0} changed who approves the staff of the team {1}. The detail is no longer stored."
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed who approves the staff of a team that was deleted. The detail is no longer stored."
+msgstr "{0} changed who approves the staff of a team that was deleted. The detail is no longer stored."
