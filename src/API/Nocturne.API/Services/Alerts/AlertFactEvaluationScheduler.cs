@@ -206,7 +206,7 @@ public sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, IDis
             {
                 await using var scope = TenantJobScope.Open(_scopes, tenant, AuditEndpoint);
                 await scope.ServiceProvider.GetRequiredService<ICanonicalAlertEvaluator>()
-                    .EvaluateAsync(moved, _abandon.Token);
+                    .EvaluateAsync(moved, ReadingReport.Here, _abandon.Token);
             }
         }
         catch (OperationCanceledException) when (_abandon.IsCancellationRequested)

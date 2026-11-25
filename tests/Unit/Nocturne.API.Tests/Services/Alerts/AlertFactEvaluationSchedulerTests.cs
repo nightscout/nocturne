@@ -93,7 +93,8 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
 
     private sealed class ScopedEvaluator(RecordingEvaluator recording, ITenantAccessor tenant) : ICanonicalAlertEvaluator
     {
-        public async Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+        public async Task<bool> EvaluateAsync(
+            MovedFacts moved, ReadingReport report = ReadingReport.Here, CancellationToken ct = default)
         {
             await recording.RunAsync(tenant.TenantId, moved, ct);
             return true;

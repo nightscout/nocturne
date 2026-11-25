@@ -265,7 +265,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             var context = new TenantContext(_tenant.Id, "slug", "Slug", true, IsDemo: false);
             await using var scope = TenantJobScope.Open(_services, context, AlertFactEvaluationScheduler.AuditEndpoint);
             await scope.ServiceProvider.GetRequiredService<ICanonicalAlertEvaluator>()
-                .EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }), ct);
+                .EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }), ct: ct);
         }
 
         public Task SweepAsync(DateTime at)

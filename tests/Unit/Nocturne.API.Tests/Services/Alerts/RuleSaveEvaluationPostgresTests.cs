@@ -87,10 +87,11 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     /// <summary>Counts the evaluations the scheduler starts, whatever they go on to select.</summary>
     private sealed class CountingEvaluator(CanonicalAlertEvaluator inner, Tenant tenant) : ICanonicalAlertEvaluator
     {
-        public Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+        public Task<bool> EvaluateAsync(
+            MovedFacts moved, ReadingReport report = ReadingReport.Here, CancellationToken ct = default)
         {
             Interlocked.Increment(ref tenant.Evaluations);
-            return inner.EvaluateAsync(moved, ct);
+            return inner.EvaluateAsync(moved, report, ct);
         }
     }
 
