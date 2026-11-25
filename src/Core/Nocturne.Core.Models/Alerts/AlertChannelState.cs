@@ -23,6 +23,6 @@ public enum AlertChannelState
     Stopped,
 }
 
-/// <summary>A channel a dry-run test fire did not send, by its place in the request.</summary>
-/// <param name="Index">The channel's position in the request's channel list.</param>
+/// <summary>A channel a test fire did not send, by its place in the channel list it fired through.</summary>
+/// <param name="Index">The channel's position in that list.</param>
 public sealed record AlertChannelNotSent(int Index, ChannelType ChannelType, AlertChannelState State);

@@ -48,8 +48,11 @@ public interface IAlertDeliveryService
     /// <param name="channels">Channels to fire through (typically the rule's saved channels; for dry-run flows the editor passes its in-memory list).</param>
     /// <param name="payload">A <see cref="AlertPayload"/> rendered by the caller — name is conventionally prefixed with <c>"[Test] "</c>.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The id of the test instance, which its delivery rows hang from.</returns>
-    Task<Guid> TestFireAsync(
+    /// <returns>
+    /// The id of the test instance, which its delivery rows hang from, and the channels it did not
+    /// send because they do not deliver. A channel not sent keeps its delivery row, recorded failed.
+    /// </returns>
+    Task<AlertTestFire> TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,

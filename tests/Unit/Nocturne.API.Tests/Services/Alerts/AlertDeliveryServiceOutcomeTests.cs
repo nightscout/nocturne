@@ -384,4 +384,50 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         await using var db = await _factory.CreateDbContextAsync();
         (await db.AlertDeliveries.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_reports_the_channel_it_did_not_send_and_still_sends_to_the_rest()
+    {
+        await AddMemberAsync(Tenant, Member);
+        var stopped = Channel(ChannelType.DiscordChannel, "1234567890123456789") with
+        {
+            AddedBySubjectId = Member,
+            StopsAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+
+        var fired = await CreateService().TestFireAsync(
+            Guid.NewGuid(), [Channel(ChannelType.InApp, Member.ToString()), stopped], Payload(Guid.Empty), CancellationToken.None);
+
+        fired.NotSent.Should().Equal(new AlertChannelNotSent(1, ChannelType.DiscordChannel, AlertChannelState.Stopped));
+        await using var db = await _factory.CreateDbContextAsync();
+        var rows = await db.AlertDeliveries.IgnoreQueryFilters().Where(d => d.AlertInstanceId == fired.InstanceId).ToListAsync();
+        rows.Single(d => d.ChannelType == ChannelType.InApp).Status.Should().Be("delivered");
+        rows.Single(d => d.ChannelType == ChannelType.DiscordChannel).Status.Should().Be("failed");
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_whose_channels_all_deliver_reports_none_not_sent()
+    {
+        await AddMemberAsync(Tenant, Member);
+
+        var fired = await CreateService().TestFireAsync(
+            Guid.NewGuid(), [Channel(ChannelType.InApp, Member.ToString())], Payload(Guid.Empty), CancellationToken.None);
+
+        fired.NotSent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_and_a_dry_run_report_the_same_channels_not_sent()
+    {
+        var channels = new[]
+        {
+            Channel(ChannelType.WebPush, string.Empty),
+            Channel(ChannelType.DiscordDm, "1234567890123456789"),
+        };
+
+        var fired = await CreateService().TestFireAsync(Guid.NewGuid(), channels, Payload(Guid.Empty), CancellationToken.None);
+        var dryRun = await CreateService().TestFireDryRunAsync(channels, Payload(Guid.Empty), CancellationToken.None);
+
+        fired.NotSent.Should().Equal(dryRun).And.ContainSingle();
+    }
 }

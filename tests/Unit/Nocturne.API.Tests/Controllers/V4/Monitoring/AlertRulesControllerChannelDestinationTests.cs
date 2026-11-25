@@ -1057,7 +1057,47 @@ public class AlertRulesControllerChannelDestinationTests
             CancellationToken.None);
 
         result.Should().BeOfType<AcceptedResult>()
-            .Which.Value.Should().BeOfType<TestFireDryRunResponse>()
+            .Which.Value.Should().BeOfType<TestFireResponse>()
             .Which.NotSent.Should().Equal(notSent);
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_answers_with_the_channels_it_did_not_send()
+    {
+        var notSent = new AlertChannelNotSent(1, ChannelType.DiscordChannel, AlertChannelState.Stopped);
+        var delivery = new Mock<IAlertDeliveryService>();
+        IReadOnlyList<AlertRuleChannelSnapshot>? fired = null;
+        delivery.Setup(d => d.TestFireAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(), It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid _, IReadOnlyList<AlertRuleChannelSnapshot> channels, AlertPayload _, CancellationToken _) => fired = channels)
+            .ReturnsAsync(new AlertTestFire(Guid.NewGuid(), [notSent]));
+        var (controller, _) = CreateController(delivery.Object);
+        var ruleId = await CreateWithAsync(controller,
+            Typed(ChannelType.Webhook, "https://example.test/hook"), Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        var result = await controller.TestFire(ruleId, CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>()
+            .Which.Value.Should().BeOfType<TestFireResponse>()
+            .Which.NotSent.Should().Equal(notSent);
+        fired!.Select(c => c.ChannelType).Should().Equal(
+            [ChannelType.Webhook, ChannelType.DiscordChannel], "the index counts the channels in the order the editor shows");
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_that_reached_every_channel_answers_with_an_empty_list()
+    {
+        var delivery = new Mock<IAlertDeliveryService>();
+        delivery.Setup(d => d.TestFireAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(), It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertTestFire(Guid.NewGuid(), []));
+        var (controller, _) = CreateController(delivery.Object);
+        var ruleId = await CreateWithAsync(controller, Typed(ChannelType.DiscordChannel, ChannelSnowflake));
+
+        var result = await controller.TestFire(ruleId, CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>()
+            .Which.Value.Should().BeOfType<TestFireResponse>()
+            .Which.NotSent.Should().BeEmpty();
     }
 }

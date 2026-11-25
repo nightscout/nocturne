@@ -28,6 +28,8 @@ const refusal = vi.hoisted(() => ({
   error: new Error("network down") as unknown,
   /** When set, the test alert is sent instead of refused. */
   testSends: false,
+  /** The channels the answer says the test alert did not go to. */
+  notSent: [] as unknown[],
   search: null as unknown,
   update: (): Promise<unknown> => Promise.reject(refusal.error),
   remove: (): Promise<unknown> => Promise.reject(refusal.error),
@@ -40,7 +42,7 @@ vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   updateRule: remoteCommand(() => refusal.update()),
   deleteRule: remoteCommand(() => refusal.remove()),
   testFire: remoteCommand(() =>
-    refusal.testSends ? Promise.resolve({ success: true }) : Promise.reject(refusal.error),
+    refusal.testSends ? Promise.resolve({ notSent: refusal.notSent }) : Promise.reject(refusal.error),
   ),
   getInAppRecipients: () => remoteQuery(() => []),
   keepChannel: remoteCommand(() => Promise.reject(new Error("not under test"))),
@@ -89,6 +91,7 @@ describe("alert rule editor", () => {
     await page.viewport(1280, 900);
     refusal.error = new Error("network down");
     refusal.testSends = false;
+    refusal.notSent = [];
     refusal.search = null;
     refusal.update = () => Promise.reject(refusal.error);
     refusal.remove = () => Promise.reject(refusal.error);
@@ -136,15 +139,17 @@ describe("alert rule editor", () => {
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
     await expect.element(page.getByText("Test alert sent. Make sure that it arrived.")).toBeVisible();
-    expect(page.getByText(/Channels that do not send did not get it/).elements()).toHaveLength(0);
+    expect(page.getByText("The test alert did not go to every channel.").elements()).toHaveLength(0);
   });
 
-  it("says that a channel that does not send did not get the test alert", async () => {
+  it("lists each channel that did not get the test alert, with the reason", async () => {
     refusal.testSends = true;
+    refusal.notSent = [{ index: 1, channelType: "webhook", state: "stopped" }];
     rule = {
       ...original,
       channels: [
-        { id: "c1", channelType: "webhook", destination: "https://example.test/hook", state: "stopped" },
+        { id: "c0", channelType: "webhook", destination: "https://example.test/a", destinationLabel: "Site A", sortOrder: 0 },
+        { id: "c1", channelType: "webhook", destination: "https://example.test/b", destinationLabel: "Site B", sortOrder: 1 },
       ],
     } as unknown as AlertRuleResponse;
     openRule(RULE_ID);
@@ -153,9 +158,10 @@ describe("alert rule editor", () => {
 
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
-    await expect
-      .element(page.getByText(/Test alert sent. Make sure that it arrived. Channels that do not send did not get it./))
-      .toBeVisible();
+    await expect.element(page.getByText("The test alert did not go to every channel.")).toBeVisible();
+    await expect.element(page.getByText("Site B did not get the test alert. This channel has stopped.")).toBeVisible();
+    expect(page.getByText(/Site A did not get the test alert/).elements()).toHaveLength(0);
+    expect(page.getByText("Test alert sent. Make sure that it arrived.").elements()).toHaveLength(0);
   });
 
   it("says how many times the alert would have started in the recent past", async () => {

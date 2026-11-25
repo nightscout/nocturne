@@ -458,12 +458,14 @@ public class AlertRulesController : ControllerBase
     /// <summary>
     /// Fire a saved rule through its real channel list as a test. Writes a
     /// <c>is_test=true</c> instance + delivery rows so the user can verify their channels
-    /// without polluting the active-alerts surface.
+    /// without polluting the active-alerts surface. The answer lists the channels it did not send
+    /// because they do not deliver, with their state, by position in the rule's channels in
+    /// <c>sortOrder</c> order.
     /// </summary>
     [HttpPost("{id:guid}/test-fire")]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(TestFireResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> TestFire(Guid id, CancellationToken ct)
     {
@@ -471,8 +473,8 @@ public class AlertRulesController : ControllerBase
         var rule = await _alerts.GetRuleAsync(id, ct);
         if (rule is null) return NotFound();
 
-        await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, _time.GetUtcNow().UtcDateTime), ct);
-        return Accepted();
+        var fired = await _deliveryService.TestFireAsync(id, rule.Channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, tenantId, _time.GetUtcNow().UtcDateTime), ct);
+        return Accepted(new TestFireResponse { NotSent = [.. fired.NotSent] });
     }
 
     /// <summary>
@@ -483,7 +485,7 @@ public class AlertRulesController : ControllerBase
     [HttpPost("test-fire-dry-run")]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
-    [ProducesResponseType(typeof(TestFireDryRunResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(TestFireResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> TestFireDryRun(
         [FromBody] TestFireDryRunRequest request, CancellationToken ct)
@@ -515,7 +517,7 @@ public class AlertRulesController : ControllerBase
         var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, _time.GetUtcNow().UtcDateTime);
 
         var notSent = await _deliveryService.TestFireDryRunAsync(channels, payload, ct);
-        return Accepted(new TestFireDryRunResponse { NotSent = [.. notSent ?? []] });
+        return Accepted(new TestFireResponse { NotSent = [.. notSent ?? []] });
     }
 
     #region Helpers
@@ -954,10 +956,10 @@ public record TestFireDryRunRequest(
     AlertRuleSeverity Severity,
     List<CreateAlertRuleChannelRequest> Channels);
 
-/// <summary>What a dry-run test fire found.</summary>
-public class TestFireDryRunResponse
+/// <summary>What a test fire found.</summary>
+public class TestFireResponse
 {
-    /// <summary>The request's channels that were not sent because they do not deliver.</summary>
+    /// <summary>The channels that were not sent because they do not deliver.</summary>
     public List<AlertChannelNotSent> NotSent { get; set; } = [];
 }
 
