@@ -708,6 +708,55 @@ public class PasskeyControllerTests : IDisposable
         response.SubjectId.Should().Be(subjectId);
     }
 
+    [Theory]
+    [MemberData(nameof(RefusedRegistrations))]
+    public async Task RegisterComplete_WhenSignedInAndTheRegistrationIsRefused_AnswersRegistrationFailed(Exception refusal)
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(refusal);
+
+        var result = await CompleteRegistrationAsync();
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be("Passkey registration failed");
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenSignedInAndTheStoreTimesOut_IsAnErrorAndNotARefusal()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteRegistrationAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenARecoverySessionEnrolsAndTheStoreTimesOut_IsAnErrorAndLeavesTheSessionUsable()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        var session = await GiveRecoverySessionAsync(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteRegistrationAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        (await IsLiveAsync(session, LoginCodePurpose.RecoverySession)).Should().BeTrue();
+    }
+
     [Fact]
     public async Task RegisterComplete_NoChallengeToken_ReturnsBadRequest()
     {
