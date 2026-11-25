@@ -19,10 +19,10 @@ namespace Nocturne.API.Services.Alerts;
 /// sends nothing, acknowledges nothing new, and settles. The payload is built from the context as
 /// it is at the run, so a re-dispatch carries the reading it found then, with that reading's time.
 /// <para>
-/// The instance lock orders the instance against a close, not the sends: a close that lands while
-/// they run has resolved, archived and cleared only what existed before them, and the sends then
-/// raise the alarm and create the notifications. So once they return, an excursion found ended owes
-/// its close again (<see cref="IAlertRepository.OweCloseIfEndedAsync"/>), which runs here once more.
+/// A close that lands while the sends run has resolved, archived and cleared only what existed
+/// before them, so once they return an excursion found ended has its close run again
+/// (<see cref="IExcursionResolutionHandler.CloseAgainIfEndedAsync"/>). A late opening that finds its
+/// excursion ended does the same, since a run that died after its sends may have left them standing.
 /// </para>
 /// </remarks>
 public interface IExcursionOpenedHandler
@@ -63,6 +63,7 @@ internal sealed class ExcursionOpenedHandler(
             logger.LogWarning(
                 "Excursion {ExcursionId} ended before its late dispatch raised an instance; it is not sent",
                 excursionId);
+            await resolutionHandler.CloseAgainIfEndedAsync(excursionId, tenantId, ct);
         }
         else if (instance.Suppressed)
         {
@@ -98,15 +99,8 @@ internal sealed class ExcursionOpenedHandler(
                     broadcast: false, ct);
             }
 
-            if (!callerCloses
-                && await repository.OweCloseIfEndedAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct))
-            {
-                logger.LogInformation(
-                    "Excursion {ExcursionId} closed while its dispatch was sending; its close runs again",
-                    excursionId);
-                await resolutionHandler.HandleClosedAsync(
-                    new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId), tenantId, ct);
-            }
+            if (!callerCloses)
+                await resolutionHandler.CloseAgainIfEndedAsync(excursionId, tenantId, ct);
         }
 
         await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionOpened, ct);

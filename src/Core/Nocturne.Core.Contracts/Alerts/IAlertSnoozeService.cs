@@ -16,8 +16,9 @@ public interface IAlertSnoozeService
 
     /// <summary>
     /// Re-dispatches a lapsed snooze's instance to its rule's channels when the alert still
-    /// stands: excursion open and out of hysteresis, unacknowledged, rule enabled, not
-    /// re-snoozed, and not silenced by DND. Returns whether a dispatch was made.
+    /// stands: excursion open and out of hysteresis, unacknowledged, rule enabled and evaluated (no
+    /// stored value its engine cannot read), not re-snoozed, and not silenced by DND. Returns whether
+    /// a dispatch was made.
     /// </summary>
     Task<bool> ResumeAsync(Guid instanceId, CancellationToken ct);
 }

@@ -221,6 +221,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Func<Task>? AfterRead;
         public Func<Task>? BeforeEnsure;
         public Func<Task>? AfterEnsure;
+        public Func<Task>? BeforeOweClose;
 
         public override async Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct)
         {
@@ -239,6 +240,13 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             if (AfterEnsure is { } after)
                 await after();
             return instance;
+        }
+
+        public override async Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct)
+        {
+            if (BeforeOweClose is { } before)
+                await before();
+            return await base.OweCloseIfEndedAsync(excursionId, now, ct);
         }
     }
 
@@ -684,16 +692,11 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
     }
 
     /// <summary>
-    /// The close lands at the dispatch's broadcast, after the instance is taken and before the alarm,
-    /// the delivery rows and the notification, so it resolves, archives and clears only what existed
-    /// before them.
+    /// Adds an in-app channel to the rule, and returns the alarm and notification events in the
+    /// order the process makes them.
     /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_close_that_lands_while_an_opening_sends_leaves_nothing_standing(bool late)
+    private static async Task<ConcurrentQueue<string>> RecordAlarmsAndNotificationsAsync(Tenant tenant)
     {
-        var tenant = await SeedAsync();
         var member = Guid.CreateVersion7();
         var inApp = new AlertRuleChannelSnapshot(
             Guid.CreateVersion7(), tenant.Rule.Id, ChannelType.InApp, member.ToString(), null, 1);
@@ -745,8 +748,12 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             .Callback(() => events.Enqueue("archived"))
             .ReturnsAsync(true);
 
-        var excursion = await tenant.OpenAsync();
-        var process = tenant.Process();
+        return events;
+    }
+
+    /// <summary>Lands a close of the excursion at the dispatch's broadcast, once.</summary>
+    private static void CloseAtTheDispatch(Tenant tenant, IServiceProvider process)
+    {
         var closing = true;
         tenant.Broadcasts
             .Setup(b => b.BroadcastAlertEventAsync("alert_dispatch", It.IsAny<object>()))
@@ -757,6 +764,23 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 var close = await tenant.CloseAsync(Opened.AddMinutes(3));
                 await process.GetRequiredService<IExcursionResolutionHandler>().HandleClosedAsync(close, tenant.Id, CancellationToken.None);
             });
+    }
+
+    /// <summary>
+    /// The close lands at the dispatch's broadcast, after the instance is taken and before the alarm,
+    /// the delivery rows and the notification, so it resolves, archives and clears only what existed
+    /// before them.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_close_that_lands_while_an_opening_sends_leaves_nothing_standing(bool late)
+    {
+        var tenant = await SeedAsync();
+        var events = await RecordAlarmsAndNotificationsAsync(tenant);
+        var excursion = await tenant.OpenAsync();
+        var process = tenant.Process();
+        CloseAtTheDispatch(tenant, process);
 
         if (late)
             await tenant.SweepAsync(process, AfterLease);
@@ -766,6 +790,28 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         events.Take(2).Should().Equal(["cleared", "raised"], "the close cleared the alarm before the dispatch raised it");
         events.Last(e => e is "raised" or "cleared").Should().Be("cleared", "no alarm stays raised for a condition that ended");
         events.Last(e => e is "notified" or "archived").Should().Be("archived", "no notification stays up for a condition that ended");
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("resolved");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_death_after_an_opening_sent_through_a_close_is_finished_by_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var events = await RecordAlarmsAndNotificationsAsync(tenant);
+        var excursion = await tenant.OpenAsync();
+        var dying = tenant.Hooked();
+        dying.BeforeOweClose = () => throw new NpgsqlException("the process dies after the sends");
+        var process = tenant.Process(dying);
+        CloseAtTheDispatch(tenant, process);
+
+        await tenant.Invoking(t => t.HandleOpenedAsync(process, excursion)).Should().ThrowAsync<NpgsqlException>();
+        events.Last(e => e is "raised" or "cleared").Should().Be("raised", "the run died with its alarm standing");
+
+        await tenant.SweepAsync(tenant.Process(), AfterLease);
+
+        events.Last(e => e is "raised" or "cleared").Should().Be("cleared");
+        events.Last(e => e is "notified" or "archived").Should().Be("archived");
         (await tenant.InstancesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("resolved");
         (await tenant.OwedAsync(excursion)).Should().Be((null, null));
     }

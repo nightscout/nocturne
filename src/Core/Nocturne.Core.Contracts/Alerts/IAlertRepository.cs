@@ -46,7 +46,8 @@ public interface IAlertRepository
 
     /// <summary>
     /// Returns every rule of <paramref name="tenantId"/>, enabled or not, in <c>SortOrder</c>,
-    /// without its channels.
+    /// without its channels. A condition type, severity or scope class no member has reads as the
+    /// stand-in the rule editor shows for it.
     /// </summary>
     /// <remarks>
     /// A startup loop calls it once per tenant. Callers serving a request are bound as for

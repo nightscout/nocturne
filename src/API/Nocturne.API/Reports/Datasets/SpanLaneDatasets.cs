@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Reports.Datasets;
 
@@ -134,12 +135,13 @@ internal sealed class AlertExcursionsDataset : LaneDataset
         })]);
     }
 
-    internal static ChartColor SeverityColor(AlertRuleSeverity? severity) => severity switch
-    {
-        AlertRuleSeverity.Critical => ChartColor.SystemEventAlarm,
-        AlertRuleSeverity.Warning => ChartColor.SystemEventWarning,
-        _ => ChartColor.SystemEventInfo,
-    };
+    internal static ChartColor SeverityColor(AlertRuleSeverity? stored) =>
+        (stored is { } severity ? AlertRuleMapper.Readable(severity) : (AlertRuleSeverity?)null) switch
+        {
+            AlertRuleSeverity.Critical => ChartColor.SystemEventAlarm,
+            AlertRuleSeverity.Warning => ChartColor.SystemEventWarning,
+            _ => ChartColor.SystemEventInfo,
+        };
 }
 
 /// <summary>

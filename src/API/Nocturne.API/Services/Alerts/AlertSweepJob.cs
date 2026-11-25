@@ -273,6 +273,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 logger.LogWarning(
                     "Excursion {ExcursionId} opened without being dispatched and has since closed or lost its rule; it is not sent",
                     transition.ExcursionId);
+                if (transition.EndedAt is not null)
+                    await resolutionHandler.CloseAgainIfEndedAsync(transition.ExcursionId, sweep.TenantId, ct);
                 await sweep.Repository.SettleTransitionAsync(transition.ExcursionId, transition.Kind, ct);
                 continue;
             }
