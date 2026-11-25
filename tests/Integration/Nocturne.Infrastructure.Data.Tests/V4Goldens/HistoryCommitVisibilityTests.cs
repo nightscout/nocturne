@@ -80,6 +80,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
             await command.ExecuteScalarAsync();
 
         var written = await CreateAsync(scope, T0, "xdrip");
+        await fixture.SettleHistoryAsync(scope);
 
         (await history.GetModifiedSinceAsync(0, 100)).Select(h => h.Record.Id).Should().Contain(written.Id);
     }

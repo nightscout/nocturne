@@ -132,11 +132,13 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
         var winner = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = at, Mgdl = 110, DataSource = "a-cgm", Device = "sensor" };
         var loser = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = at.AddMinutes(1), Mgdl = 180, DataSource = "b-cgm", Device = "sensor" };
         await repo.BulkCreateAsync([winner, loser], WriteOrigin.Live);
+        await fixture.SettleHistoryAsync(scope);
 
         (await repo.GetCanonicalModifiedSinceAsync(0, 100))
             .Select(h => (h.Record.Id, h.Deleted)).Should().Equal((winner.Id, false));
 
         await repo.DeleteAsync(loser.Id, WriteOrigin.Live);
+        await fixture.SettleHistoryAsync(scope);
         (await repo.GetCanonicalModifiedSinceAsync(0, 100))
             .Select(h => (h.Record.Id, h.Deleted)).Should().BeEquivalentTo(new[] { (winner.Id, false), (loser.Id, true) });
     }
