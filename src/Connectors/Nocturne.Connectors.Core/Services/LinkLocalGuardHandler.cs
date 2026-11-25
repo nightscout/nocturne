@@ -218,9 +218,9 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
 
         var absolute = location.IsAbsoluteUri ? location : new Uri(requestUri, location);
 
-        // Only http(s) is followed. A redirect to any other scheme is not a connector target, and
-        // OutboundDestination would refuse it anyway; stopping here keeps the response intact for
-        // the caller to report rather than raising.
+        // Only http(s) is followed. A redirect to any other scheme, ws(s) included, is not a
+        // connector target; stopping here keeps the response intact for the caller to report
+        // rather than raising.
         if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
             return false;
 

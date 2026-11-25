@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net.WebSockets;
-using System.Text;
 using Nocturne.Tests.Shared.Infrastructure;
 using Activity = System.Diagnostics.Activity;
 using FluentAssertions;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Nocturne.API.Extensions;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Nightscout;
@@ -83,7 +83,7 @@ public class NightscoutClientSpanTests
     public async Task The_realtime_listener_upgrades_to_a_websocket_whose_span_holds_the_masked_url()
     {
         var site = new EngineIoSite();
-        await using var app = await StartSiteAsync(site.AnswerAsync);
+        await using var app = await site.StartAsync();
         var updated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var (spans, port) = await ObserveAsync(
@@ -107,6 +107,7 @@ public class NightscoutClientSpanTests
             },
             spans => spans.Any(IsUpgrade));
 
+        site.WebSocketUserAgent.Should().StartWith("Nocturne").And.Be(site.PollingUserAgent);
         spans.Should().Contain(span => IsUpgrade(span));
         spans.Should().AllSatisfy(span =>
         {
@@ -122,9 +123,12 @@ public class NightscoutClientSpanTests
         builder.Configuration["Connectors:Nightscout:Enabled"] = "true";
         new NightscoutConnectorInstaller().Install(builder.Services, builder.Configuration);
         using var host = builder.Build();
+        using var http = host.Services.GetRequiredService<IHttpClientFactory>()
+            .CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName);
         using var socket = new ConnectorClientWebSocket(
             host.Services.GetRequiredService<IHttpMessageHandlerFactory>(),
-            NightscoutConnectorInstaller.RealtimeHttpClientName);
+            NightscoutConnectorInstaller.RealtimeHttpClientName,
+            http.DefaultRequestHeaders);
 
         var connect = () => socket.ConnectAsync(
             new Uri($"ws://169.254.169.254/{Secret}/socket.io/?EIO=4&transport=websocket"),
@@ -213,86 +217,11 @@ public class NightscoutClientSpanTests
             return (spans.ToList(), port);
     }
 
-    /// <summary>
-    /// An Engine.IO server as far as a client's upgrade. Over polling it opens a session that offers
-    /// the WebSocket upgrade, takes the namespace connect, answers it on the next poll, and holds every
-    /// poll after. It answers the upgrade, or a namespace connect, sent over a WebSocket with the
-    /// namespace connect and a <c>dataUpdate</c>, which it sends only there.
-    /// </summary>
-    private sealed class EngineIoSite
-    {
-        private int _polls;
-
-        public async Task AnswerAsync(HttpContext context)
-        {
-            if (context.WebSockets.IsWebSocketRequest)
-            {
-                await AnswerWebSocketAsync(await context.WebSockets.AcceptWebSocketAsync(), context.RequestAborted);
-                return;
-            }
-
-            context.Response.ContentType = "text/plain; charset=UTF-8";
-            if (HttpMethods.IsPost(context.Request.Method))
-            {
-                await context.Response.WriteAsync("ok");
-                return;
-            }
-
-            if (!context.Request.Query.ContainsKey("sid"))
-            {
-                await context.Response.WriteAsync(
-                    "0{\"sid\":\"session\",\"upgrades\":[\"websocket\"],\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}");
-                return;
-            }
-
-            if (Interlocked.Increment(ref _polls) == 1)
-            {
-                await context.Response.WriteAsync("40{\"sid\":\"namespace\"}");
-                return;
-            }
-
-            try
-            {
-                await Task.Delay(Timeout.Infinite, context.RequestAborted);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }
-
-        private static async Task AnswerWebSocketAsync(WebSocket socket, CancellationToken aborted)
-        {
-            var buffer = new byte[4096];
-            try
-            {
-                while (socket.State == WebSocketState.Open)
-                {
-                    var received = await socket.ReceiveAsync(buffer, aborted);
-                    if (received.MessageType == WebSocketMessageType.Close)
-                        return;
-
-                    if (Encoding.UTF8.GetString(buffer, 0, received.Count) is "5" or ['4', '0', ..])
-                    {
-                        await SendAsync(socket, "40{\"sid\":\"namespace\"}", aborted);
-                        await SendAsync(socket, "42[\"dataUpdate\",{}]", aborted);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is WebSocketException or OperationCanceledException)
-            {
-            }
-        }
-
-        private static Task SendAsync(WebSocket socket, string message, CancellationToken aborted) =>
-            socket.SendAsync(Encoding.UTF8.GetBytes(message), WebSocketMessageType.Text, true, aborted);
-    }
-
     private static async Task<WebApplication> StartSiteAsync(RequestDelegate answer)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         var site = builder.Build();
-        site.UseWebSockets();
         site.Run(answer);
         await site.StartAsync();
         return site;

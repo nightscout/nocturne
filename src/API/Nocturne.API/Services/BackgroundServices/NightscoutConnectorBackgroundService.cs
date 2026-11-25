@@ -10,6 +10,7 @@ using System.Collections.Specialized;
 using System.Net.WebSockets;
 using System.Web;
 using SocketIOClient;
+using SocketIOClient.Common;
 using SocketIOClient.Protocol.WebSocket;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -156,42 +157,20 @@ public class NightscoutConnectorBackgroundService
             return;
 
         var address = NightscoutAddress.Resolve(resolvedUrl);
-        var client = NewClient(
-            address,
-            _serviceProvider.GetRequiredService<IHttpClientFactory>(),
-            _serviceProvider.GetRequiredService<IHttpMessageHandlerFactory>());
 
-        foreach (var evt in new[] { "dataUpdate", "create", "update" })
-            client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
-
-        // Nightscout sends data events only to a socket that has authorized with read access, and
-        // forgets it on every reconnect. It answers authorize with a full dataUpdate, so each
-        // (re)connect syncs once: the catch-up for whatever changed while the socket was down.
-        var authorize = AuthorizeMessage(config.ApiSecret, address.Token);
-        client.OnConnected += (_, _) => Observe(AuthorizeAsync(client, authorize, tenantSlug), tenantSlug);
-
-        try
+        // SocketIOClient does not fall back to polling when the WebSocket upgrade fails, as behind a
+        // proxy that does not pass Upgrade on: it waits out the connect and dials a WebSocket on every
+        // retry. A site whose upgrade failed is connected again on polling alone.
+        var (client, upgradeFailed) = await ConnectListenerAsync(
+            tenantId, tenantSlug, address, config.ApiSecret, upgrade: true, cancellationToken);
+        if (upgradeFailed)
         {
-            using var deadline = new CancellationTokenSource(ConnectTimeout, Clock);
-            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
-
-            await client.ConnectAsync(connectCts.Token);
+            (client, _) = await ConnectListenerAsync(
+                tenantId, tenantSlug, address, config.ApiSecret, upgrade: false, cancellationToken);
         }
-        catch (Exception ex)
-        {
-            client.Dispose();
 
-            // The service is shutting down — let the caller unwind rather than reporting a failure.
-            if (cancellationToken.IsCancellationRequested)
-                throw;
-
-            Logger.LogWarning(
-                ex,
-                "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
-                tenantSlug, address.Origin);
-
+        if (client is null)
             return;
-        }
 
         if (!_socketClients.TryAdd(tenantId, client))
         {
@@ -205,23 +184,89 @@ public class NightscoutConnectorBackgroundService
     }
 
     /// <summary>
+    /// The tenant's listener, connected, or null with the failure logged. <c>UpgradeFailed</c> is
+    /// true when the site answered over polling and the WebSocket upgrade then failed.
+    /// </summary>
+    private async Task<(SocketIO? Client, bool UpgradeFailed)> ConnectListenerAsync(
+        Guid tenantId,
+        string tenantSlug,
+        NightscoutAddress address,
+        string? apiSecret,
+        bool upgrade,
+        CancellationToken cancellationToken)
+    {
+        var client = NewClient(
+            address,
+            _serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            _serviceProvider.GetRequiredService<IHttpMessageHandlerFactory>(),
+            upgrade);
+
+        foreach (var evt in new[] { "dataUpdate", "create", "update" })
+            client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
+
+        // Nightscout sends data events only to a socket that has authorized with read access, and
+        // forgets it on every reconnect. It answers authorize with a full dataUpdate, so each
+        // (re)connect syncs once: the catch-up for whatever changed while the socket was down.
+        var authorize = AuthorizeMessage(apiSecret, address.Token);
+        client.OnConnected += (_, _) => Observe(AuthorizeAsync(client, authorize, tenantSlug), tenantSlug);
+
+        try
+        {
+            using var deadline = new CancellationTokenSource(ConnectTimeout, Clock);
+            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+
+            await client.ConnectAsync(connectCts.Token);
+            return (client, false);
+        }
+        catch (Exception ex)
+        {
+            var upgradeFailed = client.Options.Transport == TransportProtocol.WebSocket;
+            client.Dispose();
+
+            // The service is shutting down — let the caller unwind rather than reporting a failure.
+            if (cancellationToken.IsCancellationRequested)
+                throw;
+
+            if (upgradeFailed)
+            {
+                Logger.LogInformation(
+                    ex,
+                    "The Socket.IO WebSocket upgrade failed for tenant {TenantSlug} at {Url}, connecting on polling",
+                    tenantSlug, address.Origin);
+            }
+            else
+            {
+                Logger.LogWarning(
+                    ex,
+                    "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
+                    tenantSlug, address.Origin);
+            }
+
+            return (null, upgradeFailed);
+        }
+    }
+
+    /// <summary>
     /// A client for the Socket.IO endpoint of <paramref name="address"/>. The client reads a URL's
     /// path as a Socket.IO namespace, so a site under a sub-path is reached by its origin and the
     /// endpoint path instead. The URL's query goes with the handshake, as it goes with every read.
     /// Its polling transport sends through the
     /// <see cref="NightscoutConnectorInstaller.RealtimeHttpClientName"/> connector client, which keeps
     /// the site's path out of telemetry, in place of the <see cref="HttpClient"/> the library would
-    /// build itself. The WebSocket it upgrades to opens through that client's handlers too
-    /// (<see cref="ConnectorClientWebSocket"/>).
+    /// build itself. Each WebSocket it opens, on the upgrade and on every reconnect after it, goes
+    /// through that client's handlers with its default headers (<see cref="ConnectorClientWebSocket"/>).
+    /// Without <paramref name="upgrade"/> it stays on polling.
     /// </summary>
     internal static SocketIO NewClient(
         NightscoutAddress address,
         IHttpClientFactory clients,
-        IHttpMessageHandlerFactory handlers)
+        IHttpMessageHandlerFactory handlers,
+        bool upgrade = true)
     {
         var options = new SocketIOOptions
         {
             Path = address.SocketIoPath,
+            AutoUpgrade = upgrade,
             Reconnection = true,
             ReconnectionAttempts = ReconnectionAttempts,
             ReconnectionDelayMax = ReconnectionDelayMaxMs,
@@ -235,8 +280,10 @@ public class NightscoutConnectorBackgroundService
             services =>
             {
                 services.AddSingleton(_ => clients.CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName));
-                services.AddScoped<IWebSocketClient>(_ =>
-                    new ConnectorClientWebSocket(handlers, NightscoutConnectorInstaller.RealtimeHttpClientName));
+                services.AddScoped<IWebSocketClient>(provider => new ConnectorClientWebSocket(
+                    handlers,
+                    NightscoutConnectorInstaller.RealtimeHttpClientName,
+                    provider.GetRequiredService<HttpClient>().DefaultRequestHeaders));
             });
     }
 

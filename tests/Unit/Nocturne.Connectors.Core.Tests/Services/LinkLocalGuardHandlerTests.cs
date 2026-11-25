@@ -88,15 +88,13 @@ public class LinkLocalGuardHandlerTests
         reachedTransport().Should().BeTrue();
     }
 
-    // A ClientWebSocket connecting through a connector client's handlers sends its handshake with
-    // the ws(s) URL it was given, so the guard reads it as the http(s) URL of the same host.
-
     [Theory]
-    [InlineData("ws://169.254.169.254/socket.io/?EIO=4&transport=websocket")]
-    [InlineData("wss://169.254.170.2/socket.io/?EIO=4&transport=websocket")]
-    public async Task Refuses_ALinkLocalWebSocketTarget(string url)
+    [InlineData("ws://169.254.169.254/socket.io/?EIO=4&transport=websocket", null)]
+    [InlineData("wss://169.254.170.2/socket.io/?EIO=4&transport=websocket", null)]
+    [InlineData("wss://metadata.example/socket.io/?EIO=4&transport=websocket", "169.254.169.254")]
+    public async Task Refuses_ALinkLocalWebSocketTarget(string url, string? resolvesTo)
     {
-        var invoker = BuildInvoker(Unresolvable, out var reachedTransport);
+        var invoker = BuildInvoker(resolvesTo is null ? Unresolvable : ResolvesTo(resolvesTo), out var reachedTransport);
 
         var act = async () => await invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, url), CancellationToken.None);
 
