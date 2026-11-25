@@ -8,14 +8,18 @@ const PATH = "src/Web/locales/de.po";
 const TRANSLATOR = { login: "translator", id: 42 };
 const allowlist = { [PATH]: [{ login: "translator", id: 42 }] };
 
-/** A catalog as Wuchale writes it, from `[msgid, msgstr]` pairs. */
+/**
+ * A catalog as Wuchale writes it, from `[msgid, msgstr]` pairs, or `[msgid, msgid_plural, [forms]]`
+ * for a plural entry.
+ */
 function catalog(entries, plural = "nplurals=2; plural=n == 1 ? 0 : 1;") {
   const po = new PO();
   po.headers = { "Plural-Forms": plural, Language: "de" };
-  po.items = entries.map(([msgid, msgstr]) => {
+  po.items = entries.map(([msgid, second, third]) => {
     const item = new PO.Item();
     item.msgid = msgid;
-    item.msgstr = [msgstr];
+    if (third) item.msgid_plural = second;
+    item.msgstr = third ?? [second];
     item.references = ["src/App.svelte"];
     return item;
   });
@@ -44,7 +48,7 @@ function fakeGitHub(o = {}) {
     head1: { [PATH]: { text: o.head ?? TRANSLATED, mode: o.headMode ?? "100644" } },
   };
   const blobs = {};
-  const log = { comments: [], commits: [], refs: [], closed: false };
+  const log = { comments: [], commits: [], refs: [], closed: false, prReads: 0 };
   let refFailures = o.refFailures ?? 0;
   let main = "main1";
 
@@ -79,7 +83,11 @@ function fakeGitHub(o = {}) {
             },
           ],
         }),
-        get: async () => ({ data: { state: "open", head: { sha: o.liveHead ?? "head1" } } }),
+        // The first read is the check before landing; a later one is the check before closing.
+        get: async () => {
+          const sha = log.prReads++ === 0 ? (o.liveHead ?? "head1") : (o.liveHeadAfter ?? "head1");
+          return { data: { state: "open", head: { sha } } };
+        },
         update: async ({ state }) => {
           log.closed = state === "closed";
           return { data: {} };
@@ -247,7 +255,7 @@ test("refuses a translation that drops a markup slot, and lists it", async () =>
   const head = catalog([["Hello <0/>", "Hallo"]]);
   const r = await land({ head });
   assert.equal(r.landed, false);
-  assert.match(r.comments[0], /1 changed translation has different placeholders/);
+  assert.match(r.comments[0], /1 changed translation does not fit the English text/);
   assert.match(r.comments[0], /\| ` Hello <0\/> ` \| ` Hallo ` \| ` <0\/> ` \| ` none ` \|/);
 });
 
@@ -261,7 +269,7 @@ test("reads a stray msgstr after a blank line as pofile does", async () => {
   const head = BASE.replace('msgstr "Fehler-ID: {0}"', 'msgstr "Fehler-ID: {0}"\n\nmsgstr "Fehler <7/> {9}"');
   const r = await land({ head });
   assert.equal(r.landed, false);
-  assert.match(r.comments[0], /different placeholders/);
+  assert.match(r.comments[0], /does not fit the English text/);
 });
 
 test("refuses a pull request that changes no translation", async () => {
@@ -286,6 +294,62 @@ test("a catalog pofile does not write back lands as the head's file only while m
   const changed = await land({ main: unmanaged + "\n", mergeBase: unmanaged, head });
   assert.equal(changed.landed, false);
   assert.match(changed.comments[0], /Update the branch/);
+});
+
+test("does not undo a translation main corrected after the branch was made", async () => {
+  // The branch landed "Fehler-ID: {0}" before; main then corrected it, and the same branch comes back.
+  const mergeBase = catalog([
+    ["Hello <0/>", ""],
+    ["Error ID: {0}", ""],
+  ]);
+  const main = catalog([
+    ["Hello <0/>", ""],
+    ["Error ID: {0}", "Fehlerkennung: {0}"],
+  ]);
+  const head = catalog([
+    ["Hello <0/>", "Hallo <0/>"],
+    ["Error ID: {0}", "Fehler-ID: {0}"],
+  ]);
+  const r = await land({ main, mergeBase, head });
+  assert.equal(r.landed, true);
+  assert.deepEqual(translations(r.landedText), { "Hello <0/>": "Hallo <0/>", "Error ID: {0}": "Fehlerkennung: {0}" });
+  assert.match(r.comments[0], /1 translation was left out because `main` changed them/);
+
+  const onlyCorrected = await land({ main, mergeBase, head: catalog([["Hello <0/>", ""], ["Error ID: {0}", "Fehler-ID: {0}"]]) });
+  assert.equal(onlyCorrected.landed, false);
+  assert.match(onlyCorrected.comments[0], /has changed every translation/);
+});
+
+test("a plural entry needs every form of the language, all filled or all empty", async () => {
+  const base = catalog([["# day", "# days", ["", ""]]]);
+  const plural = (forms) => land({ main: base, head: catalog([["# day", "# days", forms]]) });
+  assert.equal((await plural(["# Tag", "# Tage"])).landed, true);
+  for (const forms of [["# Tage"], ["", "# Tage"], ["# Tag", "# Tage", "# Tagen"]]) {
+    const r = await plural(forms);
+    assert.equal(r.landed, false, JSON.stringify(forms));
+    assert.match(r.comments[0], /does not fit/);
+  }
+});
+
+test("an entry without a plural has one form", async () => {
+  const r = await land({ head: catalog([["Error ID: {0}", "Error ID: {0}", ["Fehler-ID: {0}", "x"]]]).replace('msgid_plural "Error ID: {0}"\n', "") });
+  assert.equal(r.landed, false);
+  assert.match(r.comments[0], /does not fit/);
+});
+
+test("refuses a plural with a skipped form instead of failing", async () => {
+  const base = catalog([["# day", "# days", ["", ""]]]);
+  const head = base.replace('msgstr[0] ""\nmsgstr[1] ""', 'msgstr[0] "# Tag"\nmsgstr[2] "# Tage"');
+  const r = await land({ main: base, head });
+  assert.equal(r.landed, false);
+  assert.match(r.comments[0], /does not fit/);
+});
+
+test("leaves the pull request open when it was pushed to while landing", async () => {
+  const r = await land({ liveHeadAfter: "head2" });
+  assert.equal(r.landed, true);
+  assert.equal(r.closed, false);
+  assert.match(r.comments[0], /stays open/);
 });
 
 test("the catalogs Wuchale writes round-trip through writeCatalog", () => {

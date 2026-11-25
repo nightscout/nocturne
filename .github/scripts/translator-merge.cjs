@@ -16,6 +16,9 @@ const MARKER = "<!-- nocturne-translator-merge -->";
 const CLA_CONTEXT = "license/cla";
 const MAX_LISTED_PROBLEMS = 20;
 const LAND_ATTEMPTS = 3;
+// The Wuchale whose loading rules itemKey and readCatalog copy; web-static fails when another is
+// installed, so they are checked again on an upgrade.
+const WUCHALE_VERSION = "0.25.8";
 
 // Wuchale's interpolation holes ({0}) and markup slots (<0>, </0>, <0/>). Plural `#` is left out: a
 // language may write the singular as a word.
@@ -77,25 +80,48 @@ function mismatch(sources, translation) {
   return null;
 }
 
+function forms(count) {
+  return `${count} ${count === 1 ? "form" : "forms"}`;
+}
+
+/**
+ * Why an item's forms cannot render, or null when they can. Wuchale compiles a one-form translation
+ * as a string and treats a longer one as plural, so a plural entry needs exactly the language's
+ * number of forms, all filled or all empty, and any other entry exactly one.
+ */
+function formsMismatch(item, nplurals) {
+  const expected = item.msgid_plural ? nplurals : 1;
+  const filled = item.msgstr.filter((s) => s !== "").length;
+  if (item.msgstr.length === expected && (filled === 0 || filled === expected)) return null;
+  return { expected: forms(expected), found: filled === item.msgstr.length ? forms(item.msgstr.length) : `${filled} of ${forms(item.msgstr.length)} filled` };
+}
+
 /**
  * Why the next catalog cannot replace the current one, or null when it can. The next catalog must
  * keep every item and the Plural-Forms rule (which Wuchale compiles into code), and every
- * translation it adds or changes must pass mismatch. Both are read catalogs.
+ * translation it adds or changes must pass formsMismatch and mismatch. Both are read catalogs.
  */
 function catalogProblems(current, next) {
   if (next.pluralForms !== current.pluralForms) return { kind: "plural-forms" };
   const missing = [...current.items.keys()].filter((key) => !next.items.has(key));
   if (missing.length > 0) return { kind: "missing", count: missing.length };
 
-  const placeholders = [];
+  // Wuchale's default when a catalog has no Plural-Forms (defaultPluralRule in wuchale/dist/storage.js).
+  const nplurals = Number(PO.parsePluralForms(current.pluralForms).nplurals) || 2;
+  const problems = [];
   for (const [key, item] of next.items) {
     const before = current.items.get(key);
     if (before && sameTranslation(before, item)) continue;
+    const formsProblem = formsMismatch(item, nplurals);
+    if (formsProblem) {
+      problems.push({ msgid: item.msgid, msgstr: item.msgstr.join(" / "), ...formsProblem });
+      continue;
+    }
     const sources = item.msgid_plural ? [item.msgid, item.msgid_plural] : [item.msgid];
     item.msgstr.forEach((translation, index) => {
       const problem = translation === "" ? null : mismatch(sources, translation);
       if (!problem) return;
-      placeholders.push({
+      problems.push({
         msgid: item.msgid,
         msgstr: translation,
         index: item.msgid_plural ? index : undefined,
@@ -103,21 +129,24 @@ function catalogProblems(current, next) {
       });
     });
   }
-  return placeholders.length > 0 ? { kind: "placeholders", problems: placeholders } : null;
+  return problems.length > 0 ? { kind: "translations", problems } : null;
 }
 
 /**
  * The current catalog's text with each translation the head adds or changes against the merge base
- * written into the item of the same key, as `{ text, dropped }`. A translation whose string the
- * current catalog no longer has is dropped. Only translations move, by key, so the head's other
- * edits (headers, comments, entries an older copy lacks) never land, and a translation cannot land
- * on another string. Null when writing the current catalog back does not reproduce it, since the
- * result would then rewrite more than the translations.
+ * written into the item of the same key, as `{ text, dropped, skipped }`. Only translations move,
+ * by key, so the head's other edits (headers, comments, entries an older copy lacks) never land, and
+ * a translation cannot land on another string. A translation whose string the current catalog no
+ * longer has is dropped. One the current catalog changed since the merge base (or, for a string the
+ * branch did not have, already translated) is skipped: the head never saw that change, and landing
+ * over it would undo a correction without anyone choosing to. Null when writing the current catalog
+ * back does not reproduce it, since the result would then rewrite more than the translations.
  */
 function applyTranslations(mergeBase, head, currentText) {
   const current = readCatalog(currentText);
   if (writeCatalog(current) !== currentText) return null;
   let dropped = 0;
+  let skipped = 0;
   for (const [key, item] of head.items) {
     const before = mergeBase.items.get(key);
     if (before && sameTranslation(before, item)) continue;
@@ -126,9 +155,16 @@ function applyTranslations(mergeBase, head, currentText) {
       dropped++;
       continue;
     }
-    target.msgstr = [...item.msgstr];
+    if (sameTranslation(target, item)) continue;
+    const changedOnMain = before ? !sameTranslation(before, target) : target.msgstr.some((s) => s !== "");
+    if (changedOnMain) {
+      skipped++;
+      continue;
+    }
+    // A form the head skipped (msgstr[2] with no [1]) is a hole in the array; it fails formsMismatch.
+    target.msgstr = Array.from(item.msgstr, (s) => s ?? "");
   }
-  return { text: writeCatalog(current), dropped };
+  return { text: writeCatalog(current), dropped, skipped };
 }
 
 function codeSpan(text) {
@@ -145,7 +181,7 @@ function refusal(path, problem) {
       return `this pull request changes the \`Plural-Forms\` line of \`${path}\`. A maintainer will review it.`;
     case "missing":
       return `this pull request removes ${problem.count} ${problem.count === 1 ? "entry" : "entries"} from \`${path}\`. A maintainer will review it.`;
-    case "placeholders": {
+    case "translations": {
       const { problems } = problem;
       const rows = problems.slice(0, MAX_LISTED_PROBLEMS).map((p) => {
         const source = p.index === undefined ? codeSpan(p.msgid) : `${codeSpan(p.msgid)} (form ${p.index})`;
@@ -154,9 +190,11 @@ function refusal(path, problem) {
       const more = problems.length > MAX_LISTED_PROBLEMS ? `\n\nAnd ${problems.length - MAX_LISTED_PROBLEMS} more.` : "";
       return (
         [
-          `${problems.length} changed ${problems.length === 1 ? "translation has" : "translations have"} different placeholders from the English text in \`${path}\`.`,
+          `${problems.length} changed ${problems.length === 1 ? "translation does" : "translations do"} not fit the English text in \`${path}\`.`,
           "",
           "A translation must keep every `<0>`, `</0>` and `<0/>` of the English text and add none. It can leave out or repeat a `{0}`, but it must not use one the English text does not have. The order can change.",
+          "",
+          "An entry with a plural must have every form of the language, all filled or all empty. Any other entry has one form.",
           "",
           "| English | Translation | Expected | Found |",
           "|---|---|---|---|",
@@ -244,9 +282,10 @@ async function landOnce({ github, owner, repo, defaultBranch, path, headSha, mer
   // pull request's own change while the default branch has not changed it since the branch point.
   let nextText;
   let dropped = 0;
+  let skipped = 0;
   const applied = applyTranslations(mainChanged ? readCatalog(mergeBaseText) : current, head, mainText);
   if (applied) {
-    ({ text: nextText, dropped } = applied);
+    ({ text: nextText, dropped, skipped } = applied);
   } else if (!mainChanged) {
     nextText = headText;
   } else {
@@ -254,7 +293,14 @@ async function landOnce({ github, owner, repo, defaultBranch, path, headSha, mer
       refused: `\`${defaultBranch}\` has changed \`${path}\` since this branch was made. Update the branch from \`${defaultBranch}\`, then push.`,
     };
   }
-  if (nextText === mainText) return { refused: `this pull request changes no translation in \`${path}\` on \`${defaultBranch}\`.` };
+  if (nextText === mainText) {
+    return {
+      refused:
+        skipped > 0
+          ? `\`${defaultBranch}\` has changed every translation this pull request changes since this branch was made. Update the branch from \`${defaultBranch}\` to see them, then push.`
+          : `this pull request changes no translation in \`${path}\` on \`${defaultBranch}\`.`,
+    };
+  }
 
   const problem = catalogProblems(current, readCatalog(nextText));
   if (problem) return { refused: refusal(path, problem) };
@@ -292,7 +338,7 @@ async function landOnce({ github, owner, repo, defaultBranch, path, headSha, mer
     core.info(`${defaultBranch} moved while landing: ${error.message}`);
     return { raced: true };
   }
-  return { landed: commit.sha, dropped };
+  return { landed: commit.sha, dropped, skipped };
 }
 
 async function landIfEligible({ github, context, core, pr, allowlist, headSha }) {
@@ -341,14 +387,22 @@ async function landIfEligible({ github, context, core, pr, allowlist, headSha })
   if (outcome.refused) return comment(`Not merged automatically: ${outcome.refused}`);
 
   try {
-    const dropped =
-      outcome.dropped > 0
-        ? ` ${outcome.dropped} ${outcome.dropped === 1 ? "translation was" : "translations were"} left out because \`${defaultBranch}\` no longer has the English text.`
+    const count = (n) => `${n} ${n === 1 ? "translation was" : "translations were"}`;
+    const dropped = outcome.dropped > 0 ? ` ${count(outcome.dropped)} left out because \`${defaultBranch}\` no longer has the English text.` : "";
+    const skipped =
+      outcome.skipped > 0
+        ? ` ${count(outcome.skipped)} left out because \`${defaultBranch}\` changed them after this branch was made. Update the branch from \`${defaultBranch}\` to see them.`
         : "";
+    // A push made while this ran is not in the landed commit, so the pull request stays open for it.
+    const { data: after } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+    const moved = after.head.sha !== headSha;
+    const ending = moved
+      ? ` This pull request stays open: it has commits after ${headSha}, which did not land.`
+      : ` This pull request is closed rather than merged, because its translations are written into the catalog on \`${defaultBranch}\` as one commit.`;
     await comment(
-      `Landed on \`${defaultBranch}\` as ${outcome.landed}: \`${pr.user.login}\` is the allowlisted translator for \`${path}\`, the tests passed, and the placeholders match the English text.${dropped} This pull request is closed rather than merged, because its translations are written into the catalog on \`${defaultBranch}\` as one commit.`,
+      `Landed on \`${defaultBranch}\` as ${outcome.landed}: \`${pr.user.login}\` is the allowlisted translator for \`${path}\`, the tests passed, and the translations fit the English text.${dropped}${skipped}${ending}`,
     );
-    await github.rest.pulls.update({ owner, repo, pull_number: prNumber, state: "closed" });
+    if (!moved) await github.rest.pulls.update({ owner, repo, pull_number: prNumber, state: "closed" });
   } catch (error) {
     core.warning(`#${prNumber}: landed as ${outcome.landed}, but commenting or closing failed: ${error.message}`);
   }
@@ -376,4 +430,4 @@ async function run({ github, context, core, allowlist, headSha, headRepository }
   return landed;
 }
 
-module.exports = { run, readCatalog, writeCatalog, catalogProblems, applyTranslations, filesFor, itemKey };
+module.exports = { run, readCatalog, writeCatalog, catalogProblems, applyTranslations, filesFor, itemKey, WUCHALE_VERSION };
