@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -39,6 +40,8 @@ public class MigrationStartupService : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        await RewriteLegacySourceHashesAsync(cancellationToken);
+
         var migrationMode = _configuration["MIGRATION_MODE"];
 
         if (string.IsNullOrEmpty(migrationMode))
@@ -121,24 +124,83 @@ public class MigrationStartupService : IHostedService
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
+    /// App-side rewrite for legacy unsalted SHA-256 digests in <c>migration_sources</c>: wraps
+    /// each unwrapped <c>source_identifier</c> and <c>nightscout_api_secret_hash</c> with
+    /// HMAC-SHA256 keyed by the instance key, without requiring raw URLs or secrets.
+    /// </summary>
+    internal async Task RewriteLegacySourceHashesAsync(CancellationToken cancellationToken)
+    {
+        var instanceKey = MigrationJob.ResolveInstanceKey(_configuration);
+        if (string.IsNullOrEmpty(instanceKey))
+        {
+            _logger.LogDebug("Instance key not configured, skipping legacy migration source hash rewrite");
+            return;
+        }
+
+        try
+        {
+            await using var scope = _serviceProvider.CreateAsyncScope();
+            await using var dbContext = await scope.ServiceProvider
+                .GetRequiredService<INocturneDbContextFactory>()
+                .CreateAsync(cancellationToken);
+
+            var legacySources = await dbContext.MigrationSources
+                .Where(s => !s.SourceIdentifier.StartsWith(HashUtils.HmacSha256Prefix)
+                         || (s.NightscoutApiSecretHash != null
+                             && !s.NightscoutApiSecretHash.StartsWith(HashUtils.HmacSha256Prefix)))
+                .ToListAsync(cancellationToken);
+
+            if (legacySources.Count == 0)
+                return;
+
+            foreach (var source in legacySources)
+            {
+                if (!HashUtils.IsHmacSha256(source.SourceIdentifier))
+                {
+                    source.SourceIdentifier = HashUtils.HmacSha256OverDigest(
+                        instanceKey, source.SourceIdentifier);
+                }
+
+                if (!string.IsNullOrEmpty(source.NightscoutApiSecretHash)
+                    && !HashUtils.IsHmacSha256(source.NightscoutApiSecretHash))
+                {
+                    source.NightscoutApiSecretHash = HashUtils.HmacSha256OverDigest(
+                        instanceKey, source.NightscoutApiSecretHash);
+                }
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Rewrote {Count} legacy migration source hash(es) to HMAC-SHA256", legacySources.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error rewriting legacy migration source hashes");
+        }
+    }
+
+    /// <summary>
     /// The configured source's identifier, byte-identical to the one
     /// <c>MigrationJob.UpsertSourceAsync</c> stores, and a label that may be logged.
     /// </summary>
     private (string Identifier, string Label)? GetSource(string migrationMode)
     {
+        var instanceKey = MigrationJob.ResolveInstanceKey(_configuration);
+        if (string.IsNullOrEmpty(instanceKey))
+            return null;
+
         if (migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase))
         {
             var connectionString = _configuration["MIGRATION_MONGO_CONNECTION_STRING"];
             if (string.IsNullOrEmpty(connectionString))
                 return null;
 
-            var digest = MigrationJob.MongoSourceIdentifier(connectionString);
+            var digest = MigrationJob.MongoSourceIdentifier(connectionString, instanceKey);
             return (digest, digest);
         }
 
         var url = _configuration["MIGRATION_NS_URL"];
         return string.IsNullOrEmpty(url)
             ? null
-            : (MigrationJob.ApiSourceIdentifier(url), NightscoutAddress.Masked(url));
+            : (MigrationJob.ApiSourceIdentifier(url, instanceKey), NightscoutAddress.Masked(url));
     }
 }
