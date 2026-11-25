@@ -2145,7 +2145,7 @@ msgid "Font"
 msgstr "Písmo"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
-#: src/lib/components/command-palette/CommandPalette.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "System"
 msgstr "Systémové"
 
@@ -2186,7 +2186,7 @@ msgstr "Vlastní CSS"
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/RuleSidebar.svelte
-#: src/lib/components/command-palette/CommandPalette.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "On"
 msgstr "Zapnuto"
 
@@ -2194,7 +2194,7 @@ msgstr "Zapnuto"
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/RuleSidebar.svelte
 #: src/lib/components/alerts/alert-labels.svelte.ts
-#: src/lib/components/command-palette/CommandPalette.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/connectors/ConnectionStatusLabel.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
@@ -2209,7 +2209,7 @@ msgstr "Vypnuto"
 #~ msgstr "Tmavý režim: {0}"
 
 #. 0: getGlucoseUnits() === "mg/dl" ? "mg/dL" \\: "mmol/L"
-#: src/lib/components/command-palette/CommandPalette.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Units: {0}"
 msgstr "Jednotky: {0}"
 
@@ -33205,13 +33205,13 @@ msgstr ""
 msgid "Text style"
 msgstr ""
 
-#. 0: mode === "dark" ? "On" \\: mode === "light" ? "Off" \\: "System"
-#: src/lib/components/command-palette/CommandPalette.svelte
+#. 0: darkModeState()
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Dark mode: {0}"
 msgstr ""
 
 #. 0: glucoseChartLookback.current
-#: src/lib/components/command-palette/CommandPalette.svelte
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Chart lookback: {0}h"
 msgstr ""
 
@@ -49647,25 +49647,22 @@ msgstr ""
 msgid "Grants"
 msgstr ""
 
-#: src/lib/components/command-palette/command-palette-items.svelte.ts
-msgid "Toggle dark mode"
-msgstr ""
+#~ msgid "Toggle dark mode"
+#~ msgstr ""
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Switch between light and dark themes"
 msgstr ""
 
-#: src/lib/components/command-palette/command-palette-items.svelte.ts
-msgid "Switch glucose units"
-msgstr ""
+#~ msgid "Switch glucose units"
+#~ msgstr ""
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Toggle between mg/dL and mmol/L"
 msgstr ""
 
-#: src/lib/components/command-palette/command-palette-items.svelte.ts
-msgid "Change chart lookback"
-msgstr ""
+#~ msgid "Change chart lookback"
+#~ msgstr ""
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Adjust the time window for charts"
@@ -50103,4 +50100,12 @@ msgstr ""
 #. 0: team.name
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Delete {0}? Every manager and staff member loses the team. You cannot undo this."
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "switch"
+msgstr ""
+
+#: src/lib/components/command-palette/command-palette-items.svelte.ts
+msgid "change"
 msgstr ""
