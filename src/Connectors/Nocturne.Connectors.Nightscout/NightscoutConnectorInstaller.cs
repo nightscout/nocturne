@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -44,6 +45,7 @@ public class NightscoutConnectorInstaller()
         NightscoutConnectorConfiguration config)
     {
         services.AddSingleton<NightscoutCircuitBreaker>();
+        services.TryAddSingleton<NightscoutLookups>();
 
         void RegisterWriteBackClient<TSink>() where TSink : class =>
             ConfigureClient(services.AddHttpClient<TSink>(), config);

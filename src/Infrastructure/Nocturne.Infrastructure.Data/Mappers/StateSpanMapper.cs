@@ -94,19 +94,15 @@ public static class StateSpanMapper
     }
 
     /// <summary>
-    /// Update existing entity with data from domain model. A new end from the upload replaces the one
-    /// supersession set, so it clears <see cref="StateSpanEntity.SupersededById"/>. An upload with no
-    /// end leaves a superseded row closed, since supersession runs only on insert.
+    /// Maps every field of <paramref name="stateSpan"/> onto <paramref name="entity"/> but the end and
+    /// <see cref="StateSpanEntity.SupersededById"/>, which each caller sets by what its write means: an
+    /// upload by <see cref="Extensions.StateSpanSupersessionExtensions.UploadedEnd"/>.
     /// </summary>
     public static void UpdateEntity(StateSpanEntity entity, StateSpan stateSpan)
     {
         entity.Category = stateSpan.Category.ToString();
         entity.State = stateSpan.State ?? string.Empty;
         entity.StartTimestamp = stateSpan.StartTimestamp;
-        if (stateSpan.EndTimestamp is { } end && end != entity.EndTimestamp)
-            entity.SupersededById = null;
-        if (entity.SupersededById == null)
-            entity.EndTimestamp = stateSpan.EndTimestamp;
         entity.Source = stateSpan.Source;
         entity.MetadataJson = stateSpan.Metadata != null
             ? JsonSerializer.Serialize(stateSpan.Metadata)

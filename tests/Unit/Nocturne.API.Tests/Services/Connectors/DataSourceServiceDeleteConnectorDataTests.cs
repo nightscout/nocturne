@@ -683,6 +683,8 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             NullLogger<Nocturne.Connectors.Nightscout.Services.NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new Nocturne.Connectors.Nightscout.Services.NightscoutLookups(),
+            Nocturne.Tests.Shared.Mocks.MockTenantAccessor.Create().Object,
             publisher.Object);
 
         await service.SyncDataAsync(

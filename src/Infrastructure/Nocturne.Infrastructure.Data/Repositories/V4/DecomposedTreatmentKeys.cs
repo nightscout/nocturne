@@ -205,18 +205,22 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
     public async Task StampUnfingerprintedAsync(
         string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct = default)
     {
+        if (fingerprints.Count == 0)
+            return;
+
+        string[] ids = [.. fingerprints.Keys];
+        string[] values = [.. ids.Select(id => fingerprints[id])];
         await using var db = await contexts.CreateAsync(ct);
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await db.PlanForEachArrayAsync(ids.Length, ct);
             foreach (var table in DecomposedTreatmentTables.All)
-                await table.StampUnfingerprintedAsync(db, source, fingerprints, ct);
-            foreach (var (legacyId, fingerprint) in fingerprints)
-            {
-                await TreatmentSpansFromSource(db, source, [legacyId])
-                    .Where(s => s.UpstreamFingerprint == null)
-                    .ExecuteUpdateAsync(u => u.SetProperty(s => s.UpstreamFingerprint, fingerprint), ct);
-            }
+                await table.StampUnfingerprintedAsync(db, source, ids, values, ct);
+            await TreatmentSpansFromSource(db, source, ids)
+                .Where(s => s.UpstreamFingerprint == null)
+                .ExecuteUpdateAsync(u => u.SetProperty(
+                    s => s.UpstreamFingerprint, s => values[Array.IndexOf(ids, s.LegacyId!)]), ct);
             await transaction.CommitAsync(ct);
         });
     }

@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using Xunit.Abstractions;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Integration;
 
@@ -33,6 +34,7 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
 {
     private readonly FakeNightscoutTreatments _upstream = new("15.0.8");
     private readonly InMemoryConnectorStateStore _state = new();
+    private readonly NightscoutLookups _lookups = new();
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow.AddDays(-3).AddMinutes(-Random.Shared.Next(0, 600));
     private readonly NightscoutConnectorConfiguration _config = new()
     {
@@ -67,6 +69,8 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
             NullLogger<NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
+            _lookups,
+            MockTenantAccessor.Create().Object,
             publisher.Object);
         return await connector.SyncDataAsync(request, _config, CancellationToken.None);
     }
