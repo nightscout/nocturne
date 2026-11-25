@@ -23812,7 +23812,7 @@ msgstr "Mandanten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Translations"
-msgstr ""
+msgstr "Übersetzungen"
 
 #~ msgid "Only members who can manage this site's settings can configure or enable this connector."
 #~ msgstr ""
@@ -49109,631 +49109,631 @@ msgstr "Jeder Wert muss größer als null sein."
 
 #: src/lib/test-stubs/LoginForm.test-stub.svelte
 msgid "Start sign-in"
-msgstr ""
+msgstr "Anmeldung starten"
 
 #: src/lib/test-stubs/LoginForm.test-stub.svelte
 msgid "Fail sign-in"
-msgstr ""
+msgstr "Anmeldung scheitern lassen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Stats"
-msgstr ""
+msgstr "Statistiken"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Pages"
-msgstr ""
+msgstr "Seiten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Quick settings"
-msgstr ""
+msgstr "Schnelleinstellungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "insulin on board"
-msgstr ""
+msgstr "aktives Insulin"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "active insulin"
-msgstr ""
+msgstr "aktives Insulin"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "carbs on board"
-msgstr ""
+msgstr "aktive Kohlenhydrate"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "active carbs"
-msgstr ""
+msgstr "aktive Kohlenhydrate"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "cannula age"
-msgstr ""
+msgstr "Kanülenalter"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "CGM age"
-msgstr ""
+msgstr "CGM-Alter"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "estimated A1c"
-msgstr ""
+msgstr "geschätzter A1c-Wert"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "percentage"
-msgstr ""
+msgstr "Prozentsatz"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "dashboard"
-msgstr ""
+msgstr "Dashboard"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "home"
-msgstr ""
+msgstr "Start"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "main"
-msgstr ""
+msgstr "Hauptseite"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "nutrition"
-msgstr ""
+msgstr "Ernährung"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "eating"
-msgstr ""
+msgstr "Essen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "dining"
-msgstr ""
+msgstr "Mahlzeiten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "calendar"
-msgstr ""
+msgstr "Kalender"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "schedule"
-msgstr ""
+msgstr "Zeitplan"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "dates"
-msgstr ""
+msgstr "Datumsangaben"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "monthly"
-msgstr ""
+msgstr "monatlich"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "tools"
-msgstr ""
+msgstr "Werkzeuge"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "utilities"
-msgstr ""
+msgstr "Hilfsmittel"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "notifications"
-msgstr ""
+msgstr "Benachrichtigungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "messages"
-msgstr ""
+msgstr "Nachrichten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "therapy timeline"
-msgstr ""
+msgstr "Therapieverlauf"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "time spans"
-msgstr ""
+msgstr "Zeiträume"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "profile history"
-msgstr ""
+msgstr "Profilverlauf"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "profile changes"
-msgstr ""
+msgstr "Profiländerungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "trackers"
-msgstr ""
+msgstr "Tracker"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "consumables"
-msgstr ""
+msgstr "Verbrauchsmaterialien"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "site change"
-msgstr ""
+msgstr "Katheterwechsel"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "reminders"
-msgstr ""
+msgstr "Erinnerungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "appointments"
-msgstr ""
+msgstr "Termine"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "tenants"
-msgstr ""
+msgstr "Mandanten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "organizations"
-msgstr ""
+msgstr "Organisationen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "accounts"
-msgstr ""
+msgstr "Konten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "platform admin"
-msgstr ""
+msgstr "Plattform-Admin"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "invite"
-msgstr ""
+msgstr "Einladen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "sign up"
-msgstr ""
+msgstr "Registrieren"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "new site"
-msgstr ""
+msgstr "Neue Website"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "new tenant"
-msgstr ""
+msgstr "Neuer Mandant"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "administration"
-msgstr ""
+msgstr "Verwaltung"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "identity providers"
-msgstr ""
+msgstr "Identitätsanbieter"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "OIDC"
-msgstr ""
+msgstr "OIDC"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "SSO"
-msgstr ""
+msgstr "SSO"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "bots"
-msgstr ""
+msgstr "Bots"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "access requests"
-msgstr ""
+msgstr "Zugriffsanfragen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "join"
-msgstr ""
+msgstr "beitreten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "approve"
-msgstr ""
+msgstr "genehmigen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "pending users"
-msgstr ""
+msgstr "Ausstehende Benutzer"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "account"
-msgstr ""
+msgstr "Konto"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "email"
-msgstr ""
+msgstr "E-Mail"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "password"
-msgstr ""
+msgstr "Passwort"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "teams"
-msgstr ""
+msgstr "Teams"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "managers"
-msgstr ""
+msgstr "Manager"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "invite a manager"
-msgstr ""
+msgstr "Einen Manager einladen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "name"
-msgstr ""
+msgstr "Name"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "avatar"
-msgstr ""
+msgstr "Avatar"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "appearance"
-msgstr ""
+msgstr "Aussehen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "theme"
-msgstr ""
+msgstr "Design"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "dark mode"
-msgstr ""
+msgstr "Dunkelmodus"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "light mode"
-msgstr ""
+msgstr "Hellmodus"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "alarms"
-msgstr ""
+msgstr "Alarme"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "urgent"
-msgstr ""
+msgstr "dringend"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "warnings"
-msgstr ""
+msgstr "Warnungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "grants"
-msgstr ""
+msgstr "Freigaben"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "access"
-msgstr ""
+msgstr "Zugriff"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "permissions"
-msgstr ""
+msgstr "Berechtigungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "sharing"
-msgstr ""
+msgstr "Teilen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "connectors"
-msgstr ""
+msgstr "Konnektoren"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "migration"
-msgstr ""
+msgstr "Migration"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "import"
-msgstr ""
+msgstr "Importieren"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "transition"
-msgstr ""
+msgstr "Umstieg"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "MongoDB"
-msgstr ""
+msgstr "MongoDB"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "tenant"
-msgstr ""
+msgstr "Mandant"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "display name"
-msgstr ""
+msgstr "Anzeigename"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "address"
-msgstr ""
+msgstr "Adresse"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "bot"
-msgstr ""
+msgstr "Bot"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "chat"
-msgstr ""
+msgstr "Chat"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "integrations"
-msgstr ""
+msgstr "Integrationen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "data quality"
-msgstr ""
+msgstr "Datenqualität"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "thresholds"
-msgstr ""
+msgstr "Schwellenwerte"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "therapy"
-msgstr ""
+msgstr "Therapie"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "treatment"
-msgstr ""
+msgstr "Behandlung"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "insulin type"
-msgstr ""
+msgstr "Insulintyp"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "patient"
-msgstr ""
+msgstr "Patient"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "demographic"
-msgstr ""
+msgstr "demografische Daten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "details"
-msgstr ""
+msgstr "Details"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "privacy"
-msgstr ""
+msgstr "Datenschutz"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "public"
-msgstr ""
+msgstr "öffentlich"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "members"
-msgstr ""
+msgstr "Mitglieder"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "users"
-msgstr ""
+msgstr "Benutzer"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "team"
-msgstr ""
+msgstr "Team"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "roles"
-msgstr ""
+msgstr "Rollen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "access control"
-msgstr ""
+msgstr "Zugriffskontrolle"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "followers"
-msgstr ""
+msgstr "Follower"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "caregivers"
-msgstr ""
+msgstr "Betreuungspersonen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "audit"
-msgstr ""
+msgstr "Audit"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "changes"
-msgstr ""
+msgstr "Änderungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "support"
-msgstr ""
+msgstr "Support"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "help"
-msgstr ""
+msgstr "Hilfe"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "contact"
-msgstr ""
+msgstr "Kontakt"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "community"
-msgstr ""
+msgstr "Community"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "documentation"
-msgstr ""
+msgstr "Dokumentation"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "foundation"
-msgstr ""
+msgstr "Stiftung"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "translations"
-msgstr ""
+msgstr "Übersetzungen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "translate"
-msgstr ""
+msgstr "übersetzen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "language"
-msgstr ""
+msgstr "Sprache"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "locale"
-msgstr ""
+msgstr "Gebietsschema"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "toggle"
-msgstr ""
+msgstr "umschalten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "glucose units"
-msgstr ""
+msgstr "Glukoseeinheiten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "units"
-msgstr ""
+msgstr "Einheiten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "lookback"
-msgstr ""
+msgstr "Rückblickzeitraum"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "time range"
-msgstr ""
+msgstr "Zeitraum"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "chart period"
-msgstr ""
+msgstr "Diagrammzeitraum"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "add treatment"
-msgstr ""
+msgstr "Behandlung hinzufügen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "add food"
-msgstr ""
+msgstr "Lebensmittel hinzufügen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "new food"
-msgstr ""
+msgstr "neues Lebensmittel"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "sync"
-msgstr ""
+msgstr "synchronisieren"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "refresh"
-msgstr ""
+msgstr "neu laden"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "fetch"
-msgstr ""
+msgstr "abrufen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "update"
-msgstr ""
+msgstr "aktualisieren"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Cannula age"
-msgstr ""
+msgstr "Kanülenalter"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Grants"
-msgstr ""
+msgstr "Zugriffsfreigaben"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Toggle dark mode"
-msgstr ""
+msgstr "Dunkelmodus umschalten"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Switch between light and dark themes"
-msgstr ""
+msgstr "Zwischen hellem und dunklem Design wechseln"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Switch glucose units"
-msgstr ""
+msgstr "Glukoseeinheiten wechseln"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Toggle between mg/dL and mmol/L"
-msgstr ""
+msgstr "Zwischen mg/dL und mmol/L wechseln"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Change chart lookback"
-msgstr ""
+msgstr "Diagrammzeitraum ändern"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Adjust the time window for charts"
-msgstr ""
+msgstr "Zeitraum der Diagramme anpassen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Add treatment"
-msgstr ""
+msgstr "Behandlung hinzufügen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Log a new treatment entry"
-msgstr ""
+msgstr "Neuen Behandlungseintrag erfassen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Add food entry"
-msgstr ""
+msgstr "Lebensmitteleintrag hinzufügen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Add a food item to the database"
-msgstr ""
+msgstr "Ein Lebensmittel zur Datenbank hinzufügen"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "Trigger a manual data sync"
-msgstr ""
+msgstr "Manuelle Datensynchronisierung starten"
 
 #. 0: memberFirst; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} now has access through the team {1}."
-msgstr ""
+msgstr "{0} hat jetzt über das Team {1} Zugriff."
 
 #. 0: memberFirst
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} now has access through a team. The detail is no longer stored."
-msgstr ""
+msgstr "{0} hat jetzt über ein Team Zugriff. Die Einzelheiten werden nicht mehr gespeichert."
 
 #. 0: memberFirst; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} no longer has access through the team {1}."
-msgstr ""
+msgstr "{0} hat über das Team {1} keinen Zugriff mehr."
 
 #. 0: memberFirst
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} no longer has access through a team. The detail is no longer stored."
-msgstr ""
+msgstr "{0} hat über ein Team keinen Zugriff mehr. Die Einzelheiten werden nicht mehr gespeichert."
 
 #. 0: actor; 1: member; 2: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} approved {1} as staff of the team {2}."
-msgstr ""
+msgstr "{0} hat die Aufnahme von {1} in das Team {2} als mitarbeitende Person genehmigt."
 
 #. 0: actor; 1: member
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} approved {1} as staff of a team that was deleted."
-msgstr ""
+msgstr "{0} hat die Aufnahme von {1} als mitarbeitende Person eines inzwischen gelöschten Teams genehmigt."
 
 #. 0: actor; 1: member; 2: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} declined {1} as staff of the team {2}."
-msgstr ""
+msgstr "{0} hat die Aufnahme von {1} in das Team {2} als mitarbeitende Person abgelehnt."
 
 #. 0: actor; 1: member
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} declined {1} as staff of a team that was deleted."
-msgstr ""
+msgstr "{0} hat die Aufnahme von {1} als mitarbeitende Person eines inzwischen gelöschten Teams abgelehnt."
 
 #. 0: actor; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} turned off \"the team manages its own staff\" for the team {1}. New staff now wait for an owner's approval."
-msgstr ""
+msgstr "{0} hat \"Das Team verwaltet seine Mitarbeitenden selbst\" für das Team {1} deaktiviert. Neue Mitarbeitende warten jetzt auf die Genehmigung eines Besitzers."
 
 #. 0: actor; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} let the team {1} approve its own staff."
-msgstr ""
+msgstr "{0} hat dem Team {1} erlaubt, seine Mitarbeitenden selbst zu genehmigen."
 
 #. 0: actor
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} turned off \"the team manages its own staff\" for a team that was deleted."
-msgstr ""
+msgstr "{0} hat \"Das Team verwaltet seine Mitarbeitenden selbst\" für ein inzwischen gelöschtes Team deaktiviert."
 
 #. 0: actor
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} let a team that was deleted approve its own staff."
-msgstr ""
+msgstr "{0} hat einem inzwischen gelöschten Team erlaubt, seine Mitarbeitenden selbst zu genehmigen."
 
 #. 0: actor; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} changed who approves the staff of the team {1}. The detail is no longer stored."
-msgstr ""
+msgstr "{0} hat geändert, wer die Mitarbeitenden des Teams {1} genehmigt. Die Einzelheiten werden nicht mehr gespeichert."
 
 #. 0: actor
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} changed who approves the staff of a team that was deleted. The detail is no longer stored."
-msgstr ""
+msgstr "{0} hat geändert, wer die Mitarbeitenden eines inzwischen gelöschten Teams genehmigt. Die Einzelheiten werden nicht mehr gespeichert."
