@@ -1320,6 +1320,10 @@ notification is reported after the evaluation it comes from, and a failure to wr
 an evaluation. Instants the
 host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_at`,
 `held_since`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
+For a pump mode with no span open at `now`, the host also sends the soonest open span of that mode dated up to the
+tolerance ahead of `now`, as §4 selects a reading, since a device's clock usually dates it. It holds back a span dated
+further ahead and the spans of every other category, which a person can plan. Replay sends only the spans open at its
+tick.
 
 ---
 
