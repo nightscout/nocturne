@@ -37086,7 +37086,7 @@ msgstr ""
 #~ msgid "Glucose above {0} {1}"
 #~ msgstr ""
 
-#. 0: convertRateToDisplayUnits(mgdl, glucoseUnits.current); 1: bgLabel()
+#. 0: convertRateToDisplayUnits(mgdlPerMinute, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "{0} {1} per minute"
 msgstr ""
@@ -41385,15 +41385,11 @@ msgstr ""
 msgid "High: above {0} {1}"
 msgstr ""
 
-#. 0: convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current); 1: bgLabel()
-#: src/lib/components/alerts/wizard/templates.svelte.ts
-msgid "Falling fast: {0} {1} per minute"
-msgstr ""
+#~ msgid "Falling fast: {0} {1} per minute"
+#~ msgstr ""
 
-#. 0: convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current); 1: bgLabel()
-#: src/lib/components/alerts/wizard/templates.svelte.ts
-msgid "Rising fast: {0} {1} per minute"
-msgstr ""
+#~ msgid "Rising fast: {0} {1} per minute"
+#~ msgstr ""
 
 #. 0: minutesText(leaf?.signal_loss?.timeout_minutes ?? 0)
 #: src/lib/components/alerts/wizard/templates.svelte.ts
@@ -50320,4 +50316,14 @@ msgstr ""
 
 #: src/lib/components/members/TeamStaffRule.svelte
 msgid "An owner of this site approves each staff member of this team."
+msgstr ""
+
+#. 0: ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Falling fast: {0}"
+msgstr ""
+
+#. 0: ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)
+#: src/lib/components/alerts/wizard/templates.svelte.ts
+msgid "Rising fast: {0}"
 msgstr ""
