@@ -134,11 +134,12 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
                 recordTypeStr, allPotentialMatches.Select(m => m.CanonicalId).Distinct().ToList(), unlinked, ct);
         }
 
-        // A deleted member the record writes again (same source, and a shared legacy id or sync
-        // identifier) does not hold its source against the record, so a source that withdrew its copy
-        // of a linked dose and writes it again rejoins the group rather than standing beside the
-        // surviving copy as a second dose. Every other member holds its source, so a distinct dose of
-        // that source stays apart. A member outside the window is not in info and always holds it.
+        // A deleted member the record writes again (same source, and one of the keys
+        // DuplicateMatching.RecordInfo.IsWrittenAgainAs names) does not hold its source against the
+        // record, so a source that withdrew its copy of a linked dose and writes it again rejoins the
+        // group rather than standing beside the surviving copy as a second dose. Every other member
+        // holds its source, so a distinct dose of that source stays apart. A member outside the window
+        // is not in info and always holds it.
         bool WrittenAgain(LinkedRecordTypes.GroupMember member, DeduplicationInput record) =>
             string.Equals(member.DataSource, record.DataSource, StringComparison.OrdinalIgnoreCase)
             && info.TryGetValue(member.RecordId, out var held)
