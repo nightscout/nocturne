@@ -167,12 +167,16 @@ function applyTranslations(mergeBase, head, currentText) {
   return { text: writeCatalog(current), dropped, skipped };
 }
 
+/**
+ * Text as a code span in a table cell. A backslash in a code span is literal, so only the pipe needs
+ * escaping: GitHub's table parser turns `\|` back into `|` before it reads the span.
+ */
 function codeSpan(text) {
-  const flat = text.replace(/\s+/g, " ").replace(/\|/g, "\\|");
+  const flat = text.replace(/\s+/g, " ");
   const clipped = flat.length > 120 ? `${flat.slice(0, 117)}...` : flat;
   const longestRun = Math.max(0, ...(clipped.match(/`+/g) ?? []).map((run) => run.length));
   const fence = "`".repeat(longestRun + 1);
-  return `${fence} ${clipped} ${fence}`;
+  return `${fence} ${clipped.split("|").join("\\|")} ${fence}`;
 }
 
 function refusal(path, problem) {
