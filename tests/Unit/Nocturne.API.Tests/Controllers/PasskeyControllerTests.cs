@@ -89,7 +89,7 @@ public class PasskeyControllerTests : IDisposable
 
         var jwtService = new Mock<IJwtService>();
         jwtService.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwtService.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwtService.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
         // Login codes are tenant-scoped, so the session's contexts are on the request's tenant, as
         // the request pipeline hands them out.
         _recoverySession = new RecoverySession(
