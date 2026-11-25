@@ -2500,7 +2500,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// in Nocturne therefore survives until the source itself changes the record, and then the
     /// source wins. When none of the rows carries a fingerprint, the record is taken as it stands:
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
-    /// uploader restated. A treatment the user deleted stays deleted.
+    /// uploader restated. A record this source holds no rows of is neither stamped nor decomposed
+    /// again. A treatment the user deleted stays deleted.
     /// <para>
     /// A stored treatment <see cref="CanRepublish"/> refuses is not decomposed again: an override, a
     /// temporary target, a pump suspend or resume. Of those, an override or temporary
@@ -2546,6 +2547,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                 .ToList();
             if (!stored || UpstreamEditOf(treatment) is not null)
                 republish.Add(treatment);
+            else if (!stamped.ContainsKey(id))
+                continue;
             else if (prior.All(f => f is null))
                 baselines[id] = fingerprint;
             else if (!prior.All(f => f == fingerprint))

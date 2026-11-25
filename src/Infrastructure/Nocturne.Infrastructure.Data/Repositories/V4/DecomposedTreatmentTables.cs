@@ -119,9 +119,12 @@ public abstract class DecomposedTreatmentTable(Type model)
     internal abstract Task<List<(string LegacyId, string? Fingerprint)>> FingerprintsFromSourceAsync(
         NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct);
 
-    /// <summary>Stamps this source's rows that carry no fingerprint yet.</summary>
+    /// <summary>
+    /// Stamps this source's rows under <paramref name="legacyIds"/> that carry no fingerprint yet, each
+    /// with the fingerprint at its id's index in <paramref name="fingerprints"/>, in one statement.
+    /// </summary>
     internal abstract Task StampUnfingerprintedAsync(
-        NocturneDbContext db, string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct);
+        NocturneDbContext db, string source, string[] legacyIds, string[] fingerprints, CancellationToken ct);
 
     /// <summary>The correlation id of each row of this table among <paramref name="ids"/> that has one.</summary>
     internal abstract Task<List<(Guid Id, Guid CorrelationId)>> CorrelationsAsync(NocturneDbContext db, Guid[] ids, CancellationToken ct);
@@ -215,16 +218,12 @@ internal sealed class DecomposedTreatmentTable<T>(
             .Select(e => (e.LegacyId, e.UpstreamFingerprint))
             .ToList();
 
-    internal override async Task StampUnfingerprintedAsync(
-        NocturneDbContext db, string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct)
-    {
-        foreach (var (legacyId, fingerprint) in fingerprints)
-        {
-            await FromSource(rowsOf(db), source, [legacyId])
-                .Where(e => e.UpstreamFingerprint == null)
-                .ExecuteUpdateAsync(u => u.SetProperty(e => e.UpstreamFingerprint, fingerprint), ct);
-        }
-    }
+    internal override Task StampUnfingerprintedAsync(
+        NocturneDbContext db, string source, string[] legacyIds, string[] fingerprints, CancellationToken ct)
+        => FromSource(rowsOf(db), source, legacyIds)
+            .Where(e => e.UpstreamFingerprint == null)
+            .ExecuteUpdateAsync(u => u.SetProperty(
+                e => e.UpstreamFingerprint, e => fingerprints[Array.IndexOf(legacyIds, e.LegacyId!)]), ct);
 
     internal override async Task<List<(Guid Id, Guid CorrelationId)>> CorrelationsAsync(
         NocturneDbContext db, Guid[] ids, CancellationToken ct)

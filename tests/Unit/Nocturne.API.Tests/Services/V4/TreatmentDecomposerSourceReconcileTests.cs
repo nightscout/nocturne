@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 
@@ -25,13 +26,14 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
 
+    private readonly StatementRecorder _statements = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerSourceReconcileTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _statements);
         _context = _db.CreateContext();
 
         _decomposer = TreatmentDecomposerDoubles.Build(
@@ -212,6 +214,36 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         ]);
 
         selected.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_batch_of_rows_stored_before_fingerprints_is_stamped_in_one_statement_per_table()
+    {
+        var upstream = Enumerable.Range(0, 12).Select(i => Upstream($"t-{i}", 20 + i)).ToList();
+        var rows = new List<Guid>();
+        foreach (var treatment in upstream)
+            rows.Add(await AddCarbAsync(treatment.Id!, Connector));
+        _statements.Clear();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, upstream);
+
+        selected.Count.Should().Be(0);
+        _statements.Count("UPDATE").Should().Be(DecomposedTreatmentTables.All.Count + 1, "one per decomposed table, and one for the spans");
+        for (var i = 0; i < upstream.Count; i++)
+            (await FingerprintOfAsync(rows[i])).Should().Be(TreatmentDecomposer.UpstreamFingerprint(upstream[i]));
+    }
+
+    [Fact]
+    public async Task Ids_only_another_source_holds_are_neither_selected_nor_stamped()
+    {
+        await AddCarbAsync("theirs", Other);
+        await AddCarbAsync("also-theirs", Other);
+        _statements.Clear();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, [Upstream("theirs", 20), Upstream("also-theirs", 30)]);
+
+        selected.Count.Should().Be(0);
+        _statements.Count("UPDATE").Should().Be(0, "this source holds no rows under either id, so there is no baseline to stamp");
     }
 
     [Fact]
