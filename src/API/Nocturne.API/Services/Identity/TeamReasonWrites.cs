@@ -13,7 +13,9 @@ namespace Nocturne.API.Services.Identity;
 /// it adds, sets and removes (<see cref="TeamReasonChanges"/>). A site stopping the team's access, the
 /// team being deleted, and a staff member being removed or leaving remove the reasons that stand on what
 /// goes. A staff member joining or being edited, a site approving the team's access, and a role a team's
-/// access gives being edited bring the reasons of the staff they reach into line with the team's rows.
+/// access gives being edited, and an owner of a site approving or declining a staff member or turning
+/// "the team manages its own staff" on or off, bring the reasons of the staff they reach into line with
+/// the team's rows.
 /// A member whose last reason goes loses the membership with what a direct removal takes
 /// (<see cref="MembershipRemoval.StageLossAsync"/>), what they made stopped at once; a member whose end
 /// moves earlier has what they made capped at it.
@@ -103,6 +105,26 @@ internal static class TeamReasonWrites
             "access approval",
             token => DbUnitOfWork.OpenPlatformAsync(contexts, token),
             (unit, token) => TeamRepository.LockAccessApprovalAsync(unit, tokenHash, approver, grant, now, token),
+            grantRevocation, now, ct);
+
+    /// <inheritdoc cref="TeamRepository.LockStaffDecisionAsync"/>
+    public static Task<OwnerDecision> DecideStaffAsync(
+        INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid tenantId, Guid teamId,
+        Guid callerSubjectId, Guid staffSubjectId, string status, DateTime now, CancellationToken ct) =>
+        RunAsync(
+            "staff decision",
+            token => DbUnitOfWork.OpenForTenantAsync(contexts, tenantId, token),
+            (unit, token) => TeamRepository.LockStaffDecisionAsync(unit, tenantId, teamId, callerSubjectId, staffSubjectId, status, now, token),
+            grantRevocation, now, ct);
+
+    /// <inheritdoc cref="TeamRepository.LockStaffRuleAsync"/>
+    public static Task<OwnerDecision> SetStaffRuleAsync(
+        INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid tenantId, Guid teamId,
+        Guid callerSubjectId, bool teamManagesStaff, DateTime now, CancellationToken ct) =>
+        RunAsync(
+            "staff rule change",
+            token => DbUnitOfWork.OpenForTenantAsync(contexts, tenantId, token),
+            (unit, token) => TeamRepository.LockStaffRuleAsync(unit, tenantId, teamId, callerSubjectId, teamManagesStaff, now, token),
             grantRevocation, now, ct);
 
     /// <inheritdoc cref="TenantMembershipRepository.LockRoleEditAsync"/>

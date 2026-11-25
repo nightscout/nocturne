@@ -181,3 +181,37 @@ public class TeamSiteStaffEntity : ISystemTimestamped
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; }
 }
+
+/// <summary>
+/// An owner's decline of one subject as staff of a team at a site, for as long as the team's access to
+/// the site lasts. Not <c>ITenantScoped</c>, like <see cref="TeamSiteStaffEntity"/>; its <c>tenant_pin</c>
+/// policy reads the site off the access.
+/// </summary>
+/// <remarks>
+/// A staff member's <see cref="TeamSiteStaffEntity"/> row goes with their team membership, and the
+/// decline must outlast it: a staff member removed and invited again is still declined. So the row's
+/// <see cref="Nocturne.Core.Models.Identity.TeamSiteStaffStatus.Declined"/> is what every read, the sync
+/// and the switch go by, and this memory is read only when a staff row is made. The owner's decision is
+/// the one writer of both. It goes with the access: a site that stops the team and approves it again
+/// decides afresh.
+/// </remarks>
+[Table("team_site_declines")]
+public class TeamSiteDeclineEntity : ISystemCreated
+{
+    [Key]
+    [Column("id")]
+    public Guid Id { get; set; }
+
+    [Column("team_tenant_access_id")]
+    public Guid TeamTenantAccessId { get; set; }
+
+    public TeamTenantAccessEntity? TeamTenantAccess { get; set; }
+
+    [Column("subject_id")]
+    public Guid SubjectId { get; set; }
+
+    public SubjectEntity? Subject { get; set; }
+
+    [Column("sys_created_at")]
+    public DateTime SysCreatedAt { get; set; }
+}

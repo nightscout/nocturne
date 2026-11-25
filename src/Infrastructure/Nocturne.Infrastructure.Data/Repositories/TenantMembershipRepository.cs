@@ -217,8 +217,10 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     /// Stages setting the reason a team's access to the tenant (<paramref name="teamAccessId"/>) gives
     /// <paramref name="subjectId"/> to <paramref name="grant"/> through <see cref="MembershipReasons.SetTeamReasonAsync"/>,
     /// with the rows of what changed in it, attributed to <paramref name="source"/>, on <paramref name="unit"/>,
-    /// which must be pinned to <paramref name="tenantId"/>. A membership it leaves with an earlier end has
-    /// what the subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
+    /// which must be pinned to <paramref name="tenantId"/>. A reason whose end had passed and whose grant is
+    /// in force again also stages its joined row, as <see cref="StageAddTeamReasonAsync"/> does, since the
+    /// member has access through the team again. A membership it leaves with an earlier end has what the
+    /// subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
     /// </summary>
     /// <returns>The grants the cap lowered, for the caller to evict their sessions once the unit commits.</returns>
     /// <exception cref="InvalidOperationException">
@@ -233,6 +235,15 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
         if (member is null || await MembershipReasons.TeamGrantAsync(db, member, teamAccessId, now, ct) is not { } before)
             throw new InvalidOperationException($"Subject {subjectId} holds no reason from team access {teamAccessId} on tenant {tenantId}.");
+
+        if (MembershipLiveness.HasEnded(before.AccessEndsAt, now) && !MembershipLiveness.HasEnded(grant.AccessEndsAt, now))
+        {
+            var team = await db.TeamTenantAccess.AsNoTracking()
+                .Where(a => a.Id == teamAccessId)
+                .Select(a => new MemberAccessTeam(a.TeamId, a.Team!.Name))
+                .FirstAsync(ct);
+            MemberAccessAudit.StageJoined(db, tenantId, subjectId, MembershipJoinHow.Team, inviteId: null, by: null, team, source);
+        }
 
         MemberAccessAudit.StageRoles(
             db, tenantId, subjectId,

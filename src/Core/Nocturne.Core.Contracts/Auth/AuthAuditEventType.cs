@@ -271,4 +271,22 @@ public static class AuthAuditEventType
     /// The row names the tenant and the team, and no target.
     /// </summary>
     public const string TeamAccessStopped = "team_access_stopped";
+
+    /// <summary>
+    /// Event type when an owner of a site approves a staff member of a team with access to it, or the
+    /// switch approves them. The row names the tenant and the team, and targets the staff member.
+    /// </summary>
+    public const string TeamStaffApproved = "team_staff_approved";
+
+    /// <summary>
+    /// Event type when an owner of a site declines a staff member of a team with access to it. The row
+    /// names the tenant and the team, and targets the staff member.
+    /// </summary>
+    public const string TeamStaffDeclined = "team_staff_declined";
+
+    /// <summary>
+    /// Event type when an owner of a site turns "the team manages its own staff" on or off for a team
+    /// with access to it. The row names the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamStaffRuleChanged = "team_staff_rule_changed";
 }
