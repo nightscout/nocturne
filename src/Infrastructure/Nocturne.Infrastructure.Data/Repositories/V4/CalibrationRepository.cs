@@ -62,12 +62,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.Calibrations.AsQueryable();
-
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
+        var query = ctx.Calibrations.InWindow(from, to);
 
         return await AuditedSoftDeleteAndBroadcastAsync(
             ctx, query, $"timestamp={from:O}..{to:O}", DuplicateDelete.PromoteSurvivor, origin, ct);

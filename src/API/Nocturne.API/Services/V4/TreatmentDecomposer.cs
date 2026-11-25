@@ -2740,8 +2740,8 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         var (total, written) = await db.ExecuteInTransactionAsync(async token =>
         {
             // A Note written beside another record is served as part of it, so it is not counted apart.
-            long deleted = -await DecomposedTreatmentTables.InWindow(
-                    LegacyTreatmentTables.NotesServedWithAnotherRecord(db), from, to)
+            long deleted = -await LegacyTreatmentTables.NotesServedWithAnotherRecord(db)
+                    .InWindow(from, to)
                 .LongCountAsync(token);
             List<Type> lostRows = [];
             foreach (var table in DecomposedTreatmentTables.All)

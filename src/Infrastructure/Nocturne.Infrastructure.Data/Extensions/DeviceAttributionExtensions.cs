@@ -22,9 +22,7 @@ public static class DeviceAttributionExtensions
         Expression<Func<TEntity, bool>>? filter = null)
         where TEntity : class, IV4TimeSeriesEntity, IDeviceAttributedEntity
     {
-        var query = ctx.Set<TEntity>().AsNoTracking();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
+        var query = ctx.Set<TEntity>().AsNoTracking().InWindow(from, to);
         if (filter is not null) query = query.Where(filter);
         return query.UnattributedNewestFirstAsync(e => e.Timestamp, limit, ct);
     }

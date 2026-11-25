@@ -26,10 +26,7 @@ public class TreatmentReadServiceFindWindowTests
     public async Task ReadService_PushesWindowDownToProjection()
     {
         var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Treatment>());
+        projection.SetupWindowRead(Array.Empty<Treatment>());
 
         await NewReadService(projection.Object, NullLogger<TreatmentReadService>.Instance).QueryAsync(
             new TreatmentQuery
@@ -38,8 +35,9 @@ public class TreatmentReadServiceFindWindowTests
                 Count = int.MaxValue,
             });
 
-        projection.Verify(p => p.GetProjectedTreatmentsAsync(
-            WindowStartMills, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()));
+        projection.VerifyWindowRead(
+            range => range.From == WindowStartMills.ToUtcDateTime() && range.To is null,
+            Times.AtLeastOnce());
     }
 
     [Fact]
@@ -50,10 +48,7 @@ public class TreatmentReadServiceFindWindowTests
             .Select(i => new Treatment { EventType = "Note", Mills = i })
             .ToList();
         var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), maxFilterFetch, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(projected);
+        projection.SetupWindowRead(projected, range => range.Limit == maxFilterFetch);
         var logger = new Mock<ILogger<TreatmentReadService>>();
 
         var service = NewReadService(projection.Object, logger.Object);

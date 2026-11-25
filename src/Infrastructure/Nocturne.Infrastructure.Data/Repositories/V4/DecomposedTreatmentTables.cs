@@ -25,13 +25,13 @@ public static class DecomposedTreatmentTables
 {
     public static IReadOnlyList<DecomposedTreatmentTable> All { get; } =
     [
-        Table<Bolus, BolusEntity>(db => db.Boluses, InWindow, BolusMapper.ToEntity),
-        Table<TempBasal, TempBasalEntity>(db => db.TempBasals, InWindow, TempBasalMapper.ToEntity),
-        Table<CarbIntake, CarbIntakeEntity>(db => db.CarbIntakes, InWindow, CarbIntakeMapper.ToEntity),
-        Table<BGCheck, BGCheckEntity>(db => db.BGChecks, InWindow, BGCheckMapper.ToEntity),
-        Table<Note, NoteEntity>(db => db.Notes, InWindow, NoteMapper.ToEntity),
-        Table<DeviceEvent, DeviceEventEntity>(db => db.DeviceEvents, InWindow, DeviceEventMapper.ToEntity),
-        Table<BolusCalculation, BolusCalculationEntity>(db => db.BolusCalculations, InWindow, BolusCalculationMapper.ToEntity),
+        Table<Bolus, BolusEntity>(db => db.Boluses, ObservationWindow.InWindow, BolusMapper.ToEntity),
+        Table<TempBasal, TempBasalEntity>(db => db.TempBasals, ObservationWindow.InWindow, TempBasalMapper.ToEntity),
+        Table<CarbIntake, CarbIntakeEntity>(db => db.CarbIntakes, ObservationWindow.InWindow, CarbIntakeMapper.ToEntity),
+        Table<BGCheck, BGCheckEntity>(db => db.BGChecks, ObservationWindow.InWindow, BGCheckMapper.ToEntity),
+        Table<Note, NoteEntity>(db => db.Notes, ObservationWindow.InWindow, NoteMapper.ToEntity),
+        Table<DeviceEvent, DeviceEventEntity>(db => db.DeviceEvents, ObservationWindow.InWindow, DeviceEventMapper.ToEntity),
+        Table<BolusCalculation, BolusCalculationEntity>(db => db.BolusCalculations, ObservationWindow.InWindow, BolusCalculationMapper.ToEntity),
         Table<ProfileActivation, ProfileActivationEntity>(db => db.ProfileActivations, ServedInWindow, ProfileActivationMapper.ToEntity),
     ];
 
@@ -48,24 +48,13 @@ public static class DecomposedTreatmentTables
         All.FirstOrDefault(t => t.Model.IsInstanceOfType(record))
         ?? throw new ArgumentException($"{record.GetType().Name} is not a decomposed treatment record", nameof(record));
 
-    /// <summary>The rows of <paramref name="rows"/> whose event time is inside the window, bounds inclusive.</summary>
-    public static IQueryable<T> InWindow<T>(IQueryable<T> rows, DateTime? from, DateTime? to)
-        where T : IV4TimeSeriesEntity
-    {
-        if (from.HasValue)
-            rows = rows.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            rows = rows.Where(e => e.Timestamp <= to.Value);
-        return rows;
-    }
-
     /// <summary>
     /// The activations a window delete takes: those decomposed from a treatment, which every window
     /// read serves. A connector's are not treatments.
     /// </summary>
     private static IQueryable<ProfileActivationEntity> ServedInWindow(
         IQueryable<ProfileActivationEntity> rows, DateTime? from, DateTime? to) =>
-        InWindow(rows, from, to).Where(a => a.LegacyId != null);
+        rows.InWindow(from, to).Where(a => a.LegacyId != null);
 }
 
 /// <summary>A legacy id one of <see cref="DecomposedTreatmentTables"/> stores, and its row's event time.</summary>

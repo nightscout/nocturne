@@ -41,7 +41,13 @@ internal readonly record struct LegacyTreatmentRange(
     int Limit,
     bool Descending,
     bool IncludeDeleted = false
-);
+)
+{
+    /// <summary>The range between two instants given in Unix milliseconds, either optional.</summary>
+    internal static LegacyTreatmentRange FromMills(
+        long? fromMills, long? toMills, int limit, bool descending, bool includeDeleted = false) =>
+        new(fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending, includeDeleted);
+}
 
 /// <summary>
 /// One record fetched for projection, carrying the table that owns it, the row's primary key, the
@@ -452,7 +458,7 @@ internal sealed class LegacyStateSpanTable(
         LegacyTreatmentRepositories repositories, NocturneDbContext context, DateTime? from, DateTime? to,
         ILogger logger, CancellationToken ct) =>
         LegacyTreatmentTables.GuardedAsync(
-            this, logger, () => Window(Visible(context), from, to).LongCountAsync(ct), 0L);
+            this, logger, () => Visible(context).InWindow(s => s.StartTimestamp, from, to).LongCountAsync(ct), 0L);
 
     /// <summary>
     /// Every served span of this category, duplicate copies included: the id lookups and the bulk
@@ -476,16 +482,7 @@ internal sealed class LegacyStateSpanTable(
 
     /// <summary>Served spans starting inside the window, bounds inclusive, duplicate copies included.</summary>
     internal IQueryable<StateSpanEntity> InWindow(NocturneDbContext context, DateTime? from, DateTime? to) =>
-        Window(Rows(context), from, to);
-
-    private static IQueryable<StateSpanEntity> Window(IQueryable<StateSpanEntity> rows, DateTime? from, DateTime? to)
-    {
-        if (from is { } lower)
-            rows = rows.Where(s => s.StartTimestamp >= lower);
-        if (to is { } upper)
-            rows = rows.Where(s => s.StartTimestamp <= upper);
-        return rows;
-    }
+        Rows(context).InWindow(s => s.StartTimestamp, from, to);
 
     internal FetchedRecord Fetched(StateSpanEntity span) =>
         new(this, span, span.Id, span.CreatedAt, span.UpdatedAt, span.DeletedAt is not null);
@@ -501,7 +498,7 @@ internal sealed class LegacyStateSpanTable(
         var rows = range.IncludeDeleted
             ? Served(context.StateSpans.IncludingDeleted().AsNoTracking()).ExcludeDuplicates()
             : Visible(context);
-        var spans = await InStartOrder(Window(rows, range.From, range.To), range.Descending)
+        var spans = await InStartOrder(rows.InWindow(s => s.StartTimestamp, range.From, range.To), range.Descending)
             .Take(range.Limit)
             .ToListAsync(ct);
 
@@ -625,11 +622,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
         NocturneDbContext context, DateTime? from, DateTime? to, bool includeDeleted = false)
     {
         var rows = includeDeleted ? Served(context.ProfileActivations.IncludingDeleted().AsNoTracking()) : Rows(context);
-        if (from is { } lower)
-            rows = rows.Where(a => a.Timestamp >= lower);
-        if (to is { } upper)
-            rows = rows.Where(a => a.Timestamp <= upper);
-        return rows;
+        return rows.InWindow(from, to);
     }
 
     private FetchedRecord Fetched(ProfileActivationEntity entity) =>
@@ -993,8 +986,8 @@ internal static class LegacyTreatmentTables
     /// </summary>
     private static async Task<long> CountNotesServedApartAsync(
         NocturneDbContext context, DateTime? from, DateTime? to, CancellationToken ct) =>
-        await InWindow(context.Notes, from, to).LongCountAsync(ct)
-        - await InWindow(NotesServedWithAnotherRecord(context), from, to).LongCountAsync(ct);
+        await VisibleInWindow(context.Notes, from, to).LongCountAsync(ct)
+        - await VisibleInWindow(NotesServedWithAnotherRecord(context), from, to).LongCountAsync(ct);
 
     /// <summary>
     /// The carb intakes served as treatments of their own in the window, bounds inclusive: every
@@ -1006,8 +999,8 @@ internal static class LegacyTreatmentTables
     private static async Task<long> CountCarbIntakesServedApartAsync(
         NocturneDbContext context, DateTime? from, DateTime? to, CancellationToken ct)
     {
-        var carbs = InWindow(context.CarbIntakes, from, to);
-        var boluses = InWindow(context.Boluses, from, to);
+        var carbs = VisibleInWindow(context.CarbIntakes, from, to);
+        var boluses = VisibleInWindow(context.Boluses, from, to);
         var pairedMeals = carbs
             .Where(c => c.CorrelationId != null && boluses.Any(b => b.CorrelationId == c.CorrelationId))
             .Select(c => c.CorrelationId)
@@ -1016,16 +1009,9 @@ internal static class LegacyTreatmentTables
         return await carbs.LongCountAsync(ct) - await pairedMeals.LongCountAsync(ct);
     }
 
-    private static IQueryable<TEntity> InWindow<TEntity>(IQueryable<TEntity> rows, DateTime? from, DateTime? to)
-        where TEntity : V4TimeSeriesEntityBase, IDuplicateFlagged
-    {
-        rows = rows.AsNoTracking().ExcludeDuplicates();
-        if (from is { } lower)
-            rows = rows.Where(r => r.Timestamp >= lower);
-        if (to is { } upper)
-            rows = rows.Where(r => r.Timestamp <= upper);
-        return rows;
-    }
+    private static IQueryable<TEntity> VisibleInWindow<TEntity>(IQueryable<TEntity> rows, DateTime? from, DateTime? to)
+        where TEntity : V4TimeSeriesEntityBase, IDuplicateFlagged =>
+        rows.AsNoTracking().ExcludeDuplicates().InWindow(from, to);
 
     /// <summary>
     /// A <see cref="ProfileActivation"/> as the Profile Switch, or AAPS effective switch Note, it was

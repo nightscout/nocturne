@@ -151,7 +151,7 @@ public class V4ToLegacyProjectionServiceTests
                     CancellationToken _) =>
                 boluses.OrderBy(b => b.Timestamp).Take(limit).ToList());
 
-        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 2, descending: false)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 2, descending: false))).ToList();
 
         result.Select(t => t.Insulin).Should().Equal(1.0, 2.0);
         _bolusRepo.As<IV4Repository<Bolus>>().Verify(r => r.GetAsync(
@@ -184,7 +184,7 @@ public class V4ToLegacyProjectionServiceTests
                 (descending ? notes.OrderByDescending(n => n.Timestamp) : notes.OrderBy(n => n.Timestamp)).Take(limit).ToList());
 
         var result = (await _service.GetProjectedTreatmentsAsync(
-            null, null, 5, descending: false)).ToList();
+            ProjectionWindowReads.Range(null, null, 5, descending: false))).ToList();
 
         result.Select(t => t.Mills).Should().Equal(
             Enumerable.Range(0, 5).Select(i => new DateTimeOffset(start.AddMinutes(i)).ToUnixTimeMilliseconds()));
@@ -223,7 +223,7 @@ public class V4ToLegacyProjectionServiceTests
         SetupBoluses(new[] { smallBolus, largeBolus });
         SetupCarbs(new[] { carb });
 
-        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         var mealBolus = result.Single(t => t.EventType == TreatmentTypes.MealBolus);
         mealBolus.Insulin.Should().Be(5.0);
@@ -265,7 +265,7 @@ public class V4ToLegacyProjectionServiceTests
         SetupBoluses(new[] { smb, manual });
         SetupCarbs(Enumerable.Empty<CarbIntake>());
 
-        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         var smbTreatment = result.Single(t => t.Id == smb.Id.ToString());
         smbTreatment.EventType.Should().Be(TreatmentTypes.CorrectionBolus);
@@ -306,7 +306,7 @@ public class V4ToLegacyProjectionServiceTests
         SetupBoluses(new[] { bolus });
         SetupCarbs(new[] { smallCarb, largeCarb });
 
-        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         var mealBolus = result.Single(t => t.EventType == TreatmentTypes.MealBolus);
         mealBolus.Carbs.Should().Be(60.0);
@@ -353,12 +353,12 @@ public class V4ToLegacyProjectionServiceTests
         // First invocation: b1 before b2.
         SetupBoluses(new[] { b1, b2 });
         SetupCarbs(new[] { carb });
-        var result1 = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result1 = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
         var mealBolus1 = result1.Single(t => t.EventType == TreatmentTypes.MealBolus);
 
         // Second invocation: input order reversed. Output must be identical.
         SetupBoluses(new[] { b2, b1 });
-        var result2 = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result2 = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
         var mealBolus2 = result2.Single(t => t.EventType == TreatmentTypes.MealBolus);
 
         mealBolus1.Id.Should().Be(mealBolus2.Id);
@@ -399,10 +399,10 @@ public class V4ToLegacyProjectionServiceTests
 
         SetupBoluses(new[] { bolus });
         SetupCarbs(new[] { c1, c2 });
-        var result1 = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result1 = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         SetupCarbs(new[] { c2, c1 });
-        var result2 = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result2 = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         // The Meal Bolus projection carries the primary bolus Id, not the carb
         // Id, so the pairing's stability is verified through the leftover
@@ -448,7 +448,7 @@ public class V4ToLegacyProjectionServiceTests
         SetupBoluses(new[] { mealBolus, correction });
         SetupCarbs(new[] { carb });
 
-        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         var meal = result.Single(t => t.EventType == TreatmentTypes.MealBolus);
         meal.SrvCreated.Should().Be(carb.CreatedAt.ToMills());
@@ -598,7 +598,7 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
-    public async Task GetProjectedTreatmentsIncludingDeleted_ServesTheWindowWithDeletedRowsFlaggedIsValidFalse()
+    public async Task GetProjectedTreatments_IncludingDeleted_ServesTheWindowWithDeletedRowsFlaggedIsValidFalse()
     {
         var deletedAt = Cursor.AddHours(1);
         var live = new Note { Id = Guid.CreateVersion7(), Timestamp = Cursor, Text = "live", ModifiedAt = Cursor };
@@ -612,8 +612,8 @@ public class V4ToLegacyProjectionServiceTests
             .Setup(r => r.GetIncludingDeletedAsync(from, to, 10, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<Note>(live, false), new HistoryRecord<Note>(deleted, true)]);
 
-        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(
-            from.ToMills(), to.ToMills(), limit: 10, descending: true)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(
+            ProjectionWindowReads.Range(from.ToMills(), to.ToMills(), 10, includeDeleted: true))).ToList();
 
         result.Select(t => (t.Id, t.IsValid)).Should().Equal(
             (live.Id.ToString(), (bool?)null),
@@ -622,7 +622,7 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
-    public async Task GetProjectedTreatmentsIncludingDeleted_DeletedMeal_IsOneDeletedMealBolus()
+    public async Task GetProjectedTreatments_IncludingDeleted_DeletedMeal_IsOneDeletedMealBolus()
     {
         var correlationId = Guid.CreateVersion7();
         var deletedAt = Cursor.AddMinutes(3);
@@ -636,7 +636,7 @@ public class V4ToLegacyProjectionServiceTests
         };
         SetupDeleted(bolus, carb);
 
-        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 10, includeDeleted: true))).ToList();
 
         var meal = result.Should().ContainSingle().Subject;
         meal.EventType.Should().Be(TreatmentTypes.MealBolus);
@@ -644,7 +644,7 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
-    public async Task GetProjectedTreatmentsIncludingDeleted_DeletedBolusWithALiveCarbIntake_IsServedApart()
+    public async Task GetProjectedTreatments_IncludingDeleted_DeletedBolusWithALiveCarbIntake_IsServedApart()
     {
         // A deleted half never pairs with a live one: the bolus is the deleted treatment, and the
         // surviving carb intake is a treatment of its own, as the history serves them.
@@ -667,7 +667,7 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<CarbIntake>(carb, false)]);
 
-        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 10, includeDeleted: true))).ToList();
 
         result.Select(t => (t.EventType, t.IsValid)).Should().BeEquivalentTo(
         [
@@ -677,7 +677,7 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
-    public async Task GetProjectedTreatmentsIncludingDeleted_DeletedTreatment_IsServedWithItsDeletedNote()
+    public async Task GetProjectedTreatments_IncludingDeleted_DeletedTreatment_IsServedWithItsDeletedNote()
     {
         var bolus = new Bolus
         {
@@ -696,7 +696,7 @@ public class V4ToLegacyProjectionServiceTests
             },
             Cursor.AddMinutes(3)));
 
-        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 10, includeDeleted: true))).ToList();
 
         var deleted = result.Should().ContainSingle().Subject;
         deleted.IsValid.Should().BeFalse();
@@ -704,7 +704,7 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
-    public async Task GetProjectedTreatmentsIncludingDeleted_LiveTreatment_IsNotServedWithADeletedNote()
+    public async Task GetProjectedTreatments_IncludingDeleted_LiveTreatment_IsNotServedWithADeletedNote()
     {
         var bolus = new Bolus
         {
@@ -723,7 +723,7 @@ public class V4ToLegacyProjectionServiceTests
             },
             Cursor.AddMinutes(3)));
 
-        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 10, includeDeleted: true))).ToList();
 
         result.Should().ContainSingle().Which.Notes.Should().BeNull();
     }
@@ -987,7 +987,7 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { note });
 
-        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+        var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100))).ToList();
 
         result.Should().ContainSingle();
         result[0].Id.Should().Be(note.Id.ToString());
@@ -1016,7 +1016,7 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(failure);
 
-        var read = () => _service.GetProjectedTreatmentsAsync(null, null, 100);
+        var read = () => _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 100));
 
         (await read.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(failure);
     }
@@ -1525,7 +1525,7 @@ public class V4ToLegacyProjectionServiceTests
             .ReturnsAsync(() => _dbContext.CarbIntakes.Count(c => c.Timestamp >= from && c.Timestamp <= to));
 
         var (fromMills, toMills) = (new DateTimeOffset(from).ToUnixTimeMilliseconds(), new DateTimeOffset(to).ToUnixTimeMilliseconds());
-        var served = await _service.GetProjectedTreatmentsAsync(fromMills, toMills, 100);
+        var served = await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(fromMills, toMills, 100));
         var counted = await _service.CountProjectedTreatmentsAsync(fromMills, toMills);
 
         served.Should().HaveCount((int)expected);

@@ -71,43 +71,20 @@ internal class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <inheritdoc />
-    public Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        bool descending = true,
+    public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
+        LegacyTreatmentRange range,
         CancellationToken ct = default
-    ) => ReadWindowAsync(fromMills, toMills, limit, descending, includeDeleted: false, ct);
-
-    /// <inheritdoc />
-    public Task<IEnumerable<Treatment>> GetProjectedTreatmentsIncludingDeletedAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        bool descending,
-        CancellationToken ct = default
-    ) => ReadWindowAsync(fromMills, toMills, limit, descending, includeDeleted: true, ct);
-
-    private async Task<IEnumerable<Treatment>> ReadWindowAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        bool descending,
-        bool includeDeleted,
-        CancellationToken ct
     )
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var range = new LegacyTreatmentRange(
-            fromMills?.ToUtcDateTime(), toMills?.ToUtcDateTime(), limit, descending, includeDeleted);
 
         var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
         var treatments = await AssembleAsync(db, rows, ct);
 
-        return (descending
+        return (range.Descending
                 ? treatments.OrderByDescending(t => t.Mills)
                 : treatments.OrderBy(t => t.Mills))
-            .Take(limit);
+            .Take(range.Limit);
     }
 
     /// <summary>The records of one table <see cref="GetProjectedTreatmentsAtAsync"/> reads at each instant.</summary>

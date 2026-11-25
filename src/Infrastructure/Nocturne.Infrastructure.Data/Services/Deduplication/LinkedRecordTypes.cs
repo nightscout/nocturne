@@ -268,17 +268,11 @@ public static class LinkedRecordTypes
                     .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
                     .Where(e => EF.Property<DateTime>(e, createdAtName) < createdBefore
                         && !context.LinkedRecords.Any(lr =>
-                            lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)));
-                if (fromMills is { } from)
-                {
-                    var fromTime = from.ToUtcDateTime();
-                    query = query.Where(e => EF.Property<DateTime>(e, timestampName) >= fromTime);
-                }
-                if (toMills is { } to)
-                {
-                    var toTime = to.ToUtcDateTime();
-                    query = query.Where(e => EF.Property<DateTime>(e, timestampName) <= toTime);
-                }
+                            lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)))
+                    .InWindow(
+                        e => EF.Property<DateTime>(e, timestampName),
+                        fromMills?.ToUtcDateTime(),
+                        toMills?.ToUtcDateTime());
 
                 return (await query.ToListAsync(ct)).Select(e => new LinkedRecordEntity
                 {
