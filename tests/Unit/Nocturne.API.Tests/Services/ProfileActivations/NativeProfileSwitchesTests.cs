@@ -32,7 +32,7 @@ public sealed class NativeProfileSwitchesTests : IDisposable
     private static readonly DateTime T0 = new(2026, 5, 1, 8, 0, 0, DateTimeKind.Utc);
     private const string Person = "Rhys";
 
-    private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+    private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
     private readonly NocturneDbContext _context;
     private readonly ProfileActivationRepository _repository;
     private readonly ProfileActivationResolver _resolver;

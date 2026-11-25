@@ -71,6 +71,43 @@ public class StateSpanUpstreamRewriteTests : IAsyncLifetime
             .Should().BeEquivalentTo(first.Values.Select(r => (r.LegacyId, r.UpdatedAt)));
     }
 
+    /// <summary>
+    /// D [6,8) ended by A, a span of another preset, and A [8,10) ended by B. The upload moves A to 5 with
+    /// no end, so D runs on to B, and A now ends where D starts.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_span_whose_start_moves_before_the_span_it_ended_releases_it_by_either_writer(bool republish)
+    {
+        foreach (var (id, hour, state) in new[] { ("d", 6, "Custom"), ("a", 8, "Eating"), ("b", 10, "Custom") })
+            await WithRepositoryAsync(r => r.UpsertStateSpanAsync(Span(id, hour, state: state)));
+        var before = await RowsAsync();
+        var moved = Span("a", 5, state: "Eating");
+
+        await WithRepositoryAsync(async r => republish
+            ? (object)await r.RewriteFromUpstreamAsync(Source, [moved])
+            : await r.BulkUpsertAsync([moved]));
+
+        var rows = await RowsAsync();
+        (rows["d"].EndTimestamp, rows["d"].SupersededById).Should().Be((Origin.AddHours(10), rows["b"].Id));
+        (rows["a"].StartTimestamp, rows["a"].EndTimestamp, rows["a"].SupersededById)
+            .Should().Be((Origin.AddHours(5), Origin.AddHours(6), rows["d"].Id));
+        (rows["b"].EndTimestamp, rows["b"].SupersededById, rows["b"].UpdatedAt)
+            .Should().Be((before["b"].EndTimestamp, before["b"].SupersededById, before["b"].UpdatedAt));
+    }
+
+    /// <summary>The batch arrives latest first, so the rows are written in another order than their ends.</summary>
+    [Fact]
+    public async Task One_settle_ends_each_span_at_its_own_successor()
+    {
+        await WithRepositoryAsync(r => r.BulkUpsertAsync([Span("z", 5), Span("y", 3), Span("x", 1)]));
+
+        var rows = await RowsAsync();
+        (rows["x"].EndTimestamp, rows["x"].SupersededById).Should().Be((Origin.AddHours(3), rows["y"].Id));
+        (rows["y"].EndTimestamp, rows["y"].SupersededById).Should().Be((Origin.AddHours(5), rows["z"].Id));
+    }
+
     private async Task RewriteUnderAsync(IReadOnlyDictionary<(string? Source, string LegacyId), string?> fingerprints)
     {
         using var scope = UpstreamFingerprintScope.Open(fingerprints);
@@ -89,10 +126,10 @@ public class StateSpanUpstreamRewriteTests : IAsyncLifetime
         return rows;
     }
 
-    private static StateSpan Span(string originalId, int startHour, int? endHour = null) => new()
+    private static StateSpan Span(string originalId, int startHour, int? endHour = null, string state = "Custom") => new()
     {
         Category = StateSpanCategory.Override,
-        State = "Custom",
+        State = state,
         StartTimestamp = Origin.AddHours(startHour),
         EndTimestamp = endHour is { } end ? Origin.AddHours(end) : null,
         Source = Source,

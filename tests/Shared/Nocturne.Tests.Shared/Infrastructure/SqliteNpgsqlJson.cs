@@ -18,7 +18,7 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 /// </summary>
 public static class SqliteNpgsqlJson
 {
-    /// <summary>Pass to <see cref="TestDbContextFactory.CreateSqliteWithTenant(Guid, Action{DbContextOptionsBuilder{NocturneDbContext}}, IInterceptor[])"/>.</summary>
+    /// <summary>Every <see cref="SqliteTestDatabase"/> applies it.</summary>
     public static void Translate(DbContextOptionsBuilder<NocturneDbContext> options) =>
         options.ReplaceService<IMethodCallTranslatorProvider, TranslatingProvider>();
 

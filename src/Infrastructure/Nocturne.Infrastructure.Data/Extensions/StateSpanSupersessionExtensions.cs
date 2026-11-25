@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
@@ -41,12 +42,12 @@ internal static class StateSpanSupersessionExtensions
     /// which is all a later restore could tell its superseded end by, so such an end is cleared with it.
     /// </param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The rows written.</returns>
-    public static async Task<int> ReopenSupersededAsync(
+    /// <returns>What each span written was written with, by id.</returns>
+    public static async Task<IReadOnlyDictionary<Guid, WrittenEnd>> ReopenSupersededAsync(
         this NocturneDbContext ctx, IReadOnlyCollection<Guid> removedIds, bool purged, CancellationToken ct)
     {
         if (removedIds.Count == 0)
-            return 0;
+            return new Dictionary<Guid, WrittenEnd>();
 
         var removed = removedIds.ToHashSet();
         var rowIds = removed.ToArray();
@@ -65,39 +66,49 @@ internal static class StateSpanSupersessionExtensions
                         (s, d) => new { Span = s, SupersederStart = d.StartTimestamp })
                     .ToListAsync(token);
                 if (superseded.Count == 0)
-                    return 0;
+                    return (IReadOnlyDictionary<Guid, WrittenEnd>)new Dictionary<Guid, WrittenEnd>();
 
                 var touchedAt = NocturneDbContext.UtcNowAtStoredPrecision();
                 var kept = superseded
                     .Where(r => r.Span.DeletedAt == null && r.Span.EndTimestamp != r.SupersederStart)
-                    .Select(r => r.Span.Id)
-                    .ToArray();
+                    .Select(r => r.Span)
+                    .ToList();
                 var deletedReopened = superseded
                     .Where(r => r.Span.DeletedAt != null && r.Span.EndTimestamp == r.SupersederStart)
-                    .Select(r => r.Span.Id)
-                    .ToArray();
-                var written = await ClearAsync(kept, s => s.SetProperty(e => e.SupersededById, (Guid?)null));
-                written += await ClearAsync(deletedReopened, s => s
+                    .Select(r => r.Span)
+                    .ToList();
+                await ClearAsync(kept, s => s.SetProperty(e => e.SupersededById, (Guid?)null));
+                await ClearAsync(deletedReopened, s => s
                     .SetProperty(e => e.EndTimestamp, (DateTime?)null)
                     .SetProperty(e => e.SupersededById, (Guid?)null));
                 var reopened = superseded
                     .Where(r => r.Span.DeletedAt == null && r.Span.EndTimestamp == r.SupersederStart)
                     .Select(r => r.Span)
                     .ToList();
-                return written + (await EndAtSuccessorsAsync(
-                    ctx, reopened, s => !removed.Contains(s.Id), writeUnchanged: true, touchedAt, token)).Count;
+                var written = await EndAtSuccessorsAsync(
+                    ctx, reopened, s => !removed.Contains(s.Id), writeUnchanged: true, touchedAt, token);
+                foreach (var span in kept)
+                    written[span.Id] = new WrittenEnd(span.EndTimestamp, null, touchedAt);
+                foreach (var span in deletedReopened)
+                    written[span.Id] = new WrittenEnd(null, null, touchedAt);
+                return written;
 
-                async Task<int> ClearAsync(
-                    Guid[] targets, Action<Microsoft.EntityFrameworkCore.Query.UpdateSettersBuilder<StateSpanEntity>> set) =>
-                    targets.Length == 0
-                        ? 0
-                        : await ctx.StateSpans.IncludingDeleted().Where(s => targets.Contains(s.Id)).ExecuteUpdateAsync(
-                            s =>
-                            {
-                                set(s);
-                                s.SetProperty(e => e.UpdatedAt, touchedAt);
-                            },
-                            token);
+                async Task ClearAsync(
+                    List<StateSpanEntity> spans,
+                    Action<Microsoft.EntityFrameworkCore.Query.UpdateSettersBuilder<StateSpanEntity>> set)
+                {
+                    if (spans.Count == 0)
+                        return;
+
+                    Guid[] targets = [.. spans.Select(s => s.Id)];
+                    await ctx.StateSpans.IncludingDeleted().Where(s => targets.Contains(s.Id)).ExecuteUpdateAsync(
+                        s =>
+                        {
+                            set(s);
+                            s.SetProperty(e => e.UpdatedAt, touchedAt);
+                        },
+                        token);
+                }
             },
             ct);
     }
@@ -207,16 +218,91 @@ internal static class StateSpanSupersessionExtensions
     {
         foreach (var span in spans)
         {
-            if (!written.TryGetValue(span.Id, out var end))
-                continue;
+            if (written.TryGetValue(span.Id, out var end))
+                Accept(ctx.Entry(span), end);
+        }
+    }
 
-            var entry = ctx.Entry(span);
-            Accept(entry.Property(e => e.EndTimestamp), end.End);
-            Accept(entry.Property(e => e.SupersededById), end.SupersededById);
-            Accept(entry.Property(e => e.UpdatedAt), end.UpdatedAt);
+    /// <summary>
+    /// Saves the spans an upload wrote and settles them with their neighbours, in one transaction. Each of
+    /// <paramref name="moved"/> first releases the spans it superseded (<see cref="ReopenSupersededAsync"/>)
+    /// while the store still holds the start it ended them at. After the save, every one of
+    /// <paramref name="written"/> of an exclusive category, and every span it may now succeed, ends at its
+    /// first live successor (<see cref="SupersedeByArrivedAsync"/>). The tracked spans are left as stored.
+    /// </summary>
+    /// <remarks>
+    /// A tracked span the release wrote takes the release's end and pointer when the upload left both as it
+    /// read them. Otherwise the upload's, which <see cref="UploadedEnd"/> judged against the superseder the
+    /// span named before the release, are written over the release's.
+    /// </remarks>
+    /// <param name="ctx">The context that tracks the upload's spans.</param>
+    /// <param name="moved">Stored spans whose start or category the upload changes.</param>
+    /// <param name="written">
+    /// The spans, as mapped, that settle after the save: every one an upload wrote, or the ones a fold left open.
+    /// </param>
+    /// <param name="save">Saves the tracked changes.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>What <paramref name="save"/> returned.</returns>
+    public static async Task<int> SaveUploadAsync(
+        this NocturneDbContext ctx,
+        IReadOnlyCollection<Guid> moved,
+        IEnumerable<StateSpanEntity> written,
+        Func<CancellationToken, Task<int>> save,
+        CancellationToken ct)
+    {
+        Guid[] arrived = [.. written
+            .Where(s => StateSpanSuccession.ExclusiveCategories.Contains(s.Category))
+            .Select(s => s.Id)
+            .Distinct()];
+        if (moved.Count == 0 && arrived.Length == 0)
+            return await save(ct);
+
+        return await ctx.ExecuteInTransactionAsync(async token =>
+        {
+            var released = await ctx.ReopenSupersededAsync(moved, purged: false, token);
+            foreach (var entry in ctx.ChangeTracker.Entries<StateSpanEntity>().ToList())
+            {
+                if (released.TryGetValue(entry.Entity.Id, out var end))
+                    TakeReleased(entry, end);
+            }
+
+            var saved = await save(token);
+            ctx.AcceptWrittenEnds(
+                await ctx.SupersedeByArrivedAsync(arrived, asGiven: false, token),
+                [.. ctx.ChangeTracker.Entries<StateSpanEntity>().Select(e => e.Entity)]);
+            return saved;
+        }, ct: ct);
+    }
+
+    private static void TakeReleased(EntityEntry<StateSpanEntity> entry, WrittenEnd released)
+    {
+        var end = entry.Property(e => e.EndTimestamp);
+        var pointer = entry.Property(e => e.SupersededById);
+        if (end.IsModified || pointer.IsModified)
+        {
+            Stored(end, released.End);
+            Stored(pointer, released.SupersededById);
+            // The save stamps a span it writes; one it no longer writes keeps the release's stamp.
+            if (entry.Properties.Any(p => p.IsModified))
+                return;
         }
 
-        static void Accept<T>(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry<StateSpanEntity, T> property, T value)
+        Accept(entry, released);
+
+        static void Stored<T>(PropertyEntry<StateSpanEntity, T> property, T value)
+        {
+            property.OriginalValue = value;
+            property.IsModified = !EqualityComparer<T>.Default.Equals(property.CurrentValue, value);
+        }
+    }
+
+    private static void Accept(EntityEntry<StateSpanEntity> entry, WrittenEnd written)
+    {
+        Set(entry.Property(e => e.EndTimestamp), written.End);
+        Set(entry.Property(e => e.SupersededById), written.SupersededById);
+        Set(entry.Property(e => e.UpdatedAt), written.UpdatedAt);
+
+        static void Set<T>(PropertyEntry<StateSpanEntity, T> property, T value)
         {
             property.CurrentValue = value;
             property.OriginalValue = value;
@@ -270,7 +356,7 @@ internal static class StateSpanSupersessionExtensions
     /// <summary>
     /// Writes each of <paramref name="spans"/> ended at its first live <paramref name="eligible"/>
     /// successor, or open when it has none: every one when <paramref name="writeUnchanged"/>, else only
-    /// those whose end or pointer moves. One statement per end written.
+    /// those whose end or pointer moves. One statement writes every end.
     /// </summary>
     /// <returns>What each span written was written with, by id.</returns>
     private static async Task<Dictionary<Guid, WrittenEnd>> EndAtSuccessorsAsync(
@@ -278,28 +364,27 @@ internal static class StateSpanSupersessionExtensions
         bool writeUnchanged, DateTime touchedAt, CancellationToken ct)
     {
         var successors = await SuccessorsAsync(ctx, spans, eligible, ct);
-        var written = new Dictionary<Guid, WrittenEnd>();
-        foreach (var group in spans
-                     .Select(s => (s.Id, s.EndTimestamp, s.SupersededById,
-                         Target: successors.TryGetValue(s.Id, out var next)
-                             ? ((DateTime?)next.StartTimestamp, (Guid?)next.Id)
-                             : (null, null)))
-                     .Where(s => writeUnchanged || s.Target != (s.EndTimestamp, s.SupersededById))
-                     .GroupBy(s => s.Target, s => s.Id))
-        {
-            var (end, by) = group.Key;
-            var targets = group.ToArray();
-            await ctx.StateSpans.Where(s => targets.Contains(s.Id)).ExecuteUpdateAsync(
-                s => s
-                    .SetProperty(e => e.EndTimestamp, end)
-                    .SetProperty(e => e.SupersededById, by)
-                    .SetProperty(e => e.UpdatedAt, touchedAt),
-                ct);
-            foreach (var id in targets)
-                written[id] = new WrittenEnd(end, by, touchedAt);
-        }
+        var moves = spans
+            .Select(s => (s.Id, Was: (s.EndTimestamp, s.SupersededById),
+                Target: successors.TryGetValue(s.Id, out var next)
+                    ? ((DateTime?)next.StartTimestamp, (Guid?)next.Id)
+                    : (null, null)))
+            .Where(s => writeUnchanged || s.Target != s.Was)
+            .ToList();
+        if (moves.Count == 0)
+            return [];
 
-        return written;
+        Guid[] ids = [.. moves.Select(m => m.Id)];
+        DateTime?[] ends = [.. moves.Select(m => m.Target.Item1)];
+        Guid?[] pointers = [.. moves.Select(m => m.Target.Item2)];
+        await ctx.PlanForEachArrayAsync(ids.Length, ct);
+        await ctx.StateSpans.Where(s => ids.Contains(s.Id)).ExecuteUpdateAsync(
+            s => s
+                .SetProperty(e => e.EndTimestamp, e => ends[Array.IndexOf(ids, e.Id)])
+                .SetProperty(e => e.SupersededById, e => pointers[Array.IndexOf(ids, e.Id)])
+                .SetProperty(e => e.UpdatedAt, touchedAt),
+            ct);
+        return moves.ToDictionary(m => m.Id, m => new WrittenEnd(m.Target.Item1, m.Target.Item2, touchedAt));
     }
 
     /// <summary>
@@ -327,7 +412,6 @@ internal static class StateSpanSupersessionExtensions
                 MapperHelpers.DeserializeJson<Dictionary<string, object>>(span.MetadataJson),
                 candidates[StateSpanSuccession.Key(span.Category, span.State, span.StartTimestamp)],
                 eligible,
-                null,
                 ct);
             if (successor is not null)
                 found[span.Id] = successor;

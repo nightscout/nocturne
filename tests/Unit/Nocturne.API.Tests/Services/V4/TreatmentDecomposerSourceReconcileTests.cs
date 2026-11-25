@@ -33,7 +33,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
     public TreatmentDecomposerSourceReconcileTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _statements);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, "test", _statements);
         _context = _db.CreateContext();
 
         _decomposer = TreatmentDecomposerDoubles.Build(
