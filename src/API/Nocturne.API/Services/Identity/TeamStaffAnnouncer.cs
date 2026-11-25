@@ -126,7 +126,7 @@ public sealed partial class TeamStaffAnnouncer(
             .ToHashSet();
         var count = waiting?.WaitingSubjectIds.Count(subject => !owners.Contains(subject)) ?? 0;
 
-        await sites.RunAsync(site, AuditEndpoint, async notifications =>
+        await sites.RunAsync<IInAppNotificationService>(site, AuditEndpoint, async notifications =>
         {
             foreach (var owner in owners.Order())
             {

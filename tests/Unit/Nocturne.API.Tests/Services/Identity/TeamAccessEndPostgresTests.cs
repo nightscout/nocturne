@@ -153,6 +153,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
             Mock.Of<IAuthAuditService>(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
             Announcer(contexts),
+            InertTeamStaff.Sites(),
             NullLogger<SubjectDeletion>.Instance);
     }
 

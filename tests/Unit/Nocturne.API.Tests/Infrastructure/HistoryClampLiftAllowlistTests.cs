@@ -36,8 +36,8 @@ public class HistoryClampLiftAllowlistTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.SupersedeByArrivedAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.ClearedBeforeTheClampAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.CreateAsync",
-        // Deleting an account erases the notices that name it, which the clamp hides once old or archived; the
-        // statement returns only a count.
+        // Deleting an account erases the notices that name it, which the clamp hides once old or archived. The
+        // erased notices go back only to be broadcast to the person who held each.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.ScrubTenantRowsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/DecomposedTreatmentKeys.cs: DecomposedTreatmentKeys.GetSentUpstreamAsync",

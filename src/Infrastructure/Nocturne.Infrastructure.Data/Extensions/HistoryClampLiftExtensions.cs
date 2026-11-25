@@ -24,7 +24,8 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, the stamp of a
 /// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>), the stamp of what write-back
 /// is sending and sent (<see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSendingAsync"/>, <see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSentAsync"/>), and the erasure of a deleted
-/// account's notices in every tenant (<see cref="Repositories.SubjectRepository"/>). A lifted statement may also be a read
+/// account's notices in every tenant (<see cref="Repositories.SubjectRepository"/>), which returns the notices
+/// it erased only to broadcast each to the person who held it. A lifted statement may also be a read
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
 /// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),

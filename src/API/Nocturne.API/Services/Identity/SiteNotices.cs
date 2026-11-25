@@ -1,5 +1,4 @@
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -7,16 +6,17 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.Identity;
 
 /// <summary>
-/// What the team announcers share: filing a notification for a site from a scope opened for it, and
-/// keeping a failure to do so from reaching the write that has committed.
+/// What the team announcers and an account deletion share: filing or broadcasting a site's notices from a
+/// scope opened for it, and keeping a failure to do so from reaching the write that has committed.
 /// </summary>
 public sealed class SiteNotices(ITenantRepository tenants, IServiceProvider services)
 {
     /// <summary>
-    /// Runs <paramref name="work"/> with the notifications of <paramref name="tenantId"/>, in a scope opened
-    /// for that site as <paramref name="auditEndpoint"/>. Does nothing when the site is gone.
+    /// Runs <paramref name="work"/> with the <typeparamref name="TService"/> of <paramref name="tenantId"/>, in a
+    /// scope opened for that site as <paramref name="auditEndpoint"/>. Does nothing when the site is gone.
     /// </summary>
-    public async Task RunAsync(Guid tenantId, string auditEndpoint, Func<IInAppNotificationService, Task> work)
+    public async Task RunAsync<TService>(Guid tenantId, string auditEndpoint, Func<TService, Task> work)
+        where TService : notnull
     {
         if (await tenants.GetAsync(tenantId, CancellationToken.None) is not { } tenant)
             return;
@@ -25,7 +25,7 @@ public sealed class SiteNotices(ITenantRepository tenants, IServiceProvider serv
             services,
             new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
             auditEndpoint);
-        await work(scope.ServiceProvider.GetRequiredService<IInAppNotificationService>());
+        await work(scope.ServiceProvider.GetRequiredService<TService>());
     }
 
     /// <summary>

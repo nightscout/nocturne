@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Identity;
 
@@ -63,7 +64,7 @@ public sealed partial class TeamRenameAnnouncer(
     {
         if (!await members.IsMemberAsync(approver.TenantId, approver.SubjectId, time.GetUtcNow().UtcDateTime, CancellationToken.None))
             return;
-        await sites.RunAsync(approver.TenantId, AuditEndpoint, async notifications =>
+        await sites.RunAsync<IInAppNotificationService>(approver.TenantId, AuditEndpoint, async notifications =>
         {
             var user = approver.SubjectId.ToString();
             var source = teamId.ToString();
