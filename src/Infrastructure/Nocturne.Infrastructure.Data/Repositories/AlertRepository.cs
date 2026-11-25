@@ -299,6 +299,20 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        var excursion = await context.AlertExcursions.OfCondition(includeTest: true)
+            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        if (excursion?.EndedAt is null)
+            return false;
+        excursion.ClosedOwedAt = now;
+        await context.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(
         Guid excursionId, CancellationToken ct)
     {

@@ -1613,9 +1613,13 @@ sending in exactly two cases, since an alert for a condition that has ended misl
 only places the order favours not sending:
 
 - its excursion has closed, read again under the lock its close's resolution of instances also
-  takes, so a close that came first stops the opening (a close that lands while the opening is
-  being sent can still leave its alert standing);
+  takes, so a close that came first stops the opening;
 - its rule is disabled or deleted.
+
+The lock orders the instance against a close, not the sends: a close that lands while the opening
+is being sent finds only what existed before the sends. So once they return, an opening whose
+excursion has closed owes its close again and runs it once more, unless the same evaluation's
+close (step 5) runs next and so after the sends.
 
 An acknowledgement is not a cutoff: an acknowledge-all made for another alarm must not consume an
 alert nobody received. An enabled rule whose stored row cannot be read keeps its opening owed,

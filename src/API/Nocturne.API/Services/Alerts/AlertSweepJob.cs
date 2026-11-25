@@ -128,7 +128,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             {
                 await pass(sweep, ct);
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Error {Pass} for tenant {TenantId}", what, tenantId);
                 failed ??= ex;
@@ -282,7 +282,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 transition.ExcursionId, rule.Id);
             context ??= await OwedDispatchContextAsync(sweep, owed, rules, ct);
             await openedHandler.HandleOpenedAsync(
-                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], ct);
+                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], callerCloses: false, ct);
         }
     }
 

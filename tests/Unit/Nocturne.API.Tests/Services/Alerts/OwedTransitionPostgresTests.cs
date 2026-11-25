@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -79,6 +81,10 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Func<Task>? OnSend;
         public readonly Mock<IAlertAcknowledgementService> Acknowledgements = new();
         public readonly Mock<IAlertRuleRepository> Rules = new();
+        public readonly Mock<ITenantMembershipRepository> Members = new();
+        public readonly Mock<ISignalRBroadcastService> Broadcasts = new();
+        public readonly Mock<IEngineAlarmRelay> Alarms = new();
+        public readonly Mock<IInAppNotificationService> Notifications = new();
         public readonly FakeTimeProvider Time = new(Opened);
 
         public AlertRepository Repository() => new(new SuppliedContextFactory(Context));
@@ -127,13 +133,14 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton<IAlertRepository>(repository ?? Repository())
                 .AddSingleton(Rules.Object)
                 .AddSingleton(Acknowledgements.Object)
-                .AddSingleton(Mock.Of<ITenantMembershipRepository>())
-                .AddSingleton(Mock.Of<ISignalRBroadcastService>())
-                .AddSingleton(Mock.Of<IEngineAlarmRelay>())
-                .AddSingleton(Mock.Of<IInAppNotificationService>())
+                .AddSingleton(Members.Object)
+                .AddSingleton(Broadcasts.Object)
+                .AddSingleton(Alarms.Object)
+                .AddSingleton(Notifications.Object)
                 .AddSingleton(hub.Object)
                 .AddSingleton(connections)
                 .AddSingleton<HomeAssistantProvider>()
+                .AddSingleton<InAppProvider>()
                 .AddSingleton<IAlertDeliveryService, AlertDeliveryService>()
                 .AddSingleton<IExcursionOpenedHandler, ExcursionOpenedHandler>()
                 .AddSingleton<IExcursionResolutionHandler, ExcursionResolutionHandler>()
@@ -182,7 +189,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Task HandleOpenedAsync(IServiceProvider process, Guid excursion) =>
             process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
                 Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
-                Id, late: false, metBy: [], CancellationToken.None);
+                Id, late: false, metBy: [], callerCloses: false, CancellationToken.None);
 
         public Task SweepAsync(IServiceProvider process, DateTimeOffset at) =>
             new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(process, Id, at);
@@ -393,7 +400,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
         var dying = process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
             tenant.Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
-            tenant.Id, late: false, metBy: [], dies.Token);
+            tenant.Id, late: false, metBy: [], callerCloses: false, dies.Token);
         await dying.Invoking(async t => await t).Should().ThrowAsync<OperationCanceledException>();
         (await tenant.DeliveriesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("pending");
 
@@ -673,6 +680,115 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         tenant.Sends.Should().Be(0, "the close resolved the instance before the dispatch read it");
         (await tenant.InstancesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("resolved");
         (await tenant.DeliveriesAsync(excursion)).Should().BeEmpty();
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    /// <summary>
+    /// The close lands at the dispatch's broadcast, after the instance is taken and before the alarm,
+    /// the delivery rows and the notification, so it resolves, archives and clears only what existed
+    /// before them.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_close_that_lands_while_an_opening_sends_leaves_nothing_standing(bool late)
+    {
+        var tenant = await SeedAsync();
+        var member = Guid.CreateVersion7();
+        var inApp = new AlertRuleChannelSnapshot(
+            Guid.CreateVersion7(), tenant.Rule.Id, ChannelType.InApp, member.ToString(), null, 1);
+        await using (var db = tenant.Context())
+        {
+            db.AlertRuleChannels.Add(new AlertRuleChannelEntity
+            {
+                Id = inApp.Id, TenantId = tenant.Id, AlertRuleId = tenant.Rule.Id,
+                ChannelType = ChannelType.InApp, Destination = inApp.Destination, SortOrder = 1,
+            });
+            await db.SaveChangesAsync();
+        }
+        tenant.Rules
+            .Setup(r => r.GetChannelsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<AlertRuleChannelSnapshot>> { [tenant.Rule.Id] = [tenant.Channel, inApp] });
+        tenant.Members
+            .Setup(m => m.ListLivePeopleAsync(tenant.Id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new TenantMemberRecord(
+                    Id: Guid.CreateVersion7(), TenantId: tenant.Id, SubjectId: member, SubjectName: "Member",
+                    SubjectUsername: null, SubjectIsActive: true, IsSystemSubject: false, IsDemoSubject: false,
+                    IsPlatformAdmin: false, HasConfirmedEmail: true, Roles: [], DirectPermissions: ["*"],
+                    Label: null, Username: null, LimitTo24Hours: false, AccessEndsAt: null, LastUsedAt: null,
+                    CreatedFromInviteId: null, SysCreatedAt: Opened, Reasons: []),
+            ]);
+
+        var events = new ConcurrentQueue<string>();
+        tenant.Alarms
+            .Setup(a => a.RaiseAsync(It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .Callback(() => events.Enqueue("raised"))
+            .Returns(Task.CompletedTask);
+        tenant.Alarms
+            .Setup(a => a.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => events.Enqueue("cleared"))
+            .Returns(Task.CompletedTask);
+        tenant.Notifications
+            .Setup(n => n.CreateNotificationAsync(
+                member.ToString(), InAppProvider.NotificationType, It.IsAny<string>(), It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .Callback(() => events.Enqueue("notified"))
+            .ReturnsAsync(new InAppNotificationDto());
+        tenant.Notifications
+            .Setup(n => n.ArchiveBySourceAsync(
+                member.ToString(), InAppProvider.NotificationType, It.IsAny<string>(),
+                It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()))
+            .Callback(() => events.Enqueue("archived"))
+            .ReturnsAsync(true);
+
+        var excursion = await tenant.OpenAsync();
+        var process = tenant.Process();
+        var closing = true;
+        tenant.Broadcasts
+            .Setup(b => b.BroadcastAlertEventAsync("alert_dispatch", It.IsAny<object>()))
+            .Returns(async () =>
+            {
+                if (!closing) return;
+                closing = false;
+                var close = await tenant.CloseAsync(Opened.AddMinutes(3));
+                await process.GetRequiredService<IExcursionResolutionHandler>().HandleClosedAsync(close, tenant.Id, CancellationToken.None);
+            });
+
+        if (late)
+            await tenant.SweepAsync(process, AfterLease);
+        else
+            await tenant.HandleOpenedAsync(process, excursion);
+
+        events.Take(2).Should().Equal(["cleared", "raised"], "the close cleared the alarm before the dispatch raised it");
+        events.Last(e => e is "raised" or "cleared").Should().Be("cleared", "no alarm stays raised for a condition that ended");
+        events.Last(e => e is "notified" or "archived").Should().Be("archived", "no notification stays up for a condition that ended");
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("resolved");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task An_opening_whose_own_evaluation_closes_it_leaves_the_close_and_its_reason_to_that_evaluation()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        var close = await tenant.CloseAsync(Opened.AddMinutes(3));
+        var process = tenant.Process();
+
+        await process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
+            tenant.Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
+            tenant.Id, late: false, metBy: [], callerCloses: true, CancellationToken.None);
+
+        tenant.Sends.Should().Be(1);
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("triggered");
+
+        await process.GetRequiredService<IExcursionResolutionHandler>().HandleClosedAsync(close, tenant.Id, CancellationToken.None);
+
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(close.CloseReason!.Value.ToWireString());
         (await tenant.OwedAsync(excursion)).Should().Be((null, null));
     }
 

@@ -215,7 +215,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             opened
                 .Setup(h => h.HandleOpenedAsync(
                     It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<SensorContext>(), It.IsAny<Guid>(),
-                    It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .Callback(() => Interlocked.Increment(ref tenant.Openings))
                 .Returns(Task.CompletedTask);
             var enricher = new Mock<ISensorContextEnricher>();

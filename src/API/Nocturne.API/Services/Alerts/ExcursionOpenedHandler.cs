@@ -18,6 +18,12 @@ namespace Nocturne.API.Services.Alerts;
 /// changes nothing. So a re-run of an opening whose dispatch and info acknowledgement both finished
 /// sends nothing, acknowledges nothing new, and settles. The payload is built from the context as
 /// it is at the run, so a re-dispatch carries the reading it found then, with that reading's time.
+/// <para>
+/// The instance lock orders the instance against a close, not the sends: a close that lands while
+/// they run has resolved, archived and cleared only what existed before them, and the sends then
+/// raise the alarm and create the notifications. So once they return, an excursion found ended owes
+/// its close again (<see cref="IAlertRepository.OweCloseIfEndedAsync"/>), which runs here once more.
+/// </para>
 /// </remarks>
 public interface IExcursionOpenedHandler
 {
@@ -27,11 +33,12 @@ public interface IExcursionOpenedHandler
     /// none. <c>late</c> is the sweep finishing an opening its evaluation left owed. A late opening whose
     /// excursion has ended by the time its instance is taken is settled without a send. The
     /// evaluation that opened the excursion sends it even when the same evaluation's auto-resolve
-    /// has already closed it.
+    /// has already closed it; <c>callerCloses</c> is that evaluation, whose close runs once this
+    /// returns and so after the sends, and the close is then not run here as well.
     /// </remarks>
     Task HandleOpenedAsync(
         AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late,
-        IReadOnlyList<AlertMetPoint> metBy, CancellationToken ct);
+        IReadOnlyList<AlertMetPoint> metBy, bool callerCloses, CancellationToken ct);
 }
 
 internal sealed class ExcursionOpenedHandler(
@@ -39,13 +46,14 @@ internal sealed class ExcursionOpenedHandler(
     IAlertRuleRepository ruleRepository,
     IAlertDeliveryService deliveryService,
     IAlertAcknowledgementService acknowledgementService,
+    IExcursionResolutionHandler resolutionHandler,
     TimeProvider timeProvider,
     ILogger<ExcursionOpenedHandler> logger)
     : IExcursionOpenedHandler
 {
     public async Task HandleOpenedAsync(
         AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late,
-        IReadOnlyList<AlertMetPoint> metBy, CancellationToken ct)
+        IReadOnlyList<AlertMetPoint> metBy, bool callerCloses, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var instance = await repository.EnsureInstanceAsync(excursionId, now, whileOpen: late, ct);
@@ -88,6 +96,16 @@ internal sealed class ExcursionOpenedHandler(
                 await acknowledgementService.AcknowledgeExcursionAsync(
                     tenantId, excursionId, "system:auto-ack-on-trigger", AlertAcknowledgementAuthority.System,
                     broadcast: false, ct);
+            }
+
+            if (!callerCloses
+                && await repository.OweCloseIfEndedAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct))
+            {
+                logger.LogInformation(
+                    "Excursion {ExcursionId} closed while its dispatch was sending; its close runs again",
+                    excursionId);
+                await resolutionHandler.HandleClosedAsync(
+                    new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId), tenantId, ct);
             }
         }
 
