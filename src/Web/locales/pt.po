@@ -48959,9 +48959,8 @@ msgstr ""
 msgid "Nocturne can copy the history from a Nightscout site, or start with no data."
 msgstr ""
 
-#: src/lib/test-stubs/LoginForm.test-stub.svelte
-msgid "Show recovery codes"
-msgstr ""
+#~ msgid "Show recovery codes"
+#~ msgstr ""
 
 #: src/lib/components/auth/FirstRecoveryCodes.svelte
 msgid "You are signed in. Your account had no recovery codes, so we made them now."
@@ -49038,4 +49037,12 @@ msgstr ""
 
 #: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Each value must be greater than zero."
+msgstr ""
+
+#: src/lib/test-stubs/LoginForm.test-stub.svelte
+msgid "Start sign-in"
+msgstr ""
+
+#: src/lib/test-stubs/LoginForm.test-stub.svelte
+msgid "Fail sign-in"
 msgstr ""

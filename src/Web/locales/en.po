@@ -48959,9 +48959,8 @@ msgstr "Enter the address of your Nightscout site. If the site needs an API secr
 msgid "Nocturne can copy the history from a Nightscout site, or start with no data."
 msgstr "Nocturne can copy the history from a Nightscout site, or start with no data."
 
-#: src/lib/test-stubs/LoginForm.test-stub.svelte
-msgid "Show recovery codes"
-msgstr "Show recovery codes"
+#~ msgid "Show recovery codes"
+#~ msgstr "Show recovery codes"
 
 #: src/lib/components/auth/FirstRecoveryCodes.svelte
 msgid "You are signed in. Your account had no recovery codes, so we made them now."
@@ -49039,3 +49038,11 @@ msgstr "Some profile values look like mmol/L"
 #: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Each value must be greater than zero."
 msgstr "Each value must be greater than zero."
+
+#: src/lib/test-stubs/LoginForm.test-stub.svelte
+msgid "Start sign-in"
+msgstr "Start sign-in"
+
+#: src/lib/test-stubs/LoginForm.test-stub.svelte
+msgid "Fail sign-in"
+msgstr "Fail sign-in"
