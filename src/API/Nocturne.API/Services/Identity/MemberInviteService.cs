@@ -42,6 +42,9 @@ public class MemberInviteService : IMemberInviteService
     private static readonly AcceptMemberInviteResult AccessEnded =
         new(false, "access_ended", "The access this invite gives has already ended.");
 
+    private static readonly AcceptMemberInviteResult AccepterGone =
+        new(false, "not_found", "Your account no longer exists.");
+
     private readonly ITenantMembershipRepository _members;
     private readonly IMemberInviteRepository _invites;
     private readonly ISubjectRepository _subjects;
@@ -53,6 +56,7 @@ public class MemberInviteService : IMemberInviteService
     private readonly ILogger<MemberInviteService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TeamStaffAnnouncer _teamStaff;
 
     /// <param name="members">For the roles and memberships an invite names.</param>
     /// <param name="invites">The stored invites.</param>
@@ -64,6 +68,7 @@ public class MemberInviteService : IMemberInviteService
     /// <param name="timeProvider">The clock for an invite's creation, expiry and revocation.</param>
     /// <param name="logger">Logs the audit line for each invite created, accepted and revoked.</param>
     /// <param name="grantRevocation">Revokes the grants of an ended membership an accepted invite replaces.</param>
+    /// <param name="teamStaff">Recounts the team staff who wait at the site once an accepted invite makes its owner.</param>
     public MemberInviteService(
         ITenantMembershipRepository members,
         IMemberInviteRepository invites,
@@ -75,7 +80,8 @@ public class MemberInviteService : IMemberInviteService
         TimeProvider timeProvider,
         ILogger<MemberInviteService> logger,
         IAccountLinkRoute linkRoute,
-        GrantRevocationService grantRevocation)
+        GrantRevocationService grantRevocation,
+        TeamStaffAnnouncer teamStaff)
     {
         _members = members ?? throw new ArgumentNullException(nameof(members));
         _invites = invites ?? throw new ArgumentNullException(nameof(invites));
@@ -88,6 +94,7 @@ public class MemberInviteService : IMemberInviteService
         _logger = logger;
         _linkRoute = linkRoute;
         _grantRevocation = grantRevocation ?? throw new ArgumentNullException(nameof(grantRevocation));
+        _teamStaff = teamStaff;
     }
 
     /// <inheritdoc />
@@ -248,6 +255,10 @@ public class MemberInviteService : IMemberInviteService
             {
                 await unit.CommitAsync(async token =>
                 {
+                    await TenantMembershipRepository.LockOwnerChangeAsync(unit, invite.TenantId, acceptingSubjectId, token);
+                    if (await new SubjectRepository(unit, _linkRoute, _time).GetAsync(acceptingSubjectId, token) is null)
+                        throw new RefusedCommitException<AcceptMemberInviteResult>(AccepterGone);
+
                     revoked = await MembershipRemoval.ReplaceEndedAsync(
                             unit, members, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)
                         ?? throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
@@ -277,6 +288,8 @@ public class MemberInviteService : IMemberInviteService
                             claim == MemberInviteClaim.Exhausted ? Exhausted : Revoked);
 
                     await unit.Context.SaveChangesAsync(token);
+                    revoked = [.. revoked, .. await TeamReasonWrites.SyncOwnerChangeAsync(
+                        unit, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)];
                 });
             }
             catch (RefusedCommitException<AcceptMemberInviteResult> refused)
@@ -293,6 +306,7 @@ public class MemberInviteService : IMemberInviteService
             return refusal;
 
         _grantRevocation.EvictSessions(revoked);
+        await _teamStaff.RecountOwnerChangeAsync(invite.TenantId, acceptingSubjectId);
 
         var member = await _members.FindMemberAsync(invite.TenantId, acceptingSubjectId, CancellationToken.None)
             ?? throw new InvalidOperationException($"Subject {acceptingSubjectId} did not become a member of tenant {invite.TenantId}.");

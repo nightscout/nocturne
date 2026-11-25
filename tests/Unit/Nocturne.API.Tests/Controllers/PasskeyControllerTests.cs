@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
@@ -2165,7 +2166,7 @@ public class PasskeyControllerTests : IDisposable
             _requestAudit.Object,
             TimeProvider.System,
             NullLogger<MembershipRequestService>.Instance, AccountLinkRoutes.Off,
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
     }
 
     private sealed class SettableTenantAccessor : ITenantAccessor

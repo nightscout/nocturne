@@ -232,9 +232,9 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         var membership = (await members.FindMemberAsync(s.Tenant, s.Member, CancellationToken.None))!;
         var end = new DateTime(2031, 6, 30, 14, 0, 0, DateTimeKind.Utc);
 
-        (await members.SetAccessEndUnlessOwnerAsync(s.Tenant, membership.Id, end, DateTime.UtcNow, CancellationToken.None))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(factory, AccountLinkRoutes.Off, s.Tenant, membership.Id, end, DateTime.UtcNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.Changed);
-        (await members.SetAccessEndUnlessOwnerAsync(s.Tenant, membership.Id, null, DateTime.UtcNow, CancellationToken.None))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(factory, AccountLinkRoutes.Off, s.Tenant, membership.Id, null, DateTime.UtcNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.Changed);
 
         var entries = (await Read(s)).Data

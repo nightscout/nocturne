@@ -28,7 +28,7 @@ public class MigrationControllerUrlTests
     public MigrationControllerUrlTests()
     {
         _migrations
-            .Setup(m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MigrationJobInfo { Id = Guid.CreateVersion7(), Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow });
         _connectors
             .Setup(c => c.GetSecretsAsync("nightscout", It.IsAny<CancellationToken>()))
@@ -63,7 +63,7 @@ public class MigrationControllerUrlTests
         started.Result.Should().BeOfType<ChallengeResult>();
         fromConnector.Result.Should().BeOfType<ChallengeResult>();
         _migrations.Verify(
-            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CancellationToken>()),
+            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -90,8 +90,8 @@ public class MigrationControllerUrlTests
             });
         StartMigrationRequest? started = null;
         _migrations
-            .Setup(m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CancellationToken>()))
-            .Callback<StartMigrationRequest, TenantContext?, CancellationToken>((request, _, _) => started = request)
+            .Setup(m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()))
+            .Callback<StartMigrationRequest, TenantContext?, CredentialMaker?, CancellationToken>((request, _, _, _) => started = request)
             .ReturnsAsync(new MigrationJobInfo { Id = Guid.CreateVersion7(), Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow });
 
         await Controller().StartFromConnector("nightscout", CancellationToken.None);
@@ -118,7 +118,9 @@ public class MigrationControllerUrlTests
             new StartMigrationRequest { Mode = MigrationMode.Api, NightscoutUrl = url }, CancellationToken.None);
 
         ShouldBeRefused(response.Result);
-        _migrations.VerifyNoOtherCalls();
+        _migrations.Verify(
+            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Theory]
@@ -141,7 +143,7 @@ public class MigrationControllerUrlTests
 
         ShouldBeRefused(response.Result);
         _migrations.Verify(
-            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CancellationToken>()),
+            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -156,6 +158,33 @@ public class MigrationControllerUrlTests
         _migrations.Verify(m => m.StartMigrationAsync(
             It.Is<StartMigrationRequest>(r => r.NightscoutUrl == "ns.example/nightscout"),
             It.IsAny<TenantContext?>(),
+            It.IsAny<CredentialMaker?>(),
             It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task Each_start_names_the_caller_and_their_access_end_as_the_starter()
+    {
+        ConnectorUrl("https://ns.example");
+        var subjectId = Guid.CreateVersion7();
+        var tenantId = Guid.CreateVersion7();
+        var end = new DateTime(2026, 12, 31, 0, 0, 0, DateTimeKind.Utc);
+        var http = new DefaultHttpContext();
+        http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId, TenantId = tenantId };
+        var access = new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, end);
+        new RequestMembership(subjectId, tenantId, new MembershipFacts(Guid.CreateVersion7(), access, access, null)).StoreOn(http);
+        var controller = Controller(http);
+
+        await controller.StartMigration(
+            new StartMigrationRequest { Mode = MigrationMode.Api, NightscoutUrl = "https://ns.example" }, CancellationToken.None);
+        await controller.StartFromConnector("nightscout", CancellationToken.None);
+
+        _migrations.Verify(
+            m => m.StartMigrationAsync(
+                It.IsAny<StartMigrationRequest>(),
+                It.IsAny<TenantContext?>(),
+                new CredentialMaker(subjectId, end),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
     }
 }

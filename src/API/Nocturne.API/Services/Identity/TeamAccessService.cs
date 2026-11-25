@@ -13,7 +13,9 @@ namespace Nocturne.API.Services.Identity;
 /// by site, and the approval. Only an owner of the site may approve, and never wider than the link,
 /// than the roles they could grant, or than their own access. Also the other team writes that change
 /// the team reasons of its staff (<see cref="TeamReasonWrites"/>): a staff member joining, being edited,
-/// being removed or leaving, a site stopping the team's access, and the team being deleted.
+/// being removed or leaving, a site stopping the team's access, the team being deleted, and an owner of
+/// a site changing what the access gives or deciding which of the team's staff reach it. Each of those, once committed, files or takes back
+/// the notices the owners of the sites are owed (<see cref="TeamStaffAnnouncer"/>).
 /// </summary>
 /// <remarks>
 /// The approver is read from their membership of the chosen site, never from the request's tenant:
@@ -27,7 +29,8 @@ public sealed class TeamAccessService(
     ITenantRoleService roles,
     TimeProvider time,
     INocturneDbContextFactory contexts,
-    GrantRevocationService grantRevocation)
+    GrantRevocationService grantRevocation,
+    TeamStaffAnnouncer announcer)
 {
     /// <summary>
     /// The link's team and suggestion, and the caller's sites they may use it for. Null when there is
@@ -103,31 +106,66 @@ public sealed class TeamAccessService(
         if (TeamAccessRules.Refusal(link.Suggestion, site.Limited, site.Membership.AccessEndsAt, grant, now) is { } narrowing)
             return new TeamAccessApproval(null, narrowing);
 
-        return await TeamReasonWrites.ApproveAccessAsync(contexts, grantRevocation, tokenHash, caller, grant, now, ct);
+        return await AnnouncedAsync(TeamReasonWrites.ApproveAccessAsync(contexts, grantRevocation, tokenHash, caller, grant, now, ct));
     }
+
+    /// <inheritdoc cref="TeamRepository.LockAccessEditAsync"/>
+    public Task<TeamAccessEdit> EditAccessAsync(
+        Guid tenantId, Guid teamId, TeamAccessApproverCredential editor, TeamAccessTerms terms, CancellationToken ct) =>
+        AnnouncedAsync(TeamReasonWrites.EditAccessAsync(contexts, grantRevocation, tenantId, teamId, editor, terms, Now, ct));
 
     /// <inheritdoc cref="TeamReasonWrites.StopAsync"/>
     public Task<bool> StopAsync(Guid tenantId, Guid teamId, CancellationToken ct) =>
-        TeamReasonWrites.StopAsync(contexts, grantRevocation, tenantId, teamId, Now, ct);
+        AnnouncedAsync(TeamReasonWrites.StopAsync(contexts, grantRevocation, tenantId, teamId, Now, ct));
 
     /// <inheritdoc cref="TeamReasonWrites.DeleteTeamAsync"/>
     public Task<TeamDeletion> DeleteTeamAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct) =>
-        TeamReasonWrites.DeleteTeamAsync(contexts, grantRevocation, teamId, callerSubjectId, Now, ct);
+        AnnouncedAsync(TeamReasonWrites.DeleteTeamAsync(contexts, grantRevocation, teamId, callerSubjectId, Now, ct));
 
     /// <inheritdoc cref="TeamReasonWrites.RemoveStaffAsync"/>
     public Task<bool> RemoveStaffAsync(Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
-        TeamReasonWrites.RemoveStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, Now, ct);
+        AnnouncedAsync(TeamReasonWrites.RemoveStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, Now, ct));
 
     /// <inheritdoc cref="TeamRepository.LockStaffJoinAsync"/>
     public Task<TeamInviteAcceptance> JoinStaffAsync(string tokenHash, Guid subjectId, CancellationToken ct) =>
-        TeamReasonWrites.JoinStaffAsync(contexts, grantRevocation, tokenHash, subjectId, Now, ct);
+        AnnouncedAsync(TeamReasonWrites.JoinStaffAsync(contexts, grantRevocation, tokenHash, subjectId, Now, ct));
 
     /// <inheritdoc cref="TeamRepository.LockStaffUpdateAsync"/>
     public Task<TeamStaffChange> UpdateStaffAsync(
         Guid teamId, Guid callerSubjectId, Guid staffSubjectId, TeamStaffNarrowing narrowing, CancellationToken ct) =>
-        TeamReasonWrites.UpdateStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, narrowing, Now, ct);
+        AnnouncedAsync(TeamReasonWrites.UpdateStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, narrowing, Now, ct));
+
+    /// <summary>
+    /// An owner of <paramref name="tenantId"/> approves a staff member of the team there
+    /// (<see cref="TeamRepository.LockStaffDecisionAsync"/>).
+    /// </summary>
+    public Task<OwnerDecision> ApproveStaffAsync(
+        Guid tenantId, Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
+        AnnouncedAsync(TeamReasonWrites.DecideStaffAsync(
+            contexts, grantRevocation, tenantId, teamId, callerSubjectId, staffSubjectId, TeamSiteStaffStatus.Approved, Now, ct));
+
+    /// <summary>
+    /// An owner of <paramref name="tenantId"/> declines a staff member of the team there
+    /// (<see cref="TeamRepository.LockStaffDecisionAsync"/>).
+    /// </summary>
+    public Task<OwnerDecision> DeclineStaffAsync(
+        Guid tenantId, Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
+        AnnouncedAsync(TeamReasonWrites.DecideStaffAsync(
+            contexts, grantRevocation, tenantId, teamId, callerSubjectId, staffSubjectId, TeamSiteStaffStatus.Declined, Now, ct));
+
+    /// <inheritdoc cref="TeamRepository.LockStaffRuleAsync"/>
+    public Task<OwnerDecision> SetStaffRuleAsync(
+        Guid tenantId, Guid teamId, Guid callerSubjectId, bool teamManagesStaff, CancellationToken ct) =>
+        AnnouncedAsync(TeamReasonWrites.SetStaffRuleAsync(contexts, grantRevocation, tenantId, teamId, callerSubjectId, teamManagesStaff, Now, ct));
 
     private DateTime Now => time.GetUtcNow().UtcDateTime;
+
+    private async Task<T> AnnouncedAsync<T>(Task<TeamReasonWrites.Written<T>> write)
+    {
+        var written = await write;
+        await announcer.AnnounceAsync(written.Notices);
+        return written.Outcome;
+    }
 
     private static DateTime? Earliest(DateTime? a, DateTime? b) =>
         a is { } x && b is { } y ? (x < y ? x : y) : a ?? b;

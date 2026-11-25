@@ -777,7 +777,7 @@ internal static class LegacyTreatmentTables
     internal static readonly IReadOnlyList<LegacyStateSpanTable> StateSpanTables =
     [
         new(StateSpanCategory.Override,
-            s => s.LegacyId != null && EF.Functions.JsonContains(s.MetadataJson!, TreatmentsCollectionJson),
+            s => s.LegacyId != null && EF.Functions.JsonContains(s.MetadataJson!, StateSpanMetadataExtensions.TreatmentsCollectionJson),
             (s, metadata) => new Treatment
             {
                 EventType = TreatmentTypes.TemporaryOverride,
@@ -1104,9 +1104,6 @@ internal static class LegacyTreatmentTables
             return fallback;
         }
     }
-
-    private const string TreatmentsCollectionJson =
-        $$"""{"{{StateSpanMetadataExtensions.CollectionKey}}":"{{StateSpanMetadataExtensions.TreatmentsCollection}}"}""";
 
     /// <summary>
     /// Metadata key for the <c>timestamp</c> a span's treatment was uploaded with, served verbatim:

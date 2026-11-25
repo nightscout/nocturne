@@ -39,14 +39,14 @@ internal static class MembershipRemoval
     /// <summary>
     /// Stages and saves the removal on <paramref name="unit"/>, inside its commit, and returns the
     /// grants it revoked or capped for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
-    /// Nothing is staged when <see cref="ITenantMembershipRepository.RemoveMemberUnlessLastOwnerAsync"/>
+    /// Nothing is staged when <see cref="TenantMembershipRepository.RemoveMemberUnlessLastOwnerAsync"/>
     /// refuses, which it does with <see cref="OwnerGuardedChange.FromTeam"/> for a member with no
     /// direct reason. <paramref name="members"/> is a repository over <paramref name="unit"/>. The
     /// removed row records <paramref name="how"/>.
     /// </summary>
     public static async Task<(OwnerGuardedChange Outcome, IReadOnlyList<OAuthGrantRecord> Grants)> StageAsync(
         DbUnitOfWork unit,
-        ITenantMembershipRepository members,
+        TenantMembershipRepository members,
         GrantRevocationService grantRevocation,
         Guid tenantId,
         TenantMemberRecord member,
@@ -112,7 +112,7 @@ internal static class MembershipRemoval
     /// </remarks>
     public static async Task<IReadOnlyList<OAuthGrantRecord>?> ReplaceEndedAsync(
         DbUnitOfWork unit,
-        ITenantMembershipRepository members,
+        TenantMembershipRepository members,
         GrantRevocationService grantRevocation,
         Guid tenantId,
         Guid subjectId,

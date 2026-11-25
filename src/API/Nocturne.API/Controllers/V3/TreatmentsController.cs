@@ -205,8 +205,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                     treatment.Id,
                     cancellationToken
                 );
-                // A create with isValid: false replaces the stored treatment, as Nightscout's create of
-                // a stored identifier does, which leaves it deleted.
+                // A create with isValid: false is not a duplicate of the treatment its id names: it
+                // deletes it (InvalidUploads in Services/V4).
                 if (existingTreatment != null && treatment.IsValid != false)
                 {
                     return V3Deduplicated(existingTreatment.Id, existingTreatment.SrvModified);
@@ -484,9 +484,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     {
         _logger.LogDebug("V3 treatment PATCH requested for {Id}", id);
 
-        if (patchData.ValueKind == JsonValueKind.Object
-            && patchData.TryGetProperty("isValid", out var isValid)
-            && isValid.ValueKind == JsonValueKind.False)
+        if (PatchSetsInvalid(patchData))
             return IsValidImmutable();
 
         var result = await _treatmentService.PatchTreatmentAsync(
@@ -517,13 +515,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     }
 
     #region Helper Methods
-
-    /// <summary>
-    /// Nightscout's answer to an update that sets <c>isValid: false</c>: a client deletes a treatment
-    /// with DELETE, never by an edit.
-    /// </summary>
-    private ActionResult IsValidImmutable() =>
-        CreateV3ErrorResponse(400, "Field isValid cannot be modified by the client");
 
 
     private DateTimeOffset GetLastModified(List<Treatment> treatments)

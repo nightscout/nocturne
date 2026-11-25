@@ -312,7 +312,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var (subject, member, access) = await MixedAsync(site, "remove-direct-mixed", ["treatments.read"]);
         var before = (await RowsAsync(site, subject)).Count;
 
-        (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var rows = (await RowsAsync(site, subject)).Skip(before).ToList();
@@ -336,10 +336,10 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var state = await RowStateAsync(member);
         var audit = await AuditCountAsync(site);
 
-        (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.FromTeam);
-        (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.FromTeam);
         (await site.Members.ReplaceRolesAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct)).Should().BeFalse();
         (await site.Members.SetDirectPermissionsAsync(site.Tenant, member, ["glucose.read"], Now, Ct)).Should().BeFalse();
@@ -356,10 +356,10 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("roles-mixed");
         var (_, member, _) = await MixedAsync(site, "roles-mixed-member");
 
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.ViewerRole], [site.CaretakerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.ViewerRole], [site.CaretakerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
 
@@ -390,7 +390,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("end-mixed");
         var (_, member, _) = await MixedAsync(site, "end-mixed-member");
 
-        (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
 
         var record = (await site.Members.GetMemberAsync(site.Tenant, member, Ct))!;

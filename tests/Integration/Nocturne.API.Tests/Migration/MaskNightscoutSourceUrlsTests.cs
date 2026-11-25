@@ -149,7 +149,8 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             TimeProvider.System);
         var job = await service.StartMigrationAsync(
             new StartMigrationRequest { Mode = MigrationMode.Api, NightscoutUrl = ReimportUrl },
-            new TenantContext(TenantA, "mask", "mask", true, IsDemo: false));
+            new TenantContext(TenantA, "mask", "mask", true, IsDemo: false),
+            starter: null);
 
         var runs = await ReadRunsAsync();
         var reimport = runs.Single(r => r.Id == job.Id);

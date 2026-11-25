@@ -8,8 +8,15 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StateSpan
 /// </summary>
 [Table("state_spans")]
-public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped, IDuplicateFlagged, IWriterStamped, IWriteBackTracked
+public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped, IDuplicateFlagged, IWriterStamped, IWriteBackTracked, IUpstreamFingerprinted
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("upstream_fingerprint")]
+    public string? UpstreamFingerprint { get; set; }
+
+    string? IUpstreamFingerprinted.UpstreamSource => Source;
+
     /// <inheritdoc />
     [AuditIgnored]
     [Column("is_duplicate")]

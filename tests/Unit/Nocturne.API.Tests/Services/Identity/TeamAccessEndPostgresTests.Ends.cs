@@ -76,6 +76,9 @@ public partial class TeamAccessEndPostgresTests
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, staff, Ct))!.AccessEndsAt.Should().Be(extended);
         (await Members(site.Tenant).IsMemberAsync(site.Tenant, staff, Now, Ct)).Should().BeTrue();
         await RowIsTheSumAsync(site, staff);
+        (await RowsAsync(site.Tenant, staff)).Where(r => r.EventType == AuthAuditEventType.MemberJoined)
+            .Should().HaveCount(2, "the history says the member has access through the team again")
+            .And.OnlyContain(r => r.Team == team.Id);
     }
 
     [Fact]

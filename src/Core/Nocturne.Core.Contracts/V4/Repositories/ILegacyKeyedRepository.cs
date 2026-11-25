@@ -213,6 +213,18 @@ public interface ILegacyKeyedRepository<TRecord>
     Task<IReadOnlySet<string>> GetHeldLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
+    /// <summary>The ids among <paramref name="legacyIds"/> a deleted row is stored under, whoever deleted it.</summary>
+    Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Stores <paramref name="records"/> as rows already deleted, in one save: nothing reads them live,
+    /// and nothing a live write sets off (deduplication, a change broadcast) runs for them. The rows
+    /// are a system delete whatever the scope's audit actor, so a later upload of their ids writes them
+    /// again.
+    /// </summary>
+    Task StoreDeletedAsync(IReadOnlyCollection<TRecord> records, CancellationToken ct = default);
+
     /// <summary>
     /// The ids among <paramref name="legacyIds"/> held, as <see cref="GetHeldLegacyIdsAsync"/> holds
     /// them, by a record Nightscout write-back may have sent upstream: one written by a live write at
@@ -310,4 +322,15 @@ public interface ILegacyKeyedRepository<TRecord>
 
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes the live records stored under <paramref name="legacyIds"/> or with <paramref name="ids"/>,
+    /// which their client sent again with <c>isValid: false</c>, and broadcasts their delete. A copy
+    /// another source reported, which deduplication linked to a deleted record, is promoted in its place
+    /// rather than deleted: that source still reports the record.
+    /// </summary>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> InvalidateAsync(
+        IReadOnlyCollection<string> legacyIds, IReadOnlyCollection<Guid> ids, WriteOrigin origin,
+        CancellationToken ct = default);
 }

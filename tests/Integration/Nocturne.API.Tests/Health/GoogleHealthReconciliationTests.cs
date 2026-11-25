@@ -365,7 +365,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         try
         {
             Assert.Null(await coordinator.AcquireAsync(tenantId, default, TimeSpan.Zero));
-            Assert.False(await coordinator.QueueAsync(tenantId, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.False(await coordinator.QueueAsync(tenantId, 4, default).WaitAsync(Eventually.DefaultPatience));
             await using var unrelated = await coordinator.AcquireAsync(otherTenantId, default, TimeSpan.Zero);
             Assert.NotNull(unrelated);
             using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
@@ -434,14 +434,14 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var subject = Guid.NewGuid();
         await using var reader = await coordinator.WatchReadsAsync(tenantId, default);
         var request = await coordinator.RequestDisconnectAsync(tenantId, subject, default);
-        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(Eventually.DefaultPatience);
         var restarted = Coordinator(provider);
         Assert.Equal(subject, (await restarted.DisconnectRequestAsync(tenantId, default))!.SubjectId);
         Assert.Equal(request, await restarted.RequestDisconnectAsync(tenantId, Guid.NewGuid(), default));
         await using (var late = await restarted.WatchReadsAsync(tenantId, default))
             Assert.True(late.Token.IsCancellationRequested);
         await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
-        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(Eventually.DefaultPatience));
         Assert.Equal(tenantId, requests.Current);
         await restarted.FinishDisconnectAsync(tenantId, Guid.NewGuid());
         Assert.NotNull(await restarted.DisconnectRequestAsync(tenantId, default));

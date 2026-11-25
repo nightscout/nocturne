@@ -10,9 +10,6 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 /// <summary>A coordinator whose work in flight lives in memory, one entry per tenant.</summary>
 internal static class InMemoryGoogleHealthCoordinator
 {
-    /// <summary>A bound a passing run never reaches; only a hang trips it.</summary>
-    public static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(60);
-
     public static GoogleHealthCoordinator Create(TimeProvider? clock = null, ITenantService? tenants = null) =>
         Build(clock, tenants, null);
 

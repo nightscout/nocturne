@@ -1,12 +1,16 @@
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
 public class ConnectorSyncBudgetTests
 {
+    // A waiter that must stay blocked is watched this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan StaysBlockedFor = TimeSpan.FromMilliseconds(200);
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
@@ -25,13 +29,13 @@ public class ConnectorSyncBudgetTests
         var held = await budget.AcquireAsync(CancellationToken.None);
         var waiting = budget.AcquireAsync(CancellationToken.None).AsTask();
 
-        (await Task.WhenAny(waiting, Task.Delay(TimeSpan.FromMilliseconds(200))))
+        (await Task.WhenAny(waiting, Task.Delay(StaysBlockedFor)))
             .Should().NotBe(waiting, "the budget is exhausted while the first lease is held");
         budget.InFlight.Should().Be(1);
 
         held.Dispose();
 
-        (await Task.WhenAny(waiting, Task.Delay(TimeSpan.FromSeconds(5))))
+        (await Task.WhenAny(waiting, Task.Delay(Eventually.DefaultPatience)))
             .Should().Be(waiting, "returning the lease hands the slot to the waiter");
         budget.InFlight.Should().Be(1);
 

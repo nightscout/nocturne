@@ -286,10 +286,31 @@ public record SensorContext
     /// The host reads it; it is not sent to the engine.
     /// </summary>
     public ReadingSource? LatestSource { get; init; }
+
+    /// <summary>
+    /// What a live pass saw of the stored pump-mode spans, or null when it read none. The host
+    /// reports a clock anomaly from it; it is not sent to the engine.
+    /// </summary>
+    public SpansRead? PumpModesRead { get; init; }
+
+    /// <summary>
+    /// What a live pass saw of the overrides a device status wrote, or null when it read none. Only
+    /// those date an override by a device's clock; any other is a plan. The host reports a clock
+    /// anomaly from it; it is not sent to the engine.
+    /// </summary>
+    public SpansRead? OverridesRead { get; init; }
 }
 
 /// <summary>The device and data source a reading was written under.</summary>
 public sealed record ReadingSource(string? DataSource, string? Device);
+
+/// <summary>What a live pass saw of the stored spans of one context fact.</summary>
+/// <param name="At">The instant the pass chose the spans to send at, which the host judges them against.</param>
+/// <param name="NewestStart">
+/// The latest start among the spans not ended before <paramref name="At"/>, open or closed, sent or not, or null
+/// when there is none.
+/// </param>
+public sealed record SpansRead(DateTime At, DateTime? NewestStart);
 
 /// <summary>A tracker definition's active instance, as the <c>tracker_age</c> leaf reads it.</summary>
 /// <param name="ReferenceAt">Start time for a Duration tracker, scheduled time for an Event tracker.</param>

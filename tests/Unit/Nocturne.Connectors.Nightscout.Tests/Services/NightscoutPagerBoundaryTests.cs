@@ -14,6 +14,7 @@ using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -273,6 +274,8 @@ public class NightscoutPagerBoundaryTests
 
     private sealed class Harness(Source source)
     {
+        private readonly NightscoutLookups _lookups = new();
+
         public List<string> Published { get; } = [];
 
         public Mock<ILogger<NightscoutConnectorService>> Logger { get; } = new();
@@ -346,6 +349,8 @@ public class NightscoutPagerBoundaryTests
                 Logger.Object,
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
+                _lookups,
+                MockTenantAccessor.Create().Object,
                 publisher.Object);
         }
 

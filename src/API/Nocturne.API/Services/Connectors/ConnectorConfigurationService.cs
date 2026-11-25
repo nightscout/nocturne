@@ -649,6 +649,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             var propertySchema = GeneratePropertySchema(
                 property.PropertyType, connectorPropAttr, envPrefix, defaultValue);
 
+            if (DelegatedConfigurationGuard.ChoosesDestination(property))
+            {
+                propertySchema[ConnectorAddresses.SchemaMarker] = true;
+            }
+
             properties[propName] = propertySchema;
 
             if (connectorPropAttr.Required)

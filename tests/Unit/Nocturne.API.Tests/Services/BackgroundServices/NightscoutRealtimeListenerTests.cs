@@ -378,11 +378,11 @@ public class NightscoutRealtimeListenerTests
         };
 
         var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
-        using var accepted = await silent.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        using var accepted = await silent.AcceptTcpClientAsync().WaitAsync(Eventually.DefaultPatience);
         Assert.False(start.IsCompleted);
 
         clock.Advance(TimeSpan.FromHours(1));
-        await start.WaitAsync(TimeSpan.FromSeconds(10));
+        await start.WaitAsync(Eventually.DefaultPatience);
 
         logger.Entries.Should().Contain(e => e.Message.Contains("Failed to connect Socket.IO"));
         Assert.Empty(SocketClients(sut));
@@ -414,12 +414,12 @@ public class NightscoutRealtimeListenerTests
         };
 
         var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
-        using var accepted = await site.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        using var accepted = await site.AcceptTcpClientAsync().WaitAsync(Eventually.DefaultPatience);
         using var reader = new StreamReader(accepted.GetStream());
-        var requestLine = await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        var requestLine = await reader.ReadLineAsync().WaitAsync(Eventually.DefaultPatience);
 
         clock.Advance(TimeSpan.FromHours(1));
-        await start.WaitAsync(TimeSpan.FromSeconds(10));
+        await start.WaitAsync(Eventually.DefaultPatience);
 
         requestLine.Should().StartWith("GET /AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io/");
         requestLine.Should().Contain("&token=reader-abc123&key=a+b%2Bc ",

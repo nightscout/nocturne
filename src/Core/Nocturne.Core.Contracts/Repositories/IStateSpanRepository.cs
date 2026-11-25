@@ -118,6 +118,20 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Writes each of <paramref name="stateSpans"/> onto the live row of a treatment's category that
+    /// <paramref name="source"/> stores under its original id, as the upstream record it was built from
+    /// now stands, and settles the spans around it by the succession rule, in one transaction. A row
+    /// that a superseder had ended stays ended at the first span that follows it while that span starts
+    /// before the row's own end, if any; otherwise the row takes the span's own end. A span no such row
+    /// is stored under writes nothing.
+    /// </summary>
+    /// <returns>The original ids of the rows written.</returns>
+    Task<IReadOnlyList<string>> RewriteFromUpstreamAsync(
+        string source,
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The spans of <paramref name="category"/> still open or overlapping <paramref name="from"/>
     /// through <paramref name="through"/>, and the first <paramref name="following"/> starting after
     /// <paramref name="through"/> from each of <paramref name="followingSources"/>, in one query. A null
@@ -213,6 +227,17 @@ public interface IStateSpanRepository
         StateSpanCategory category,
         string? state,
         DateTime at,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Every live span of <paramref name="category"/> overlapping [<paramref name="from"/>, <paramref name="to"/>],
+    /// oldest start first, including the copies deduplication hides behind another record's primary. Not capped.
+    /// A null <paramref name="to"/> sets no later bound.
+    /// </summary>
+    Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime? to,
         CancellationToken cancellationToken = default);
 
     /// <summary>

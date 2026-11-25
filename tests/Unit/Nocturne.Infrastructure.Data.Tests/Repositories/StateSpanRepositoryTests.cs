@@ -1166,6 +1166,354 @@ public class StateSpanRepositoryTests : IDisposable
     private Task<Dictionary<string, StateSpanEntity>> LiveRowsAsync() =>
         _context.StateSpans.AsNoTracking().ToDictionaryAsync(s => s.LegacyId!);
 
+    private Task<IReadOnlyList<string>> RewriteAsync(IReadOnlyList<StateSpan> spans) =>
+        _repository.RewriteFromUpstreamAsync("connector", spans);
+
+    // --- Rewrite from upstream ---
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_AShortenedSpanNothingEnded_TakesItsNewEnd()
+    {
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 12),
+            Span(StateSpanCategory.Override, "Custom", 14, "ov-b"),
+        ]);
+        var after = (await LiveRowsAsync())["ov-b"];
+
+        var written = await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 10)]);
+
+        written.Should().Equal("ov-a");
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["ov-a"].SupersededById.Should().BeNull();
+        rows["ov-b"].UpdatedAt.Should().Be(after.UpdatedAt, "a span the rewrite does not move is not written");
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanShortenedBeforeTheSpanThatEndedIt_TakesItsOwnEnd()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 9)]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(9));
+        rows["ov-a"].SupersededById.Should().BeNull("an uploaded end is the span's own, which a later delete of ov-b must not move");
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(null)]
+    public async Task RewriteFromUpstreamAsync_ASpanWhoseEndLiesAfterTheSpanThatEndedIt_StaysEndedThere(int? endHour)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour)]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["ov-a"].SupersededById.Should().Be(ended);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanMadeOpenBehindALaterSpan_EndsAtIt()
+    {
+        await _repository.BulkUpsertAsync(
+        [
+            Span(StateSpanCategory.TemporaryTarget, "Active", 8, "tt-a", endHour: 9),
+            Span(StateSpanCategory.TemporaryTarget, "Active", 10, "tt-b"),
+        ]);
+
+        await RewriteAsync([Span(StateSpanCategory.TemporaryTarget, "Active", 8, "tt-a")]);
+
+        var rows = await LiveRowsAsync();
+        rows["tt-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["tt-a"].SupersededById.Should().Be(rows["tt-b"].Id);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanThatMovesItsStart_ReSettlesTheSpanItEnded()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 12, "ov-c"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 11, "ov-b")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+        rows["ov-b"].StartTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(12), "it still ends where ov-c starts");
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-c"].Id);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanNoLiveRowHolds_WritesNothing()
+    {
+        await _repository.BulkUpsertAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 9)]);
+        await _repository.DeleteStateSpanAsync("ov-a");
+
+        var written = await RewriteAsync(
+            [Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 10), Span(StateSpanCategory.Override, "Custom", 8, "ov-none")]);
+
+        written.Should().BeEmpty();
+        (await LiveRowsAsync()).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(9, 11)]
+    [InlineData(7, 9)]
+    public async Task RewriteFromUpstreamAsync_TwoNeighboursWhoseStartsBothMove_EndTheEarlierAtTheLatersNewStart(
+        int earlierStart, int laterStart)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync(
+        [
+            Span(StateSpanCategory.Override, "Custom", earlierStart, "ov-a"),
+            Span(StateSpanCategory.Override, "Custom", laterStart, "ov-b"),
+        ]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(laterStart));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanWhoseCategoryChanges_ReleasesTheSpanItEnded()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.TemporaryTarget, "Active", 10, "ov-b")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-b"].Category.Should().Be(nameof(StateSpanCategory.TemporaryTarget));
+        rows["ov-a"].EndTimestamp.Should().BeNull("no override follows it any more");
+        rows["ov-a"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanAnotherSourceStores_IsNotWritten()
+    {
+        var theirs = Span(StateSpanCategory.Override, "Custom", 8, "ov-a");
+        theirs.Source = "uploader";
+        await _repository.UpsertStateSpanAsync(theirs);
+        var before = (await LiveRowsAsync())["ov-a"];
+
+        var written = await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 9)]);
+
+        written.Should().BeEmpty();
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.EndTimestamp.Should().BeNull();
+        row.UpdatedAt.Should().Be(before.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_AStartMovedEarlierPastASpan_EndsAtThatSpan()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 7, "ov-b")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(8));
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-a"].Id);
+        rows["ov-a"].EndTimestamp.Should().BeNull("the span that ended it now starts before it");
+        rows["ov-a"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_AStartMovedLaterPastTheSpanThatEndedIt_EndsThatSpanInstead()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 11, "ov-a")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().BeNull();
+        rows["ov-a"].SupersededById.Should().BeNull();
+        rows["ov-b"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["ov-b"].SupersededById.Should().Be(rows["ov-a"].Id);
+    }
+
+    [Fact]
+    public async Task RewriteFromUpstreamAsync_ASpanWhoseSupersederIsDeleted_EndsAtItsFirstLiveSuccessor()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 12, "ov-c"));
+        var deleted = (await LiveRowsAsync())["ov-b"].Id;
+        await _repository.DeleteStateSpanAsync("ov-b");
+        await _context.StateSpans.Where(s => s.LegacyId == "ov-a").ExecuteUpdateAsync(u => u
+            .SetProperty(s => s.EndTimestamp, BatchDay.AddHours(10))
+            .SetProperty(s => s.SupersededById, deleted));
+
+        await RewriteAsync([Span(StateSpanCategory.Override, "Custom", 8, "ov-a")]);
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(12));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-c"].Id);
+    }
+
+    // --- An uploaded end against a superseded end ---
+
+    /// <summary>A crawl writes an upload by the upsert, a reconcile by the rewrite; both must leave one row.</summary>
+    private async Task UploadAsync(bool republish, params StateSpan[] spans)
+    {
+        if (republish)
+            await RewriteAsync(spans);
+        else
+            await _repository.BulkUpsertAsync(spans);
+    }
+
+    [Theory]
+    [InlineData(false, 11)]
+    [InlineData(true, 11)]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    public async Task AnUploadedEndPastTheSpanThatEndedIt_KeepsTheEndThatSpanGave_ByEitherWriter(bool republish, int? endHour)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+
+        await UploadAsync(republish, Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10), "an upload does not stretch a span over the span that ended it");
+        rows["ov-a"].SupersededById.Should().Be(ended);
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false, 9)]
+    [InlineData(true, 9)]
+    [InlineData(false, 10)]
+    [InlineData(true, 10)]
+    public async Task AnUploadedEndAtOrBeforeTheSpanThatEndedIt_IsTheUploadsOwn_ByEitherWriter(bool republish, int endHour)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await UploadAsync(republish, Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(endHour));
+        rows["ov-a"].SupersededById.Should().BeNull("an uploaded end is the span's own, which a later delete of ov-b must not move");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnUploadPastTheSpanThatEndedIt_WhenThatSpanMoves_EndsAtItsNewStart_ByEitherWriter(bool republish)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await UploadAsync(republish,
+            Span(StateSpanCategory.Override, "Custom", 12, "ov-b"),
+            Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 13));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(12));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+    }
+
+    [Fact]
+    public async Task UpdateStateSpansAsync_AFoldThatEndsASupersededSpanLater_KeepsTheEndItsSupersederGave()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+        var extended = Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 11);
+        extended.Id = "ov-a";
+
+        await _repository.UpdateStateSpansAsync([extended]);
+
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        row.SupersededById.Should().Be(ended);
+    }
+
+    [Fact]
+    public async Task UpdateStateSpansAsync_AFoldThatLeavesASupersededEndAlone_KeepsItsSuperseder()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+        var ended = (await LiveRowsAsync())["ov-b"].Id;
+        var moved = Span(StateSpanCategory.Override, "Custom", 9, "ov-a", endHour: 10);
+        moved.Id = "ov-a";
+
+        await _repository.UpdateStateSpansAsync([moved]);
+
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.StartTimestamp.Should().Be(BatchDay.AddHours(9));
+        row.EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        row.SupersededById.Should().Be(ended, "the fold handed back the end it read, which a delete of ov-b must still reopen");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UpdateStateSpansAsync_AFoldThatMovesTheSpanThatEndedAnOpenedSpan_EndsItAtTheNewStart(bool supersederFirst)
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 8, "tt-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 10, "tt-b"));
+        var opened = Span(StateSpanCategory.TemporaryTarget, "Custom", 8, "tt-a");
+        opened.Id = "tt-a";
+        var moved = Span(StateSpanCategory.TemporaryTarget, "Custom", 11, "tt-b");
+        moved.Id = "tt-b";
+
+        var folded = await _repository.UpdateStateSpansAsync(supersederFirst ? [moved, opened] : [opened, moved]);
+
+        var rows = await LiveRowsAsync();
+        rows["tt-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11), "the fold saves tt-b at 11 before tt-a is ended");
+        rows["tt-a"].SupersededById.Should().Be(rows["tt-b"].Id);
+        folded.Single(s => s!.OriginalId == "tt-a")!.EndTimestamp.Should().Be(BatchDay.AddHours(11));
+    }
+
+    [Fact]
+    public async Task UpdateStateSpansAsync_AFoldThatAlsoMovesTheOpenedSpansStart_DoesNotEndItAtItself()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 8, "tt-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.TemporaryTarget, "Custom", 10, "tt-b"));
+        var moved = Span(StateSpanCategory.TemporaryTarget, "Custom", 11, "tt-b");
+        moved.Id = "tt-b";
+        var opened = Span(StateSpanCategory.TemporaryTarget, "Custom", 7, "tt-a");
+        opened.Id = "tt-a";
+
+        await _repository.UpdateStateSpansAsync([moved, opened]);
+
+        var rows = await LiveRowsAsync();
+        rows["tt-a"].StartTimestamp.Should().Be(BatchDay.AddHours(7));
+        rows["tt-a"].EndTimestamp.Should().Be(BatchDay.AddHours(11));
+        rows["tt-a"].SupersededById.Should().Be(rows["tt-b"].Id, "the stored tt-a at 8 is the span itself, not its successor");
+    }
+
+    [Fact]
+    public async Task UpdateStateSpanAsync_AnEditedEndPastTheSpanThatEndedIt_IsTheEditors()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 8, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await _repository.UpdateStateSpanAsync("ov-a", Span(StateSpanCategory.Override, "Custom", 8, "ov-a", endHour: 11));
+
+        var row = (await LiveRowsAsync())["ov-a"];
+        row.EndTimestamp.Should().Be(BatchDay.AddHours(11), "a user's edit wins over supersession");
+        row.SupersededById.Should().BeNull();
+    }
+
     /// <summary>
     /// Ending each inserted open span at its stored successor reads the store once for the batch, so a
     /// batch of fifty reads what a batch of one does.

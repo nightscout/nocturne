@@ -99,4 +99,16 @@ public interface ITeamRepository
     /// with the team's name as it is now.
     /// </summary>
     Task<IReadOnlyList<TeamAccessApprover>> ListAccessApproversAsync(Guid teamId, CancellationToken ct);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> with the team's current name and the staff whose rows on its access to
+    /// <paramref name="tenantId"/> wait for an owner, and whose place and access have not ended at
+    /// <paramref name="now"/>, read under a lock on the team at the site that every other call for the pair
+    /// waits for until <paramref name="work"/> has finished. Null when the team has no access to the site.
+    /// </summary>
+    Task WithStaffWaitingLockedAsync(
+        Guid tenantId, Guid teamId, DateTime now, Func<TeamStaffWaiting?, Task> work, CancellationToken ct);
+
+    /// <summary>Each team and site where <paramref name="subjectId"/> has a <c>team_site_staff</c> row, across every site.</summary>
+    Task<IReadOnlyList<TeamSiteKey>> ListStaffSitesOfSubjectAsync(Guid subjectId, CancellationToken ct);
 }

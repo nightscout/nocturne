@@ -27,7 +27,7 @@ public class DecomposedTreatmentKeysTests : IDisposable
 
     public DecomposedTreatmentKeysTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, "site").SeedTenant(_otherTenant, "other");
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, SqliteNpgsqlJson.Translate).SeedTenant(_otherTenant, "other");
     }
 
     public void Dispose() => _db.Dispose();
@@ -204,7 +204,8 @@ public class DecomposedTreatmentKeysTests : IDisposable
         await StoreAsync(_otherTenant, Bolus("id", Connector));
         var keys = Keys(_tenant);
 
-        (await keys.GetFingerprintsFromSourceAsync(Connector, ["id"]))["id"].Should().BeEquivalentTo(["old", null]);
+        (await keys.GetFingerprintsFromSourceAsync(Connector, ["id"]))["id"].Select(f => f.Fingerprint)
+            .Should().BeEquivalentTo(["old", null]);
 
         await keys.StampUnfingerprintedAsync(Connector, new Dictionary<string, string> { ["id"] = "new" });
 

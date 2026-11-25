@@ -14,6 +14,16 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, TimeProvider time) : IDecomposedTreatmentKeys
 {
+    /// <summary>
+    /// The categories of the spans a treatment writes in place of a table row. A profile switch is a
+    /// profile activation.
+    /// </summary>
+    public static IReadOnlyList<string> TreatmentSpanCategories { get; } =
+    [
+        nameof(StateSpanCategory.Override),
+        nameof(StateSpanCategory.TemporaryTarget),
+    ];
+
     /// <inheritdoc />
     public async Task<HeldLegacyIds> GetHeldLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
@@ -38,6 +48,25 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
             .Select(s => s.LegacyId!)
             .ToListAsync(ct));
         return deleted;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Matches the jsonb boolean, so a string <c>"false"</c> is not taken for it.</remarks>
+    public async Task<IReadOnlyList<string>> GetLiveInvalidLegacyIdsAsync(CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await db.Database.SqlQuery<string>($"""
+            SELECT legacy_id AS "Value" FROM temp_basals
+            WHERE deleted_at IS NULL AND legacy_id IS NOT NULL AND (additional_properties -> 'isValid') = 'false'::jsonb
+            UNION
+            SELECT legacy_id FROM profile_activations
+            WHERE deleted_at IS NULL AND legacy_id IS NOT NULL AND (additional_properties -> 'isValid') = 'false'::jsonb
+            UNION
+            SELECT original_id FROM state_spans
+            WHERE deleted_at IS NULL AND original_id IS NOT NULL
+              AND category = ANY({TreatmentSpanCategories.ToArray()})
+              AND (metadata -> 'isValid') = 'false'::jsonb
+            """).OrderBy(id => id).ToListAsync(ct);
     }
 
     /// <inheritdoc />
@@ -151,35 +180,47 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<string, IReadOnlyList<string?>>> GetFingerprintsFromSourceAsync(
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
         string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
         string[] ids = [.. legacyIds];
-        var stamped = new Dictionary<string, List<string?>>(StringComparer.Ordinal);
+        var stored = new List<(string LegacyId, StoredFingerprint Fingerprint)>();
         foreach (var table in DecomposedTreatmentTables.All)
         {
-            foreach (var (legacyId, fingerprint) in await table.FingerprintsFromSourceAsync(db, source, ids, ct))
-            {
-                if (!stamped.TryGetValue(legacyId, out var rowFingerprints))
-                    stamped[legacyId] = rowFingerprints = [];
-                rowFingerprints.Add(fingerprint);
-            }
+            stored.AddRange((await table.FingerprintsFromSourceAsync(db, source, ids, ct))
+                .Select(row => (row.LegacyId, new StoredFingerprint(row.Fingerprint, OnSpan: false))));
         }
 
-        return stamped.ToDictionary(p => p.Key, IReadOnlyList<string?> (p) => p.Value, StringComparer.Ordinal);
+        stored.AddRange((await TreatmentSpansFromSource(db, source, ids).AsNoTracking()
+                .Select(s => new { LegacyId = s.LegacyId!, s.UpstreamFingerprint })
+                .ToListAsync(ct))
+            .Select(span => (span.LegacyId, new StoredFingerprint(span.UpstreamFingerprint, OnSpan: true))));
+
+        return stored.GroupBy(r => r.LegacyId, StringComparer.Ordinal).ToDictionary(
+            g => g.Key, IReadOnlyList<StoredFingerprint> (g) => [.. g.Select(r => r.Fingerprint)], StringComparer.Ordinal);
     }
 
     /// <inheritdoc />
     public async Task StampUnfingerprintedAsync(
         string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct = default)
     {
+        if (fingerprints.Count == 0)
+            return;
+
+        string[] ids = [.. fingerprints.Keys];
+        string[] values = [.. ids.Select(id => fingerprints[id])];
         await using var db = await contexts.CreateAsync(ct);
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await db.PlanForEachArrayAsync(ids.Length, ct);
             foreach (var table in DecomposedTreatmentTables.All)
-                await table.StampUnfingerprintedAsync(db, source, fingerprints, ct);
+                await table.StampUnfingerprintedAsync(db, source, ids, values, ct);
+            await TreatmentSpansFromSource(db, source, ids)
+                .Where(s => s.UpstreamFingerprint == null)
+                .ExecuteUpdateAsync(u => u.SetProperty(
+                    s => s.UpstreamFingerprint, s => values[Array.IndexOf(ids, s.LegacyId!)]), ct);
             await transaction.CommitAsync(ct);
         });
     }
@@ -318,6 +359,15 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts, 
 
         var blocks = RecreationBlocks<string>.From(rows);
         return new HeldLegacyIds(blocks.Held, blocks.DeletedByUser);
+    }
+
+    /// <summary>The live spans of <see cref="TreatmentSpanCategories"/> <paramref name="source"/> stored under <paramref name="legacyIds"/>.</summary>
+    private static IQueryable<StateSpanEntity> TreatmentSpansFromSource(
+        NocturneDbContext db, string source, string[] legacyIds)
+    {
+        string[] categories = [.. TreatmentSpanCategories];
+        return db.StateSpans.Where(s => s.Source == source
+            && s.LegacyId != null && legacyIds.Contains(s.LegacyId) && categories.Contains(s.Category));
     }
 
     private static IQueryable<StateSpanEntity> StateSpansFromSource(

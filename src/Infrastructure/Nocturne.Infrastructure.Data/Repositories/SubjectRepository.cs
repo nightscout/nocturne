@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
@@ -8,6 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
+using NoticeSubjectPointer = Nocturne.Core.Models.NoticeSubjectPointer;
+using NotificationSubjectNaming = Nocturne.Core.Models.NotificationSubjectNaming;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -546,10 +549,10 @@ public class SubjectRepository : ISubjectRepository
             db.Subjects.Remove(entity);
             await db.SaveChangesAsync(ct);
 
-            await ScrubTenantRowsAsync(db, subjectId, ct);
+            var removed = await ScrubTenantRowsAsync(db, subjectId, ct);
 
             await tx.CommitAsync(ct);
-            return new SubjectChange.Changed();
+            return new SubjectChange.Changed { RemovedNotices = removed };
         });
     }
 
@@ -557,17 +560,24 @@ public class SubjectRepository : ISubjectRepository
     /// Clears the subject's client address and user agent from the audit trail of every tenant, not
     /// only those it still belongs to: a member removed earlier, or a platform admin who never
     /// joined, has rows there too. Removes the subject's membership requests there as well, which
-    /// carry its own message and would otherwise sit in an owner's list naming no one.
+    /// carry its own message and would otherwise sit in an owner's list naming no one, the notices
+    /// <see cref="NotificationSubjectNaming"/> declares as naming the subject, and the notices the
+    /// subject held, which nobody can read once it is gone. Returns the removed notices someone else
+    /// held. The subject's own are left out: its sessions end with the account.
     /// </summary>
     /// <remarks>
-    /// Both tables force row level security, so each tenant's statements run with its id set local
-    /// to the transaction, which the commit discards. The tenant query filter reads the context's
-    /// tenant, so it is lifted and the tenant named in the predicate. Runs after the subject delete,
-    /// so the last tenant set governs no other statement.
+    /// Every table the loop writes forces row level security, so each tenant's statements run with its
+    /// id set local to the transaction, which the commit discards. The tenant query filter reads the
+    /// context's tenant, so it is lifted and the tenant named in the predicate. The notice delete also
+    /// lifts the member history clamp, which would otherwise hide the older notices from it. Runs after
+    /// the subject delete, so the last tenant set governs no other statement. Only PostgreSQL translates
+    /// the metadata match (<see cref="NamedInMetadata"/>); the other providers serve tests.
     /// </remarks>
-    private static async Task ScrubTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    private static async Task<List<RemovedNotice>> ScrubTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         var tenantIds = await db.Tenants.AsNoTracking().Select(t => t.Id).ToListAsync(ct);
+        var subjectKey = subjectId.ToString();
+        var removed = new List<RemovedNotice>();
         foreach (var tenantId in tenantIds)
         {
             if (db.Database.IsNpgsql())
@@ -586,12 +596,61 @@ public class SubjectRepository : ISubjectRepository
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(a => a.IpAddress, (string?)null)
                     .SetProperty(a => a.UserAgent, (string?)null), ct);
-            await db.MembershipRequests
+
+            var requests = db.MembershipRequests
                 .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
-                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId)
-                .ExecuteDeleteAsync(ct);
+                .Where(r => r.TenantId == tenantId && r.SubjectId == subjectId);
+            var requestIds = (await requests.Select(r => r.Id).ToListAsync(ct)).Select(id => id.ToString()).ToList();
+            var tenantNotices = db.InAppNotifications
+                .IgnoreQueryFilters([NocturneDbContext.TenantFilterKey])
+                .Where(n => n.TenantId == tenantId);
+            var named = tenantNotices
+                .Where(n => n.UserId == subjectKey
+                    || (n.SourceId != null
+                        && ((NotificationSubjectNaming.PointingAtRequests.Contains(n.Type) && requestIds.Contains(n.SourceId))
+                            || (NotificationSubjectNaming.PointingAtSubject.Contains(n.Type) && n.SourceId == subjectKey))));
+            var othersHeld = await db.WriteWithHistoryClampLiftedAsync(
+                async token =>
+                {
+                    var held = await RemoveNoticesAsync(named, subjectKey, token);
+                    if (db.Database.IsNpgsql())
+                        held.AddRange(await RemoveNoticesAsync(NamedInMetadata(tenantNotices, subjectId), subjectKey, token));
+                    return held;
+                },
+                ct);
+            removed.AddRange(othersHeld.Select(n => new RemovedNotice(tenantId, n.UserId, InAppNotificationRepository.ToDto(n))));
+            await requests.ExecuteDeleteAsync(ct);
         }
+
+        return removed;
     }
+
+    /// <summary>
+    /// Deletes <paramref name="notices"/> by the ids read, so every notice deleted is reported, and
+    /// returns those someone other than <paramref name="subjectKey"/> held.
+    /// </summary>
+    private static async Task<List<InAppNotificationEntity>> RemoveNoticesAsync(
+        IQueryable<InAppNotificationEntity> notices, string subjectKey, CancellationToken ct)
+    {
+        var read = await notices.AsNoTracking().ToListAsync(ct);
+        var ids = read.Select(n => n.Id).ToList();
+        await notices.Where(n => ids.Contains(n.Id)).ExecuteDeleteAsync(ct);
+        return read.Where(n => n.UserId != subjectKey).ToList();
+    }
+
+    /// <summary>The <see cref="NoticeSubjectPointer.MetadataSubject"/> notices whose metadata names <paramref name="subjectId"/>.</summary>
+    private static IQueryable<InAppNotificationEntity> NamedInMetadata(
+        IQueryable<InAppNotificationEntity> notices, Guid subjectId)
+    {
+        var member = MetadataProbe(NotificationSubjectNaming.MemberSubjectIdKey, subjectId);
+        var adder = MetadataProbe(NotificationSubjectNaming.AddedBySubjectIdKey, subjectId);
+        return notices.Where(n => NotificationSubjectNaming.PointingAtMetadata.Contains(n.Type)
+            && n.MetadataJson != null
+            && (EF.Functions.JsonContains(n.MetadataJson, member) || EF.Functions.JsonContains(n.MetadataJson, adder)));
+    }
+
+    private static string MetadataProbe(string key, Guid subjectId) =>
+        JsonSerializer.Serialize(new Dictionary<string, string> { [key] = subjectId.ToString() });
 
     /// <inheritdoc/>
     public virtual async Task<bool?> IsDemoSubjectAsync(Guid subjectId, CancellationToken ct)
@@ -864,6 +923,10 @@ public class SubjectRepository : ISubjectRepository
         {
             db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            // The membership it adds names the holder, so the holder's row comes before the setup and
+            // membership locks (MembershipLock): a deletion of the holder either finishes first, and the
+            // retry finds no holder, or waits for this commit.
+            await db.LockSubjectRowSharedAsync(holderId, ct);
 
             var tenantId = await db.Tenants.AsNoTracking()
                 .Where(t => t.Slug == tenantSlug).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
@@ -1081,6 +1144,7 @@ public class SubjectRepository : ISubjectRepository
         yield return db.AlertInvites.IgnoreQueryFilters().Where(i => i.TenantId == tenantId && (i.CreatedBy == subjectId || i.UsedBy == subjectId)).Select(i => i.Id);
         yield return db.AlertExcursionReceipts.IgnoreQueryFilters().Where(r => r.TenantId == tenantId && r.ActorKind == AlertReceiptActorKind.Member && r.ActorId == subjectId).Select(r => r.Id);
         yield return db.TeamTenantAccess.Where(a => a.TenantId == tenantId && a.ApprovedBySubjectId == subjectId).Select(a => a.Id);
+        yield return db.TeamSiteDeclines.Where(d => d.TeamTenantAccess!.TenantId == tenantId && d.SubjectId == subjectId).Select(d => d.Id);
     }
 
     /// <inheritdoc/>

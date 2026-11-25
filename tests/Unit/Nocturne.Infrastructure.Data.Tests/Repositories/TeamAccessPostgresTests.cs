@@ -445,7 +445,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, a, b);
         await held.RollbackAsync();
 
-        var outcomes = await Task.WhenAll(a, b).WaitAsync(TimeSpan.FromSeconds(30));
+        var outcomes = await Task.WhenAll(a, b).WaitAsync(Eventually.DefaultPatience);
         outcomes.Select(o => o.Refusal).Should().BeEquivalentTo(new TeamAccessRefusal?[] { null, TeamAccessRefusal.UsedUp });
         (await AccessCountAsync(team)).Should().Be(1);
         (await StoredLinkAsync(linkId)).UseCount.Should().Be(1);
@@ -471,7 +471,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, approval);
         await held.CommitAsync();
 
-        (await approval.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().Be(TeamAccessRefusal.RoleAdministrative);
+        (await approval.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().Be(TeamAccessRefusal.RoleAdministrative);
         (await AccessCountAsync(team)).Should().Be(0);
     }
 
@@ -502,7 +502,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, editing);
         await held.CommitAsync();
 
-        (await editing.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(new TenantRoleUpdate(RoleChangeOutcome.HeldByTeam, null));
+        (await editing.WaitAsync(Eventually.DefaultPatience)).Should().Be(new TenantRoleUpdate(RoleChangeOutcome.HeldByTeam, null));
         (await Members().GetRoleAsync(site.Id, role, default))!.Permissions.Should().Equal(Scope.GlucoseRead);
     }
 
@@ -619,7 +619,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, approval);
         await held.CommitAsync();
 
-        (await approval.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().Be(TeamAccessRefusal.NotOwner);
+        (await approval.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().Be(TeamAccessRefusal.NotOwner);
         (await AccessCountAsync(team)).Should().Be(0);
         (await StoredLinkAsync(linkId)).UseCount.Should().Be(0);
         (await AuditOfAsync(team)).Should().NotContain(r => r.EventType == AuthAuditEventType.TeamAccessGiven);
@@ -751,7 +751,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, deletion);
         await held.CommitAsync();
 
-        (await deletion.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(TeamDeletion.Deleted);
+        (await deletion.WaitAsync(Eventually.DefaultPatience)).Should().Be(TeamDeletion.Deleted);
         (await AuditOfAsync(team)).Where(r => r.EventType == AuthAuditEventType.TeamAccessStopped).Select(r => r.TenantId)
             .Should().Equal(b.Id);
     }
@@ -925,8 +925,8 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, roleDeletion, accountDeletion);
         await held.RollbackAsync();
 
-        (await roleDeletion.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(RoleChangeOutcome.Changed);
-        (await accountDeletion.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeOfType<SubjectChange.Changed>();
+        (await roleDeletion.WaitAsync(Eventually.DefaultPatience)).Should().Be(RoleChangeOutcome.Changed);
+        (await accountDeletion.WaitAsync(Eventually.DefaultPatience)).Should().BeOfType<SubjectChange.Changed>();
         (await AccessCountAsync(team)).Should().Be(0);
     }
 }

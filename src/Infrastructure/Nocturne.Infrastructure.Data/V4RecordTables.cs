@@ -762,7 +762,7 @@ internal sealed class DeduplicatedTable<T>(
             db,
             e => new RecordInfo(
                 criteria(e), e.DeletedAt != null, spanEnd?.Invoke(e) ?? default, e.LegacyId,
-                (e as ISyncDedupable)?.SyncIdentifier),
+                (e as ISyncDedupable)?.SyncIdentifier, (e as IUpstreamFingerprinted)?.UpstreamFingerprint),
             ids, ct);
 
     public override Task<int> DeriveFlagsAsync(NocturneDbContext ctx, Guid[] ids, CancellationToken ct) =>

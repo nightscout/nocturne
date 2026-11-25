@@ -16,6 +16,12 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// nothing rather than everything the access holds. A ceiling that shares nothing with the access's roles
 /// gives no reason either: a membership that reaches nothing would still list the staff member as having
 /// access. A team reason never gives the owner role: an access holds data roles only.
+/// <para>
+/// An owner of the site is never staff there, so a subject whose direct reason holds the owner role and is
+/// in force holds no team reason at the site. Their access stands on the direct reason alone, and stepping
+/// down or losing the owner role leaves them what the team's rows give. A direct reason that has lapsed is
+/// no owner.
+/// </para>
 /// </remarks>
 internal static class TeamReasons
 {
@@ -24,12 +30,16 @@ internal static class TeamReasons
 
     /// <summary>
     /// What the team reasons of <paramref name="subjectId"/> on <paramref name="tenantId"/> give when they
-    /// agree with the team's rows, keyed by access id, ends that have passed included. Reads the rows of
-    /// that site only, on a context pinned to it or to none.
+    /// agree with the team's rows, keyed by access id, ends that have passed included; none for an owner of
+    /// the site at <paramref name="now"/>. Reads the rows of that site only, on a context pinned to it or to
+    /// none.
     /// </summary>
     public static async Task<IReadOnlyDictionary<Guid, MembershipGrant>> DesiredAsync(
-        NocturneDbContext db, Guid tenantId, Guid subjectId, CancellationToken ct)
+        NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct)
     {
+        if (await OwnsAsync(db, tenantId, subjectId, now, ct))
+            return new Dictionary<Guid, MembershipGrant>();
+
         var rows = await db.TeamSiteStaff.AsNoTracking()
             .Where(s => s.Status == TeamSiteStaffStatus.Approved
                 && s.TeamTenantAccess!.TenantId == tenantId
@@ -63,6 +73,25 @@ internal static class TeamReasons
 
         return desired;
     }
+
+    /// <summary>
+    /// Whether the subject's direct reason on the site holds the owner role and is in force at
+    /// <paramref name="now"/>, as <see cref="MembershipReasons"/> brings it into line with the row before a
+    /// change: a member who holds no team reason has their row for a direct reason, since a row with no
+    /// reason is adopted and a lone direct reason that differs from the row is re-synced from it.
+    /// </summary>
+    private static Task<bool> OwnsAsync(NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct) =>
+        db.TenantMembers.AsNoTracking().AnyAsync(m =>
+            m.TenantId == tenantId
+            && m.SubjectId == subjectId
+            && (m.Reasons.Any(r => r.Kind == MembershipReasonKind.Team)
+                ? m.Reasons.Any(r =>
+                    r.Kind == MembershipReasonKind.Direct
+                    && (r.AccessEndsAt == null || r.AccessEndsAt > now)
+                    && r.ReasonRoles.Any(rr => rr.TenantRole.Slug == RoleSeeds.Owner))
+                : (m.AccessEndsAt == null || m.AccessEndsAt > now)
+                    && m.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner)),
+            ct);
 
     /// <summary>
     /// What a team access holding <paramref name="roles"/> gives a staff member whose ceiling is

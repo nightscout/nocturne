@@ -181,9 +181,9 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         (await directory.GetByTenantAsync(seeded.Tenant, CancellationToken.None))
             .Should().ContainSingle("the link is kept for the settings list, so a later end restores it");
 
-        (await new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off).SetAccessEndUnlessOwnerAsync(
-            seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id, Now.UtcDateTime.AddDays(7), clock.GetUtcNow().UtcDateTime,
-            CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(
+            seeded.Contexts, AccountLinkRoutes.Off, seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id,
+            Now.UtcDateTime.AddDays(7), clock.GetUtcNow().UtcDateTime, CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
         (await directory.GetCandidatesAsync("discord", platformUser, CancellationToken.None))
             .Select(l => l.Label).Should().BeEquivalentTo(["ending", "staying"]);
     }
@@ -258,7 +258,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MemberInviteService>.Instance,
             AccountLinkRoutes.Off,
-            Revocation());
+            Revocation(), InertTeamStaff.Announcer());
 
         var result = await service.AcceptInviteAsync(token, state.Seeded.Guest, tenant);
 
@@ -299,7 +299,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MembershipRequestService>.Instance,
             AccountLinkRoutes.Off,
-            Revocation());
+            Revocation(), InertTeamStaff.Announcer());
 
         var result = await service.ApproveRequestAsync(
             requestId, tenant, [state.Seeded.CaretakerRole], Guid.NewGuid(), [Scope.FullAccess], accessEndsAt: null);
@@ -324,7 +324,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private static GuestSessionCacheService Sessions() => new(new MemoryCache(new MemoryCacheOptions()));
 
@@ -601,7 +601,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             new FakeTimeProvider(Now),
             NullLogger<MemberInviteService>.Instance,
             AccountLinkRoutes.Off,
-            new GrantRevocationService(sessions));
+            new GrantRevocationService(sessions), InertTeamStaff.Announcer());
 
     private async Task<(string Token, Guid Link)> InviteAndLinkOfEndedMemberAsync(
         Seeded seeded, Guid dataOwner, GuestSessionCacheService sessions, bool claimLastUse)

@@ -244,8 +244,8 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
             });
         await staged.Task;
 
-        var stepDown = Task.Run(() => members.ReplaceRolesUnlessLastOwnerAsync(
-            seeded.Tenant, steppingDownId, [ownerRole], [caretakerRole], DateTime.UtcNow, CancellationToken.None));
+        var stepDown = Task.Run(() => OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(
+            factory, AccountLinkRoutes.Off, seeded.Tenant, steppingDownId, [ownerRole], [caretakerRole], DateTime.UtcNow, CancellationToken.None));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, stepDown);
         commit.SetResult();
 
@@ -525,11 +525,11 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
     {
         var ending = await SeedEndingMemberAsync("grant", EndNow.AddMinutes(-1));
         var tenant = ending.Seeded.Tenant;
-        var members = new TenantMembershipRepository(new Factory(Context, tenant), AccountLinkRoutes.Off);
+        var contexts = new Factory(Context, tenant);
 
         (await AccessReadFindsAsync("FindLiveDirectGrant", ending, EndNow)).Should().BeFalse();
 
-        (await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, EndNow.AddDays(7), EndNow, CancellationToken.None))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, ending.MemberId, EndNow.AddDays(7), EndNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.Changed);
 
         (await AccessReadFindsAsync("FindLiveDirectGrant", ending, EndNow)).Should().BeTrue("nothing was revoked when the date passed");
@@ -540,21 +540,22 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
     {
         var ending = await SeedEndingMemberAsync("owner", EndNow.AddDays(7));
         var tenant = ending.Seeded.Tenant;
-        var members = new TenantMembershipRepository(new Factory(Context, tenant), AccountLinkRoutes.Off);
+        var contexts = new Factory(Context, tenant);
+        var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         var ownerMembership = (await members.FindMemberAsync(tenant, ending.Seeded.Owner, CancellationToken.None))!;
         var ownerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
 
-        (await members.SetAccessEndUnlessOwnerAsync(tenant, ownerMembership.Id, EndNow.AddDays(1), EndNow, CancellationToken.None))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, ownerMembership.Id, EndNow.AddDays(1), EndNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.OwnerAccessEnds);
-        (await members.ReplaceRolesUnlessLastOwnerAsync(tenant, ending.MemberId, [], [ownerRole], EndNow, CancellationToken.None))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, ending.MemberId, [], [ownerRole], EndNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.OwnerAccessEnds);
 
         (await members.FindMemberAsync(tenant, ending.Seeded.Owner, CancellationToken.None))!.AccessEndsAt.Should().BeNull();
         (await members.GetMemberAsync(tenant, ending.MemberId, CancellationToken.None))!.IsOwner.Should().BeFalse();
 
-        (await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, null, EndNow, CancellationToken.None))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, ending.MemberId, null, EndNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.Changed);
-        (await members.ReplaceRolesUnlessLastOwnerAsync(tenant, ending.MemberId, [], [ownerRole], EndNow, CancellationToken.None))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, ending.MemberId, [], [ownerRole], EndNow, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.Changed, "the date was cleared first");
     }
 
@@ -580,17 +581,19 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
     {
         var ending = await SeedEndingMemberAsync("audit", accessEndsAt: null);
         var tenant = ending.Seeded.Tenant;
-        var members = new TenantMembershipRepository(new Factory(Context, tenant), AccountLinkRoutes.Off);
+        var contexts = new Factory(Context, tenant);
         var first = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc);
         var second = new DateTime(2026, 12, 15, 0, 0, 0, DateTimeKind.Utc);
+        Task SetEndAsync(DateTime? end) =>
+            OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, ending.MemberId, end, EndNow, CancellationToken.None);
 
         (await AccessEndAuditAsync(tenant, ending.Guest)).Should().BeEmpty("the membership was created with no end");
 
-        await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, first, EndNow, CancellationToken.None);
-        await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, first, EndNow, CancellationToken.None);
-        await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, second, EndNow, CancellationToken.None);
-        await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, null, EndNow, CancellationToken.None);
-        await members.SetAccessEndUnlessOwnerAsync(tenant, ending.MemberId, null, EndNow, CancellationToken.None);
+        await SetEndAsync(first);
+        await SetEndAsync(first);
+        await SetEndAsync(second);
+        await SetEndAsync(null);
+        await SetEndAsync(null);
 
         (await AccessEndAuditAsync(tenant, ending.Guest)).Should().Equal(
             "tenant 2026-12-01T00:00:00.0000000Z",
@@ -639,12 +642,13 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
     public async Task AccessEnd_AnAdministratorWhoseAccessHasEndedDoesNotKeepTheSiteOutOfRecoveryMode()
     {
         var (tenant, administratorMember) = await SeedStuckOwnerWithAnAdministratorAsync("recover", EndNow.AddSeconds(-1));
-        var members = new TenantMembershipRepository(new Factory(Context, tenant), AccountLinkRoutes.Off);
+        var contexts = new Factory(Context, tenant);
+        var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
 
         (await members.ReadSetupGateAsync(tenant, EndNow, CancellationToken.None))
             .Should().Be(new SetupGate(HasCredentials: true, RecoveryMode: true), "the ended administrator cannot sign in");
 
-        await members.SetAccessEndUnlessOwnerAsync(tenant, administratorMember, EndNow.AddDays(1), EndNow, CancellationToken.None);
+        await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(contexts, AccountLinkRoutes.Off, tenant, administratorMember, EndNow.AddDays(1), EndNow, CancellationToken.None);
 
         (await members.ReadSetupGateAsync(tenant, EndNow, CancellationToken.None))
             .Should().Be(new SetupGate(HasCredentials: true, RecoveryMode: false), "the administrator can sign in again");

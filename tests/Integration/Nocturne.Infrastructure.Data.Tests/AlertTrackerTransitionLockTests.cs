@@ -22,6 +22,9 @@ namespace Nocturne.Infrastructure.Data.Tests;
 [Collection("RLS completeness")]
 public class AlertTrackerTransitionLockTests
 {
+    // A lock on another rule must not wait on a held one; this is how long it has, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
     private readonly RlsCompletenessFixture _fx;
 
     public AlertTrackerTransitionLockTests(RlsCompletenessFixture fx) => _fx = fx;
@@ -49,7 +52,7 @@ public class AlertTrackerTransitionLockTests
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var contender = secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
@@ -60,8 +63,8 @@ public class AlertTrackerTransitionLockTests
         contender.IsCompleted.Should().BeFalse("the first transaction holds the rule's lock");
 
         release.SetResult();
-        await holder.WaitAsync(TimeSpan.FromSeconds(30));
-        (await contender.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be("active",
+        await holder.WaitAsync(Eventually.DefaultPatience);
+        (await contender.WaitAsync(Eventually.DefaultPatience)).Should().Be("active",
             "the lock is granted after the holder's commit, so the contender reads what it wrote");
     }
 
@@ -88,13 +91,13 @@ public class AlertTrackerTransitionLockTests
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         await secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
             await tx.LockRuleAsync(ruleB, ct);
             return true;
-        }).WaitAsync(TimeSpan.FromSeconds(10));
+        }).WaitAsync(MustNotWaitLongerThan);
 
         release.SetResult();
         await holder;

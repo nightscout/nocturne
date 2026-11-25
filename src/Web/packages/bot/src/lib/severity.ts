@@ -59,3 +59,14 @@ export function withAlertAccent<T>(severity: unknown, run: () => T): T {
 export function currentAlertAccent(): AlertAccent | undefined {
   return scope.getStore();
 }
+
+/**
+ * Card titles per severity. Every platform gets this, including the ones with
+ * no colour to carry (Telegram, WhatsApp, e-mail); on Discord and Slack it sits
+ * alongside the coloured bar that `../adapters/accented-discord.ts` applies.
+ */
+export const SEVERITY_TITLES: Record<AlertRuleSeverity, string> = {
+  [AlertRuleSeverity.Critical]: "CRITICAL",
+  [AlertRuleSeverity.Warning]: "Warning",
+  [AlertRuleSeverity.Info]: "Info",
+};

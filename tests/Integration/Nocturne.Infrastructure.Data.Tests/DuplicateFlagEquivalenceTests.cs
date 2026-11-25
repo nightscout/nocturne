@@ -31,6 +31,11 @@ namespace Nocturne.Infrastructure.Data.Tests;
 public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Database database)
     : IClassFixture<DuplicateFlagEquivalenceTests.Database>
 {
+    // A writer that must stay blocked is watched this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan StaysBlockedFor = TimeSpan.FromSeconds(1);
+    // A write that must not wait on a held lock has this long to finish; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
     public sealed class Database : IAsyncLifetime
     {
         public string AppConnectionString { get; private set; } = string.Empty;
@@ -254,10 +259,10 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         var pause = new PauseBeforeFlagWrite();
         var planned = Task.Run(() => SetPrimariesAsync(Context(tenant, pause), [new(copy.Id, true)]));
-        await pause.Reached.WaitAsync(TimeSpan.FromSeconds(30));
+        await pause.Reached.WaitAsync(Eventually.DefaultPatience);
 
         var demoting = Task.Run(() => SetPrimariesAsync(Context(tenant), [new(copy.Id, false), new(primary.Id, true)]));
-        (await Task.WhenAny(demoting, Task.Delay(TimeSpan.FromSeconds(1)))).Should().NotBe(demoting,
+        (await Task.WhenAny(demoting, Task.Delay(StaysBlockedFor))).Should().NotBe(demoting,
             "the first writer holds the copy's link until it commits");
 
         pause.Release();
@@ -289,7 +294,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
 
         await transaction.CommitAsync();
-        (await merge.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
+        (await merge.WaitAsync(Eventually.DefaultPatience)).Should().Be(1);
 
         (await GroupsWithTwoPrimariesAsync(tenant)).Should().BeEmpty();
         (await MismatchesAsync(tenant)).Should().BeEmpty();
@@ -323,12 +328,12 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         var rowWrite = merge.Database.ExecuteSqlAsync(
             $"UPDATE carb_intakes SET is_duplicate = is_duplicate WHERE id = {later.Primary}");
-        (await Task.WhenAny(rowWrite, Task.Delay(TimeSpan.FromSeconds(10)))).Should().Be(rowWrite,
+        (await Task.WhenAny(rowWrite, Task.Delay(MustNotWaitLongerThan))).Should().Be(rowWrite,
             "the waiting delete holds none of the rows yet");
         await rowWrite;
         await transaction.CommitAsync();
 
-        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(later.Copy);
+        (await delete.WaitAsync(Eventually.DefaultPatience)).Promoted.Should().Equal(later.Copy);
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
 
@@ -366,7 +371,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         await transaction.CommitAsync();
 
-        (await repick.WaitAsync(TimeSpan.FromSeconds(30))).Should().Equal(next.Id);
+        (await repick.WaitAsync(Eventually.DefaultPatience)).Should().Equal(next.Id);
         (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
             .Should().Equal(next.Id.ToString());
         (await MismatchesAsync(tenant)).Should().BeEmpty();
@@ -401,7 +406,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         await transaction.CommitAsync();
 
-        (await restore.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(copy.Id);
+        (await restore.WaitAsync(Eventually.DefaultPatience)).Promoted.Should().Equal(copy.Id);
         (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
             .Should().Equal(copy.Id.ToString());
         (await MismatchesAsync(tenant)).Should().BeEmpty();
@@ -456,7 +461,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         });
         await Task.WhenAny(promote, PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, promote));
         commit.SetResult();
-        await Task.WhenAll(delete, promote).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(delete, promote).WaitAsync(Eventually.DefaultPatience);
 
         (await QueryAsync(tenant, """
             SELECT lr.record_id::text FROM linked_records lr JOIN sensor_glucose g ON g.id = lr.record_id

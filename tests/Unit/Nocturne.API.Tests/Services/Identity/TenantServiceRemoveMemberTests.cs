@@ -63,7 +63,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
+        Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>
     private async Task<Guid> SeedMemberAsync(

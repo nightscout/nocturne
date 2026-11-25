@@ -87,6 +87,35 @@ public class DeduplicatedTableListTests : IDisposable
         info.Should().ContainKey(id).WhoseValue.IsDeleted.Should().BeTrue();
     }
 
+    [Theory]
+    [MemberData(nameof(DeduplicatedRecordTypes))]
+    public async Task TheRecordInfoOfEveryTypeReadsTheUpstreamFingerprintWhereTheTypeCarriesOne(RecordType recordType)
+    {
+        var id = await AddAsync(recordType, deleted: false, fingerprint: "stamped");
+
+        await using var context = _db.CreateContext();
+        var info = await LinkedRecordTypes.LoadRecordInfoAsync(context, recordType, [id], default);
+
+        info[id].UpstreamFingerprint.Should().Be(
+            recordType is RecordType.SensorGlucose ? null : "stamped");
+    }
+
+    [Theory]
+    [InlineData("a", "a", true)]
+    [InlineData("a", "b", false)]
+    [InlineData("a", null, false)]
+    [InlineData(null, "a", false)]
+    [InlineData(null, null, false)]
+    public void ARecordIsWrittenAgainAsOneWithTheSameUpstreamFingerprintAndNoOther(
+        string? held, string? incoming, bool writtenAgain)
+    {
+        var criteria = new MatchCriteria();
+        var heldInfo = new DuplicateMatching.RecordInfo(criteria, IsDeleted: true, LegacyId: "x", UpstreamFingerprint: held);
+        var incomingInfo = new DuplicateMatching.RecordInfo(criteria, IsDeleted: false, LegacyId: "y", UpstreamFingerprint: incoming);
+
+        heldInfo.IsWrittenAgainAs(incomingInfo).Should().Be(writtenAgain);
+    }
+
     [Fact]
     public async Task AStateSpansRecordInfoCarriesHowItEnded()
     {
@@ -157,7 +186,7 @@ public class DeduplicatedTableListTests : IDisposable
         _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
     };
 
-    private async Task<Guid> AddAsync(RecordType recordType, bool deleted, bool duplicate = false)
+    private async Task<Guid> AddAsync(RecordType recordType, bool deleted, bool duplicate = false, string? fingerprint = null)
     {
         var id = Guid.CreateVersion7();
         DateTime? deletedAt = deleted ? At : null;
@@ -179,6 +208,8 @@ public class DeduplicatedTableListTests : IDisposable
             _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
         };
         ((ITenantScoped)entity).TenantId = TenantId;
+        if (entity is IUpstreamFingerprinted stamped)
+            stamped.UpstreamFingerprint = fingerprint;
 
         await using var context = _db.CreateContext();
         context.Add(entity);

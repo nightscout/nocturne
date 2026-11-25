@@ -80,19 +80,27 @@ internal static class DuplicateMatching
 
     /// <summary>
     /// A record's match criteria paired with its soft-deleted status, for a state span its
-    /// <see cref="SpanEnd"/>, and the ids its source keys it by, keyed by record id when returned from
+    /// <see cref="SpanEnd"/>, the ids its source keys it by, and the <see cref="UpstreamFingerprint"/>
+    /// of the document it was written from, keyed by record id when returned from
     /// <see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>.
     /// </summary>
     internal sealed record RecordInfo(
-        MatchCriteria Criteria, bool IsDeleted, SpanEnd Span = default, string? LegacyId = null, string? SyncIdentifier = null)
+        MatchCriteria Criteria, bool IsDeleted, SpanEnd Span = default, string? LegacyId = null,
+        string? SyncIdentifier = null, string? UpstreamFingerprint = null)
     {
         /// <summary>
         /// Whether <paramref name="other"/> is this record written again: the two share a legacy id or a
-        /// sync identifier.
+        /// sync identifier, or both carry the same upstream fingerprint. A connector publish stamps the
+        /// fingerprint, and it hashes what the document says (its time, amount and type among them) but
+        /// not its id, so a rewrite under a fresh id has the same one. A record with none (a table that
+        /// carries no fingerprint, or a row written through the v1 API or created through v4) is never
+        /// written again by that route.
         /// </summary>
         internal bool IsWrittenAgainAs(RecordInfo other) =>
             (LegacyId is not null && string.Equals(LegacyId, other.LegacyId, StringComparison.Ordinal))
-            || (SyncIdentifier is not null && string.Equals(SyncIdentifier, other.SyncIdentifier, StringComparison.Ordinal));
+            || (SyncIdentifier is not null && string.Equals(SyncIdentifier, other.SyncIdentifier, StringComparison.Ordinal))
+            || (UpstreamFingerprint is not null
+                && string.Equals(UpstreamFingerprint, other.UpstreamFingerprint, StringComparison.Ordinal));
     }
 
     /// <summary>

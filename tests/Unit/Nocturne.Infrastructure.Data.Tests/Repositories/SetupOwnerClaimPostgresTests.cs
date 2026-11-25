@@ -24,8 +24,6 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     : IClassFixture<SetupOwnerClaimPostgresTests.Database>
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
-    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
-
     public sealed class Database : IAsyncLifetime
     {
         public string AppConnectionString { get; private set; } = string.Empty;
@@ -114,7 +112,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, stored);
         await held.CommitAsync();
 
-        (await stored.WaitAsync(Wait)).Should().BeNull();
+        (await stored.WaitAsync(Eventually.DefaultPatience)).Should().BeNull();
         (await CredentialsAsync(site.Owner)).Should().Be(0);
         (await RecordAsync(site.Tenant)).Should().BeNull();
     }
@@ -132,7 +130,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, stored);
         await held.RollbackAsync();
 
-        (await stored.WaitAsync(Wait)).Should().NotBeNull();
+        (await stored.WaitAsync(Eventually.DefaultPatience)).Should().NotBeNull();
         (await CredentialsAsync(site.Owner)).Should().Be(1);
         (await RecordAsync(site.Tenant)).Should().BeNull();
     }
@@ -159,10 +157,72 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, adoption);
         await held.CommitAsync();
 
-        (await adoption.WaitAsync(Wait)).Should().BeFalse();
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().BeFalse();
         (await members.FindMemberAsync(site.Tenant, holder, Ct)).Should().BeNull();
         (await members.FindMemberAsync(site.Tenant, site.Owner, Ct)).Should().NotBeNull();
         (await seedingSubjects.GetAsync(site.Owner, Ct)).Should().NotBeNull("a refused adoption keeps the owner-step subject");
+    }
+
+    /// <remarks>
+    /// The holder manages a team of their own, so a deletion holds the holder's row <c>FOR UPDATE</c>
+    /// while it waits at the team's manager lock. An adoption ahead holds the holder's row and waits at
+    /// the holder's membership lock; the deletion then waits at the row and is refused once the holder
+    /// owns the site. A deletion ahead deletes the holder while the adoption waits at the row, and the
+    /// adoption's retry finds no holder to adopt.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_adoption_and_the_holders_account_deletion_at_once_either_adopt_or_refuse_cleanly(bool adoptFirst)
+    {
+        var site = await SiteAsync($"adopt-delete-{adoptFirst}");
+        var members = new TenantMembershipRepository(site.Seeding, AccountLinkRoutes.Off);
+        await members.SeedRolesAsync(site.Tenant, Ct);
+        var ownerRole = (await members.FindRoleIdBySlugAsync(site.Tenant, RoleSeeds.Owner, Ct))!.Value;
+        (await members.AddMemberAsync(
+            new NewTenantMember(site.Tenant, site.Owner, [ownerRole]) { How = MembershipJoinHow.Setup, By = null }, Ct))
+            .Should().BeTrue();
+        var seedingSubjects = new SubjectRepository(site.Seeding, AccountLinkRoutes.Off);
+        var holder = await seedingSubjects.CreateAsync(new NewSubject("Holder"), Ct);
+        var identity = await seedingSubjects.AddOidcIdentityAsync(
+            new NewSubjectOidcIdentity(holder, site.Provider, $"ext-{Guid.NewGuid():N}", Issuer(site.Provider), null, DateTime.UtcNow), Ct);
+        var team = (await new TeamRepository(site.Seeding).CreateAsync(holder, "Clinic", Ct)).Id;
+
+        await using var holding = Context(database.AppConnectionString, Guid.Empty);
+        await using var held = await holding.Database.BeginTransactionAsync();
+        Task<bool> adoption;
+        Task<SubjectChange> deletion;
+        if (adoptFirst)
+        {
+            await holding.LockMembershipAsync(site.Tenant, holder, Ct);
+            adoption = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).AdoptForSetupAsync(site.Owner, holder, identity, site.Slug, Ct);
+            await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, adoption);
+            deletion = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).DeleteAsync(holder, Ct);
+        }
+        else
+        {
+            await holding.LockTeamManagersAsync(team, Ct);
+            deletion = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).DeleteAsync(holder, Ct);
+            await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, deletion);
+            adoption = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).AdoptForSetupAsync(site.Owner, holder, identity, site.Slug, Ct);
+        }
+
+        await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, adoption, deletion);
+        await held.RollbackAsync();
+
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().Be(adoptFirst);
+        var deleted = await deletion.WaitAsync(Eventually.DefaultPatience);
+        if (adoptFirst)
+        {
+            deleted.Should().BeOfType<SubjectChange.LastOwnerOf>();
+            (await members.FindMemberAsync(site.Tenant, holder, Ct)).Should().NotBeNull();
+        }
+        else
+        {
+            deleted.Should().BeOfType<SubjectChange.Changed>();
+            (await seedingSubjects.GetAsync(holder, Ct)).Should().BeNull();
+            (await members.FindMemberAsync(site.Tenant, site.Owner, Ct)).Should().NotBeNull("a refused adoption keeps the owner-step subject");
+        }
     }
 
     [Fact]

@@ -147,7 +147,7 @@ public class OAuthGrantService : IOAuthGrantService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default) =>
-        _grants.RecordUseAsync(grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), ct);
+        _grants.RecordUseAsync(grantId, _time.GetUtcNow().UtcDateTime, new GrantPresentation(ipAddress, userAgent), ct);
 
     /// <inheritdoc />
     public async Task<OAuthGrantInfo?> UpdateGrantAsync(
@@ -185,7 +185,7 @@ public class OAuthGrantService : IOAuthGrantService
         if (validatedScopes is not null && grant.GrantType == OAuthGrantTypes.Guest)
         {
             var violation = bounds.GivenToOthers is null
-                ? new GrantCeilingViolation(MemberAccessFromTeam.Code, MemberAccessFromTeam.CallerDetail)
+                ? new GrantCeilingViolation(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail)
                 : Scope.ValidateDelegation(validatedScopes, bounds.GivenToOthers);
             if (violation is not null)
                 throw new GrantCeilingViolationException(violation);

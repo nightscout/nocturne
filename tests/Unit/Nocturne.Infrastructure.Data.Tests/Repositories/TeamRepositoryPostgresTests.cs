@@ -258,7 +258,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         await UntilWaitingAsync(2, leaveA, leaveB);
         await held.RollbackAsync();
 
-        var outcomes = await Task.WhenAll(leaveA, leaveB).WaitAsync(TimeSpan.FromSeconds(30));
+        var outcomes = await Task.WhenAll(leaveA, leaveB).WaitAsync(Eventually.DefaultPatience);
         outcomes.Should().BeEquivalentTo([ManagerGuardedChange.Changed, ManagerGuardedChange.LastManager]);
         var left = outcomes[0] == ManagerGuardedChange.Changed ? b : a;
         (await Teams().GetAsync(team, left, Now, default))!.Managers.Select(m => m.SubjectId).Should().Equal(left);
@@ -406,7 +406,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         await UntilWaitingAsync(1, create);
         await held.CommitAsync();
 
-        (await create.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeNull("the check runs after the removal commits");
+        (await create.WaitAsync(Eventually.DefaultPatience)).Should().BeNull("the check runs after the removal commits");
         await using var db = Context();
         (await db.TeamInvites.AnyAsync(i => i.TeamId == team && i.CreatedBySubjectId == r)).Should().BeFalse();
     }

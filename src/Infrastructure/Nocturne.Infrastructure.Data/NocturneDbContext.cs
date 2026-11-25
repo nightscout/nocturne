@@ -301,6 +301,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TeamSiteStaffEntity> TeamSiteStaff { get; set; } = null!;
 
+    public DbSet<TeamSiteDeclineEntity> TeamSiteDeclines { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
@@ -999,7 +1001,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     {
         if (entry.State is EntityState.Deleted or EntityState.Detached
             || entry.Entity is not IUpstreamFingerprinted { LegacyId: { } legacyId } row
-            || !UpstreamFingerprintScope.TryGet(row.DataSource, legacyId, out var fingerprint)
+            || !UpstreamFingerprintScope.TryGet(row.UpstreamSource, legacyId, out var fingerprint)
             || row.UpstreamFingerprint == fingerprint)
             return;
 

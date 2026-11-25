@@ -87,6 +87,34 @@ describe("SidebarNotifications", () => {
     expect(server.executed).toEqual([]);
   });
 
+  it.each(["team.staff_waiting", "team.staff_joined"])(
+    "marks a %s notice read when its link is followed, and runs no server action",
+    async (type) => {
+      render(Harness, {
+        notifications: [
+          {
+            id: "ts1",
+            type,
+            urgency: NotificationUrgency.Info,
+            title: type === "team.staff_waiting" ? "team_staff_waiting" : "team_staff_joined",
+            createdAt: new Date().toISOString(),
+            metadata: { team: "Ward 4", teamId: "0199a1b2-0000-7000-8000-0000000000bb", count: 2 },
+          },
+        ],
+      });
+
+      const stayOnPage = (e: Event) => e.preventDefault();
+      document.addEventListener("click", stayOnPage);
+      onTestFinished(() => document.removeEventListener("click", stayOnPage));
+
+      await page.getByRole("button", { name: "Notifications" }).click();
+      await page.getByRole("link", { name: "Open the team" }).click();
+
+      await expect.poll(() => server.read).toEqual(["ts1"]);
+      expect(server.executed).toEqual([]);
+    },
+  );
+
   it("lists what to enter again after an instance key change and opens the alerts", async () => {
     render(Harness, {
       notifications: [

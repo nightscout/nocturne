@@ -698,7 +698,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<TeamAccessService>();
+        services.AddScoped<SiteNotices>();
         services.AddScoped<TeamRenameAnnouncer>();
+        services.AddScoped<TeamStaffAnnouncer>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
@@ -988,6 +990,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ILoopClosedLoopStamper, LoopClosedLoopStamper>();
         services.AddScheduledJob<ProfileVersionsMovedJob>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
+        services.AddScheduledJob<RetireInvalidTreatmentsJob>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddScheduledJob<ApsSnapshotCurvesJob>();
         services.AddScheduledJob<TempBasalOriginCorroborationJob>();

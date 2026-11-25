@@ -24,6 +24,10 @@ vi.mock("#lib/api/generated/teams.generated.remote.js", () => ({
   createManagerInvite: vi.fn(),
   revokeManagerInvite: vi.fn(),
   deleteTeam: vi.fn(),
+  createStaffInvite: vi.fn(),
+  revokeStaffInvite: vi.fn(),
+  updateStaff: vi.fn(),
+  removeStaff: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
@@ -38,6 +42,7 @@ const manager: TeamDetail = {
   id: teamId,
   name: "Clinic",
   managers: [{ subjectId: me, displayName: "Alex" }],
+  managerNames: ["Alex"],
   invites: [],
   accessLinks: [],
   sites: [],
@@ -51,6 +56,7 @@ const manager: TeamDetail = {
 };
 
 const makeLink = () => page.getByRole("button", { name: "Make access link" });
+const accessForm = () => page.getByRole("form", { name: "Make an access link" });
 
 describe("team page access sections", () => {
   beforeEach(() => {
@@ -65,8 +71,8 @@ describe("team page access sections", () => {
   it("offers the roles the API sends, and no role it did not send", async () => {
     render(TeamPage);
 
-    await expect.element(page.getByRole("radio", { name: "Caretaker" })).toBeVisible();
-    await expect.element(page.getByRole("radio", { name: "Viewer" })).toBeVisible();
+    await expect.element(accessForm().getByRole("radio", { name: "Caretaker" })).toBeVisible();
+    await expect.element(accessForm().getByRole("radio", { name: "Viewer" })).toBeVisible();
     expect(page.getByRole("radio", { name: "Administrator" }).elements()).toHaveLength(0);
     expect(page.getByRole("radio", { name: "Denied" }).elements()).toHaveLength(0);
   });
@@ -86,7 +92,7 @@ describe("team page access sections", () => {
   it("shows what the chosen role lets the team see and change", async () => {
     render(TeamPage);
 
-    await page.getByRole("radio", { name: "Caretaker" }).click();
+    await accessForm().getByRole("radio", { name: "Caretaker" }).click();
 
     await expect.element(page.getByText("What the team can see and change with this role")).toBeVisible();
     await expect.element(makeLink()).toBeEnabled();
@@ -105,7 +111,7 @@ describe("team page access sections", () => {
     };
     render(TeamPage);
 
-    await page.getByRole("radio", { name: "Viewer" }).click();
+    await accessForm().getByRole("radio", { name: "Viewer" }).click();
 
     await expect.element(page.getByText("View glucose readings")).toBeVisible();
     await expect.element(page.getByText("Send notifications to this device", { exact: false })).toBeVisible();
@@ -145,9 +151,9 @@ describe("team page access sections", () => {
 
     expect(page.getByRole("button", { name: "Copy the access link" }).elements()).toHaveLength(0);
     await page.getByLabelText("Label of the access link (optional)").fill("  Night clinic ");
-    await page.getByRole("radio", { name: "Viewer" }).click();
-    await page.getByLabelText("Only the last 24 hours").click();
-    await page.getByLabelText("30 days").nth(1).click();
+    await accessForm().getByRole("radio", { name: "Viewer" }).click();
+    await accessForm().getByLabelText("Only the last 24 hours").click();
+    await accessForm().getByLabelText("30 days").click();
     await makeLink().click();
 
     await vi.waitFor(() => expect(mocks.createAccessLink).toHaveBeenCalled());
@@ -171,7 +177,7 @@ describe("team page access sections", () => {
     mocks.createAccessLink.mockResolvedValue({ id: linkId, token: "t", linkUrl: "https://example.org/x" });
     render(TeamPage);
 
-    await page.getByRole("radio", { name: "Viewer" }).click();
+    await accessForm().getByRole("radio", { name: "Viewer" }).click();
     await page.getByLabelText("Latest end of the access (optional)").fill("2099-01-31");
     await makeLink().click();
 
@@ -188,7 +194,7 @@ describe("team page access sections", () => {
     });
     render(TeamPage);
 
-    await page.getByRole("radio", { name: "Viewer" }).click();
+    await accessForm().getByRole("radio", { name: "Viewer" }).click();
     await makeLink().click();
 
     await expect

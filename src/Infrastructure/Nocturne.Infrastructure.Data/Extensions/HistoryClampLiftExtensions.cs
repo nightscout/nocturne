@@ -22,8 +22,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// which takes them onto the rows it gives back, the duplicate flag
 /// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
 /// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, the stamp of a
-/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>), and the stamp of what write-back
-/// is sending and sent (<see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSendingAsync"/>, <see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSentAsync"/>). A lifted statement may also be a read
+/// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>), the stamp of what write-back
+/// is sending and sent (<see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSendingAsync"/>, <see cref="Repositories.V4.DecomposedTreatmentKeys.RecordSentAsync"/>), and the erasure of a deleted
+/// account's notices in every tenant (<see cref="Repositories.SubjectRepository"/>), which returns the notices
+/// it erased only to broadcast each to the person who held it. A lifted statement may also be a read
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
 /// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),
@@ -36,12 +38,18 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// the clamp's window, answers with that window as the first clear did (<see cref="Repositories.DndWindowRepository"/>).
 /// <para>
 /// A keyed upsert (<see cref="Repositories.SystemEventRepository"/>, <see cref="Repositories.StateSpanRepository"/>,
-/// <see cref="Repositories.SleepSessionRepository"/>, the health series) lifts the read that matches a record by
+/// <see cref="Repositories.SleepSessionRepository"/>, the health series, and a V4 record's sync-key and legacy-id
+/// matches in <see cref="Repositories.V4.SyncUpsertRepositoryBase{TModel,TEntity}"/> and
+/// <see cref="Repositories.V4.V4RepositoryBase{TModel,TEntity}"/>) lifts the read that matches a record by
 /// the key a unique index holds over the whole tenant, and the save that overwrites the match. Without it a
 /// clamped writer re-sending a record stored before the window finds no row, inserts, and fails the index with
 /// 23505. The match is overwritten with the writer's own record, and the answer is built from what the writer
-/// sent: a field only the stored row holds (a creation time, a supersession) is not answered for a row the clamp
-/// hides.
+/// sent and the id of the row it reached, which is the write's own result: a field only the stored row holds
+/// (a supersession, a legacy id, a correlation id) is not answered or broadcast for a row the clamp hides. A V4
+/// row the clamp hides keeps its correlation id (<see cref="Repositories.V4.KeptCorrelationIds"/>). A V4 insert's
+/// check of the legacy ids or correlation ids stored rows hold is lifted for the same reason, and so are the
+/// reads that agree with a lifted match: a sync key's recreation check and the stored times a sync-key upsert
+/// moves, which only key cache clears.
 /// </para>
 /// <para>
 /// A user's delete or restore of a record the clamp shows its caller reaches every copy in the

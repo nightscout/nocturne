@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 
@@ -25,13 +26,14 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
 
+    private readonly StatementRecorder _statements = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerSourceReconcileTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _statements);
         _context = _db.CreateContext();
 
         _decomposer = TreatmentDecomposerDoubles.Build(
@@ -79,7 +81,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
         var row = await _context.CarbIntakes.IgnoreQueryFilters().AsNoTracking().SingleAsync(c => c.Id == named);
         _context.Entry(row).Property<bool>("DeletedByUser").CurrentValue.Should().BeFalse();
-        (await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 20)])).Should().ContainSingle();
+        (await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 20)])).Decompose.Should().ContainSingle();
     }
 
     [Fact]
@@ -189,7 +191,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
         var selected = await _decomposer.SelectForRepublishAsync(Connector, [Upstream("new", 20), Upstream("swept", 20)]);
 
-        selected.Select(t => t.Id).Should().BeEquivalentTo(["new", "swept"]);
+        selected.Decompose.Select(t => t.Id).Should().BeEquivalentTo(["new", "swept"]);
     }
 
     [Fact]
@@ -211,8 +213,120 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             new Treatment { Id = "override", EventType = "Temporary Override", Created_at = "2026-03-01T12:00:00.000Z" },
         ]);
 
-        selected.Should().BeEmpty();
+        selected.Count.Should().Be(0);
     }
+
+    [Fact]
+    public async Task A_batch_of_rows_stored_before_fingerprints_is_stamped_in_one_statement_per_table()
+    {
+        var upstream = Enumerable.Range(0, 12).Select(i => Upstream($"t-{i}", 20 + i)).ToList();
+        var rows = new List<Guid>();
+        foreach (var treatment in upstream)
+            rows.Add(await AddCarbAsync(treatment.Id!, Connector));
+        _statements.Clear();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, upstream);
+
+        selected.Count.Should().Be(0);
+        _statements.Count("UPDATE").Should().Be(DecomposedTreatmentTables.All.Count + 1, "one per decomposed table, and one for the spans");
+        for (var i = 0; i < upstream.Count; i++)
+            (await FingerprintOfAsync(rows[i])).Should().Be(TreatmentDecomposer.UpstreamFingerprint(upstream[i]));
+    }
+
+    [Fact]
+    public async Task Ids_only_another_source_holds_are_neither_selected_nor_stamped()
+    {
+        await AddCarbAsync("theirs", Other);
+        await AddCarbAsync("also-theirs", Other);
+        _statements.Clear();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, [Upstream("theirs", 20), Upstream("also-theirs", 30)]);
+
+        selected.Count.Should().Be(0);
+        _statements.Count("UPDATE").Should().Be(0, "this source holds no rows under either id, so there is no baseline to stamp");
+    }
+
+    [Fact]
+    public async Task A_changed_override_is_selected_for_its_span_and_not_decomposed_again()
+    {
+        AddOverrideSpan("override", fingerprint: TreatmentDecomposer.UpstreamFingerprint(UpstreamOverride("override", 60)));
+        await _context.SaveChangesAsync();
+
+        var unchanged = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamOverride("override", 60)]);
+        var changed = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamOverride("override", 30)]);
+
+        unchanged.Count.Should().Be(0);
+        changed.Decompose.Should().BeEmpty();
+        changed.Spans.Should().ContainSingle(t => t.Id == "override");
+    }
+
+    [Fact]
+    public async Task An_override_span_with_no_fingerprint_is_stamped_and_not_selected()
+    {
+        var span = AddOverrideSpan("override", fingerprint: null);
+        await _context.SaveChangesAsync();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamOverride("override", 30)]);
+
+        selected.Count.Should().Be(0);
+        (await _context.StateSpans.AsNoTracking().Where(s => s.Id == span).Select(s => s.UpstreamFingerprint).SingleAsync())
+            .Should().Be(TreatmentDecomposer.UpstreamFingerprint(UpstreamOverride("override", 30)));
+    }
+
+    [Fact]
+    public async Task A_changed_profile_switch_is_selected_and_an_unchanged_one_is_not()
+    {
+        _context.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "switch", DataSource = Connector,
+            Timestamp = At, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Default",
+            UpstreamFingerprint = TreatmentDecomposer.UpstreamFingerprint(UpstreamSwitch(60)),
+        });
+        await _context.SaveChangesAsync();
+
+        var unchanged = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamSwitch(60)]);
+        var changed = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamSwitch(30)]);
+
+        unchanged.Count.Should().Be(0);
+        changed.Decompose.Should().ContainSingle(t => t.Id == "switch");
+        changed.Spans.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_profile_switch_with_no_fingerprint_is_stamped_and_not_selected()
+    {
+        var row = Guid.CreateVersion7();
+        _context.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = row, TenantId = TenantId, LegacyId = "switch", DataSource = Connector,
+            Timestamp = At, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Default",
+        });
+        await _context.SaveChangesAsync();
+
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, [UpstreamSwitch(30)]);
+
+        selected.Count.Should().Be(0);
+        (await _context.ProfileActivations.AsNoTracking().Where(a => a.Id == row).Select(a => a.UpstreamFingerprint).SingleAsync())
+            .Should().Be(TreatmentDecomposer.UpstreamFingerprint(UpstreamSwitch(30)));
+    }
+
+    [Fact]
+    public void An_effective_profile_switch_follows_the_rule_of_a_profile_switch()
+    {
+        var effective = new Treatment
+        {
+            Id = "eps-1", EventType = "Note", OriginalProfileName = "Rhys", Created_at = "2026-03-01T12:00:00.000Z",
+        };
+
+        _decomposer.CanRepublish(effective, stored: true).Should().BeTrue();
+        _decomposer.CanRepublish(effective, stored: false).Should().BeTrue();
+    }
+
+    private static Treatment UpstreamSwitch(double duration) => new()
+    {
+        Id = "switch", EventType = "Profile Switch", Profile = "Default", Duration = duration,
+        Created_at = "2026-03-01T12:00:00.000Z", DataSource = Connector,
+    };
 
     [Fact]
     public async Task A_row_stored_before_fingerprints_is_stamped_and_not_overwritten()
@@ -221,7 +335,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
         var selected = await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 35)]);
 
-        selected.Should().BeEmpty();
+        selected.Decompose.Should().BeEmpty();
         (await FingerprintOfAsync(row)).Should().Be(TreatmentDecomposer.UpstreamFingerprint(Upstream("t-1", 35)));
     }
 
@@ -231,8 +345,8 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         await AddCarbAsync("t-1", Connector);
         await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 35)]);
 
-        (await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 35)])).Should().BeEmpty();
-        (await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 50)])).Should().ContainSingle();
+        (await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 35)])).Decompose.Should().BeEmpty();
+        (await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 50)])).Decompose.Should().ContainSingle();
     }
 
     [Fact]
@@ -248,7 +362,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
         var selected = await _decomposer.SelectForRepublishAsync(Connector, [Upstream("t-1", 35)]);
 
-        selected.Should().ContainSingle();
+        selected.Decompose.Should().ContainSingle();
     }
 
     [Fact]
@@ -284,7 +398,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     [InlineData("Temporary Override", false, true)]
     [InlineData("Temporary Override", true, false)]
     [InlineData("Temporary Target", true, false)]
-    [InlineData("Profile Switch", true, false)]
+    [InlineData("Profile Switch", true, true)]
     [InlineData("Pump Suspend", false, true)]
     [InlineData("Pump Suspend", true, false)]
     [InlineData("Pump Resume", true, false)]
@@ -295,6 +409,24 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         var treatment = new Treatment { Id = "t-1", EventType = eventType, Created_at = "2026-03-01T12:00:00.000Z" };
 
         _decomposer.CanRepublish(treatment, stored).Should().Be(republished);
+    }
+
+    private static Treatment UpstreamOverride(string id, double duration) => new()
+    {
+        Id = id, EventType = "Temporary Override", Duration = duration,
+        Created_at = "2026-03-01T12:00:00.000Z", DataSource = Connector,
+    };
+
+    private Guid AddOverrideSpan(string legacyId, string? fingerprint)
+    {
+        var id = Guid.CreateVersion7();
+        _context.StateSpans.Add(new StateSpanEntity
+        {
+            Id = id, TenantId = TenantId, Category = nameof(StateSpanCategory.Override), State = "Custom",
+            StartTimestamp = At, EndTimestamp = At.AddMinutes(60), LegacyId = legacyId, Source = Connector,
+            UpstreamFingerprint = fingerprint,
+        });
+        return id;
     }
 
     private static Treatment Upstream(string id, double carbs) => new()

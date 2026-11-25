@@ -108,6 +108,7 @@
   <Card.Content class="space-y-5">
     <form
       class="space-y-5"
+      aria-label="Make an access link"
       onsubmit={(e) => {
         e.preventDefault();
         void make();
@@ -166,8 +167,12 @@
       />
 
       <div class="space-y-2">
-        <Label>The link stops working after</Label>
-        <RadioGroup.Root bind:value={expiresInDays} class="flex flex-wrap gap-4">
+        <Label id="team-access-expiry-label">The link stops working after</Label>
+        <RadioGroup.Root
+          bind:value={expiresInDays}
+          aria-labelledby="team-access-expiry-label"
+          class="flex flex-wrap gap-4"
+        >
           {#each linkExpiryOptions() as [value, text] (value)}
             <div class="flex items-center gap-2">
               <RadioGroup.Item {value} id={`team-access-expiry-${value}`} />

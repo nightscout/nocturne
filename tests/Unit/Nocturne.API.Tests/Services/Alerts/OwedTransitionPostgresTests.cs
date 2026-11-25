@@ -627,8 +627,8 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
         var firstSweep = tenant.SweepAsync(tenant.Process(first), AfterLease);
         var secondSweep = tenant.SweepAsync(tenant.Process(second), AfterLease);
-        await secondSweep.ContinueWith(_ => secondDone.TrySetResult(), TaskScheduler.Default).WaitAsync(TimeSpan.FromSeconds(30));
-        await Task.WhenAll(firstSweep, secondSweep).WaitAsync(TimeSpan.FromSeconds(30));
+        await secondSweep.ContinueWith(_ => secondDone.TrySetResult(), TaskScheduler.Default).WaitAsync(Eventually.DefaultPatience);
+        await Task.WhenAll(firstSweep, secondSweep).WaitAsync(Eventually.DefaultPatience);
 
         tenant.Sends.Should().Be(1, "the second sweep's take-up compares the value it read, which the first changed");
     }

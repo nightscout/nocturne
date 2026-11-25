@@ -346,7 +346,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Looking_up_a_staff_invite_says_what_narrows_the_staff_member_and_whether_the_caller_is_a_member(bool member)
+    public async Task Looking_up_a_staff_invite_says_what_narrows_the_staff_member_whether_the_caller_is_a_member_and_the_role_names(bool member)
     {
         var narrowing = new TeamStaffNarrowing(RoleSeeds.Viewer, true, DateTime.UtcNow.AddDays(3));
         _teams.Setup(t => t.GetStaffInviteInfoAsync(It.IsAny<string>(), Caller, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -355,7 +355,7 @@ public class TeamsControllerTests
         var result = await Controller(Session()).GetStaffInviteInfo("token", default);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should()
-            .Be(new TeamStaffInviteDetails(TeamId, "Camp", "Sam", narrowing, member));
+            .Be(new TeamStaffInviteDetails(TeamId, "Camp", "Sam", narrowing, member, TeamSuggestableRoles.All));
     }
 
     [Fact]
@@ -548,8 +548,9 @@ public class TeamsControllerTests
         typeof(TeamAccessSiteOption).GetProperties().Select(p => p.Name).Should().BeEquivalentTo(
             "TenantId", "DisplayName", "AlreadyGiven", "Roles", "DefaultRoleId", "LimitForced", "LatestEnd");
         typeof(TeamSiteAccess).GetProperties().Select(p => p.Name).Should().BeEquivalentTo(
-            ["TenantId", "DisplayName", "RoleNames", "LimitTo24Hours", "AccessEndsAt", "HasEnded", "GivenAt"],
-            "a team learns a site's name and what it was given, never who approved or who is in it");
+            ["TenantId", "DisplayName", "RoleNames", "LimitTo24Hours", "AccessEndsAt", "HasEnded", "GivenAt",
+                "TeamManagesStaff", "PendingStaffCount", "DeclinedStaffCount"],
+            "a team learns a site's name, what it was given and how many of its staff wait or were declined, never who approved, who decided or who is in it");
     }
 
     [Theory]
@@ -601,13 +602,15 @@ public class TeamsControllerTests
             [new TenantMemberRoleRecord(Guid.CreateVersion7(), "Owner", RoleSeeds.Owner, [Scope.FullAccess])],
             null, null, null, false, null, null, null, DateTime.UtcNow, []));
 
+    private static SiteNotices Sites() => new(Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider());
+
     private TeamRenameAnnouncer Announcer() => new(
-        _teams.Object, _members.Object, Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider(),
-        TimeProvider.System, NullLogger<TeamRenameAnnouncer>.Instance);
+        _teams.Object, _members.Object, Sites(), TimeProvider.System, NullLogger<TeamRenameAnnouncer>.Instance);
 
     private TeamAccessService Access() => new(
         _teams.Object, _members.Object, _roles.Object, TimeProvider.System, Mock.Of<INocturneDbContextFactory>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new TeamStaffAnnouncer(_teams.Object, _members.Object, Sites(), TimeProvider.System, NullLogger<TeamStaffAnnouncer>.Instance));
 
     private static object? CodeOf(ObjectResult problem) =>
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Extensions["code"];

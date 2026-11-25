@@ -151,6 +151,7 @@ public class AapsProfileSwitchReadbackIntegrationTests : ApiIntegrationTestBase
         (await GetArrayAsync(client, $"/api/v4/profile/settings/by-name/{snapshot}"))
             .Should().BeEmpty("the switch's inline profile is its activation's snapshot, not a stored profile");
 
+        await SettleHistoryAsync();
         foreach (var url in new[]
                  {
                      "/api/v4/profile/summary", "/api/v4/profile/settings", "/api/v4/profile/records",

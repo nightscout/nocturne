@@ -33,6 +33,9 @@ public sealed class TeamReasonChanges
     private readonly IReadOnlyList<Given> _given;
     private readonly Func<NocturneDbContext, CancellationToken, Task> _write;
 
+    /// <summary>What the owners of the sites are owed once the write commits: <see cref="WithStaffNotices"/>.</summary>
+    public StaffNotices Notices { get; }
+
     /// <summary>A reason removed; <c>Last</c> when the membership ends with the removals, holding no other reason and gaining none.</summary>
     private sealed record Removal(Guid TenantId, Guid SubjectId, Guid AccessId, bool Last);
 
@@ -41,13 +44,25 @@ public sealed class TeamReasonChanges
 
     private TeamReasonChanges(
         DbUnitOfWork unit, IReadOnlyList<Removal> removals, IReadOnlyList<Given> given,
-        Func<NocturneDbContext, CancellationToken, Task> write)
+        Func<NocturneDbContext, CancellationToken, Task> write, StaffNotices notices)
     {
         _unit = unit;
         _removals = removals;
         _given = given;
         _write = write;
+        Notices = notices;
     }
+
+    /// <summary>
+    /// These changes, owing the owners of the sites once they commit a recount of <paramref name="teamId"/>'s
+    /// waiting staff at <paramref name="recountSites"/>, and a notice that the team's staff newly reach each
+    /// site where a reason is added. An owner is given no reason, so no owner is announced as joined.
+    /// </summary>
+    public TeamReasonChanges WithStaffNotices(Guid teamId, IEnumerable<Guid> recountSites) => new(
+        _unit, _removals, _given, _write,
+        new StaffNotices(
+            recountSites.Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList(),
+            _given.Where(g => !g.Held).Select(g => g.TenantId).Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList()));
 
     /// <summary>The sites where a team reason changes, in ascending tenant id.</summary>
     public IReadOnlyList<Guid> Sites =>
@@ -120,7 +135,7 @@ public sealed class TeamReasonChanges
                 r.SourceId!.Value,
                 !r.TenantMember.Reasons.Any(other => other.Id != r.Id)))
             .ToListAsync(ct);
-        return new TeamReasonChanges(unit, removals, [], write);
+        return new TeamReasonChanges(unit, removals, [], write, StaffNotices.None);
     }
 
     /// <summary>
@@ -135,9 +150,10 @@ public sealed class TeamReasonChanges
     /// The caller holds, in the order <see cref="MembershipLock"/> states, the row of every subject named
     /// (<see cref="TenantOwnerLock.LockSubjectRowsSharedAsync"/>), since adding a reason can add the
     /// membership, and the team access lock of every site named, which every writer of the rows read here
-    /// takes, so they hold still to the commit.
+    /// takes, so they hold still to the commit. Whether the subject owns the site is read under the
+    /// membership's lock, which every writer of a direct reason holds.
     /// </remarks>
-    internal static async Task<TeamReasonChanges> SyncAsync(
+    public static async Task<TeamReasonChanges> SyncAsync(
         DbUnitOfWork unit, IEnumerable<(Guid TenantId, Guid SubjectId)> memberships, DateTime now, CancellationToken ct)
     {
         var db = unit.Context;
@@ -148,7 +164,7 @@ public sealed class TeamReasonChanges
         var given = new List<Given>();
         foreach (var (tenantId, subjectId) in pairs)
         {
-            var desired = await TeamReasons.DesiredAsync(db, tenantId, subjectId, ct);
+            var desired = await TeamReasons.DesiredAsync(db, tenantId, subjectId, now, ct);
             var member = await db.TenantMembers.AsNoTracking()
                 .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId)
                 .Select(m => new
@@ -192,7 +208,7 @@ public sealed class TeamReasonChanges
             removals.AddRange(gone.Select(accessId => new Removal(tenantId, subjectId, accessId, last)));
         }
 
-        return new TeamReasonChanges(unit, removals, given, (_, _) => Task.CompletedTask);
+        return new TeamReasonChanges(unit, removals, given, (_, _) => Task.CompletedTask, StaffNotices.None);
     }
 
     /// <summary>

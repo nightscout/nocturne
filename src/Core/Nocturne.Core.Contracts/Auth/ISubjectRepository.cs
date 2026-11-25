@@ -189,6 +189,10 @@ public interface ISubjectRepository
     /// <c>TeamManagerFilter.IsLastManagerAsync</c>. Both hold the manager lock of each team the subject
     /// belongs to, in ascending team id, until the delete commits.
     /// </para>
+    /// <para>
+    /// A delete answers <see cref="SubjectChange.Changed.RemovedNotices"/> with the notices it removed
+    /// from other people.
+    /// </para>
     /// </remarks>
     Task<SubjectChange> DeleteAsync(Guid subjectId, CancellationToken ct);
 

@@ -1,6 +1,8 @@
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -11,7 +13,10 @@ namespace Nocturne.API.Services.Auth;
 /// <remarks>
 /// The tenants are read before any membership goes, and each tenant's stop (<see cref="MadeByStop"/>)
 /// runs on a unit of its own, since the tables it writes force row level security per tenant. Its
-/// sessions are evicted once that unit commits.
+/// sessions are evicted once that unit commits. The teams and sites where the subject is staff are read
+/// before anything goes, since their rows go with the account, and their owners' waiting notices are
+/// recounted once it is deleted. The notices the delete removed from other people are broadcast as
+/// archived once it commits, each from a scope opened for its site, so an open app drops them.
 /// </remarks>
 public sealed class SubjectDeletion(
     INocturneDbContextFactory contexts,
@@ -20,8 +25,12 @@ public sealed class SubjectDeletion(
     GrantRevocationService grantRevocation,
     IAuthAuditService audit,
     TimeProvider time,
+    TeamStaffAnnouncer teamStaff,
+    SiteNotices sites,
     ILogger<SubjectDeletion> logger) : ISubjectDeletion
 {
+    private const string AuditEndpoint = "service:subject-deletion";
+
     /// <inheritdoc/>
     public async Task<SubjectDeletionOutcome> DeleteAsync(Guid subjectId, bool evenLastOwner, CancellationToken ct)
     {
@@ -34,6 +43,7 @@ public sealed class SubjectDeletion(
             return new SubjectDeletionOutcome(new SubjectChange.NotFound(), []);
         }
 
+        var staffNotices = await teamStaff.OwedForDeletionAsync(subjectId, ct);
         var now = time.GetUtcNow().UtcDateTime;
         foreach (var tenantId in await members.ListTenantIdsOfSubjectAsync(subjectId, ct))
         {
@@ -48,12 +58,28 @@ public sealed class SubjectDeletion(
             : [];
 
         var change = await subjects.DeleteAsync(subjectId, ct);
-        if (change is SubjectChange.Changed)
+        if (change is SubjectChange.Changed changed)
         {
             logger.LogInformation("Deleted subject {SubjectId}", subjectId);
             await audit.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
+            await teamStaff.AnnounceAsync(staffNotices);
+            await BroadcastRemovedAsync(changed.RemovedNotices);
         }
 
         return new SubjectDeletionOutcome(change, leftWithoutOwner);
+    }
+
+    private async Task BroadcastRemovedAsync(IReadOnlyList<RemovedNotice> removed)
+    {
+        foreach (var site in removed.GroupBy(n => n.TenantId))
+        {
+            await SiteNotices.BestEffortAsync(
+                () => sites.RunAsync<ISignalRBroadcastService>(site.Key, AuditEndpoint, async broadcast =>
+                {
+                    foreach (var notice in site)
+                        await broadcast.BroadcastNotificationArchivedAsync(notice.UserId, notice.Notice, NotificationArchiveReason.ConditionMet);
+                }),
+                ex => logger.LogWarning(ex, "The notices a deletion removed were not broadcast on site {TenantId}", site.Key));
+        }
     }
 }

@@ -74,7 +74,7 @@ public partial class TeamAccessEndPostgresTests
             """);
 
     private static Task BothAsync(Func<Task> first, Func<Task> second) =>
-        Task.WhenAll(Task.Run(first), Task.Run(second)).WaitAsync(TimeSpan.FromSeconds(60));
+        Task.WhenAll(Task.Run(first), Task.Run(second)).WaitAsync(Eventually.DefaultPatience);
 
     [Fact]
     public async Task Joining_gives_a_team_reason_where_the_team_decides_its_staff_and_none_where_the_site_does()

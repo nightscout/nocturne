@@ -146,6 +146,7 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Live> LiveAsync(HttpClient client)
     {
+        await SettleHistoryAsync();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var onBoard = await WithTenantScopeAsync(async sp =>
         {
@@ -163,8 +164,11 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
             onBoard.Total.Cob?.Cob ?? 0);
     }
 
-    private static async Task<JsonArray> HistoryAsync(HttpClient client) =>
-        (await GetAsync(client, "/api/v3/treatments/history/0"))["result"]!.AsArray();
+    private async Task<JsonArray> HistoryAsync(HttpClient client)
+    {
+        await SettleHistoryAsync();
+        return (await GetAsync(client, "/api/v3/treatments/history/0"))["result"]!.AsArray();
+    }
 
     private static bool IsDeleted(JsonNode? treatment) => treatment?["isValid"]?.GetValue<bool>() == false;
 

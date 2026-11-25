@@ -13,7 +13,7 @@
     onCancel?: () => void;
   } = $props();
 
-  let showingRecoveryCodes = $state(false);
+  let signingIn = $state(false);
 
   /** Handle successful login */
   async function handleLoginSuccess() {
@@ -45,9 +45,9 @@
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
   <Dialog.Content
     class="sm:max-w-md"
-    showClose={!showingRecoveryCodes}
-    escapeKeydownBehavior={showingRecoveryCodes ? "ignore" : "close"}
-    interactOutsideBehavior={showingRecoveryCodes ? "ignore" : "close"}
+    showClose={!signingIn}
+    escapeKeydownBehavior={signingIn ? "ignore" : "close"}
+    interactOutsideBehavior={signingIn ? "ignore" : "close"}
   >
     <Dialog.Header>
       <Dialog.Title>Sign in required</Dialog.Title>
@@ -59,7 +59,7 @@
         ? window.location.pathname + window.location.search
         : '/'}
       onSuccess={handleLoginSuccess}
-      onShowingRecoveryCodes={(showing) => (showingRecoveryCodes = showing)}
+      onBusyChange={(busy) => (signingIn = busy)}
     />
   </Dialog.Content>
 </Dialog.Root>

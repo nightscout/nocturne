@@ -94,8 +94,9 @@ public interface ITreatmentPublisher
     /// comes back.
     /// </summary>
     /// <remarks>
-    /// A treatment stored only as a state span (an override, a temporary target) is never written
-    /// again: there is no stored row to compare it with.
+    /// A changed override or temporary target is written onto its state span in place, which settles
+    /// the spans around it. One whose span was stored with no fingerprint of the source is taken as
+    /// it stands. A stored profile switch is never written again.
     /// </remarks>
     /// <returns>How many were written, or null when the write failed.</returns>
     Task<int?> PublishRecentTreatmentsAsync(

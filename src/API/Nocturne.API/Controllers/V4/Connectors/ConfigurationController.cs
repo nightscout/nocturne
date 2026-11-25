@@ -65,7 +65,8 @@ public class ConfigurationController : ControllerBase
 
     /// <summary>
     /// Gets the configuration for a specific connector.
-    /// Returns runtime configuration only (secrets are not included).
+    /// Returns runtime configuration only (secrets are not included), with each address masked
+    /// (<see cref="ConnectorAddresses"/>).
     /// </summary>
     /// <param name="connectorName">The connector name (e.g., "Dexcom", "Glooko")</param>
     /// <param name="ct">Cancellation token</param>
@@ -88,6 +89,7 @@ public class ConfigurationController : ControllerBase
         }
 
         config = await WithoutUnusableKeysAsync(connectorName, config, ct);
+        config.Configuration = (await AddressesAsync(connectorName, ct)).Masked(config.Configuration);
         if (IsGuarded())
             config.LockedKeys = await _configService.GetGuardedKeysAsync(connectorName, ct);
         return Ok(config);
@@ -123,6 +125,19 @@ public class ConfigurationController : ControllerBase
         config.Configuration = JsonDocument.Parse(stored.ToJsonString());
         return config;
     }
+
+    private async Task<ConnectorAddresses> AddressesAsync(string connectorName, CancellationToken ct)
+    {
+        var schema = await _configService.GetSchemaAsync(connectorName, ct);
+        return ConnectorAddresses.Of(schema, RequiredFields(schema.RootElement));
+    }
+
+    private static HashSet<string> RequiredFields(JsonElement schemaRoot) =>
+        schemaRoot.ValueKind == JsonValueKind.Object
+        && schemaRoot.TryGetProperty("required", out var requiredFields)
+        && requiredFields.ValueKind == JsonValueKind.Array
+            ? requiredFields.EnumerateArray().Select(field => field.GetString()).OfType<string>().ToHashSet(StringComparer.Ordinal)
+            : [];
 
     private static string UnbindableMessage(string key, Type type, JsonElement root)
     {
@@ -197,7 +212,9 @@ public class ConfigurationController : ControllerBase
     /// <summary>
     /// Saves or updates runtime configuration for a connector.
     /// Only properties marked with [RuntimeConfigurable] are accepted.
-    /// Validates the configuration against the connector's schema before saving.
+    /// Validates the configuration against the connector's schema before saving. An address the
+    /// configuration leaves out keeps its stored value (<see cref="ConnectorAddresses"/>), and the
+    /// saved configuration is returned with each address masked.
     /// Refused for Google Health, whose options are saved by the Google Health endpoint. A delegated
     /// credential, and a caller without <c>tenant.settings</c>, is refused the changes
     /// <see cref="DelegatedConfigurationGuard"/> lists.
@@ -232,7 +249,10 @@ public class ConfigurationController : ControllerBase
             return NotFound(new { message = $"'{connectorName}' is not a connector" });
         }
 
-        // Validate the configuration against the schema
+        var addresses = await AddressesAsync(connectorName, ct);
+        configuration = addresses.WithStored(
+            configuration, (await _configService.GetConfigurationAsync(connectorName, ct))?.Configuration);
+
         var validationErrors = await ValidateConfigurationAsync(connectorName, configuration, ct);
         if (validationErrors.Count > 0)
         {
@@ -257,6 +277,7 @@ public class ConfigurationController : ControllerBase
         }
 
         var result = await _configService.SaveConfigurationAsync(connectorName, configuration, modifiedBy, ct);
+        result.Configuration = addresses.Masked(result.Configuration);
         return Ok(result);
     }
 
@@ -351,16 +372,14 @@ public class ConfigurationController : ControllerBase
             }
         }
 
+        var required = RequiredFields(schemaRoot);
+
         // Validate required fields (skip secrets - they're saved separately)
-        if (schemaRoot.TryGetProperty("required", out var requiredFields))
+        foreach (var fieldName in required)
         {
-            foreach (var requiredField in requiredFields.EnumerateArray())
+            if (!secretFields.Contains(fieldName) && !configRoot.TryGetProperty(fieldName, out _))
             {
-                var fieldName = requiredField.GetString();
-                if (fieldName != null && !secretFields.Contains(fieldName) && !configRoot.TryGetProperty(fieldName, out _))
-                {
-                    errors.Add($"Required field '{fieldName}' is missing");
-                }
+                errors.Add($"Required field '{fieldName}' is missing");
             }
         }
 
@@ -435,7 +454,8 @@ public class ConfigurationController : ControllerBase
                 && configProp.Value.ValueKind == JsonValueKind.String)
             {
                 var candidate = configProp.Value.GetString();
-                if (!IsAcceptableUri(candidate))
+                var clearsOptional = string.IsNullOrWhiteSpace(candidate) && !required.Contains(configProp.Name);
+                if (!clearsOptional && !IsAcceptableUri(candidate))
                 {
                     errors.Add(
                         $"Field '{configProp.Name}' must be an http or https URL " +
@@ -468,9 +488,9 @@ public class ConfigurationController : ControllerBase
     /// <c>ConnectorUrl.TryResolveBase</c>, which the connectors resolve their base URL through.
     /// </para>
     /// <para>
-    /// Embedded credentials are refused because this value is stored in the connector's runtime
-    /// configuration, which <c>GET</c> returns in the clear — the secret fields are the ones kept
-    /// out of that response, and a password smuggled into the URL would bypass that. The check runs
+    /// Embedded credentials are refused because this value is stored unencrypted in the connector's
+    /// runtime configuration. The secret fields are the ones stored encrypted, and a password
+    /// smuggled into the URL would bypass that. The check runs
     /// on the prepended form too, since <c>admin:hunter2@mysite.example</c> only reveals its
     /// userinfo once a scheme is in front of it.
     /// </para>

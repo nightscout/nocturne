@@ -2823,7 +2823,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             "_id": "aaps-stamps-1",
             "mills": 1700000000000,
             "device": "openaps://samsung",
-            "isValid": false,
+            "isValid": true,
             "srvModified": 1,
             "srvCreated": 1,
             "configuration": { "sensitivityType": "oref1" },

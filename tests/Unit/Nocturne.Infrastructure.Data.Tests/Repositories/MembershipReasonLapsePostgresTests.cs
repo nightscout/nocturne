@@ -274,7 +274,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var write = site.Members.SetDirectPermissionsAsync(site.Tenant, lapsing.Member, ["glucose.read"], After, Ct);
         await PostgresLockWaits.UntilWaitingAsync(site.App, 2, recompute, write);
         await held.RollbackAsync();
-        await Task.WhenAll(recompute, write).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(recompute, write).WaitAsync(Eventually.DefaultPatience);
 
         var row = (await site.Members.GetMemberAsync(site.Tenant, lapsing.Member, Ct))!;
         row.DirectPermissions.Should().Equal("glucose.read");
@@ -335,10 +335,12 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             Writer.Add => site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, subject, [site.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct),
             Writer.SetDirectPermissions => site.Members.SetDirectPermissionsAsync(site.Tenant, member, ["glucose.read"], T0, Ct),
             Writer.SetLimitTo24Hours => site.Members.SetLimitTo24HoursAsync(site.Tenant, member, true, T0, Ct),
-            Writer.SetAccessEndUnlessOwner => site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, After, T0, Ct),
+            Writer.SetAccessEndUnlessOwner => OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, After, T0, Ct),
             Writer.ReplaceRoles => site.Members.ReplaceRolesAsync(site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
-            Writer.ReplaceRolesUnlessLastOwner => site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
-            Writer.RemoveMemberUnlessLastOwner => site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, T0, Ct),
+            Writer.ReplaceRolesUnlessLastOwner => OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(
+                site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
+            Writer.RemoveMemberUnlessLastOwner => OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+                site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, T0, Ct),
             Writer.DeleteRole => site.Members.DeleteRoleAsync(site.Tenant, site.CaretakerRole, T0, Ct),
             Writer.RemoveMembershipsOfSubject => site.Members.RemoveMembershipsOfSubjectAsync(subject, Ct),
             Writer.Recompute => MembershipReasons.RecomputeAsync(site.Factory, site.Tenant, subject, T0, Ct),
@@ -348,7 +350,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
 
         await PostgresLockWaits.UntilBlockedAsync(site.App, write);
         await held.RollbackAsync();
-        await write.WaitAsync(TimeSpan.FromSeconds(30));
+        await write.WaitAsync(Eventually.DefaultPatience);
     }
 
     [Fact]
@@ -501,7 +503,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         await PostgresLockWaits.UntilBlockedAsync(site.App, adoption);
         await held.RollbackAsync();
 
-        (await adoption.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeTrue();
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
         (await site.Members.FindMemberAsync(site.Tenant, holder, Ct)).Should().NotBeNull();
     }
 

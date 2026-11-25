@@ -2,27 +2,31 @@ import type { AlertHold } from "@nocturne/api-client";
 import { formatDateTimeCompact } from "#lib/utils/formatting.js";
 
 /** The facts the engine names a held rule's missing data by. */
-type KnownFact =
-  | "glucose"
-  | "predictions"
-  | "insulin"
-  | "carbs"
-  | "pump"
-  | "aps"
-  | "uploader"
-  | "transmitter"
-  | "state_spans"
-  | "device_ages"
-  | "trackers"
-  | "sleep"
-  | "active_alerts"
-  | "do_not_disturb"
-  | "time_zone"
-  | "sensor_state"
-  | "aps_determination"
-  | "target_range";
+export const KNOWN_FACTS = [
+  "glucose",
+  "predictions",
+  "insulin",
+  "carbs",
+  "pump",
+  "aps",
+  "uploader",
+  "transmitter",
+  "state_spans",
+  "device_ages",
+  "trackers",
+  "sleep",
+  "active_alerts",
+  "do_not_disturb",
+  "time_zone",
+  "sensor_state",
+  "aps_determination",
+  "target_range",
+] as const;
 
-type KnownReason = "absent" | "stale" | "ahead_of_clock" | "unrecognised" | "inexact" | "sensor_not_ok";
+export const KNOWN_REASONS = ["absent", "stale", "ahead_of_clock", "unrecognised", "inexact", "sensor_not_ok"] as const;
+
+type KnownFact = (typeof KNOWN_FACTS)[number];
+type KnownReason = (typeof KNOWN_REASONS)[number];
 
 function factName(fact: KnownFact): string {
   switch (fact) {
@@ -90,38 +94,8 @@ function reasonText(reason: KnownReason): string {
   }
 }
 
-const KNOWN_FACTS: ReadonlySet<string> = new Set<KnownFact>([
-  "glucose",
-  "predictions",
-  "insulin",
-  "carbs",
-  "pump",
-  "aps",
-  "uploader",
-  "transmitter",
-  "state_spans",
-  "device_ages",
-  "trackers",
-  "sleep",
-  "active_alerts",
-  "do_not_disturb",
-  "time_zone",
-  "sensor_state",
-  "aps_determination",
-  "target_range",
-]);
-
-const KNOWN_REASONS: ReadonlySet<string> = new Set<KnownReason>([
-  "absent",
-  "stale",
-  "ahead_of_clock",
-  "unrecognised",
-  "inexact",
-  "sensor_not_ok",
-]);
-
-const isKnownFact = (fact: string): fact is KnownFact => KNOWN_FACTS.has(fact);
-const isKnownReason = (reason: string): reason is KnownReason => KNOWN_REASONS.has(reason);
+const isKnownFact = (fact: string): fact is KnownFact => KNOWN_FACTS.some((known) => known === fact);
+const isKnownReason = (reason: string): reason is KnownReason => KNOWN_REASONS.some((known) => known === reason);
 
 /** A fact by name; one this build does not know, as the API sent it. */
 export function heldFactName(fact: string | undefined): string {

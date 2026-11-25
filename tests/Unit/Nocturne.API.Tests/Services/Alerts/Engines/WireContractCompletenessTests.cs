@@ -39,19 +39,17 @@ public class WireContractCompletenessTests
             // The host matches a reported sensor state to the reading's source before it sends
             // the state; the engine reads only the state.
             nameof(SensorContext.LatestSource),
+            // The host reports a pump-mode span or an override the engine was not sent; the engine
+            // reads only the spans it is sent.
+            nameof(SensorContext.PumpModesRead),
+            nameof(SensorContext.OverridesRead),
         ]),
         new(typeof(PredictedGlucosePoint), "WirePrediction", typeof(ScenarioPrediction), []),
         // AlertId travels as the wire record's extra field (it is the dictionary key on
         // the domain side); the snapshot's own properties must all cross.
         new(typeof(ActiveAlertSnapshot), "WireActiveAlert", typeof(ScenarioActiveAlert), []),
         new(typeof(TempBasalSnapshot), "WireTempBasal", typeof(ScenarioTempBasal), []),
-        new(typeof(OverrideSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan),
-        [
-            // The override evaluators read only StartedAt; the rest never crosses.
-            nameof(OverrideSnapshot.EndsAt),
-            nameof(OverrideSnapshot.Multiplier),
-            nameof(OverrideSnapshot.Name),
-        ]),
+        new(typeof(OverrideSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan), []),
         new(typeof(PumpSuspensionSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan), []),
         new(typeof(DoNotDisturbSnapshot), "WireDoNotDisturb", typeof(ScenarioDoNotDisturb), []),
         new(typeof(PumpModeSnapshot), "WirePumpMode", typeof(ScenarioPumpMode), []),

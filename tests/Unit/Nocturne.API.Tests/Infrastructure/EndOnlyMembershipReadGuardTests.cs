@@ -54,14 +54,20 @@ public class EndOnlyMembershipReadGuardTests
             "which reasons the member list's note on a lifted limit names, not whether the row is a member",
         [$"{Repositories}/TenantMembershipRepository.cs: TenantMembershipRepository.IsDirectMemberAsync"] =
             "whether the direct reason itself is in force, so a person is not let in directly twice; access checks keep IsMemberAsync",
+        [$"{Repositories}/TenantMembershipRepository.cs: TenantMembershipRepository.StageSetTeamReasonAsync"] =
+            "whether one team reason's own end had passed and its new grant's has not, which the history states as access again, not whether the row is a member",
         [$"{Repositories}/MembershipReasonColumns.cs: MembershipReasonColumns.DirectAccess"] =
             "the direct reason's own end, which decides what the member may give, not whether the row is a member",
         [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.ListAccessOfTenantAsync"] =
             "a team's access to a site, not a membership",
         [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.SitesOfAsync"] =
             "a team's access to a site, not a membership",
+        [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.WithStaffWaitingLockedAsync"] =
+            "a team's access to a site and a staff member's place in the team, which decide who an owner is told waits, not a membership",
         [$"{Repositories}/TeamReasonChanges.cs: TeamReasonChanges.SyncAsync"] =
             "whether one team reason has lapsed, which is left in place, or would be added already ended, not whether the row is a member",
+        ["src/Infrastructure/Nocturne.Infrastructure.Data/Services/TeamReasons.cs: TeamReasons.OwnsAsync"] =
+            "whether the direct reason, or the row that stands for it, still gives the owner role, not whether the row is a member",
         ["src/Core/Nocturne.Core.Models/Identity/MembershipSum.cs: MembershipSum.InForceAt"] =
             "a reason's own end: the rule that decides which reasons are in force",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Services/TeamAccessRules.cs: TeamAccessRules.Refusal"] =

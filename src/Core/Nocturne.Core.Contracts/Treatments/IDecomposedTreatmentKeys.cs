@@ -21,6 +21,13 @@ public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
+    /// The legacy ids of the live temp basals, profile activations, and override and temporary target
+    /// spans that kept <c>isValid: false</c>. Only a record written before such an upload was stored
+    /// deleted keeps it.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetLiveInvalidLegacyIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Stores <paramref name="records"/> and <paramref name="spans"/> as rows already deleted, in one
     /// save: nothing reads them live, and nothing a live write sets off (deduplication, a change
     /// broadcast, the settling of the records around them) runs for them. The delete is attributed as
@@ -46,7 +53,7 @@ public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
     /// The upstream fingerprint of each of <paramref name="source"/>'s rows under
     /// <paramref name="legacyIds"/>, by legacy id. An id with no such row is absent.
     /// </summary>
-    Task<IReadOnlyDictionary<string, IReadOnlyList<string?>>> GetFingerprintsFromSourceAsync(
+    Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
         string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
@@ -56,6 +63,11 @@ public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
     Task StampUnfingerprintedAsync(
         string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct = default);
 }
+
+/// <summary>The upstream fingerprint one stored row carries.</summary>
+/// <param name="Fingerprint">The fingerprint, or <c>null</c> when the row carries none.</param>
+/// <param name="OnSpan">Whether the row is the state span of an override or a temporary target.</param>
+public readonly record struct StoredFingerprint(string? Fingerprint, bool OnSpan);
 
 /// <param name="Held">Every id a re-upload would find stored.</param>
 /// <param name="DeletedByUser">The ids in <paramref name="Held"/> held only by a record the user deleted.</param>

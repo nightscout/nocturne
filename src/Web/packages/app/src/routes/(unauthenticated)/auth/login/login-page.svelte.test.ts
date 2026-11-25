@@ -111,12 +111,14 @@ describe("Login page", () => {
     await vi.waitFor(() => expect(state.goto).toHaveBeenCalledWith("/", { replace: true }));
   });
 
-  it("clears what the browser kept for a member once the server says nobody is signed in", async () => {
+  it("shows the sign-in form and clears what the browser kept for a member once the server says nobody is signed in", async () => {
     localStorage.setItem(DRAFT_KEY, "{}");
 
     loginWith("/calendar");
 
+    await expect.element(page.getByTestId("sign-in-card")).toBeInTheDocument();
     await vi.waitFor(() => expect(localStorage.getItem(DRAFT_KEY)).toBeNull());
+    expect(state.goto).not.toHaveBeenCalled();
   });
 
   it("keeps the drafts of a member who is still signed in", async () => {

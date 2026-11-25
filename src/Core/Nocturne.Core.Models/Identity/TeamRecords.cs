@@ -18,6 +18,9 @@ public static class TeamSiteStaffStatus
 {
     public const string Pending = "pending";
     public const string Approved = "approved";
+
+    /// <summary>An owner of the site declined the staff member, and only an owner's approval lifts it.</summary>
+    public const string Declined = "declined";
 }
 
 /// <summary>A team the caller is a member of.</summary>
@@ -70,7 +73,8 @@ public sealed record TeamManagerInvite(
 
 /// <summary>
 /// A team as one of its members reads it. A staff member reads its name, its managers' names, their
-/// own kind and <paramref name="OwnStaff"/>, and nothing else.
+/// own kind, <paramref name="OwnStaff"/> and the static <paramref name="SuggestableRoles"/> that name
+/// their role ceiling, and nothing else.
 /// </summary>
 /// <param name="Managers">The managers with their subject ids; empty unless the caller is a manager.</param>
 /// <param name="ManagerNames">The managers' display names, for any member.</param>
@@ -83,7 +87,7 @@ public sealed record TeamManagerInvite(
 /// <param name="StaffInvites">The live staff invites; empty unless the caller is a manager.</param>
 /// <param name="AccessLinks">The live access links; empty unless the caller is a manager.</param>
 /// <param name="Sites">The sites the team has access to; empty unless the caller is a manager.</param>
-/// <param name="SuggestableRoles">The roles an access link may suggest; empty unless the caller is a manager.</param>
+/// <param name="SuggestableRoles">The roles an access link may suggest and a role ceiling may name, for any member.</param>
 /// <param name="CanDelete">Whether the caller may delete the team now.</param>
 /// <param name="CallerKind">What the caller is in the team, a <see cref="TeamMemberKind"/> value.</param>
 /// <param name="OwnStaff">What narrows the caller; null unless the caller is a staff member.</param>
@@ -225,9 +229,13 @@ public sealed record TeamAccessLinkSummary(
     string CreatedByName,
     TeamAccessSuggestion Suggestion);
 
-/// <summary>A site the team has access to, as a manager of the team reads it.</summary>
+/// <summary>
+/// A site the team has access to, as a manager of the team reads it: how many of its staff wait for the
+/// site's approval there and how many the site declined, never which of them or who decided.
+/// </summary>
 /// <param name="HasEnded">Whether <paramref name="AccessEndsAt"/> has passed.</param>
 /// <param name="GivenAt">When the access was given.</param>
+/// <param name="TeamManagesStaff">Whether the team's staff are approved at the site as they join.</param>
 public sealed record TeamSiteAccess(
     Guid TenantId,
     string DisplayName,
@@ -235,7 +243,10 @@ public sealed record TeamSiteAccess(
     bool LimitTo24Hours,
     DateTime? AccessEndsAt,
     bool HasEnded,
-    DateTime GivenAt);
+    DateTime GivenAt,
+    bool TeamManagesStaff,
+    int PendingStaffCount,
+    int DeclinedStaffCount);
 
 /// <summary>An access link, read by the person holding its token.</summary>
 /// <param name="Refusal">Why it cannot be used, or null when it can.</param>
@@ -308,9 +319,24 @@ public sealed record TeamAccessGrant(
 /// <summary>What approving an access link did: the access made, or why it was refused.</summary>
 public sealed record TeamAccessApproval(Guid? AccessId, TeamAccessRefusal? Refusal);
 
+/// <summary>Everything a team's access to a site gives, as an owner sets it in place of what it gave.</summary>
+/// <param name="AccessEndsAt">When the access ends, in UTC; null for no end.</param>
+public sealed record TeamAccessTerms(IReadOnlyList<Guid> RoleIds, bool LimitTo24Hours, DateTime? AccessEndsAt);
+
+/// <summary>
+/// What an owner's edit of a team's access to their site found: <paramref name="Refusal"/> says why the new
+/// terms were refused when <paramref name="Decision"/> is <see cref="OwnerDecision.Decided"/>, and is null
+/// when they were saved or changed nothing.
+/// </summary>
+public sealed record TeamAccessEdit(OwnerDecision Decision, TeamAccessRefusal? Refusal);
+
 /// <summary>A team with access to a site, as the site reads it.</summary>
 /// <param name="HasEnded">Whether <paramref name="AccessEndsAt"/> has passed.</param>
 /// <param name="ApprovedBySubjectId">Who approved it; null once that subject is deleted.</param>
+/// <param name="TeamManagesStaff">
+/// Whether the team's staff are approved at the site as they join. When false each waits for an owner.
+/// </param>
+/// <param name="Staff">The team's staff, each with whether the site approved them.</param>
 public sealed record TenantTeamAccess(
     Guid TeamId,
     string TeamName,
@@ -320,7 +346,32 @@ public sealed record TenantTeamAccess(
     bool HasEnded,
     Guid? ApprovedBySubjectId,
     string? ApprovedByName,
-    DateTime GivenAt);
+    DateTime GivenAt,
+    bool TeamManagesStaff,
+    IReadOnlyList<TenantTeamStaff> Staff);
+
+/// <summary>A staff member of a team with access to a site, as the site reads them.</summary>
+/// <param name="Status">Whether the site approved them, a <see cref="TeamSiteStaffStatus"/> value.</param>
+/// <param name="HasEnded">Whether <see cref="TeamStaffNarrowing.EndsAt"/> has passed.</param>
+public sealed record TenantTeamStaff(
+    Guid SubjectId, string DisplayName, string Status, TeamStaffNarrowing Narrowing, bool HasEnded);
+
+/// <summary>
+/// What an owner's decision at their site found: about a team's access to it, or about the team's staff there.
+/// </summary>
+public enum OwnerDecision
+{
+    Decided,
+
+    /// <summary>The team has no access to the site, or the subject is not its staff.</summary>
+    NotFound,
+
+    /// <summary>The caller holds no direct reason in force on the site, so gives nothing.</summary>
+    AccessFromTeam,
+
+    /// <summary>The caller's direct reason on the site does not hold the owner role.</summary>
+    NotOwner,
+}
 
 /// <summary>A role a team's access gives.</summary>
 public sealed record TenantTeamAccessRole(Guid Id, string Name, string Slug);

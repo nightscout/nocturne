@@ -597,8 +597,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await UntilWaitingAsync(2, join, approval);
         await held.RollbackAsync();
 
-        (await join.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().BeNull();
-        (await approval.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().BeNull();
+        (await join.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().BeNull();
+        (await approval.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().BeNull();
         (await SiteStaffAsync(team)).Should().Equal((site.Id, staff, TeamSiteStaffStatus.Approved));
     }
 
@@ -620,7 +620,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, join);
         await held.CommitAsync();
 
-        (await join.WaitAsync(TimeSpan.FromSeconds(30))).Refusal.Should().BeNull();
+        (await join.WaitAsync(Eventually.DefaultPatience)).Refusal.Should().BeNull();
         (await SiteStaffAsync(team)).Should().Equal((kept.Id, staff, TeamSiteStaffStatus.Approved));
     }
 
@@ -726,7 +726,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, edit);
         await held.CommitAsync();
 
-        (await edit.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(TeamStaffChange.Changed);
+        (await edit.WaitAsync(Eventually.DefaultPatience)).Should().Be(TeamStaffChange.Changed);
         (await SiteStaffAsync(team)).Should().Equal((kept.Id, staff, TeamSiteStaffStatus.Pending));
         (await MemberAsync(team, staff)).LimitTo24Hours.Should().BeFalse();
         (await AuditOfAsync(team, AuthAuditEventType.TeamStaffChanged)).Should().ContainSingle();
@@ -818,7 +818,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     }
 
     [Fact]
-    public async Task A_staff_member_reads_the_teams_name_the_managers_names_and_what_narrows_them_and_nothing_else()
+    public async Task A_staff_member_reads_the_teams_name_the_managers_names_what_narrows_them_and_the_role_names_and_nothing_else()
     {
         var (team, manager) = await TeamAsync();
         var second = await NewSubjectAsync("second");
@@ -845,7 +845,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         detail.AccessLinks.Should().BeEmpty();
         detail.Sites.Should().BeEmpty();
         detail.Staff.Should().BeEmpty();
-        detail.SuggestableRoles.Should().BeEmpty();
+        detail.SuggestableRoles.Should().BeSameAs(TeamSuggestableRoles.All);
         (detail.IsLastManager, detail.CanDelete).Should().Be((false, false));
         var json = JsonSerializer.Serialize(detail);
         foreach (var secret in new[] { manager, second, other, site.Id, managerInvite, staffInvite })

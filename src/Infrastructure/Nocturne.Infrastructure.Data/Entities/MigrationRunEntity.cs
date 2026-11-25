@@ -135,6 +135,20 @@ public class MigrationRunEntity
     public int Revision { get; set; }
 
     /// <summary>
+    /// The subject who started the run, stamped as the maker of every token it adopts; null for a run
+    /// started before runs recorded one, which adopts with no maker.
+    /// </summary>
+    [Column("started_by_subject_id")]
+    public Guid? StartedBySubjectId { get; set; }
+
+    /// <summary>
+    /// When the starter's access ends, read once at start and the expiry of every token the run
+    /// adopts. A later end only lowers it (<see cref="Repositories.MemberCreations.CapAsync"/>).
+    /// </summary>
+    [Column("starter_access_ends_at")]
+    public DateTime? StarterAccessEndsAt { get; set; }
+
+    /// <summary>
     /// Navigation property for the migration source
     /// </summary>
     [ForeignKey(nameof(SourceId))]

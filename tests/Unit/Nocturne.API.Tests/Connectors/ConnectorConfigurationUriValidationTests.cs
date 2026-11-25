@@ -66,7 +66,7 @@ public class ConnectorConfigurationUriValidationTests
         configService
             .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse(
-                """{"properties":{"baseUrl":{"type":"string","format":"uri"}}}"""));
+                """{"properties":{"baseUrl":{"type":"string","format":"uri"}},"required":["baseUrl"]}"""));
         configService
             .Setup(s => s.SaveConfigurationAsync(
                 It.IsAny<string>(), It.IsAny<JsonDocument>(), It.IsAny<string>(),

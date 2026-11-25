@@ -23,9 +23,12 @@ public class NotificationTemplateRegistry : INotificationTemplateRegistry
 {
     private readonly Dictionary<string, NotificationTemplate> _templates = new();
 
+    public IReadOnlyCollection<NotificationTemplate> Templates => _templates.Values;
+
     public void Register(NotificationTemplate template)
     {
-        _templates[template.Type] = template;
+        if (!_templates.TryAdd(template.Type, template))
+            throw new InvalidOperationException($"A template for '{template.Type}' is already registered.");
     }
 
     public NotificationTemplate? GetTemplate(string type)

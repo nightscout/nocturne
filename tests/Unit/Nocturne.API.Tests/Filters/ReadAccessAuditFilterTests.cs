@@ -225,7 +225,7 @@ public class ReadAccessAuditFilterTests
         await DrainQueuedAsync();
 
         // Wait for the fire-and-forget write with a generous timeout.
-        var completed = await saveCompleted.WaitAsync(TimeSpan.FromSeconds(5));
+        var completed = await saveCompleted.WaitAsync(Eventually.DefaultPatience);
         completed.Should().BeTrue("the fire-and-forget audit write should complete");
 
         _contextFactory.Verify(
@@ -275,7 +275,7 @@ public class ReadAccessAuditFilterTests
         await filter.OnResultExecutionAsync(ctx, next);
         await DrainQueuedAsync();
 
-        (await saveCompleted.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeTrue();
+        (await saveCompleted.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
 
         written.Should().NotBeNull();
         written!.CredentialFingerprint.Should().Be("0123456789abcdef");
@@ -312,7 +312,7 @@ public class ReadAccessAuditFilterTests
         await CreateFilter().OnResultExecutionAsync(ctx, next);
         await DrainQueuedAsync();
 
-        (await saveCompleted.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeTrue();
+        (await saveCompleted.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
         written!.ActorSubjectId.Should().Be(caller);
         written.ActorName.Should().Be("Alex");
     }
@@ -351,7 +351,7 @@ public class ReadAccessAuditFilterTests
         await CreateFilter().OnResultExecutionAsync(ctx, next);
         await DrainQueuedAsync();
 
-        (await saveCompleted.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeTrue();
+        (await saveCompleted.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
         written!.Endpoint.Should().Be($"GET {CredentialRouteRedactor.AlertInvitePath}");
     }
 

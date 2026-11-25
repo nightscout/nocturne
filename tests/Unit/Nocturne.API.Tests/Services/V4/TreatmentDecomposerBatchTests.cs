@@ -1095,6 +1095,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
         public Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
             => keys.GetDeletedLegacyIdsAsync(legacyIds, ct);
 
+        public Task<IReadOnlyList<string>> GetLiveInvalidLegacyIdsAsync(CancellationToken ct = default)
+            => keys.GetLiveInvalidLegacyIdsAsync(ct);
+
         public Task StoreDeletedAsync(
             IReadOnlyCollection<V4Models.IV4Record> records, IReadOnlyCollection<StateSpan> spans, CancellationToken ct = default)
             => keys.StoreDeletedAsync(records, spans, ct);
@@ -1103,7 +1106,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             string source, IReadOnlyList<ClientIdEquivalent> equivalents, CancellationToken ct = default)
             => keys.RekeyClientIdsAsync(source, equivalents, ct);
 
-        public Task<IReadOnlyDictionary<string, IReadOnlyList<string?>>> GetFingerprintsFromSourceAsync(
+        public Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
             string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
             => keys.GetFingerprintsFromSourceAsync(source, legacyIds, ct);
 
@@ -1216,11 +1219,11 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         var selected = await _decomposer.SelectForRepublishAsync("nightscout-connector", [copy]);
         adopted.Should().Be(0);
-        await _decomposer.ResolveStoredIdentitiesAsync(selected);
+        await _decomposer.ResolveStoredIdentitiesAsync(selected.Decompose);
         adopted.Should().Be(1);
         await _decomposer.DecomposeBatchAsync([copy], WriteOrigin.Live);
 
-        selected.Should().Equal(copy);
+        selected.Decompose.Should().Equal(copy);
         copy.Id.Should().Be(wireId);
         adopted.Should().Be(1);
         _bolusRepoMock.Verify(

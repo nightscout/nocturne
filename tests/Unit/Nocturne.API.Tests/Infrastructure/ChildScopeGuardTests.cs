@@ -101,7 +101,7 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorResetJob.ExecuteAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorSyncService.cs: ConnectorSyncService.TriggerSyncAsync",
         "src/API/Nocturne.API/Services/Devices/SensorSessionInferenceRunner.cs: SensorSessionInferenceRunner.RunAsync",
-        "src/API/Nocturne.API/Services/Identity/TeamRenameAnnouncer.cs: TeamRenameAnnouncer.AnnounceToAsync",
+        "src/API/Nocturne.API/Services/Identity/SiteNotices.cs: SiteNotices.RunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.CreateTenantScope",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.ExecuteApiMigrationAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.ExecuteMongoMigrationAsync",

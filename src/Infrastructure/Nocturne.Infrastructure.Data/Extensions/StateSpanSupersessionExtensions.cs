@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -6,9 +7,9 @@ using Nocturne.Infrastructure.Data.Repositories;
 namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
-/// Keeps supersession true when a span is removed (soft-deleted or purged) or arrives outside the upsert
-/// (restored, or written by a replace): an open span of an exclusive category ends at its first live
-/// successor (<see cref="StateSpanSuccession"/>).
+/// Keeps supersession true when a span is removed (soft-deleted or purged), arrives outside the upsert
+/// (restored, or written by a replace), or is rewritten by an upload (<see cref="UploadedEnd"/>): an open
+/// span of an exclusive category ends at its first live successor (<see cref="StateSpanSuccession"/>).
 /// </summary>
 /// <remarks>
 /// Supersession ends only an open span, so the end it gave is told apart by the pointer and the
@@ -137,19 +138,64 @@ internal static class StateSpanSupersessionExtensions
                         spans.TryAdd(span.Id, span);
                 }
 
-                var pointers = spans.Values.Select(s => s.SupersededById).OfType<Guid>().Distinct().ToArray();
-                var supersederStarts = await ctx.StateSpans.IncludingDeleted().AsNoTracking()
-                    .Where(s => pointers.Contains(s.Id))
-                    .ToDictionaryAsync(s => s.Id, s => s.StartTimestamp, token);
+                var superseders = await ctx.SupersedersAsync(spans.Values, token);
                 var movable = spans.Values
                     .Where(s => !(asGiven && arrivedIdSet.Contains(s.Id)))
-                    .Where(s => s.EndTimestamp == null
-                        || (s.SupersededById is { } by && supersederStarts.GetValueOrDefault(by) == s.EndTimestamp))
+                    .Where(s => s.EndTimestamp == null || SupersededEnd(s, superseders) is not null)
                     .ToList();
                 return await EndAtSuccessorsAsync(
                     ctx, movable, _ => true, writeUnchanged: false, NocturneDbContext.UtcNowAtStoredPrecision(), token);
             },
             ct);
+    }
+
+    /// <summary>The span each of <paramref name="spans"/> names as its superseder, live or not, as stored, by its id.</summary>
+    public static async Task<Dictionary<Guid, StateSpanEntity>> SupersedersAsync(
+        this NocturneDbContext ctx, IEnumerable<StateSpanEntity> spans, CancellationToken ct)
+    {
+        var pointers = spans.Select(s => s.SupersededById).OfType<Guid>().Distinct().ToArray();
+        return pointers.Length == 0
+            ? []
+            : await ctx.StateSpans.IncludingDeleted().AsNoTracking()
+                .Where(s => pointers.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, ct);
+    }
+
+    /// <summary>
+    /// The end supersession gave <paramref name="span"/>, the start of the span it names, when its end
+    /// is that; null for an uploaded end or none.
+    /// </summary>
+    public static DateTime? SupersededEnd(StateSpanEntity span, IReadOnlyDictionary<Guid, StateSpanEntity> superseders) =>
+        SupersededEnd(span, span.SupersededById is { } by ? superseders.GetValueOrDefault(by) : null);
+
+    /// <inheritdoc cref="SupersededEnd(StateSpanEntity, IReadOnlyDictionary{Guid, StateSpanEntity})"/>
+    /// <param name="span">The span.</param>
+    /// <param name="superseder">The span it names, as stored, or null.</param>
+    public static DateTime? SupersededEnd(StateSpanEntity span, StateSpanEntity? superseder) =>
+        superseder is not null && span.SupersededById == superseder.Id && superseder.StartTimestamp == span.EndTimestamp
+            ? superseder.StartTimestamp
+            : null;
+
+    /// <summary>
+    /// The end and pointer a stored span keeps when an upload rewrites it. The uploaded end, unless the
+    /// span had a superseded end and the upload still reaches the span that gave it
+    /// (<see cref="StateSpanSuccession.Follows"/>, at that span's start as it now stands). Then it keeps
+    /// that end, or, when that span has moved, it is left open with no pointer, for the writer to end at
+    /// its first successor. An uploaded end at or before the superseder's start is the upload's own.
+    /// </summary>
+    /// <param name="row">The stored row, with every other field of the upload already mapped onto it.</param>
+    /// <param name="uploaded">The span uploaded.</param>
+    /// <param name="supersededEnd">The row's <see cref="SupersededEnd(StateSpanEntity, StateSpanEntity?)"/> before the upload.</param>
+    /// <param name="superseder">The span the row named before the upload, as it now stands.</param>
+    public static (DateTime? End, Guid? SupersededById) UploadedEnd(
+        StateSpanEntity row, StateSpan uploaded, DateTime? supersededEnd, StateSpanEntity? superseder)
+    {
+        if (supersededEnd is not { } ended || superseder is null
+            || !StateSpanSuccession.Follows(row, uploaded.Metadata, superseder)
+            || uploaded.EndTimestamp <= superseder.StartTimestamp)
+            return (uploaded.EndTimestamp, null);
+
+        return superseder.StartTimestamp == ended ? (ended, superseder.Id) : (null, null);
     }
 
     /// <summary>

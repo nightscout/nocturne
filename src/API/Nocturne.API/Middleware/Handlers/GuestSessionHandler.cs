@@ -88,7 +88,7 @@ public class GuestSessionHandler : IAuthHandler
         // A cached session past its own expiry is a miss, so expiry and a cap end a session at the
         // stated time rather than at the end of the cache lifetime.
         if (!_sessionCache.TryGet(tenantCtx.TenantId, grantId, out var session)
-            || session?.ExpiresAt <= _time.GetUtcNow().UtcDateTime)
+            || OAuthGrantState.IsExpiredAt(session?.ExpiresAt, _time.GetUtcNow().UtcDateTime))
         {
             using var scope = _scopeFactory.CreateScope();
 

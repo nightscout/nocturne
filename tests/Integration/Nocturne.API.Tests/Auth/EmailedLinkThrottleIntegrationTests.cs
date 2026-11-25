@@ -125,12 +125,12 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
                     db, memberId, LoginCodePurpose.RecoverySession, null, null,
                     new AuthAuditActor(null, "test"), cancel.Token);
             });
-            (await session.WaitAsync(TimeSpan.FromSeconds(15))).Should().NotBeNull();
+            (await session.WaitAsync(Eventually.DefaultPatience)).Should().NotBeNull();
             mint.IsCompleted.Should().BeFalse("the link request still waits on the redemption's claim");
 
             await claim.CommitAsync();
 
-            (await mint.WaitAsync(TimeSpan.FromSeconds(30))).Should().NotBeNull();
+            (await mint.WaitAsync(Eventually.DefaultPatience)).Should().NotBeNull();
             (await ScalarAsync<long>(conn, "SELECT count(*) FROM login_codes WHERE id = @id;", ("id", spentId)))
                 .Should().Be(0);
         }
@@ -138,7 +138,7 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
         {
             await claim.DisposeAsync();
             cancel.Cancel();
-            await Task.WhenAny(Task.WhenAll(new Task?[] { mint, session }.OfType<Task>()), Task.Delay(TimeSpan.FromSeconds(30)));
+            await Task.WhenAny(Task.WhenAll(new Task?[] { mint, session }.OfType<Task>()), Task.Delay(Eventually.DefaultPatience));
             await ExecuteAsync(conn, "DELETE FROM login_codes WHERE subject_id = @id;", ("id", memberId));
             await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }

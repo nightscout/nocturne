@@ -11,6 +11,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
@@ -122,6 +123,68 @@ public class NightscoutTreatmentReconcileTests
 
         harness.Deleted.Should().BeEmpty();
         harness.Lookups.Skip(firstLookups).Should().NotContain($"find[id]={TrioGone}");
+    }
+
+    [Fact]
+    public async Task Another_source_with_a_later_clock_does_not_forget_this_sources_lookups()
+    {
+        var memory = new NightscoutLookups();
+        var harness = new Harness
+        {
+            LookupMemory = memory,
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+            AlsoUpstream = [TrioGone],
+        };
+        var later = Now.AddDays(7);
+        var elsewhere = new Harness
+        {
+            LookupMemory = memory,
+            At = later,
+            LatestStored = later.AddMinutes(-10),
+            Upstream = [Trio(MongoIdB, TrioKept, later.AddMinutes(-30))],
+            Stored = [TrioKept, LoopGone],
+            AlsoUpstream = [LoopGone],
+        };
+
+        await harness.SyncAsync();
+        var firstLookups = harness.Lookups.Count;
+        await elsewhere.SyncAsync();
+        await harness.SyncAsync();
+
+        elsewhere.Lookups.Should().Contain(l => l.EndsWith(LoopGone), "the later source looked its own treatment up");
+        harness.Lookups.Skip(firstLookups).Should().NotContain($"find[id]={TrioGone}");
+    }
+
+    [Fact]
+    public async Task Another_tenants_lookup_on_the_same_site_does_not_stand_for_this_tenants()
+    {
+        var memory = new NightscoutLookups();
+        const string site = "https://shared.ns.example";
+        var first = new Harness
+        {
+            LookupMemory = memory,
+            Url = site,
+            Tenant = Guid.NewGuid(),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+            AlsoUpstream = [TrioGone],
+        };
+        var second = new Harness
+        {
+            LookupMemory = memory,
+            Url = site,
+            Tenant = Guid.NewGuid(),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+        };
+
+        await first.SyncAsync();
+        await second.SyncAsync();
+
+        first.Deleted.Should().BeEmpty();
+        second.Lookups.Should().Contain($"find[id]={TrioGone}", "the first tenant's lookup was of its own copy");
+        second.Deleted.Should().ContainSingle().Which.Should().BeEquivalentTo([TrioGone]);
     }
 
     [Fact]
@@ -435,6 +498,11 @@ public class NightscoutTreatmentReconcileTests
 
     private sealed class Harness : HttpMessageHandler
     {
+        /// <summary>What the connector remembers of its lookups; give two harnesses one to share it.</summary>
+        public NightscoutLookups LookupMemory { get; init; } = new();
+
+        public Guid Tenant { get; init; } = MockTenantAccessor.DefaultTenantId;
+
         public string Url { get; init; } = $"https://{Guid.NewGuid():N}.ns.example";
 
         public DateTimeOffset At { get; init; } = Now;
@@ -602,6 +670,8 @@ public class NightscoutTreatmentReconcileTests
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
+                LookupMemory,
+                MockTenantAccessor.Create(Tenant).Object,
                 publisher.Object,
                 new FakeTimeProvider(At));
         }

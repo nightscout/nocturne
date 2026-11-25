@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Health;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
@@ -553,10 +554,10 @@ public class GoogleHealthConnectorServiceTests
         config.HistoryDays = 7;
 
         var sync = fixture.Service.SyncDataAsync(config, CancellationToken.None);
-        var cleanupToken = await saveStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var cleanupToken = await saveStarted.Task.WaitAsync(Eventually.DefaultPatience);
         Assert.False(cleanupToken.IsCancellationRequested);
         clock.Advance(TimeSpan.FromSeconds(30));
-        var result = await sync.WaitAsync(TimeSpan.FromSeconds(10));
+        var result = await sync.WaitAsync(Eventually.DefaultPatience);
 
         Assert.True(cleanupToken.IsCancellationRequested);
         Assert.False(result.Success);
@@ -623,10 +624,10 @@ public class GoogleHealthConnectorServiceTests
         var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
         var sync = fixture.Service.SyncDataAsync(
             new SyncRequest { From = from, To = from.AddDays(1) }, fixture.Configuration(), CancellationToken.None);
-        var cleanupToken = await abandonStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var cleanupToken = await abandonStarted.Task.WaitAsync(Eventually.DefaultPatience);
         Assert.False(cleanupToken.IsCancellationRequested);
         clock.Advance(TimeSpan.FromSeconds(30));
-        var result = await sync.WaitAsync(TimeSpan.FromSeconds(10));
+        var result = await sync.WaitAsync(Eventually.DefaultPatience);
 
         Assert.True(cleanupToken.IsCancellationRequested);
         Assert.False(result.Success);

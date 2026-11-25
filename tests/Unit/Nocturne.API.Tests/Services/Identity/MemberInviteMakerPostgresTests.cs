@@ -134,7 +134,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         new FakeTimeProvider(Now),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static TenantService TenantService(SuppliedContextFactory contexts) => new(
         contexts,
@@ -148,7 +148,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         Revocation(),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private async Task<(Guid Id, string Token)> InviteByAsync(
         Seeded s, Guid maker, DateTime? expiresAt = null, int? maxUses = null)
@@ -228,7 +228,8 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         var (id, token) = await InviteByAsync(s, s.Maker);
         var members = new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off);
         var maker = (await members.FindMemberAsync(s.Tenant, s.Maker, Ct))!;
-        (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+                Contexts(s.Tenant), AccountLinkRoutes.Off, s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.Changed);
         (await StoredAsync(s, id)).RevokedAt.Should().BeNull();
 
@@ -244,7 +245,8 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         var (id, token) = await InviteByAsync(s, s.Maker, maxUses: 1);
         var members = new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off);
         var maker = (await members.FindMemberAsync(s.Tenant, s.Maker, Ct))!;
-        (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+                Contexts(s.Tenant), AccountLinkRoutes.Off, s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var service = InviteService(Contexts(s.Tenant), new MakerStillReadsAsMember(Contexts(s.Tenant), s.Maker));

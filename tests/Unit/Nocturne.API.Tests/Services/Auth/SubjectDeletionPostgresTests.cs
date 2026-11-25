@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -183,6 +184,8 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
                 contexts, new HttpContextAccessor { HttpContext = new DefaultHttpContext() }, new AuditContext(),
                 NullLogger<AuthAuditService>.Instance),
             TimeProvider.System,
+            InertTeamStaff.Announcer(),
+            InertTeamStaff.Sites(),
             NullLogger<SubjectDeletion>.Instance);
     }
 

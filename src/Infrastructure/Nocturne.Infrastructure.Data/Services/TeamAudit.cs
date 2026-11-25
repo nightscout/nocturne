@@ -25,6 +25,15 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// team's name at the time under <c>name</c>, the role slugs under <c>roles</c>, the limit under
 /// <c>history_limit</c> and the end under <c>access_ends_at</c> as <see cref="MemberAccessAudit"/> writes
 /// them, the link under <c>link</c>, and for a stop how under <c>how</c>: <c>stopped</c> or <c>team_deleted</c>.
+/// An owner's change of what the access gives is a third such row, holding what it gives after the change
+/// under those keys and what it gave before under <c>old_roles</c>, <c>old_history_limit</c> and
+/// <c>old_access_ends_at</c>.
+/// </para>
+/// <para>
+/// An owner's decision about the team's staff at a site is a <c>team_access</c> row too, naming the team's
+/// name under <c>name</c>. A staff member approved or declined targets that staff member, so their own
+/// history reads it. A change of the switch has no target and holds the new value under
+/// <c>team_manages_staff</c>.
 /// </para>
 /// </remarks>
 internal static class TeamAudit
@@ -34,6 +43,8 @@ internal static class TeamAudit
     internal const string InviteKey = "invite";
     internal const string LinkKey = "link";
     internal const string RolesKey = "roles";
+    internal const string OldRolesKey = "old_roles";
+    internal const string OldAccessEndsAtKey = "old_access_ends_at";
     internal const string OldCeilingKey = "old_ceiling";
     internal const string CeilingKey = "ceiling";
     internal const string OldHistoryLimitKey = "old_history_limit";
@@ -41,6 +52,7 @@ internal static class TeamAudit
     internal const string EndsAtKey = "ends_at";
     internal const string StoppedHow = "stopped";
     internal const string TeamDeletedHow = "team_deleted";
+    internal const string TeamManagesStaffKey = "team_manages_staff";
 
     public static void StageCreated(NocturneDbContext db, Guid teamId, string name) =>
         Stage(db, AuthAuditEventType.TeamCreated, teamId, null, new() { [NameKey] = name });
@@ -107,10 +119,43 @@ internal static class TeamAudit
     public static void StageAccessGiven(NocturneDbContext db, TeamTenantAccessEntity access, string teamName, IEnumerable<string> roleSlugs) =>
         StageAccess(db, AuthAuditEventType.TeamAccessGiven, access, teamName, roleSlugs, how: null);
 
+    /// <summary>Stages an owner's change of what <paramref name="access"/> gives, from <paramref name="before"/> to what it gives now.</summary>
+    public static void StageAccessChanged(
+        NocturneDbContext db, TeamTenantAccessEntity access, string teamName, IEnumerable<string> roleSlugs,
+        (IReadOnlyList<string> Roles, bool LimitTo24Hours, DateTime? AccessEndsAt) before)
+    {
+        var details = AccessDetails(access, teamName, roleSlugs);
+        details[OldRolesKey] = before.Roles.Order(StringComparer.Ordinal).ToList();
+        details[OldHistoryLimitKey] = before.LimitTo24Hours ? MemberAccessAudit.TwentyFourHours : MemberAccessAudit.FullHistory;
+        details[OldAccessEndsAtKey] = Instant(before.AccessEndsAt);
+        AuthAuditRows.Stage(db, AuthAuditEventType.TeamAccessChanged, access.TenantId, access.TeamId, targetSubjectId: null, details);
+    }
+
     /// <summary>Stages the stopped row, <paramref name="how"/> being <see cref="StoppedHow"/> or <see cref="TeamDeletedHow"/>.</summary>
     public static void StageAccessStopped(
         NocturneDbContext db, TeamTenantAccessEntity access, string teamName, IEnumerable<string> roleSlugs, string how) =>
         StageAccess(db, AuthAuditEventType.TeamAccessStopped, access, teamName, roleSlugs, how);
+
+    /// <summary>
+    /// Stages an owner's decision about <paramref name="staffSubjectId"/> at the site of
+    /// <paramref name="access"/>: <see cref="AuthAuditEventType.TeamStaffApproved"/> or
+    /// <see cref="AuthAuditEventType.TeamStaffDeclined"/>.
+    /// </summary>
+    public static void StageStaffDecided(
+        NocturneDbContext db, string eventType, TeamTenantAccessEntity access, string teamName, Guid staffSubjectId) =>
+        AuthAuditRows.Stage(db, eventType, access.TenantId, access.TeamId, staffSubjectId, new Dictionary<string, object?>
+        {
+            [AuthAuditKind.Key] = AuthAuditKind.TeamAccess,
+            [NameKey] = teamName,
+        });
+
+    public static void StageStaffRuleChanged(NocturneDbContext db, TeamTenantAccessEntity access, string teamName) =>
+        AuthAuditRows.Stage(db, AuthAuditEventType.TeamStaffRuleChanged, access.TenantId, access.TeamId, targetSubjectId: null, new Dictionary<string, object?>
+        {
+            [AuthAuditKind.Key] = AuthAuditKind.TeamAccess,
+            [NameKey] = teamName,
+            [TeamManagesStaffKey] = access.TeamManagesStaff,
+        });
 
     private static string HistoryLimit(TeamStaffNarrowing narrowing) =>
         narrowing.LimitTo24Hours ? MemberAccessAudit.TwentyFourHours : MemberAccessAudit.FullHistory;
@@ -122,7 +167,15 @@ internal static class TeamAudit
         NocturneDbContext db, string eventType, TeamTenantAccessEntity access, string teamName,
         IEnumerable<string> roleSlugs, string? how)
     {
-        var details = new Dictionary<string, object?>
+        var details = AccessDetails(access, teamName, roleSlugs);
+        if (how is not null)
+            details[MemberAccessAudit.HowKey] = how;
+
+        AuthAuditRows.Stage(db, eventType, access.TenantId, access.TeamId, targetSubjectId: null, details);
+    }
+
+    private static Dictionary<string, object?> AccessDetails(TeamTenantAccessEntity access, string teamName, IEnumerable<string> roleSlugs) =>
+        new()
         {
             [AuthAuditKind.Key] = AuthAuditKind.TeamAccess,
             [NameKey] = teamName,
@@ -131,11 +184,6 @@ internal static class TeamAudit
             [MemberAccessAudit.AccessEndsAtKey] = Instant(access.AccessEndsAt),
             [LinkKey] = access.CreatedFromLinkId?.ToString(),
         };
-        if (how is not null)
-            details[MemberAccessAudit.HowKey] = how;
-
-        AuthAuditRows.Stage(db, eventType, access.TenantId, access.TeamId, targetSubjectId: null, details);
-    }
 
     private static void Stage(
         NocturneDbContext db, string eventType, Guid teamId, Guid? targetSubjectId, Dictionary<string, object?> details)

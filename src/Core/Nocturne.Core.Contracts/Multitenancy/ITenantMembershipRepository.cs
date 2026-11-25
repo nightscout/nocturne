@@ -138,24 +138,6 @@ public interface ITenantMembershipRepository
     Task<bool> AnyOtherOwnerAsync(Guid tenantId, Guid memberId, CancellationToken ct);
 
     /// <summary>
-    /// Removes the membership's direct reason, refused with <see cref="OwnerGuardedChange.LastOwner"/>
-    /// when <c>TenantOwnerFilter.IsLastOwnerAsync</c> says it is the last owner, and with
-    /// <see cref="OwnerGuardedChange.FromTeam"/> when it holds no direct reason. A membership whose only
-    /// reason it is goes with it; one that also holds a team's reason stays, projected at
-    /// <paramref name="now"/> from what is left, and says the end it keeps.
-    /// Its removed row records <paramref name="how"/>.
-    /// </summary>
-    /// <remarks>
-    /// The check and the removal hold the tenant's owner lock. Over a unit, call it inside the
-    /// unit's commit, which then holds the lock until it commits the removal. The caller caps what
-    /// the member made at <see cref="DirectReasonRemoval.KeptAccessEndsAt"/> on that same unit, in
-    /// the same commit (<c>MemberCreations.CapAsync</c>), so call it over a unit: without one it
-    /// commits the kept end before anything can be capped.
-    /// </remarks>
-    Task<DirectReasonRemoval> RemoveMemberUnlessLastOwnerAsync(
-        Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct);
-
-    /// <summary>
     /// Removes every membership <paramref name="subjectId"/> holds, in any tenant, with every reason, and returns how
     /// many, with the tenants whose last owner it was by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.
     /// Each removed row records <see cref="MembershipEndHow.System"/>.
@@ -181,17 +163,6 @@ public interface ITenantMembershipRepository
     /// </summary>
     Task<bool> SetLimitTo24HoursAsync(Guid tenantId, Guid memberId, bool limitTo24Hours, DateTime now, CancellationToken ct);
 
-    /// <summary>
-    /// Sets when the membership's direct reason ends, null clearing it, and stamps it updated at
-    /// <paramref name="now"/> when the date moved. Refused with
-    /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it would give an owner an end date, and
-    /// with <see cref="OwnerGuardedChange.FromTeam"/> when it holds no direct reason.
-    /// It does not cap what the member made: <see cref="ITenantService.SetMemberAccessEndAsync"/> does, in the same commit.
-    /// </summary>
-    /// <remarks>Holds the tenant's owner lock as <see cref="RemoveMemberUnlessLastOwnerAsync"/> does, so it and a role change cannot race.</remarks>
-    Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(
-        Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct);
-
     /// <summary>Sets the membership's per-tenant sign-in name.</summary>
     Task<bool> SetUsernameAsync(Guid tenantId, Guid memberId, string? username, CancellationToken ct);
 
@@ -200,20 +171,8 @@ public interface ITenantMembershipRepository
     /// <paramref name="addedRoleIds"/>, and stamps it updated at <paramref name="now"/>, in one save;
     /// false when there is no such membership or it holds no direct reason.
     /// </summary>
-    /// <remarks>Does not check for the last owner. For a membership a person holds, use <see cref="ReplaceRolesUnlessLastOwnerAsync"/>.</remarks>
+    /// <remarks>Does not check for the last owner. For a membership a person holds, use <see cref="ITenantService.ReplaceMemberRolesAsync"/>.</remarks>
     Task<bool> ReplaceRolesAsync(
-        Guid tenantId, Guid memberId, IReadOnlyCollection<Guid> removedRoleIds, IReadOnlyCollection<Guid> addedRoleIds,
-        DateTime now, CancellationToken ct);
-
-    /// <summary>
-    /// <see cref="ReplaceRolesAsync"/>, refused with <see cref="OwnerGuardedChange.LastOwner"/> when
-    /// it removes the owner role from a membership <c>TenantOwnerFilter.IsLastOwnerAsync</c> says is the last owner,
-    /// with <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it gives the owner role to a direct
-    /// reason that has an end date, and with <see cref="OwnerGuardedChange.FromTeam"/> when the
-    /// membership holds no direct reason.
-    /// </summary>
-    /// <remarks>Holds the tenant's owner lock as <see cref="RemoveMemberUnlessLastOwnerAsync"/> does.</remarks>
-    Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
         Guid tenantId, Guid memberId, IReadOnlyCollection<Guid> removedRoleIds, IReadOnlyCollection<Guid> addedRoleIds,
         DateTime now, CancellationToken ct);
 

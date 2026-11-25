@@ -1,6 +1,7 @@
 import {
   CreateTeamAccessLinkRequestSchema,
   CreateTeamInviteRequestSchema,
+  CreateTeamStaffInviteRequestSchema,
   TeamNameRequestSchema,
 } from "@nocturne/api-client/schemas";
 
@@ -33,3 +34,5 @@ export const teamNameMaxLength = maxLengthOf(TeamNameRequestSchema.shape.name);
 export const inviteLabelMaxLength = maxLengthOf(CreateTeamInviteRequestSchema.shape.label);
 
 export const accessLinkLabelMaxLength = maxLengthOf(CreateTeamAccessLinkRequestSchema.shape.label);
+
+export const staffInviteLabelMaxLength = maxLengthOf(CreateTeamStaffInviteRequestSchema.shape.label);

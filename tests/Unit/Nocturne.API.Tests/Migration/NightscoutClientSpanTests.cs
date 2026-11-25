@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Nocturne.Tests.Shared.Infrastructure;
 using Activity = System.Diagnostics.Activity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -88,7 +89,7 @@ public class NightscoutClientSpanTests
                 using var client = NightscoutConnectorBackgroundService.NewClient(
                     NightscoutAddress.Resolve($"http://127.0.0.1:{port}/{Secret}/?token={Token}"),
                     services.GetRequiredService<IHttpClientFactory>());
-                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                using var deadline = new CancellationTokenSource(Eventually.DefaultPatience);
 
                 await client.ConnectAsync(deadline.Token);
                 await polled.WaitAsync(deadline.Token);

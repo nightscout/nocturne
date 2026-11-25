@@ -24,6 +24,8 @@ const JsonSchemaPropertySchema = z.looseObject({
   "x-hidden": optional(z.boolean()),
   /** Whether this property holds a secret (x-secret extension) */
   "x-secret": optional(z.boolean()),
+  /** Whether this property holds a free-text address (x-address extension) */
+  "x-address": optional(z.boolean()),
 });
 
 export type JsonSchemaProperty = z.infer<typeof JsonSchemaPropertySchema>;
@@ -70,4 +72,12 @@ export function normalizeConnectorJsonSchema(
   }
 
   return parsed.data;
+}
+
+/**
+ * Whether the API marks a property as a free-text address. It gives only its masked form, and keeps
+ * the stored address for a save that leaves the property out.
+ */
+export function isAddress(property: JsonSchemaProperty | undefined): boolean {
+  return property?.["x-address"] === true;
 }

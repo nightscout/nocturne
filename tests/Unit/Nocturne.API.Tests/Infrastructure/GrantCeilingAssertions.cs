@@ -12,8 +12,8 @@ internal static class GrantCeilingAssertions
         var problem = result.Should().BeAssignableTo<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Extensions["code"].Should().Be(MemberAccessFromTeam.Code);
-        details.Detail.Should().Be(MemberAccessFromTeam.CallerDetail);
+        details.Extensions["code"].Should().Be(CallerAccessFromTeam.Code);
+        details.Detail.Should().Be(CallerAccessFromTeam.Detail);
     }
 
     public static void ShouldRefuseAsAccessFromTeam<T>(ActionResult<T> result) =>
