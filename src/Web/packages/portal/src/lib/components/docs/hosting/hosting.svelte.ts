@@ -16,7 +16,7 @@ function isHosting(value: unknown): value is Hosting {
  * The portal is prerendered, so the choice is unknown during the build and for a reader without
  * JavaScript. Until the reader chooses, every page shows both paths.
  */
-class HostingChoice {
+export class HostingChoice {
     current = $state<Hosting | null>(null);
     /** The page runs in a browser and has read the stored choice. */
     started = $state(false);
