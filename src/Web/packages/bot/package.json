@@ -10,6 +10,10 @@
       "default": "./dist/index.js"
     },
     "./package.json": "./package.json",
+    "./alert-text": {
+      "types": "./dist/alert-text.d.ts",
+      "default": "./dist/alert-text.js"
+    },
     "./parse-dispatch": {
       "types": "./dist/alerts/parse-dispatch.d.ts",
       "default": "./dist/alerts/parse-dispatch.js"

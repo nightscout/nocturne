@@ -1,7 +1,12 @@
 import { availableParallelism } from "node:os";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
+
+// The bot publishes built output; the parity test reads its sources so it needs no build.
+const botSource = join(dirname(createRequire(import.meta.url).resolve("@nocturne/bot/package.json")), "src");
 
 export default defineConfig({
   plugins: [svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } })],
@@ -28,6 +33,7 @@ export default defineConfig({
       exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/*.d.ts"],
     },
     alias: {
+      "@nocturne/bot/alert-text": join(botSource, "alert-text.ts"),
       // mode-watcher only exports under "svelte" condition — stub for node tests
       "mode-watcher": fileURLToPath(new URL("./src/lib/test-stubs/mode-watcher.ts", import.meta.url)),
       // SvelteKit's env modules are virtual (provided by its vite plugin, which

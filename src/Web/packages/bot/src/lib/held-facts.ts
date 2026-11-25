@@ -4,7 +4,7 @@ import type { HeldFact } from "@nocturne/api-client";
  * The words for a fact and a reason the engine names a held rule's missing data with. A value
  * this build does not know is shown as the engine sent it.
  */
-const FACT_NAMES: Record<string, string> = {
+export const FACT_NAMES: Record<string, string> = {
   glucose: "Glucose readings",
   predictions: "Glucose forecast",
   insulin: "Insulin data",
@@ -22,9 +22,10 @@ const FACT_NAMES: Record<string, string> = {
   time_zone: "Time zone",
   sensor_state: "Sensor state",
   aps_determination: "Loop result",
+  target_range: "Target range",
 };
 
-const REASONS: Record<string, string> = {
+export const REASONS: Record<string, string> = {
   absent: "Missing",
   stale: "Too old",
   ahead_of_clock: "Has a time in the future",
@@ -34,11 +35,11 @@ const REASONS: Record<string, string> = {
 };
 
 export function heldFactName(fact: string | undefined): string {
-  return fact === undefined ? "" : (FACT_NAMES[fact] ?? fact);
+  return fact !== undefined && Object.hasOwn(FACT_NAMES, fact) ? FACT_NAMES[fact] : (fact ?? "");
 }
 
 export function heldReason(reason: string | undefined): string {
-  return reason === undefined ? "" : (REASONS[reason] ?? reason);
+  return reason !== undefined && Object.hasOwn(REASONS, reason) ? REASONS[reason] : (reason ?? "");
 }
 
 export const describeHeldFacts = (facts: HeldFact[] | undefined) =>

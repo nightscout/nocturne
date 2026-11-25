@@ -241,7 +241,7 @@ describe("AlertCard for an alert a forecast or loop condition started", () => {
       expect.arrayContaining([
         "Glucose: 66 mg/dL, limit 70 mg/dL (target low minus 10 mg/dL)",
         "Glucose: 76 mg/dL, limit 80 mg/dL (target low)",
-        "Forecast: 49 mg/dL in 15 minutes, limit 50 mg/dL (latest glucose minus 30 mg/dL)",
+        "Default forecast: 49 mg/dL in 15 minutes, limit 50 mg/dL (latest glucose minus 30 mg/dL)",
         "Eventual glucose: 200 mg/dL, limit 180 mg/dL (target_middle)",
         "Eventual glucose: 220 mg/dL, limit 200 mg/dL (target high plus 20 mg/dL)",
       ]),
