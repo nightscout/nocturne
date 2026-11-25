@@ -459,6 +459,7 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
 
     private async Task<(List<JsonElement> Docs, long Cursor)> HistoryAsync(string collection, long since)
     {
+        await SettleHistoryAsync();
         var response = await AuthenticatedClient.GetAsync($"/api/v3/{collection}/history/{since}?limit=100");
         response.IsSuccessStatusCode.Should().BeTrue();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();

@@ -99,11 +99,12 @@ public class UploadedInvalidEntryIntegrationTests : ApiIntegrationTestBase
         public static Live None { get; } = new([], [], []);
     }
 
-    private static async Task<Live> LiveAsync(HttpClient client)
+    private async Task<Live> LiveAsync(HttpClient client)
     {
         static string[] Ids(JsonArray documents, string key) =>
             [.. documents.Select(d => d![key]!.GetValue<string>()).Order()];
 
+        await SettleHistoryAsync();
         return new Live(
             Ids((await GetAsync(client, "/api/v1/entries?count=100")).AsArray(), "_id"),
             Ids((await GetAsync(client, "/api/v3/entries?limit=100"))["result"]!.AsArray(), "identifier"),
@@ -114,8 +115,11 @@ public class UploadedInvalidEntryIntegrationTests : ApiIntegrationTestBase
     private static void ShouldServe(Live live, string id) =>
         live.Should().BeEquivalentTo(new Live([id], [id], [id]), o => o.WithStrictOrdering());
 
-    private static async Task<JsonArray> HistoryAsync(HttpClient client) =>
-        (await GetAsync(client, "/api/v3/entries/history/0"))["result"]!.AsArray();
+    private async Task<JsonArray> HistoryAsync(HttpClient client)
+    {
+        await SettleHistoryAsync();
+        return (await GetAsync(client, "/api/v3/entries/history/0"))["result"]!.AsArray();
+    }
 
     private static bool IsDeleted(JsonNode? entry) => entry?["isValid"]?.GetValue<bool>() == false;
 
@@ -381,6 +385,25 @@ public class UploadedInvalidEntryIntegrationTests : ApiIntegrationTestBase
             .Should().NotBe(true);
         var live = await LiveAsync(client);
         (live.V1, live.V3).Should().BeEquivalentTo((new[] { id }, new[] { id }));
+    }
+
+    /// <summary>
+    /// A deleted entry hides only the live entry of its own type: an mbg a later deleted sgv shares
+    /// its id with is still served by a search by modification.
+    /// </summary>
+    [Fact]
+    public async Task A_search_by_modification_serves_a_live_entry_whose_id_a_later_deleted_entry_of_another_type_shares()
+    {
+        var client = CreateAuthenticatedClient();
+        var id = NewId();
+        await UploadAsync(client, Entry("mbg", id), v3: false);
+        await UploadAsync(client, Entry("sgv", id, isValid: false), v3: false);
+
+        var live = await LiveAsync(client);
+
+        ShouldServe(live, id);
+        (await HistoryAsync(client)).Select(e => (Type: e!["type"]!.GetValue<string>(), Deleted: IsDeleted(e)))
+            .Should().BeEquivalentTo([("mbg", false), ("sgv", true)]);
     }
 
     [Fact]

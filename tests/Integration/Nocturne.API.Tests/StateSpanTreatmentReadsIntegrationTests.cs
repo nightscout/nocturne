@@ -88,8 +88,9 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         return JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
     }
 
-    private static async Task<JsonArray> GetV3ResultAsync(HttpClient client, string url)
+    private async Task<JsonArray> GetV3ResultAsync(HttpClient client, string url)
     {
+        await SettleHistoryAsync();
         var response = await client.GetAsync(url);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return JsonNode.Parse(await response.Content.ReadAsStringAsync())!["result"]!.AsArray();

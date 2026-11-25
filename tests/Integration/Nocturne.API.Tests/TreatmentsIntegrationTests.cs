@@ -728,6 +728,7 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
         var search = V3Result(await client.GetFromJsonAsync<JsonElement>($"/api/v3/treatments?created_at$eq={createdAt}"));
         CarriesIdentifier(search, identifier).Should().BeTrue("search serves the identifier the create returned");
 
+        await SettleHistoryAsync();
         var history = V3Result(await client.GetFromJsonAsync<JsonElement>("/api/v3/treatments/history/0"));
         CarriesIdentifier(history, identifier).Should().BeTrue("history serves the identifier the create returned");
 
@@ -844,6 +845,7 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
         var search = V3Result(await client.GetFromJsonAsync<JsonElement>($"/api/v3/treatments?date$eq={mills}"));
         CarriesNoInsulin(search.EnumerateArray().Single(t => t.GetProperty("identifier").GetString() == identifier), "search");
 
+        await SettleHistoryAsync();
         var history = V3Result(await client.GetFromJsonAsync<JsonElement>("/api/v3/treatments/history/0"));
         CarriesNoInsulin(history.EnumerateArray().Single(t => t.GetProperty("identifier").GetString() == identifier), "history");
     }
