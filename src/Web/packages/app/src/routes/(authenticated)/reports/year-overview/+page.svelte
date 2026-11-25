@@ -205,6 +205,7 @@
    * first move of the window pins the range where it is and the colors stay put.
    */
   function setScaleWindow(focusWindow: ColorFocusRange | null) {
+    if (!Number.isFinite(scaleLimits[1]) && metricMax <= 0 && !colorPreferences[scaleKeys.range] && !colorPreferences[scaleKeys.band]) return;
     saveColorPreferences((next) => {
       if (selectedMetric !== "avgGlucose" && !next[scaleKeys.range])
         next[scaleKeys.range] = [...scale.domain];

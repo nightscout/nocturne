@@ -342,6 +342,7 @@ export function addColorBoundary(
     if (edges[i] - edges[i - 1] > edges[gap + 1] - edges[gap]) gap = i - 1;
   }
   const value = snap((edges[gap] + edges[gap + 1]) / 2);
+  if (!(value > low && value < high)) return null;
   const position = rampPosition(value, domain, boundaries);
   if (boundaries.some((b) => b.value === value)) return null;
   const candidate = fitOutsideDomain(

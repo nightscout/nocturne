@@ -36762,14 +36762,11 @@ msgstr "Warten auf deinen ersten Messwert"
 msgid "{0} low end color"
 msgstr "{0}: Farbe am unteren Ende"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Swap {0} end colors"
-msgstr "Endfarben von {0} tauschen"
+#~ msgid "Swap {0} end colors"
+#~ msgstr "Endfarben von {0} tauschen"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Swap colors"
-msgstr "<0/> Farben tauschen"
+#~ msgid "<0/> Swap colors"
+#~ msgstr "<0/> Farben tauschen"
 
 #. 0: metricLabel
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
@@ -50367,7 +50364,7 @@ msgstr ""
 msgid "{0} focus window"
 msgstr ""
 
-#. 0: Number.isFinite(limits[1]) ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}` \\: ""
+#. 0: Number.isFinite(limits[1]) ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}` \\: `, at or above ${formatted(limits[0])} ${unitLabel}`
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 msgid "Enter a color range with its low end below its high end{0}."
 msgstr ""

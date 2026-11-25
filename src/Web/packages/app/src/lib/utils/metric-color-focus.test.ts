@@ -153,6 +153,12 @@ describe("scaleGradient", () => {
 });
 
 describe("addColorBoundary", () => {
+  it("rejects a snapped endpoint without changing retained boundaries", () => {
+    const boundaries = [{ value: 200, position: 0.5 }];
+    const scale = glucoseScale({ window: [100, 101], domain: [100, 101], boundaries });
+    expect(addColorBoundary(scale, Math.round)).toBeNull();
+    expect(boundaries).toEqual([{ value: 200, position: 0.5 }]);
+  });
   it("pins the color already drawn at the middle of the widest gap", () => {
     const scale = glucoseScale({ window: [70, 180] });
     const [added] = addColorBoundary(scale, Math.round)!;

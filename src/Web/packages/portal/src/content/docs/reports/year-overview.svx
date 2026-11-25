@@ -80,15 +80,16 @@ To filter the data:
 
 To change the colour scale:
 
-- Move the two handles on the scale, or type a value above each handle, to set
-  the range of values that the colours cover. The days outside the range fade.
+- Move the upper handles, or type a value above each handle, to set the focus
+  window. The days outside this window fade.
   Type a value in **Dim outside** to set how much they fade.
 - Select **Color boundary** to add a point to the scale. Move the point to
   change where the colours change.
 - Select the circle at an end of the scale, or next to a point, to choose a
   different colour for it.
-- Select **Swap colors** to put the colours at the two ends in the opposite
-  order. For example, to make low values the brightest.
+- Move the colour dots or edit the low and high colour values to set the colour
+  range. This does not change the focus window. The end colours, value inputs,
+  boundaries and add button are in one row, in scale order.
 - Select **Reset** to go back to the default scale.
 
 When you scroll down, the scale panel moves out of view. Scroll up a small

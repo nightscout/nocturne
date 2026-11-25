@@ -39,6 +39,19 @@ const gradient = (id = "color-focus-track") =>
   elementOf(page.getByTestId(id), HTMLElement).style.getPropertyValue("--scale-gradient");
 
 describe("year overview color focus", () => {
+  it("keeps a boundary at a color endpoint in a separate hit lane", async () => {
+    render(Harness, { glucose: true, metricLabel: "Avg glucose", initialRange: [70, 180], initialBoundaries: [{ value: 180, position: 0.5 }] });
+    await expect.element(boundarySlider(1, "Avg glucose")).toBeVisible();
+    const end = page.getByTestId("color-range-high-handle").element().getBoundingClientRect();
+    const boundary = boundarySlider(1, "Avg glucose").element().getBoundingClientRect();
+    expect(end.bottom).toBeLessThan(boundary.top);
+  });
+
+  it("explains the minimum for an unbounded color range", async () => {
+    render(Harness);
+    await page.getByRole("spinbutton", { name: "TDD low color position" }).fill("-1");
+    await expect.element(page.getByRole("alert")).toHaveTextContent("at or above 0 U");
+  });
   it("shows only the focus window until a color boundary is added", async () => {
     render(Harness);
     await expect.element(minimumInput()).toHaveValue(0);

@@ -308,7 +308,7 @@
       </div>
 
       <!-- Separate lanes keep coincident window handles and color dots independently draggable. -->
-      <div class="relative h-20 w-full">
+      <div class="relative h-28 w-full">
         <Slider.Root
           type="multiple"
           min={scale.axis[0]}
@@ -341,7 +341,7 @@
           autoSort={false}
           thumbPositioning="exact"
           bind:value={() => [...colorValues], moveColors}
-          class="pointer-events-none absolute inset-x-0 bottom-0 flex h-10 w-full touch-none select-none items-center"
+          class="pointer-events-none absolute inset-x-0 top-10 flex h-10 w-full touch-none select-none items-center"
           aria-label={`${metricLabel} color scale`}
         >
           {#snippet children({ thumbItems })}
@@ -385,7 +385,7 @@
                   index={thumb.index}
                   aria-label={`${metricLabel} color boundary ${thumb.index - 1}`}
                   aria-valuetext={`${formatted(thumb.value)} ${unitLabel}`}
-                  class="pointer-events-auto relative z-30 block size-4 cursor-pointer rounded-full border-2 border-foreground bg-(--pin) shadow-sm before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
+                  class="pointer-events-auto relative z-30 block size-4 transform-[translateY(24px)] cursor-pointer rounded-full border-2 border-foreground bg-(--pin) shadow-sm before:absolute before:inset-y-0 before:-inset-x-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
                   style="--pin: {boundaryColor(boundary)}"
                 />
               {/if}
@@ -462,7 +462,7 @@
       {:else if invalid === "range"}
         Enter a color range with its low end below its high end{Number.isFinite(limits[1])
           ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}`
-          : ""}.
+          : `, at or above ${formatted(limits[0])} ${unitLabel}`}.
       {:else if invalid === "window"}
         Enter a focus window with its minimum below its maximum{Number.isFinite(limits[1])
           ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}`

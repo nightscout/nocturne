@@ -132,6 +132,14 @@ describe("year overview page color focus integration", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not save an automatic fallback while a dose metric has no data", async () => {
+    yearOverviewMocks.days.mockResolvedValue({ days: [] });
+    render(YearOverviewPage);
+    await selectMetric("TDD");
+    await minimum().fill("0.2");
+    expect(collectPreferences().yearOverviewColors ?? {}).toEqual({});
+  });
+
   it("colors each metric in its own theme color, with no palette or advanced mode", async () => {
     render(YearOverviewPage);
     await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
