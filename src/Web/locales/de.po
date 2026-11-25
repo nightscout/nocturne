@@ -190,6 +190,7 @@ msgid "<0/> Deny"
 msgstr "<0/> Ablehnen"
 
 #: src/lib/components/members/PendingRequestsList.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 #: src/lib/components/oauth/DeviceCodeApproval.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
 #: src/routes/(authenticated)/oauth/device/+page.svelte
@@ -440,6 +441,7 @@ msgstr "Unbenannter Zugang ({0})"
 #: src/lib/components/members/PendingInvitesList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
@@ -527,6 +529,7 @@ msgstr "Verifizierungscode"
 #: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/TeamAccessEditForm.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
@@ -991,7 +994,7 @@ msgstr "Verbindungstest fehlgeschlagen"
 
 #. 0: (team.roles ?? []).map((r) => r.name).join(", ")
 #. 0: (site.roleNames ?? []).join(", ")
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "Roles: {0}"
 msgstr "Rollen: {0}"
@@ -1320,6 +1323,7 @@ msgstr "Schweregrad"
 #~ msgstr "Startzeit"
 
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/TeamAccessEditForm.svelte
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 #: src/lib/components/settings/ClientDevices.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
@@ -5814,6 +5818,7 @@ msgstr "<0/> Erneut versuchen"
 #: ../portal/src/routes/roadmap/+page.svelte
 #: src/lib/components/alerts/HistoryCheck.svelte
 #: src/lib/components/members/PublicAccessCard.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
@@ -16170,7 +16175,7 @@ msgid "Limit public viewers to recent data only. Older history stays private."
 msgstr "Beschränke den öffentlichen Zugriff auf aktuelle Daten. Ältere Verlaufsdaten bleiben privat."
 
 #: src/lib/components/members/PublicAccessCard.svelte
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "All history"
 msgstr "Gesamter Verlauf"
@@ -48077,7 +48082,7 @@ msgstr "Dieses Team hat bereits Zugriff auf diese Instanz."
 msgid "Only an owner of the site can give a team access to it."
 msgstr "Nur ein Eigentümer der Instanz kann einem Team Zugriff darauf gewähren."
 
-#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/members/TeamAccessTermsFields.svelte
 #: src/lib/teams/problem-messages.svelte.ts
 msgid "Choose at least one role."
 msgstr "Wähle mindestens eine Rolle."
@@ -48215,54 +48220,54 @@ msgstr "{0} hat einem inzwischen gelöschten Team mit den Rollen {1} bis {2} Zug
 msgid "{0} gave a team that was deleted access with the roles {1}."
 msgstr "{0} hat einem inzwischen gelöschten Team mit den Rollen {1} Zugriff gewährt."
 
-#: src/lib/components/members/TeamAccessList.svelte
-#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamAccessTermsFields.svelte
 #: src/lib/components/teams/AccessLinksSection.svelte
 #: src/lib/components/teams/StaffNarrowingFields.svelte
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "Only the last 24 hours"
 msgstr "Nur die letzten 24 Stunden"
 
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "Access does not end"
 msgstr "Zugriff ohne Enddatum"
 
 #. 0: formatMediumDate(accessEndDate(team.accessEndsAt))
 #. 0: formatMediumDate(accessEndDate(site.accessEndsAt))
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "Access ended {0}"
 msgstr "Zugriff endete am {0}"
 
 #. 0: formatMediumDate(accessEndDate(team.accessEndsAt))
 #. 0: formatMediumDate(accessEndDate(site.accessEndsAt))
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "Access ends {0}"
 msgstr "Zugriff endet am {0}"
 
 #. 0: team.approvedByName ?? "a deleted member"; 1: formatMediumDateTime(team.givenAt)
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 msgid "Approved by {0} · {1}"
 msgstr "Genehmigt von {0} · {1}"
 
-#: src/lib/components/members/TeamAccessList.svelte
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 msgid "Stop access"
 msgstr "Zugriff stoppen"
 
 #. 0: team.teamName
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 msgid "Stop the access of {0}"
 msgstr "Zugriff von {0} stoppen"
 
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 msgid "<0/> Stop access"
 msgstr "<0/> Zugriff beenden"
 
 #. 0: team.teamName
-#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessCard.svelte
 msgid "Stop the access of {0}? The staff of the team lose access at once. A manager of the team must ask again."
 msgstr "Den Zugriff von {0} beenden? Die Mitarbeitenden des Teams verlieren sofort den Zugriff. Ein Manager des Teams muss ihn erneut anfordern."
 
@@ -48307,12 +48312,12 @@ msgstr "Der Zugriff muss spätestens am {0} enden. Der Link oder dein eigener Zu
 msgid "No role of this site fits this link and your own access, so the team cannot get access here."
 msgstr "Keine Rolle dieser Site ist mit diesem Link und deinem eigenen Zugriff vereinbar. Daher kann das Team hier keinen Zugriff erhalten."
 
-#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/members/TeamAccessTermsFields.svelte
 #: src/lib/components/teams/AccessLinksSection.svelte
 msgid "What the team can see and change with this role"
 msgstr "Was das Team mit dieser Rolle sehen und ändern kann"
 
-#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/members/TeamAccessTermsFields.svelte
 msgid "Roles to give the team"
 msgstr "Rollen für das Team"
 
@@ -48320,7 +48325,7 @@ msgstr "Rollen für das Team"
 msgid "The link or your own access requires this limit."
 msgstr "Der Link oder dein eigener Zugriff erfordert diese Begrenzung."
 
-#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/members/TeamAccessTermsFields.svelte
 #: src/lib/components/teams/AccessLinksSection.svelte
 msgid "The team can see only the most recent 24 hours of data."
 msgstr "Das Team kann nur die Daten der letzten 24 Stunden sehen."
@@ -48417,6 +48422,7 @@ msgstr "Zugriff des Teams beendet."
 msgid "Failed to stop the access of the team. Try again."
 msgstr "Der Zugriff des Teams konnte nicht beendet werden. Versuche es erneut."
 
+#: src/lib/components/members/TeamAccessCard.svelte
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "This team no longer has access."
 msgstr "Dieses Team hat keinen Zugriff mehr."
@@ -48909,6 +48915,7 @@ msgid "Direct access"
 msgstr "Direkter Zugriff"
 
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "Last 24 hours only"
 msgstr "Nur die letzten 24 Stunden"
 
@@ -48946,6 +48953,7 @@ msgstr "Du kannst deine eigene Anfrage nicht genehmigen. Bitte ein anderes Mitgl
 msgid "Nocturne did not add the passkey. To try again, select Add passkey."
 msgstr "Nocturne hat den Passkey nicht hinzugefügt. Um es erneut zu versuchen, wähle Passkey hinzufügen."
 
+#: src/lib/components/members/TeamStaffList.svelte
 #: src/lib/components/teams/TeamStaffSection.svelte
 #: src/lib/teams/member-kind.svelte.ts
 msgid "Staff"
@@ -50021,7 +50029,11 @@ msgstr ""
 msgid "Remove {0} from {1}? They lose what the team gives them at every site."
 msgstr ""
 
+#. 0: team.teamName
+#. 0: team.teamName
 #. 0: member.displayName
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamAccessEditForm.svelte
 #: src/lib/components/teams/TeamStaffSection.svelte
 msgid "Change the access of {0}"
 msgstr ""
@@ -50108,4 +50120,204 @@ msgstr ""
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 msgid "change"
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Only an owner of this site can decide which staff of a team can see this site."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "You have access to this site only through a team, so you cannot change the access of a team or its staff."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Only an owner of this site can change the access of a team."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessEditForm.svelte
+msgid "You cannot give a team any role of this site, so you cannot change this access."
+msgstr ""
+
+#. 0: heldNotOffered.map((r) => r.name).join(", ")
+#: src/lib/components/members/TeamAccessEditForm.svelte
+msgid "The team has roles that you cannot give: {0}. If you save, the team loses them."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessEditForm.svelte
+msgid "You can see only the last 24 hours, so the access that you give must keep this limit."
+msgstr ""
+
+#. 0: formatMediumDate(accessEndDate(team.accessEndsAt))
+#: src/lib/components/members/TeamAccessEditForm.svelte
+msgid "This access ended on {0}. A new end date, or no end date, starts the access again for the approved staff."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessEditForm.svelte
+msgid "The change applies to all staff of the team at once. Less access stops at once, and more access never makes approved staff wait again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "Staff are the people who work for a team. Approved staff can see this site through the team."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "This team no longer has access, or this person is no longer on its staff."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Staff member approved."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Could not approve the staff member. Try again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Staff member declined."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Could not decline the staff member. Try again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "The team now decides who on its staff can see this site."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Each new staff member now waits for an owner's approval."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Could not change the setting. Try again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Access of the team changed."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Could not change the access of the team. Try again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "<0/> Change access"
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "The roles of this site did not load, so you cannot change the access of this team."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "This team has no staff."
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Staff of {0}"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Approved"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Waits for your approval"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Waits for an owner's approval"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Declined"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "What limits {0}"
+msgstr ""
+
+#. 0: ceiling
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Up to the role {0}"
+msgstr ""
+
+#. 0: formatShortDate(accessEndDate(endsAt), true)
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Time on the team ended {0}"
+msgstr ""
+
+#. 0: formatShortDate(accessEndDate(endsAt), true)
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "On the team until {0}"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Approve {0}"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Decline {0}?"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Decline"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Decline {0}"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "<0/> Decline"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "They do not see this site's data through the team. They stay declined if they leave the team and join again, until you approve them or stop the team's access."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "The team decides who on its staff can see this site"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "On: new staff, and staff that the team gives more access, can see this site at once."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Off: each new staff member, and each one that the team gives more access, waits for an owner's approval."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "If you change it to off, approved staff keep their access. If you change it to on, all waiting staff are approved."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Approve all waiting staff?"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Approve all"
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "1 staff member of {0} waits for approval. If you change this setting to on, they are approved."
+msgstr ""
+
+#. 0: waiting; 1: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "{0} staff members of {1} wait for approval. If you change this setting to on, they are all approved."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "The team decides who on its staff can see this site."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "An owner of this site approves each staff member of this team."
 msgstr ""
