@@ -214,6 +214,8 @@ function writeThroughReporting(prefs: UserDisplayPreferences): void {
   }
 }
 
+export const PREFERENCES_WRITE_THROUGH_DELAY_MS = 400;
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Mirror to cookie immediately and debounce the backend write-through. */
@@ -225,7 +227,7 @@ function schedulePersist(): void {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     writeThroughReporting(prefs);
-  }, 400);
+  }, PREFERENCES_WRITE_THROUGH_DELAY_MS);
 }
 
 /**

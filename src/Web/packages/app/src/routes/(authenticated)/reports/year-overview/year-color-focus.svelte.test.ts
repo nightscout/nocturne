@@ -3,7 +3,7 @@ import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import type { DailySummaryDay } from "@nocturne/api-client";
 import { yearOverviewMocks } from "#lib/test-stubs/year-overview-remote.js";
-import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie } from "#lib/stores/appearance-store.svelte.js";
+import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie, PREFERENCES_WRITE_THROUGH_DELAY_MS } from "#lib/stores/appearance-store.svelte.js";
 import { getGlucoseHeatmapFill } from "@nocturne/charts/core";
 import { rampColor, rampPosition, GLUCOSE_LIMITS, GLUCOSE_RAMP } from "#lib/utils/metric-color-focus.js";
 
@@ -272,7 +272,10 @@ describe("year overview page color focus integration", () => {
     await expect.element(cell("2026-01-02")).toBeInTheDocument();
     await selectMetric("TDD");
     await setWindow(10, 70);
-    await vi.waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { tddBand: [10, 70] } })));
+    await vi.waitFor(
+      () => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { tddBand: [10, 70] } })),
+      { timeout: PREFERENCES_WRITE_THROUGH_DELAY_MS + 4000 },
+    );
     const cookie = document.cookie.split("; ").find(row => row.startsWith("nocturne-prefs="))!.slice("nocturne-prefs=".length);
     expect(parsePrefsCookie(cookie)?.yearOverviewColors).toEqual({ tddBand: [10, 70] });
     await expect.element(cell("2026-01-02")).toHaveTextContent(insulinAt("50.00"));
