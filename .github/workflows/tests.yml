@@ -434,6 +434,18 @@ jobs:
         with:
           name: api-client
           path: src/Web/packages
+      # translator-merge.yml reads and writes catalogs with a vendored copy of the pofile Wuchale
+      # uses, since it installs nothing; this keeps the copy identical to the installed one.
+      - name: Translator merge
+        if: ${{ !cancelled() }}
+        run: |
+          installed=$(node -p 'const fs = require("fs"), path = require("path");
+            require("module").createRequire(path.join(fs.realpathSync("node_modules/wuchale"), "package.json")).resolve("pofile")')
+          cmp "$installed" ../../.github/scripts/vendor/pofile/po.js || {
+            echo "::error::Wuchale's pofile ($installed) differs from .github/scripts/vendor/pofile/po.js. Copy it there."
+            exit 1
+          }
+          node --test ../../.github/scripts/translator-merge.test.cjs
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |

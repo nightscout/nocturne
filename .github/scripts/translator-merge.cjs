@@ -1,102 +1,57 @@
-// Merges a translator's pull request that changes only the locale catalog they are allowlisted for
-// in .github/translators.json. Called by translator-merge.yml after Tests passes on the pull request.
+// Lands a translator's pull request that changes only the locale catalog they are allowlisted for in
+// .github/translators.json. Called by translator-merge.yml after Tests passes on the pull request.
 //
-// That workflow holds a write token, so nothing here runs or checks out the pull request. Every check
-// reads the tested head commit by its sha, never the pull request's live file list or head, and the
-// merge is pinned to that sha: otherwise a force-push between the check and the merge could swap in
-// other files.
+// That workflow holds a write token, so nothing here runs or checks out the pull request. It reads
+// the tested head commit by its sha, never the pull request's live head, and it does not let GitHub
+// merge the branch: a branch's history can make a merge change files its diff does not show (two
+// merge bases). It writes one commit on the default branch instead, whose tree is the default
+// branch's with only the checked catalog replaced, and closes the pull request.
+//
+// Catalogs are read and written with the pofile Wuchale uses (vendor/pofile, kept identical to the
+// installed copy by the web-static job), so the checks see what the app will see.
+
+const PO = require("./vendor/pofile/po.js");
 
 const MARKER = "<!-- nocturne-translator-merge -->";
 const CLA_CONTEXT = "license/cla";
 const MAX_LISTED_PROBLEMS = 20;
+const LAND_ATTEMPTS = 3;
 
 // Wuchale's interpolation holes ({0}) and markup slots (<0>, </0>, <0/>). Plural `#` is left out: a
 // language may write the singular as a word.
 const HOLE = /\{\d+\}/g;
 const SLOT = /<\/?\d+\/?>/g;
 
-// Wuchale reads catalogs with pofile, which also decodes \x and octal escapes. A catalog never needs
-// them, and decoding them differently here would let `\x3c0/>` pass as text and render as a slot,
-// so any other escape is refused.
-const ESCAPES = { n: "\n", t: "\t", r: "\r", '"': '"', "\\": "\\" };
-
-class CatalogError extends Error {}
-
-function unquote(line, lineNumber) {
-  const match = line.match(/^"((?:[^"\\]|\\.)*)"\s*$/);
-  if (!match) throw new CatalogError(`line ${lineNumber}: expected a quoted string`);
-  return match[1].replace(/\\(.)/g, (_, c) => {
-    if (!(c in ESCAPES)) throw new CatalogError(`line ${lineNumber}: unsupported escape \\${c}`);
-    return ESCAPES[c];
-  });
+/** Wuchale's key for a catalog item (getKey in wuchale/dist/adapters.js). */
+function itemKey(item) {
+  const id = item.msgid_plural ? [item.msgid, item.msgid_plural] : [item.msgid];
+  return `${id.join("\n")}\n${item.msgctxt ?? ""}`.trim();
 }
 
 /**
- * Parses a gettext catalog the way Wuchale loads it: obsolete (`#~`) entries count, since Wuchale
- * decides what is obsolete itself, and a later entry with the same context and msgid replaces an
- * earlier one. Returns the header (the `msgid ""` translation) and the entries keyed by context and
- * msgid. Throws a CatalogError on a line it cannot read, so a malformed catalog never merges.
+ * A catalog as Wuchale loads it: the Plural-Forms header, and the items by key, a later duplicate
+ * replacing an earlier one. Obsolete items count, since Wuchale decides what is obsolete itself.
  */
-function parsePo(text) {
-  const entries = new Map();
-  let header = null;
-  let entry = null;
-  let field = null;
-
-  const finish = () => {
-    if (entry && entry.msgid !== undefined) {
-      if (entry.msgid === "" && entry.msgctxt === undefined) header = entry.msgstr.join("\u0000");
-      else entries.set(`${entry.msgctxt ?? ""}\u0004${entry.msgid}`, entry);
-    }
-    entry = null;
-    field = null;
-  };
-
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
-    const lineNumber = i + 1;
-    if (line.startsWith("#~") && !line.startsWith("#~|")) line = line.slice(2).trim();
-    if (line === "") {
-      finish();
-      continue;
-    }
-    if (line.startsWith("#")) {
-      // A comment after a string field starts the next entry.
-      if (field) finish();
-      continue;
-    }
-    if (line.startsWith('"')) {
-      if (!field) throw new CatalogError(`line ${lineNumber}: a string continues no field`);
-      append(entry, field, unquote(line, lineNumber));
-      continue;
-    }
-    const keyword = line.match(/^(msgctxt|msgid_plural|msgid|msgstr(?:\[(\d+)\])?)\s+(".*)$/);
-    if (!keyword) throw new CatalogError(`line ${lineNumber}: not a catalog line`);
-    const [, name, index, rest] = keyword;
-    // msgctxt opens an entry, and so does a msgid that no msgctxt opened.
-    if (field && (name === "msgctxt" || (name === "msgid" && field.name !== "msgctxt"))) finish();
-    entry ??= { msgstr: [] };
-    field = index !== undefined ? { name: "msgstr", index: Number(index) } : name === "msgstr" ? { name, index: 0 } : { name };
-    if (field.name === "msgstr") entry.msgstr[field.index] = "";
-    else entry[field.name] = "";
-    append(entry, field, unquote(rest, lineNumber));
-  }
-  finish();
-  return { header, entries };
+function readCatalog(text) {
+  const po = PO.parse(text);
+  const items = new Map();
+  for (const item of po.items) items.set(itemKey(item), item);
+  return { po, pluralForms: po.headers["Plural-Forms"] ?? "", items };
 }
 
-/** Every Plural-Forms line of a header, in order. */
-function pluralForms(header) {
-  return (header ?? "")
-    .split("\n")
-    .filter((line) => /^\s*plural-forms\s*:/i.test(line))
-    .join("\n");
+/**
+ * A read catalog's text as Wuchale writes it: a fresh PO with only the headers the file had, since
+ * PO.parse also fills in pofile's default headers, which toString would write out.
+ */
+function writeCatalog(catalog) {
+  const po = new PO();
+  for (const name of catalog.po.headerOrder) po.headers[name] = catalog.po.headers[name];
+  po.items = catalog.po.items;
+  return po.toString();
 }
 
-function append(entry, field, text) {
-  if (field.name === "msgstr") entry.msgstr[field.index] += text;
-  else entry[field.name] += text;
+function sameTranslation(a, b) {
+  return a.msgstr.length === b.msgstr.length && a.msgstr.every((s, i) => s === b.msgstr[i]);
 }
 
 function tokens(text, pattern) {
@@ -123,29 +78,57 @@ function mismatch(sources, translation) {
 }
 
 /**
- * The translations the head catalog adds or changes against the base catalog that cannot stand for
- * their source text (see mismatch). Both are parsed catalogs. An empty translation is untranslated,
- * not a problem.
+ * Why the next catalog cannot replace the current one, or null when it can. The next catalog must
+ * keep every item and the Plural-Forms rule (which Wuchale compiles into code), and every
+ * translation it adds or changes must pass mismatch. Both are read catalogs.
  */
-function placeholderProblems(base, head) {
-  const problems = [];
-  for (const [key, entry] of head.entries) {
-    const before = base.entries.get(key);
-    if (before && before.msgstr.join("\u0000") === entry.msgstr.join("\u0000")) continue;
+function catalogProblems(current, next) {
+  if (next.pluralForms !== current.pluralForms) return { kind: "plural-forms" };
+  const missing = [...current.items.keys()].filter((key) => !next.items.has(key));
+  if (missing.length > 0) return { kind: "missing", count: missing.length };
 
-    const sources = entry.msgid_plural === undefined ? [entry.msgid] : [entry.msgid, entry.msgid_plural];
-    entry.msgstr.forEach((translation, index) => {
+  const placeholders = [];
+  for (const [key, item] of next.items) {
+    const before = current.items.get(key);
+    if (before && sameTranslation(before, item)) continue;
+    const sources = item.msgid_plural ? [item.msgid, item.msgid_plural] : [item.msgid];
+    item.msgstr.forEach((translation, index) => {
       const problem = translation === "" ? null : mismatch(sources, translation);
       if (!problem) return;
-      problems.push({
-        msgid: entry.msgid,
+      placeholders.push({
+        msgid: item.msgid,
         msgstr: translation,
-        index: entry.msgid_plural !== undefined ? index : undefined,
+        index: item.msgid_plural ? index : undefined,
         ...problem,
       });
     });
   }
-  return problems;
+  return placeholders.length > 0 ? { kind: "placeholders", problems: placeholders } : null;
+}
+
+/**
+ * The current catalog's text with each translation the head adds or changes against the merge base
+ * written into the item of the same key, as `{ text, dropped }`. A translation whose string the
+ * current catalog no longer has is dropped. Only translations move, by key, so the head's other
+ * edits (headers, comments, entries an older copy lacks) never land, and a translation cannot land
+ * on another string. Null when writing the current catalog back does not reproduce it, since the
+ * result would then rewrite more than the translations.
+ */
+function applyTranslations(mergeBase, head, currentText) {
+  const current = readCatalog(currentText);
+  if (writeCatalog(current) !== currentText) return null;
+  let dropped = 0;
+  for (const [key, item] of head.items) {
+    const before = mergeBase.items.get(key);
+    if (before && sameTranslation(before, item)) continue;
+    const target = current.items.get(key);
+    if (!target) {
+      dropped++;
+      continue;
+    }
+    target.msgstr = [...item.msgstr];
+  }
+  return { text: writeCatalog(current), dropped };
 }
 
 function codeSpan(text) {
@@ -156,21 +139,33 @@ function codeSpan(text) {
   return `${fence} ${clipped} ${fence}`;
 }
 
-function problemsMarkdown(file, problems) {
-  const rows = problems.slice(0, MAX_LISTED_PROBLEMS).map((p) => {
-    const source = p.index === undefined ? codeSpan(p.msgid) : `${codeSpan(p.msgid)} (form ${p.index})`;
-    return `| ${source} | ${codeSpan(p.msgstr)} | ${codeSpan(p.expected)} | ${codeSpan(p.found)} |`;
-  });
-  const more = problems.length > MAX_LISTED_PROBLEMS ? `\n\nAnd ${problems.length - MAX_LISTED_PROBLEMS} more.` : "";
-  return [
-    `Not merged automatically: ${problems.length} changed ${problems.length === 1 ? "translation has" : "translations have"} different placeholders from the English text in \`${file}\`.`,
-    "",
-    "A translation must keep every `<0>`, `</0>` and `<0/>` of the English text and add none. It can leave out or repeat a `{0}`, but it must not use one the English text does not have. The order can change.",
-    "",
-    "| English | Translation | Expected | Found |",
-    "|---|---|---|---|",
-    ...rows,
-  ].join("\n") + more;
+function refusal(path, problem) {
+  switch (problem.kind) {
+    case "plural-forms":
+      return `this pull request changes the \`Plural-Forms\` line of \`${path}\`. A maintainer will review it.`;
+    case "missing":
+      return `this pull request removes ${problem.count} ${problem.count === 1 ? "entry" : "entries"} from \`${path}\`. A maintainer will review it.`;
+    case "placeholders": {
+      const { problems } = problem;
+      const rows = problems.slice(0, MAX_LISTED_PROBLEMS).map((p) => {
+        const source = p.index === undefined ? codeSpan(p.msgid) : `${codeSpan(p.msgid)} (form ${p.index})`;
+        return `| ${source} | ${codeSpan(p.msgstr)} | ${codeSpan(p.expected)} | ${codeSpan(p.found)} |`;
+      });
+      const more = problems.length > MAX_LISTED_PROBLEMS ? `\n\nAnd ${problems.length - MAX_LISTED_PROBLEMS} more.` : "";
+      return (
+        [
+          `${problems.length} changed ${problems.length === 1 ? "translation has" : "translations have"} different placeholders from the English text in \`${path}\`.`,
+          "",
+          "A translation must keep every `<0>`, `</0>` and `<0/>` of the English text and add none. It can leave out or repeat a `{0}`, but it must not use one the English text does not have. The order can change.",
+          "",
+          "| English | Translation | Expected | Found |",
+          "|---|---|---|---|",
+          ...rows,
+        ].join("\n") + more
+      );
+    }
+  }
+  throw new Error(`unknown problem ${problem.kind}`);
 }
 
 async function upsertComment({ github, owner, repo, prNumber, body }) {
@@ -189,14 +184,9 @@ async function upsertComment({ github, owner, repo, prNumber, body }) {
   }
 }
 
-async function fileText({ github, owner, repo, path, ref }) {
-  const { data } = await github.rest.repos.getContent({ owner, repo, path, ref, mediaType: { format: "raw" } });
-  return typeof data === "string" ? data : Buffer.from(data).toString("utf8");
-}
-
 /**
- * The locale files a GitHub account may merge alone. Matched by account id, since a login freed by
- * a rename can be registered by someone else. Keys starting with `$` are not files.
+ * The locale files a GitHub account may land alone. Matched by account id, since a login freed by a
+ * rename can be registered by someone else. Keys starting with `$` are not files.
  */
 function filesFor(allowlist, userId) {
   return Object.entries(allowlist)
@@ -204,29 +194,108 @@ function filesFor(allowlist, userId) {
     .map(([file]) => file);
 }
 
-/**
- * The English strings whose translation the head catalog adds or changes against the merge base and
- * that the current catalog no longer has as they were: removed, or with another plural source. The
- * squash applies the pull request's edits to the current catalog line by line, so such a translation
- * could land on another string than the one it was checked against.
- */
-function movedStrings(mergeBase, head, current) {
-  const moved = [];
-  for (const [key, entry] of head.entries) {
-    const before = mergeBase.entries.get(key);
-    if (before && before.msgstr.join("\u0000") === entry.msgstr.join("\u0000")) continue;
-    const now = current.entries.get(key);
-    if (!now || now.msgid_plural !== entry.msgid_plural) moved.push(entry.msgid);
+/** The blob of a path at a commit, as `{ sha, mode }`, or null when there is no regular file there. */
+async function treeBlob({ github, owner, repo, commitSha, path }) {
+  const { data: commit } = await github.rest.git.getCommit({ owner, repo, commit_sha: commitSha });
+  let treeSha = commit.tree.sha;
+  const parts = path.split("/");
+  for (const [i, part] of parts.entries()) {
+    const { data: tree } = await github.rest.git.getTree({ owner, repo, tree_sha: treeSha });
+    const entry = tree.tree.find((e) => e.path === part);
+    if (!entry) return null;
+    if (i === parts.length - 1) return entry.type === "blob" && entry.mode === "100644" ? { sha: entry.sha } : null;
+    if (entry.type !== "tree") return null;
+    treeSha = entry.sha;
   }
-  return moved;
+  return null;
 }
 
-async function fileObject({ github, owner, repo, path, ref }) {
-  const { data } = await github.rest.repos.getContent({ owner, repo, path, ref, mediaType: { format: "object" } });
-  return data;
+async function blobText({ github, owner, repo, sha }) {
+  const { data } = await github.rest.git.getBlob({ owner, repo, file_sha: sha });
+  return Buffer.from(data.content, data.encoding).toString("utf8");
 }
 
-async function mergeIfEligible({ github, context, core, pr, allowlist, headSha }) {
+/**
+ * One try at landing the head's catalog on the default branch as it is now. Returns
+ * `{ landed: sha }`, `{ refused: message }`, or `{ raced: true }` when the default branch moved
+ * before the commit was written.
+ */
+async function landOnce({ github, owner, repo, defaultBranch, path, headSha, mergeBaseSha, pr, core }) {
+  const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${defaultBranch}` });
+  const mainSha = ref.object.sha;
+
+  const [headBlob, mergeBaseBlob, mainBlob] = await Promise.all(
+    [headSha, mergeBaseSha, mainSha].map((commitSha) => treeBlob({ github, owner, repo, commitSha, path })),
+  );
+  if (!headBlob) return { refused: `\`${path}\` must stay a regular file. A maintainer will review it.` };
+  if (!mergeBaseBlob || !mainBlob) return { refused: `\`${path}\` is not a regular file on \`${defaultBranch}\`. A maintainer will review it.` };
+
+  const mainChanged = mergeBaseBlob.sha !== mainBlob.sha;
+  const [mainText, headText, mergeBaseText] = await Promise.all([
+    blobText({ github, owner, repo, sha: mainBlob.sha }),
+    blobText({ github, owner, repo, sha: headBlob.sha }),
+    mainChanged ? blobText({ github, owner, repo, sha: mergeBaseBlob.sha }) : null,
+  ]);
+  const current = readCatalog(mainText);
+  const head = readCatalog(headText);
+
+  // The head's translations, written into the current catalog. A catalog that pofile does not write
+  // back as it is (one Wuchale does not manage) lands as the head's file instead, which is only the
+  // pull request's own change while the default branch has not changed it since the branch point.
+  let nextText;
+  let dropped = 0;
+  const applied = applyTranslations(mainChanged ? readCatalog(mergeBaseText) : current, head, mainText);
+  if (applied) {
+    ({ text: nextText, dropped } = applied);
+  } else if (!mainChanged) {
+    nextText = headText;
+  } else {
+    return {
+      refused: `\`${defaultBranch}\` has changed \`${path}\` since this branch was made. Update the branch from \`${defaultBranch}\`, then push.`,
+    };
+  }
+  if (nextText === mainText) return { refused: `this pull request changes no translation in \`${path}\` on \`${defaultBranch}\`.` };
+
+  const problem = catalogProblems(current, readCatalog(nextText));
+  if (problem) return { refused: refusal(path, problem) };
+
+  const { data: blob } = await github.rest.git.createBlob({
+    owner,
+    repo,
+    content: Buffer.from(nextText, "utf8").toString("base64"),
+    encoding: "base64",
+  });
+  const { data: mainCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: mainSha });
+  const { data: tree } = await github.rest.git.createTree({
+    owner,
+    repo,
+    base_tree: mainCommit.tree.sha,
+    tree: [{ path, mode: "100644", type: "blob", sha: blob.sha }],
+  });
+  const login = pr.user.login;
+  const { data: commit } = await github.rest.git.createCommit({
+    owner,
+    repo,
+    message: [
+      `${pr.title} (#${pr.number})`,
+      "",
+      `Landed by translator-merge: ${login} is the allowlisted translator for ${path}.`,
+      "",
+      `Co-authored-by: ${login} <${pr.user.id}+${login}@users.noreply.github.com>`,
+    ].join("\n"),
+    tree: tree.sha,
+    parents: [mainSha],
+  });
+  try {
+    await github.rest.git.updateRef({ owner, repo, ref: `heads/${defaultBranch}`, sha: commit.sha, force: false });
+  } catch (error) {
+    core.info(`${defaultBranch} moved while landing: ${error.message}`);
+    return { raced: true };
+  }
+  return { landed: commit.sha, dropped };
+}
+
+async function landIfEligible({ github, context, core, pr, allowlist, headSha }) {
   const { owner, repo } = context.repo;
   const defaultBranch = context.payload.repository.default_branch;
   const prNumber = pr.number;
@@ -238,22 +307,13 @@ async function mergeIfEligible({ github, context, core, pr, allowlist, headSha }
   if (allowed.length === 0) return core.info(`#${prNumber}: ${pr.user.login} is not an allowlisted translator`);
   const allowedList = allowed.map((f) => `\`${f}\``).join(", ");
 
-  const [{ data: live }, { data: branch }] = await Promise.all([
-    github.rest.pulls.get({ owner, repo, pull_number: prNumber }),
-    github.rest.git.getRef({ owner, repo, ref: `heads/${defaultBranch}` }),
-  ]);
+  const { data: live } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
   if (live.state !== "open" || live.head.sha !== headSha) return core.info(`#${prNumber} has moved on from ${headSha}`);
-  if (live.mergeable === false) {
-    return comment(`Not merged automatically: this pull request conflicts with \`${defaultBranch}\`. Update the branch, then push.`);
-  }
-  const mainSha = branch.object.sha;
 
-  // Three dots: what the tested head changes since it left the default branch, which is what the
-  // squash brings in.
   const { data: diff } = await github.rest.repos.compareCommitsWithBasehead({
     owner,
     repo,
-    basehead: `${mainSha}...${headSha}`,
+    basehead: `${defaultBranch}...${headSha}`,
     per_page: 100,
   });
   const files = diff.files ?? [];
@@ -264,14 +324,6 @@ async function mergeIfEligible({ github, context, core, pr, allowlist, headSha }
     );
   }
   const path = only.filename;
-  const mergeBaseSha = diff.merge_base_commit.sha;
-
-  const [headObject, mergeBaseObject, mainObject] = await Promise.all(
-    [headSha, mergeBaseSha, mainSha].map((ref) => fileObject({ github, owner, repo, path, ref })),
-  );
-  if (headObject.type !== "file") {
-    return comment(`Not merged automatically: \`${path}\` must stay a regular file. A maintainer will review it.`);
-  }
 
   const { data: status } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: headSha });
   const cla = status.statuses.find((s) => s.context === CLA_CONTEXT);
@@ -281,75 +333,32 @@ async function mergeIfEligible({ github, context, core, pr, allowlist, headSha }
     );
   }
 
-  const mainChanged = mainObject.sha !== mergeBaseObject.sha;
-  const [mergeBaseText, headText, mainText] = await Promise.all([
-    fileText({ github, owner, repo, path, ref: mergeBaseSha }),
-    fileText({ github, owner, repo, path, ref: headSha }),
-    mainChanged ? fileText({ github, owner, repo, path, ref: mainSha }) : null,
-  ]);
-
-  let mergeBase;
-  let current;
-  try {
-    mergeBase = parsePo(mergeBaseText);
-    current = mainChanged ? parsePo(mainText) : mergeBase;
-  } catch (error) {
-    if (!(error instanceof CatalogError)) throw error;
-    core.warning(`${path} on ${defaultBranch} cannot be read: ${error.message}`);
-    return comment(`Not merged automatically: \`${path}\` on \`${defaultBranch}\` cannot be read, so this change cannot be checked. A maintainer will review it.`);
+  let outcome = { raced: true };
+  for (let attempt = 0; attempt < LAND_ATTEMPTS && outcome.raced; attempt++) {
+    outcome = await landOnce({ github, owner, repo, defaultBranch, path, headSha, mergeBaseSha: diff.merge_base_commit.sha, pr, core });
   }
-  let head;
-  try {
-    head = parsePo(headText);
-  } catch (error) {
-    if (!(error instanceof CatalogError)) throw error;
-    return comment(`Not merged automatically: \`${path}\` cannot be read as a catalog (${error.message}).`);
-  }
-
-  // Wuchale compiles the header's Plural-Forms rule into code. The other header lines are metadata
-  // that translators' editors rewrite.
-  if (pluralForms(head.header) !== pluralForms(mergeBase.header)) {
-    return comment(`Not merged automatically: this pull request changes the \`Plural-Forms\` line of \`${path}\`. A maintainer will review it.`);
-  }
-
-  const problems = placeholderProblems(mergeBase, head);
-  if (problems.length > 0) return comment(problemsMarkdown(path, problems));
-
-  const moved = mainChanged ? movedStrings(mergeBase, head, current) : [];
-  if (moved.length > 0) {
-    return comment(
-      `Not merged automatically: \`${defaultBranch}\` has changed or removed ${moved.length} of the English strings this pull request translates. Update the branch from \`${defaultBranch}\`, then push.`,
-    );
-  }
+  if (outcome.raced) throw new Error(`#${prNumber}: ${defaultBranch} kept moving; run this workflow again`);
+  if (outcome.refused) return comment(`Not merged automatically: ${outcome.refused}`);
 
   try {
-    await github.rest.pulls.merge({
-      owner,
-      repo,
-      pull_number: prNumber,
-      sha: headSha,
-      merge_method: "squash",
-      commit_title: `${pr.title} (#${prNumber})`,
-      commit_message: `Merged by translator-merge: ${pr.user.login} is the allowlisted translator for ${path}.`,
-    });
-  } catch (error) {
-    core.warning(`#${prNumber}: merge failed: ${error.message}`);
-    return comment(`Not merged automatically: GitHub refused the merge (${error.message}). Update the branch from \`${defaultBranch}\`, then push.`);
-  }
-  try {
+    const dropped =
+      outcome.dropped > 0
+        ? ` ${outcome.dropped} ${outcome.dropped === 1 ? "translation was" : "translations were"} left out because \`${defaultBranch}\` no longer has the English text.`
+        : "";
     await comment(
-      `Merged automatically: \`${pr.user.login}\` is the allowlisted translator for \`${path}\`, the tests passed, and the placeholders match the English text.`,
+      `Landed on \`${defaultBranch}\` as ${outcome.landed}: \`${pr.user.login}\` is the allowlisted translator for \`${path}\`, the tests passed, and the placeholders match the English text.${dropped} This pull request is closed rather than merged, because its translations are written into the catalog on \`${defaultBranch}\` as one commit.`,
     );
+    await github.rest.pulls.update({ owner, repo, pull_number: prNumber, state: "closed" });
   } catch (error) {
-    core.warning(`#${prNumber}: merged, but the comment failed: ${error.message}`);
+    core.warning(`#${prNumber}: landed as ${outcome.landed}, but commenting or closing failed: ${error.message}`);
   }
   return true;
 }
 
 /**
  * Finds the open pull requests into the default branch whose head is the commit and repository
- * Tests passed on, and merges those an allowlisted translator opened. Returns whether anything
- * merged.
+ * Tests passed on, and lands those an allowlisted translator opened. Returns whether anything
+ * landed.
  */
 async function run({ github, context, core, allowlist, headSha, headRepository }) {
   const { owner, repo } = context.repo;
@@ -360,11 +369,11 @@ async function run({ github, context, core, allowlist, headSha, headRepository }
     core.info(`no open pull request from ${headRepository} has head ${headSha}`);
     return false;
   }
-  let merged = false;
+  let landed = false;
   for (const pr of prs) {
-    if ((await mergeIfEligible({ github, context, core, pr, allowlist, headSha })) === true) merged = true;
+    if ((await landIfEligible({ github, context, core, pr, allowlist, headSha })) === true) landed = true;
   }
-  return merged;
+  return landed;
 }
 
-module.exports = { run, parsePo, placeholderProblems, pluralForms, movedStrings, filesFor, CatalogError };
+module.exports = { run, readCatalog, writeCatalog, catalogProblems, applyTranslations, filesFor, itemKey };
