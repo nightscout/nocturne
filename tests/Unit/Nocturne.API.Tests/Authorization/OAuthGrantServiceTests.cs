@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -73,7 +74,7 @@ public class OAuthGrantServiceTests : IDisposable
             });
     }
 
-    private OAuthGrantService CreateService(NocturneDbContext dbContext)
+    private OAuthGrantService CreateService(NocturneDbContext dbContext, TimeProvider? time = null)
     {
         return new OAuthGrantService(
             _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
@@ -81,7 +82,7 @@ public class OAuthGrantServiceTests : IDisposable
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),
             new GrantConsentService(NullLogger<GrantConsentService>.Instance),
-            TimeProvider.System,
+            time ?? TimeProvider.System,
             _mockLogger.Object);
     }
 
@@ -293,6 +294,22 @@ public class OAuthGrantServiceTests : IDisposable
 
         Assert.NotNull(result);
         Assert.Equal("New Label", result.Label);
+    }
+
+    [Fact]
+    public async Task UpdateLastUsedAsync_RecordsTheInjectedTime()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var service = CreateService(db, time);
+
+        await service.UpdateLastUsedAsync(grantId, ipAddress: null, userAgent: null);
+
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        Assert.Equal(time.GetUtcNow().UtcDateTime, grant.LastUsedAt);
     }
 
     [Fact]

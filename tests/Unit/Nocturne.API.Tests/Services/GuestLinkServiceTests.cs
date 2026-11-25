@@ -19,7 +19,7 @@ namespace Nocturne.API.Tests.Services;
 public class GuestLinkServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
-    private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GuestLinkService _service;
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -64,13 +64,13 @@ public class GuestLinkServiceTests : IDisposable
         result.FullUrl.Should().StartWith("https://example.com/guest/");
         result.Info.Label.Should().Be("Test Link");
         result.Info.Status.Should().Be(GuestLinkStatus.Pending);
-        result.Info.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(48), TimeSpan.FromSeconds(5));
+        result.Info.ExpiresAt.Should().Be(_time.GetUtcNow().UtcDateTime.AddHours(48));
     }
 
     [Fact]
     public async Task CreateGuestLink_expiresNoLaterThanTheCreatorsAccess()
     {
-        var creatorAccessEndsAt = DateTime.UtcNow.AddHours(6);
+        var creatorAccessEndsAt = _time.GetUtcNow().UtcDateTime.AddHours(6);
 
         var result = await _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Capped", "https://example.com", Unbounded(), expiresNoLaterThan: creatorAccessEndsAt);
@@ -82,9 +82,9 @@ public class GuestLinkServiceTests : IDisposable
     public async Task CreateGuestLink_keepsItsLifetimeWhenTheCreatorsAccessEndsLater()
     {
         var result = await _service.CreateGuestLinkAsync(
-            _dataOwnerId, _creatorId, "Uncapped", "https://example.com", Unbounded(), expiresNoLaterThan: DateTime.UtcNow.AddDays(30));
+            _dataOwnerId, _creatorId, "Uncapped", "https://example.com", Unbounded(), expiresNoLaterThan: _time.GetUtcNow().UtcDateTime.AddDays(30));
 
-        result.Info.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(48), TimeSpan.FromSeconds(5));
+        result.Info.ExpiresAt.Should().Be(_time.GetUtcNow().UtcDateTime.AddHours(48));
     }
 
     [Fact]
@@ -352,7 +352,7 @@ public class GuestLinkServiceTests : IDisposable
     private async Task CapAsync(DateTime notAfter)
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_dbContext.AsFactory(), _tenantId);
-        await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(_creatorId, notAfter, DateTime.UtcNow, CancellationToken.None);
+        await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(_creatorId, notAfter, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
         await unit.Context.SaveChangesAsync();
     }
 
@@ -361,13 +361,13 @@ public class GuestLinkServiceTests : IDisposable
     {
         var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Cap Test", "https://example.com", Unbounded(), null);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
-        var newExpiry = DateTime.UtcNow.AddHours(1);
+        var newExpiry = _time.GetUtcNow().UtcDateTime.AddHours(1);
 
         await CapAsync(newExpiry);
 
         (await _service.ValidateSessionAsync(created.Info.Id))!.ExpiresAt.Should().Be(newExpiry);
 
-        await CapAsync(DateTime.UtcNow.AddMinutes(-1));
+        await CapAsync(_time.GetUtcNow().UtcDateTime.AddMinutes(-1));
 
         (await _service.ValidateSessionAsync(created.Info.Id)).Should().BeNull();
     }
@@ -375,11 +375,11 @@ public class GuestLinkServiceTests : IDisposable
     [Fact]
     public async Task ValidateSessionAsync_CapDoesNotLengthenALinkThatEndsSooner()
     {
-        var soon = DateTime.UtcNow.AddMinutes(10);
+        var soon = _time.GetUtcNow().UtcDateTime.AddMinutes(10);
         var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Short Test", "https://example.com", Unbounded(), soon);
         await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
 
-        await CapAsync(DateTime.UtcNow.AddDays(5));
+        await CapAsync(_time.GetUtcNow().UtcDateTime.AddDays(5));
 
         (await _service.ValidateSessionAsync(created.Info.Id))!.ExpiresAt.Should().Be(created.Info.ExpiresAt);
     }
@@ -467,23 +467,20 @@ public class GuestLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DismissAsync_ExpiredLink_SetsDismissedAt()
+    public async Task DismissAsync_AtTheExpiryBoundary_SetsDismissedAt()
     {
         var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Expired Dismiss", "https://example.com", Unbounded(), null);
 
-        // Force expiration by backdating ExpiresAt
-        var grant = await _dbContext.OAuthGrants
-            .IgnoreQueryFilters()
-            .FirstAsync(g => g.Id == created.Info.Id);
-        grant.ExpiresAt = DateTime.UtcNow.AddHours(-1);
-        await _dbContext.SaveChangesAsync();
+        _time.Advance(TimeSpan.FromHours(48));
 
         var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
 
         result.Should().BeTrue();
 
-        await _dbContext.Entry(grant).ReloadAsync();
-        grant.DismissedAt.Should().NotBeNull();
+        var grant = await _dbContext.OAuthGrants.AsNoTracking()
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.DismissedAt.Should().Be(created.Info.ExpiresAt);
     }
 
     [Fact]
@@ -573,7 +570,7 @@ public class GuestLinkServiceTests : IDisposable
         var grant = await _dbContext.OAuthGrants
             .IgnoreQueryFilters()
             .FirstAsync(g => g.Id == created.Info.Id);
-        grant.ExpiresAt = DateTime.UtcNow.AddHours(-1);
+        grant.ExpiresAt = _time.GetUtcNow().UtcDateTime.AddHours(-1);
         await _dbContext.SaveChangesAsync();
 
         (await _service.HasRedeemableCodeAsync()).Should().BeFalse();
@@ -588,7 +585,7 @@ public class GuestLinkServiceTests : IDisposable
             SubjectId = _dataOwnerId,
             GrantType = OAuthGrantTypes.Direct,
             Scopes = [Scope.HealthRead],
-            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            ExpiresAt = _time.GetUtcNow().UtcDateTime.AddHours(1),
         });
         await _dbContext.SaveChangesAsync();
 

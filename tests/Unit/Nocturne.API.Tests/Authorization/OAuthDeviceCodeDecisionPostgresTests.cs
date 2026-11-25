@@ -146,6 +146,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             clients.Object,
             contexts,
             new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            TimeProvider.System,
             NullLogger<OAuthDeviceCodeService>.Instance);
     }
 
