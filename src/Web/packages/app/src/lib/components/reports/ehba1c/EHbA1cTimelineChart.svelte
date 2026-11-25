@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { SvelteMap } from "svelte/reactivity";
   import { Chart, Svg, Axis, Spline, Rule, Text, LinearGradient, BrushContext, Highlight, type ChartState } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
@@ -50,11 +51,18 @@
   const DAY_MS = 24 * 60 * 60 * 1000;
 
   const fullDomain = $derived.by((): [Date, Date] => {
-    const first = data[0]?.date ?? new Date();
-    const last = data[data.length - 1]?.date ?? new Date();
-    return [first, last];
+    const dates = [...data, ...labPoints].map((point) => point.date.getTime());
+    if (dates.length === 0) return [new Date(), new Date()];
+    return [new Date(Math.min(...dates) - DAY_MS / 2), new Date(Math.max(...dates) + DAY_MS / 2)];
   });
   const xDomain = $derived(zoom ?? fullDomain);
+  const hoverData = $derived.by(() => {
+    const rows = new SvelteMap(data.map((point) => [point.date.getTime(), point]));
+    for (const point of labPoints) {
+      if (!rows.has(point.date.getTime())) rows.set(point.date.getTime(), point);
+    }
+    return [...rows.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+  });
 
   /**
    * Stops for a vertical gradient in plot pixels: offset 0 is the top of the plot. Zones are low to
@@ -98,7 +106,7 @@
 <div class="space-y-2">
   <div class="h-[320px] w-full @md:h-[400px]" data-testid="ehba1c-chart">
     <Chart
-      {data}
+      data={hoverData}
       x="date"
       y="displayValue"
       xScale={scaleTime()}

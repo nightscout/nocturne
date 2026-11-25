@@ -177,8 +177,18 @@ describe("eHbA1c chart tooltips", () => {
     ) as SVGPolygonElement | undefined;
     if (!beforeHistoryMarker) throw new Error("Pre-history lab marker is not rendered");
     const markerBounds = beforeHistoryMarker.getBoundingClientRect();
+    const chart = page.getByTestId("ehba1c-chart");
+    const chartBounds = chart.element().getBoundingClientRect();
 
     expect(screenLineStart.x).toBeGreaterThan(markerBounds.right);
+    expect(markerBounds.x + markerBounds.width / 2).toBeGreaterThan(chartBounds.left);
+    await userEvent.hover(chart, {
+      position: {
+        x: markerBounds.x - chartBounds.x + markerBounds.width / 2,
+        y: markerBounds.y - chartBounds.y + markerBounds.height / 2,
+      },
+    });
+    await expect.element(page.getByTestId("ehba1c-tooltip")).toHaveTextContent("Before glucose history");
   });
 });
 
