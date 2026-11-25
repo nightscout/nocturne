@@ -27,7 +27,6 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     : IClassFixture<OAuthDeviceCodeDecisionPostgresTests.Database>
 {
     private const string ClientId = "app";
-    private static readonly TimeSpan BarrierTimeout = TimeSpan.FromSeconds(30);
     private static readonly IReadOnlySet<string> FullAccess = new HashSet<string> { Scope.FullAccess };
 
     public sealed class Database : IAsyncLifetime
@@ -167,7 +166,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             {
                 if (Interlocked.Increment(ref arrived) == 2)
                     bothArrived.SetResult();
-                return bothArrived.Task.WaitAsync(BarrierTimeout);
+                return bothArrived.Task.WaitAsync(Eventually.DefaultPatience);
             })));
     }
 

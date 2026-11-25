@@ -24,8 +24,6 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     : IClassFixture<SetupOwnerClaimPostgresTests.Database>
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
-    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
-
     public sealed class Database : IAsyncLifetime
     {
         public string AppConnectionString { get; private set; } = string.Empty;
@@ -114,7 +112,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, stored);
         await held.CommitAsync();
 
-        (await stored.WaitAsync(Wait)).Should().BeNull();
+        (await stored.WaitAsync(Eventually.DefaultPatience)).Should().BeNull();
         (await CredentialsAsync(site.Owner)).Should().Be(0);
         (await RecordAsync(site.Tenant)).Should().BeNull();
     }
@@ -132,7 +130,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, stored);
         await held.RollbackAsync();
 
-        (await stored.WaitAsync(Wait)).Should().NotBeNull();
+        (await stored.WaitAsync(Eventually.DefaultPatience)).Should().NotBeNull();
         (await CredentialsAsync(site.Owner)).Should().Be(1);
         (await RecordAsync(site.Tenant)).Should().BeNull();
     }
@@ -159,7 +157,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, adoption);
         await held.CommitAsync();
 
-        (await adoption.WaitAsync(Wait)).Should().BeFalse();
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().BeFalse();
         (await members.FindMemberAsync(site.Tenant, holder, Ct)).Should().BeNull();
         (await members.FindMemberAsync(site.Tenant, site.Owner, Ct)).Should().NotBeNull();
         (await seedingSubjects.GetAsync(site.Owner, Ct)).Should().NotBeNull("a refused adoption keeps the owner-step subject");
@@ -212,8 +210,8 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, adoption, deletion);
         await held.RollbackAsync();
 
-        (await adoption.WaitAsync(Wait)).Should().Be(adoptFirst);
-        var deleted = await deletion.WaitAsync(Wait);
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().Be(adoptFirst);
+        var deleted = await deletion.WaitAsync(Eventually.DefaultPatience);
         if (adoptFirst)
         {
             deleted.Should().BeOfType<SubjectChange.LastOwnerOf>();

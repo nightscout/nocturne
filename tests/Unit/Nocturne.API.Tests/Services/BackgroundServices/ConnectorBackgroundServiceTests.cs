@@ -31,6 +31,9 @@ namespace Nocturne.API.Tests.Services.BackgroundServices;
 /// </summary>
 public class ConnectorBackgroundServiceTests
 {
+    // A poller that must stay queued is watched this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan StaysQueuedFor = TimeSpan.FromMilliseconds(500);
+
     private const string JobName = "connector:testconnector";
 
     /// <summary>On the minute, so <c>Start + phase</c> is a point of the tenant's phase.</summary>
@@ -551,7 +554,7 @@ public class ConnectorBackgroundServiceTests
         var firstRun = RunAsync(first, BuildServiceProvider(db, configServiceMock, Enabled()), tenant, firstCts.Token);
         try
         {
-            (await Task.WhenAny(firstStarted.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(firstStarted.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(firstStarted.Task, "the first poller must take the only slot");
 
             var secondRun = RunAsync(
@@ -559,14 +562,14 @@ public class ConnectorBackgroundServiceTests
                 BuildServiceProvider(db, configServiceMock, Enabled(), onConfigLoad: () => Interlocked.Increment(ref secondConfigLoads)),
                 tenant);
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromMilliseconds(500))))
+            (await Task.WhenAny(secondDone.Task, Task.Delay(StaysQueuedFor)))
                 .Should().NotBe(secondDone.Task, "the second poller's tenant must wait while the first poller holds the slot");
             secondConfigLoads.Should().Be(0, "the slot must be held before the tenant's config is loaded");
             budget.InFlight.Should().Be(1);
 
             await firstCts.CancelAsync();
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(secondDone.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(secondDone.Task, "the slot the first poller released must go to the second");
             await secondRun;
             secondConfigLoads.Should().Be(1);
@@ -613,7 +616,7 @@ public class ConnectorBackgroundServiceTests
         var firstRun = RunAsync(first, root, tenant, firstCts.Token);
         try
         {
-            (await Task.WhenAny(firstStarted.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(firstStarted.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(firstStarted.Task, "the first poller must take the only slot");
 
             var secondRun = RunAsync(second, root, tenant);
@@ -622,7 +625,7 @@ public class ConnectorBackgroundServiceTests
             await Task.Delay(TimeSpan.FromMilliseconds(800));
             await firstCts.CancelAsync();
 
-            (await Task.WhenAny(secondDone.Task, Task.Delay(TimeSpan.FromSeconds(5))))
+            (await Task.WhenAny(secondDone.Task, Task.Delay(Eventually.DefaultPatience)))
                 .Should().Be(secondDone.Task, "a tenant that queued longer than its timeout must still run once it holds a slot");
             await secondRun;
         }
@@ -658,14 +661,14 @@ public class ConnectorBackgroundServiceTests
             timeProvider: clock);
 
         var run = RunAsync(sut, BuildServiceProvider(db, configServiceMock, Enabled()), tenant, shutdown.Token);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await started.Task.WaitAsync(Eventually.DefaultPatience);
 
         clock.Advance(TimeSpan.FromMinutes(3) - TimeSpan.FromSeconds(1));
         await Task.Delay(100);
         run.IsCompleted.Should().BeFalse("the timeout has not passed on the injected clock");
 
         clock.Advance(TimeSpan.FromSeconds(1));
-        (await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(10)))).Should().Be(run, "the timeout ends the run");
+        (await Task.WhenAny(run, Task.Delay(Eventually.DefaultPatience))).Should().Be(run, "the timeout ends the run");
         var thrown = await FluentActions.Awaiting(() => run).Should().ThrowAsync<TimeoutException>();
         logger.Messages.Should().Contain(m => m.Contains("exceeded"));
         budget.InFlight.Should().Be(0);
@@ -693,7 +696,7 @@ public class ConnectorBackgroundServiceTests
             hangFirstNCalls: 1);
 
         var run = RunAsync(sut, BuildServiceProvider(db, configServiceMock, Enabled()), tenant, shutdown.Token);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await started.Task.WaitAsync(Eventually.DefaultPatience);
         await shutdown.CancelAsync();
 
         await FluentActions.Awaiting(() => run).Should().ThrowAsync<OperationCanceledException>();

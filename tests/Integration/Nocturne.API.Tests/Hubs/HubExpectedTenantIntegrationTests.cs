@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -70,7 +71,7 @@ public class HubExpectedTenantIntegrationTests : ApiIntegrationTestBase
     }
 
     private static async Task ShouldCloseAsync(Task closed) =>
-        (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10))))
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience)))
             .Should().BeSameAs(closed, "the host resolves to a tenant the connection did not expect");
 
     private static Task<JsonElement> AuthorizeAsBridgeAsync(HubConnection connection) =>

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Legacy;
@@ -195,7 +196,7 @@ public class BraceExpansionServiceTests
     public async Task ExpandBraces_RangeEndingAtIntMaxValue_StopsAtTheEnd()
     {
         var expanded = await Task.Run(() => _service.ExpandBraces("{2147483646..2147483647}").ToList())
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(Eventually.DefaultPatience);
 
         expanded.Should().Equal("2147483646", "2147483647");
     }

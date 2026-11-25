@@ -306,7 +306,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         }
 
         _clock.Advance(JobScheduler.HeartbeatInterval);
-        await running.DrainAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await running.DrainAsync().WaitAsync(Eventually.DefaultPatience);
 
         job.Cancelled.Should().Be(1);
         job.Runs.Should().BeEmpty();

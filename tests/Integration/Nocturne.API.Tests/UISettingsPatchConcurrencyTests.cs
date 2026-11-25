@@ -130,7 +130,7 @@ public class UISettingsPatchConcurrencyTests : ApiIntegrationTestBase
 
                 await transaction.CommitAsync();
             });
-            await secondTask!.WaitAsync(TimeSpan.FromSeconds(30));
+            await secondTask!.WaitAsync(Eventually.DefaultPatience);
         }
         finally
         {
@@ -138,7 +138,7 @@ public class UISettingsPatchConcurrencyTests : ApiIntegrationTestBase
             {
                 try
                 {
-                    await secondTask.WaitAsync(TimeSpan.FromSeconds(30));
+                    await secondTask.WaitAsync(Eventually.DefaultPatience);
                 }
                 catch (Exception ex)
                 {

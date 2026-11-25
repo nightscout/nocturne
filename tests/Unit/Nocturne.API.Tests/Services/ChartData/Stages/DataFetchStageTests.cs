@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.ChartData.Stages;
 
@@ -358,7 +359,7 @@ public class DataFetchStageTests
         };
 
         var result = await _stage.ExecuteAsync(context, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(Eventually.DefaultPatience);
 
         started.Should().Be(factoryBackedReads);
         result.BolusList.Should().ContainSingle();

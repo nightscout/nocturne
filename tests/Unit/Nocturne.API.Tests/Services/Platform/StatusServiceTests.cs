@@ -1189,7 +1189,7 @@ public class StatusServiceTests
                 .GetSystemStatusAsync())
             .ToList();
         held.SetResult(new UserDisplayPreferences());
-        var results = await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5));
+        var results = await Task.WhenAll(reads).WaitAsync(Eventually.DefaultPatience);
 
         runs.Should().Be(1);
         results.Should().AllSatisfy(r => r.Should().BeSameAs(results[0]));

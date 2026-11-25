@@ -378,7 +378,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     private static async Task RunAsync(InstanceKeyChangeService service)
     {
         await service.StartAsync(CancellationToken.None);
-        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.ExecuteTask!.WaitAsync(Eventually.DefaultPatience);
     }
 
     /// <summary>

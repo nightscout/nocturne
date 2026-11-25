@@ -5,6 +5,7 @@ using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Eventing;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Aspire.Host.Tests;
@@ -25,7 +26,7 @@ public class DevTenantSeedResourceTests
         await using var app = builder.Build();
         var notifications = app.Services.GetRequiredService<ResourceNotificationService>();
         var eventing = app.Services.GetRequiredService<IDistributedApplicationEventing>();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
 
         await eventing.PublishAsync(
             new InitializeResourceEvent(
@@ -95,7 +96,7 @@ public class DevTenantSeedResourceTests
         await using var app = builder.Build();
         var notifications = app.Services.GetRequiredService<ResourceNotificationService>();
         var eventing = app.Services.GetRequiredService<IDistributedApplicationEventing>();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
 
         var initialize = eventing.PublishAsync(
             new InitializeResourceEvent(

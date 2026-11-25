@@ -10,6 +10,7 @@ using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
@@ -241,7 +242,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
 
         var revoke = store.RevokeAsync("refresh", "account", default);
 
-        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(
+        (await revoke.WaitAsync(Eventually.DefaultPatience)).Should().Be(
             outcome == "ok" ? GoogleHealthRevocation.Revoked : GoogleHealthRevocation.Failed);
     }
 
@@ -258,13 +259,13 @@ public class GoogleHealthSessionStoreTests : IDisposable
         }), revokeTimeout: TimeSpan.FromSeconds(30), time: time);
 
         var revoke = store.RevokeAsync("refresh", "account", default);
-        await asked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await asked.Task.WaitAsync(Eventually.DefaultPatience);
         revoke.IsCompleted.Should().BeFalse();
         time.Advance(TimeSpan.FromSeconds(29));
         revoke.IsCompleted.Should().BeFalse();
         time.Advance(TimeSpan.FromSeconds(1));
 
-        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(GoogleHealthRevocation.Failed);
+        (await revoke.WaitAsync(Eventually.DefaultPatience)).Should().Be(GoogleHealthRevocation.Failed);
     }
 
     [Fact]
@@ -280,10 +281,10 @@ public class GoogleHealthSessionStoreTests : IDisposable
         }), time: time);
 
         var revoke = store.RevokeAsync("refresh", "account", default);
-        await asked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await asked.Task.WaitAsync(Eventually.DefaultPatience);
         time.Advance(TimeSpan.FromSeconds(5));
 
-        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(GoogleHealthRevocation.Failed);
+        (await revoke.WaitAsync(Eventually.DefaultPatience)).Should().Be(GoogleHealthRevocation.Failed);
     }
 
     [Fact]
@@ -297,7 +298,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => store.RevokeAsync("refresh", "account", cancellation.Token).WaitAsync(TimeSpan.FromSeconds(5)));
+            () => store.RevokeAsync("refresh", "account", cancellation.Token).WaitAsync(Eventually.DefaultPatience));
     }
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)

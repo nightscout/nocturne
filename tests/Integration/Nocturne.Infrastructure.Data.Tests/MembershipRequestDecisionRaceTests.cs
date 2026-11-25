@@ -47,16 +47,16 @@ public class MembershipRequestDecisionRaceTests
             locked.SetResult();
             await release.Task;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var deny = new TenantMembershipRepository(DbUnitOfWork.Own(denying), AccountLinkRoutes.Off)
             .DecideRequestAsync(seed.Tenant, seed.Request, Decision(MembershipRequestRecord.Denied, null), CancellationToken.None);
         await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, deny);
 
         release.SetResult();
-        await approval.WaitAsync(TimeSpan.FromSeconds(30));
+        await approval.WaitAsync(Eventually.DefaultPatience);
 
-        (await deny.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeFalse("the approval committed first, so the request is no longer pending");
+        (await deny.WaitAsync(Eventually.DefaultPatience)).Should().BeFalse("the approval committed first, so the request is no longer pending");
         await using var read = await ContextAsync(provider, seed.Tenant);
         (await read.MembershipRequests.SingleAsync(r => r.Id == seed.Request)).Status.Should().Be(MembershipRequestRecord.Approved);
         (await read.TenantMembers.AnyAsync(m => m.SubjectId == seed.Subject)).Should().BeTrue();
@@ -81,7 +81,7 @@ public class MembershipRequestDecisionRaceTests
             locked.SetResult();
             await release.Task;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var members = new TenantMembershipRepository(approvingUnit, AccountLinkRoutes.Off);
         var approval = approvingUnit.CommitAsync(async token =>
@@ -96,9 +96,9 @@ public class MembershipRequestDecisionRaceTests
         await PostgresLockWaits.UntilBlockedAsync(_fx.AppConnectionString, approval);
 
         release.SetResult();
-        await deny.WaitAsync(TimeSpan.FromSeconds(30));
+        await deny.WaitAsync(Eventually.DefaultPatience);
 
-        (await approval.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeFalse("the deny committed first, so the request is no longer pending");
+        (await approval.WaitAsync(Eventually.DefaultPatience)).Should().BeFalse("the deny committed first, so the request is no longer pending");
         await using var read = await ContextAsync(provider, seed.Tenant);
         (await read.MembershipRequests.SingleAsync(r => r.Id == seed.Request)).Status.Should().Be(MembershipRequestRecord.Denied);
         (await read.TenantMembers.AnyAsync(m => m.SubjectId == seed.Subject)).Should().BeFalse();

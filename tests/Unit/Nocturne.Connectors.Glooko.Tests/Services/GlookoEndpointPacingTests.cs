@@ -66,7 +66,7 @@ public class GlookoEndpointPacingTests
         await Task.Delay(200);
         await cts.CancelAsync();
 
-        await FluentActions.Awaiting(() => sync.WaitAsync(TimeSpan.FromSeconds(5)))
+        await FluentActions.Awaiting(() => sync.WaitAsync(Eventually.DefaultPatience))
             .Should().ThrowAsync<OperationCanceledException>();
         handler.Fetched.Should().HaveCount(1, "the pause was cut short and nothing after it ran");
         progress.Phases.Should().EndWith(SyncPhase.Failed);

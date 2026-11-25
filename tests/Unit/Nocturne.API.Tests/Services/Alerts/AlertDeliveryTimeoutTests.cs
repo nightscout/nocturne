@@ -108,7 +108,7 @@ public class AlertDeliveryTimeoutTests
         send.IsCompleted.Should().BeFalse("the resolver has not answered and the limit has not passed");
         clock.Advance(AlertDeliveryClient.Timeout);
 
-        (await send.WaitAsync(TimeSpan.FromSeconds(2))).Should().Equal(Unresolvable);
+        (await send.WaitAsync(Eventually.DefaultPatience)).Should().Equal(Unresolvable);
         handler.Requested.Should().Equal(Answers);
     }
 

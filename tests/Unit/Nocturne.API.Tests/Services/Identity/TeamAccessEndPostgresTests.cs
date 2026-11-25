@@ -597,8 +597,8 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, ahead, behind);
         await held.RollbackAsync(Ct);
 
-        await ahead.WaitAsync(TimeSpan.FromSeconds(30));
-        await behind.WaitAsync(TimeSpan.FromSeconds(30));
+        await ahead.WaitAsync(Eventually.DefaultPatience);
+        await behind.WaitAsync(Eventually.DefaultPatience);
     }
 
     private async Task ExecuteAsync(string sql)

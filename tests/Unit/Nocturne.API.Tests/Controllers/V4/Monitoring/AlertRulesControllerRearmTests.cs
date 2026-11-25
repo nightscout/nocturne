@@ -225,7 +225,7 @@ public class AlertRulesControllerRearmTests
         (await AwaitingRearm(db)).Should().BeTrue();
 
         evaluation.Dispose();
-        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+        await toggle.WaitAsync(Eventually.DefaultPatience);
         (await AwaitingRearm(db)).Should().BeFalse();
     }
 
@@ -241,7 +241,7 @@ public class AlertRulesControllerRearmTests
         await Task.Delay(100);
         await SetHold(db, true);
         evaluation.Dispose();
-        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+        await toggle.WaitAsync(Eventually.DefaultPatience);
 
         (await AwaitingRearm(db)).Should().BeFalse();
     }
@@ -259,7 +259,7 @@ public class AlertRulesControllerRearmTests
         await request.CancelAsync();
         evaluation.Dispose();
 
-        await toggle.Invoking(t => t.WaitAsync(TimeSpan.FromSeconds(5)))
+        await toggle.Invoking(t => t.WaitAsync(Eventually.DefaultPatience))
             .Should().ThrowAsync<OperationCanceledException>();
         (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId)).IsEnabled.Should().BeTrue();
         (await AwaitingRearm(db)).Should().BeTrue();

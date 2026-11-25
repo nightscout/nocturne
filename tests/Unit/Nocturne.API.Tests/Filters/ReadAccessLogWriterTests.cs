@@ -20,6 +20,9 @@ namespace Nocturne.API.Tests.Filters;
 [Trait("Category", "Unit")]
 public class ReadAccessLogWriterTests
 {
+    // A full queue must not make a request wait; this is how long the enqueues have, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotBlockLongerThan = TimeSpan.FromSeconds(10);
+
     private static readonly Guid TenantA = Guid.CreateVersion7();
     private static readonly Guid TenantB = Guid.CreateVersion7();
 
@@ -63,7 +66,7 @@ public class ReadAccessLogWriterTests
                 writer.Enqueue(Entry(TenantA, $"GET /api/v4/entries/{i}"));
         });
 
-        (await Task.WhenAny(enqueue, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(
+        (await Task.WhenAny(enqueue, Task.Delay(MustNotBlockLongerThan))).Should().BeSameAs(
             enqueue, "a full queue must not make a request wait");
         await enqueue;
 
