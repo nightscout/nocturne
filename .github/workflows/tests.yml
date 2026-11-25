@@ -434,6 +434,25 @@ jobs:
         with:
           name: api-client
           path: src/Web/packages
+      # translator-merge.yml reads and writes catalogs with a vendored copy of the pofile Wuchale
+      # uses, since it installs nothing, and copies a few of Wuchale's loading rules. This keeps the
+      # copy identical to the installed one and fails on a Wuchale upgrade, so the rules are rechecked.
+      - name: Translator merge
+        if: ${{ !cancelled() }}
+        run: |
+          wuchale=$(node -p 'require("fs").realpathSync("node_modules/wuchale")')
+          installed=$(node -p 'require("module").createRequire(process.argv[1] + "/package.json").resolve("pofile")' "$wuchale")
+          cmp "$installed" ../../.github/scripts/vendor/pofile/po.js || {
+            echo "::error::Wuchale's pofile ($installed) differs from .github/scripts/vendor/pofile/po.js. Copy it there."
+            exit 1
+          }
+          version=$(node -p 'require(process.argv[1] + "/package.json").version' "$wuchale")
+          expected=$(node -p 'require("../../.github/scripts/translator-merge.cjs").WUCHALE_VERSION')
+          [ "$version" = "$expected" ] || {
+            echo "::error::Wuchale is $version; translator-merge.cjs copies the loading rules of $expected. Check itemKey and readCatalog against wuchale/dist/pofile.js and adapters.js, then update WUCHALE_VERSION."
+            exit 1
+          }
+          node --test ../../.github/scripts/translator-merge.test.cjs
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
