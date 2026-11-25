@@ -9,6 +9,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -92,11 +93,25 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<BolusCalculation>());
 
+        NoDeletedRows<Bolus>(_bolusRepo);
+        NoDeletedRows<CarbIntake>(_carbIntakeRepo);
+        NoDeletedRows<BGCheck>(_bgCheckRepo);
+        NoDeletedRows<Note>(_noteRepo);
+        NoDeletedRows<DeviceEvent>(_deviceEventRepo);
+        NoDeletedRows<TempBasal>(_tempBasalRepo);
+        NoDeletedRows<BolusCalculation>(_bolusCalcRepo);
+
         _dbContext = TestDbContextFactory.CreateInMemoryContext();
         _dbContext.TenantId = TenantId; // satisfy the tenant query filter
 
         _service = CreateService(_dbContext);
     }
+
+    private static void NoDeletedRows<T>(Mock repository) where T : class, IV4Record =>
+        repository.As<ILegacyKeyedRepository<T>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
     private void SetupBoluses(IEnumerable<Bolus> boluses) =>
         _bolusRepo.As<IV4Repository<Bolus>>()
@@ -580,6 +595,149 @@ public class V4ToLegacyProjectionServiceTests
 
         result.Should().ContainSingle();
         result[0].SrvModified.Should().Be(new DateTimeOffset(newest, TimeSpan.Zero).ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsIncludingDeleted_ServesTheWindowWithDeletedRowsFlaggedIsValidFalse()
+    {
+        var deletedAt = Cursor.AddHours(1);
+        var live = new Note { Id = Guid.CreateVersion7(), Timestamp = Cursor, Text = "live", ModifiedAt = Cursor };
+        var deleted = new Note
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor.AddMinutes(-1), Text = "deleted", ModifiedAt = deletedAt,
+        };
+        var from = Cursor.AddDays(-1);
+        var to = Cursor.AddDays(1);
+        _noteRepo.As<ILegacyKeyedRepository<Note>>()
+            .Setup(r => r.GetIncludingDeletedAsync(from, to, 10, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<Note>(live, false), new HistoryRecord<Note>(deleted, true)]);
+
+        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(
+            from.ToMills(), to.ToMills(), limit: 10, descending: true)).ToList();
+
+        result.Select(t => (t.Id, t.IsValid)).Should().Equal(
+            (live.Id.ToString(), (bool?)null),
+            (deleted.Id.ToString(), (bool?)false));
+        result[1].SrvModified.Should().Be(deletedAt.ToMills());
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsIncludingDeleted_DeletedMeal_IsOneDeletedMealBolus()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var deletedAt = Cursor.AddMinutes(3);
+        var bolus = new Bolus
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor, Insulin = 4.0, CorrelationId = correlationId, ModifiedAt = deletedAt,
+        };
+        var carb = new CarbIntake
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor, Carbs = 40.0, CorrelationId = correlationId, ModifiedAt = deletedAt,
+        };
+        SetupDeleted(bolus, carb);
+
+        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+
+        var meal = result.Should().ContainSingle().Subject;
+        meal.EventType.Should().Be(TreatmentTypes.MealBolus);
+        meal.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsIncludingDeleted_DeletedBolusWithALiveCarbIntake_IsServedApart()
+    {
+        // A deleted half never pairs with a live one: the bolus is the deleted treatment, and the
+        // surviving carb intake is a treatment of its own, as the history serves them.
+        var correlationId = Guid.CreateVersion7();
+        var deletedAt = Cursor.AddMinutes(3);
+        var bolus = new Bolus
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor, Insulin = 4.0, CorrelationId = correlationId, ModifiedAt = deletedAt,
+        };
+        var carb = new CarbIntake
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor, Carbs = 40.0, CorrelationId = correlationId, ModifiedAt = Cursor,
+        };
+        _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<Bolus>(bolus, true)]);
+        _carbIntakeRepo.As<ILegacyKeyedRepository<CarbIntake>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<CarbIntake>(carb, false)]);
+
+        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+
+        result.Select(t => (t.EventType, t.IsValid)).Should().BeEquivalentTo(
+        [
+            (TreatmentTypes.CorrectionBolus, (bool?)false),
+            (TreatmentTypes.CarbCorrection, (bool?)null),
+        ]);
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsIncludingDeleted_DeletedTreatment_IsServedWithItsDeletedNote()
+    {
+        var bolus = new Bolus
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor, Insulin = 4.0, LegacyId = "65f000000000000000000b01",
+            ModifiedAt = Cursor.AddMinutes(3),
+        };
+        _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<Bolus>(bolus, true)]);
+        await AddModifiedAsync((
+            new NoteEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, Timestamp = Cursor, Text = "after lunch",
+                LegacyId = bolus.LegacyId, DeletedAt = Cursor.AddMinutes(3),
+            },
+            Cursor.AddMinutes(3)));
+
+        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+
+        var deleted = result.Should().ContainSingle().Subject;
+        deleted.IsValid.Should().BeFalse();
+        deleted.Notes.Should().Be("after lunch");
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsIncludingDeleted_LiveTreatment_IsNotServedWithADeletedNote()
+    {
+        var bolus = new Bolus
+        {
+            Id = Guid.CreateVersion7(), Timestamp = Cursor, Insulin = 4.0, LegacyId = "65f000000000000000000b02",
+            ModifiedAt = Cursor,
+        };
+        _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<Bolus>(bolus, false)]);
+        await AddModifiedAsync((
+            new NoteEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, Timestamp = Cursor, Text = "removed",
+                LegacyId = bolus.LegacyId, DeletedAt = Cursor.AddMinutes(3),
+            },
+            Cursor.AddMinutes(3)));
+
+        var result = (await _service.GetProjectedTreatmentsIncludingDeletedAsync(null, null, 10, descending: true)).ToList();
+
+        result.Should().ContainSingle().Which.Notes.Should().BeNull();
+    }
+
+    private void SetupDeleted(Bolus bolus, CarbIntake carb)
+    {
+        _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<Bolus>(bolus, true)]);
+        _carbIntakeRepo.As<ILegacyKeyedRepository<CarbIntake>>()
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HistoryRecord<CarbIntake>(carb, true)]);
     }
 
     [Fact]

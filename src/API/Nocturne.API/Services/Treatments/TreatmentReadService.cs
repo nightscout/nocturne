@@ -117,8 +117,13 @@ internal class TreatmentReadService : ITreatmentStore
 
     private Task<IEnumerable<Treatment>> FetchWindowAsync(
         FindQuery find, int limit, bool descending, CancellationToken ct) =>
-        _projection.GetProjectedTreatmentsAsync(
-            find.FromMills, find.ToMills, limit, descending, ct);
+        NamesIsValid(find)
+            ? _projection.GetProjectedTreatmentsIncludingDeletedAsync(
+                find.FromMills, find.ToMills, limit, descending, ct)
+            : _projection.GetProjectedTreatmentsAsync(
+                find.FromMills, find.ToMills, limit, descending, ct);
+
+    private static bool NamesIsValid(FindQuery find) => find.Fields.Contains("isValid");
 
     private static IEnumerable<Treatment> OrderByTime(IEnumerable<Treatment> treatments, bool descending) =>
         descending ? treatments.OrderByDescending(t => t.Mills) : treatments.OrderBy(t => t.Mills);
@@ -421,8 +426,7 @@ internal class TreatmentReadService : ITreatmentStore
         {
             // Field filters only exist on the projected shape; count matches within the
             // (bounded) window instead of delegating to per-repo counts.
-            var projected = (await _projection.GetProjectedTreatmentsAsync(
-                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, ct: ct)).ToList();
+            var projected = (await FetchWindowAsync(findQuery, MaxFilterFetch, descending: true, ct)).ToList();
             if (projected.Count >= MaxFilterFetch)
                 _logger.LogWarning(
                     "Find-filtered treatment count hit the {MaxFetch}-row window; older matches are not counted",

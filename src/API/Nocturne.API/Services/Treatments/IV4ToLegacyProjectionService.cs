@@ -28,6 +28,19 @@ internal interface IV4ToLegacyProjectionService
     );
 
     /// <summary>
+    /// <see cref="GetProjectedTreatmentsAsync"/> over the rows stored deleted as well as the live ones,
+    /// a deleted one projected with <c>isValid: false</c> and its delete as its modification stamp. The
+    /// window, the limit and the order apply to live and deleted rows together.
+    /// </summary>
+    Task<IEnumerable<Treatment>> GetProjectedTreatmentsIncludingDeletedAsync(
+        long? fromMills,
+        long? toMills,
+        int limit,
+        bool descending,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
     /// The treatments that start exactly at one of <paramref name="instants"/>, each served as a read
     /// of its instant alone serves it: a bolus and a carb intake at different instants are not paired.
     /// Each table is read once however many instants there are, and nothing between them is read.

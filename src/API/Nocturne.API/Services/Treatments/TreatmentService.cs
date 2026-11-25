@@ -511,11 +511,12 @@ internal class TreatmentService : ITreatmentService
 
     private async Task<long> DeleteMatchingTreatmentsAsync(string? find, CancellationToken ct)
     {
+        // A find that names isValid also reads deleted treatments, which are already gone.
         var matching = await _store.QueryAsync(
             new TreatmentQuery { Find = find, Count = int.MaxValue }, ct);
 
         long deleted = 0;
-        foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
+        foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id) && t.IsValid != false))
         {
             if (await _store.DeleteAsync(treatment.Id!, ct) is not null)
             {

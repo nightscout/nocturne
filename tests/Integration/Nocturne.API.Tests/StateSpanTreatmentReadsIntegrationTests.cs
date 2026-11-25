@@ -174,6 +174,50 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task A_find_naming_isValid_does_not_list_a_deleted_copy_of_a_state_span_treatment_a_live_primary_stands_for()
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 31));
+        await PostAsync(client, Upload("Temporary Override", minutesAgo: 30));
+        await WithTenantScopeAsync(async sp =>
+        {
+            await using var db = await sp.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+            var spans = await db.StateSpans.OrderBy(s => s.StartTimestamp).Select(s => s.Id).ToListAsync();
+            await db.LinkedRecords.Where(l => spans.Contains(l.RecordId)).ExecuteDeleteAsync();
+            await DuplicateGroups.LinkAsync(db, RecordType.StateSpan, spans[0], spans[1]);
+            await db.StateSpans.Where(s => s.Id == spans[1]).ExecuteUpdateAsync(
+                s => s.SetProperty(x => x.DeletedAt, DateTime.UtcNow));
+            return 0;
+        });
+
+        (await GetArrayAsync(client, "/api/v1/treatments?find[isValid]=false")).Should().BeEmpty();
+        (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(EventTypes))]
+    public async Task A_find_naming_isValid_lists_a_deleted_state_span_treatment_in_the_window_as_invalid(string eventType)
+    {
+        var client = CreateAuthenticatedClient();
+        await PostAsync(client, Upload(eventType, minutesAgo: 30));
+        await PostAsync(client, Upload(eventType, minutesAgo: 60 * 24 * 3));
+        var served = await GetArrayAsync(client, "/api/v1/treatments");
+        var inWindow = served.Single(t => DateTime.Parse(t!["created_at"]!.GetValue<string>()) > DateTime.UtcNow.AddDays(-1))!;
+        var outside = served.Single(t => !ReferenceEquals(t, inWindow))!;
+        foreach (var id in new[] { inWindow, outside }.Select(t => t["_id"]!.GetValue<string>()))
+            (await client.DeleteAsync($"/api/v1/treatments/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var since = Uri.EscapeDataString(DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+
+        var invalid = await GetArrayAsync(client, $"/api/v1/treatments?find[isValid]=false&find[created_at][$gte]={since}");
+
+        var listed = invalid.Should().ContainSingle().Subject!;
+        listed["_id"]!.GetValue<string>().Should().Be(inWindow["_id"]!.GetValue<string>());
+        listed["isValid"]!.GetValue<bool>().Should().BeFalse();
+        (await GetArrayAsync(client, $"/api/v1/treatments?find[created_at][$gte]={since}")).Should().BeEmpty();
+        (await CountAsync(client, $"?find[isValid]=false&find[created_at][$gte]={since}")).Should().Be(1);
+    }
+
+    [Fact]
     public async Task A_window_delete_removes_the_state_span_treatments_in_the_window()
     {
         var client = CreateAuthenticatedClient();
