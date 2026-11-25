@@ -204,8 +204,8 @@ public class ClockAnomalyNoticeTests
             },
         });
 
-    private static SensorContext PumpModesStartingAt(DateTime start) =>
-        Context() with { ActivePumpModes = [new PumpModeSnapshot("Suspended", start)] };
+    private SensorContext PumpModesStartingAt(DateTime? newest) =>
+        Context() with { PumpModesRead = new PumpModeSpansRead(Now, newest) };
 
     [Fact]
     public async Task A_notice_raised_under_the_retired_pump_fact_stands_for_the_same_span_and_is_not_raised_again()
@@ -249,21 +249,141 @@ public class ClockAnomalyNoticeTests
     public async Task The_pump_modes_are_observed_at_their_newest_start()
     {
         IReadOnlyCollection<ClockAnomaly> ahead = [new(PumpModesFact, TimeSpan.FromMinutes(30))];
-        var context = Context() with
-        {
-            ActivePumpModes =
-            [
-                new PumpModeSnapshot("Automatic", T0.AddMinutes(-60)),
-                new PumpModeSnapshot("Suspended", T0.AddMinutes(30)),
-            ],
-        };
+        var context = PumpModesStartingAt(T0.AddMinutes(30));
         await _notice.ReportAsync(context, ahead, CancellationToken.None);
         Standing.Should().Equal(PumpModesFact);
 
         _clock.Advance(TimeSpan.FromMinutes(31));
         await _notice.ReportAsync(context, [], CancellationToken.None);
 
-        Standing.Should().BeEmpty("the newest start is no longer ahead, whatever the older one is");
+        Standing.Should().BeEmpty("the newest start is no longer ahead");
+    }
+
+    [Fact]
+    public async Task A_pump_mode_span_beyond_the_tolerance_raises_the_notice_with_no_engine_anomaly()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(Now.AddMinutes(20)), [], CancellationToken.None);
+
+        Standing.Should().Equal(PumpModesFact);
+        _created.Should().Be(1);
+        _active.Single().Type.Should().Be(ClockAnomalyNotice.NotificationType);
+    }
+
+    [Fact]
+    public async Task A_pump_mode_span_within_the_tolerance_raises_nothing()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(Now.AddMinutes(3)), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+        _created.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task The_pump_mode_notice_is_raised_once_across_passes_and_kept_while_the_span_is_ahead()
+    {
+        for (var pass = 0; pass < 6; pass++)
+        {
+            await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _created.Should().Be(1);
+        _archived.Should().Be(0);
+        Standing.Should().Equal(PumpModesFact);
+    }
+
+    [Fact]
+    public async Task The_pump_mode_notice_is_kept_once_the_span_comes_within_the_tolerance_and_archived_when_time_passes_it()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(17));
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { PumpModesFact }, "the span is still ahead, inside the tolerance");
+
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-60)]
+    public async Task The_pump_mode_notice_is_archived_at_once_when_the_span_is_removed_or_ended(int? newestStartMinutes)
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(PumpModesFact);
+
+        await _notice.ReportAsync(
+            PumpModesStartingAt(newestStartMinutes is { } m ? Now.AddMinutes(m) : null), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty("no stored open pump-mode span is ahead of now, though the span's start is 20 minutes away");
+    }
+
+    [Theory]
+    [InlineData(10, 20, 20)]
+    [InlineData(30, 20, 30)]
+    public async Task The_larger_of_the_engines_and_the_hosts_distance_ahead_is_the_one_stored(
+        int engineMinutes, int hostMinutes, int storedMinutes)
+    {
+        IReadOnlyCollection<ClockAnomaly> engine = [new(PumpModesFact, TimeSpan.FromMinutes(engineMinutes))];
+
+        await _notice.ReportAsync(PumpModesStartingAt(Now.AddMinutes(hostMinutes)), engine, CancellationToken.None);
+
+        _active.Single().Metadata![ClockAnomalyNotice.AheadUntilKey].Should()
+            .Be(Now.AddMinutes(storedMinutes).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public async Task A_span_the_enrichment_judged_beyond_the_bound_is_reported_though_the_clock_has_moved_within_it()
+    {
+        var enrichedAt = Now;
+        var start = enrichedAt.AddMinutes(5).AddSeconds(5);
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        await _notice.ReportAsync(
+            Context() with { PumpModesRead = new PumpModeSpansRead(enrichedAt, start) }, [], CancellationToken.None);
+
+        Standing.Should().Equal(PumpModesFact);
+    }
+
+    [Fact]
+    public async Task A_span_the_enrichment_sent_is_not_reported_though_the_clock_is_behind_the_bound_it_used()
+    {
+        var enrichedAt = Now.AddMinutes(1);
+
+        await _notice.ReportAsync(
+            Context() with { PumpModesRead = new PumpModeSpansRead(enrichedAt, Now.AddMinutes(6)) },
+            [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_pass_that_reads_no_pump_modes_leaves_the_pump_mode_notice_to_its_instant()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { PumpModesFact }, "the pass did not read pump modes, so it cannot say the span is gone");
+
+        _clock.Advance(TimeSpan.FromMinutes(21));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_later_pass_reporting_a_span_further_ahead_moves_the_notice_forward()
+    {
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(45)), [], CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(30));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+
+        Standing.Should().Equal(new[] { PumpModesFact }, "the notice stands for the latest start, 45 minutes in");
+        _created.Should().Be(1);
     }
 
     /// <summary>

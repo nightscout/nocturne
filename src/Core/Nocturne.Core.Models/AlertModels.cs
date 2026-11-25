@@ -286,10 +286,22 @@ public record SensorContext
     /// The host reads it; it is not sent to the engine.
     /// </summary>
     public ReadingSource? LatestSource { get; init; }
+
+    /// <summary>
+    /// What a live pass saw of the stored pump-mode spans, or null when it read none. The host
+    /// reports a clock anomaly from it; it is not sent to the engine.
+    /// </summary>
+    public PumpModeSpansRead? PumpModesRead { get; init; }
 }
 
 /// <summary>The device and data source a reading was written under.</summary>
 public sealed record ReadingSource(string? DataSource, string? Device);
+
+/// <param name="At">The instant the pass chose the spans to send at, which the host judges them against.</param>
+/// <param name="NewestStart">
+/// The latest start among the open pump-mode spans, sent or not, or null when none is open.
+/// </param>
+public sealed record PumpModeSpansRead(DateTime At, DateTime? NewestStart);
 
 /// <summary>A tracker definition's active instance, as the <c>tracker_age</c> leaf reads it.</summary>
 /// <param name="ReferenceAt">Start time for a Duration tracker, scheduled time for an Event tracker.</param>

@@ -200,6 +200,14 @@ public class StateSpanService : IStateSpanService
         return await _repository.GetActiveAtAsync(category, state, at, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default)
+        => _repository.GetAllCopiesAsync(category, from, to, cancellationToken);
+
     #region Activity Compatibility Methods
 
     /// <inheritdoc />

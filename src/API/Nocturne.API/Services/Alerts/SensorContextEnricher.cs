@@ -165,9 +165,11 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
-        var pumpModeSpans = new Lazy<Task<IReadOnlyList<StateSpan>>>(() => ReadPumpModeSpansAsync(now, isReplay, ct));
+        var pumpModeSpans = new Lazy<Task<PumpModeSpans>>(() => ReadPumpModeSpansAsync(now, isReplay, ct));
         enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, pumpModeSpans, ct);
         enriched = await EnrichPhase2FactsAsync(enriched, needs, now, pumpModeSpans, ct);
+        if (!isReplay && pumpModeSpans.IsValueCreated)
+            enriched = enriched with { PumpModesRead = (await pumpModeSpans.Value).Read };
 
         // DND state is fetched unconditionally — engine-level suppression in the orchestrator
         // applies to every rule regardless of whether its tree references the do_not_disturb
@@ -225,7 +227,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// </summary>
     private async Task<SensorContext> EnrichPhase2FactsAsync(
         SensorContext baseCtx, DataNeedsSet needs, DateTime now,
-        Lazy<Task<IReadOnlyList<StateSpan>>> pumpModeSpans, CancellationToken ct)
+        Lazy<Task<PumpModeSpans>> pumpModeSpans, CancellationToken ct)
     {
         var enriched = baseCtx;
 
@@ -280,7 +282,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsPumpModes)
         {
-            enriched = enriched with { ActivePumpModes = ActivePumpModes(await pumpModeSpans.Value) };
+            enriched = enriched with { ActivePumpModes = ActivePumpModes((await pumpModeSpans.Value).Sent) };
         }
 
         if (needs.ReferencedStateSpans.Count > 0)
@@ -393,7 +395,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// </summary>
     private async Task<SensorContext> EnrichLoopingFactsAsync(
         SensorContext baseCtx, DataNeedsSet needs, DateTime now, bool isReplay,
-        Lazy<Task<IReadOnlyList<StateSpan>>> pumpModeSpans, CancellationToken ct)
+        Lazy<Task<PumpModeSpans>> pumpModeSpans, CancellationToken ct)
     {
         var enriched = baseCtx;
 
@@ -450,7 +452,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 var pumpFresh = (now - pump.Timestamp) < _deps.Options.Value.PumpFreshnessThreshold;
                 if (pumpFresh)
                 {
-                    var span = OpenSuspension(await pumpModeSpans.Value);
+                    var span = OpenSuspension((await pumpModeSpans.Value).Sent);
                     if (span is not null)
                     {
                         enriched = enriched with
@@ -502,7 +504,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (needs.NeedsOverride)
         {
             var span = await _deps.StateSpans.GetActiveAtAsync(
-                StateSpanCategory.Override, state: null, at: now, ct);
+                StateSpanCategory.Override, state: null, at: now, ct)
+                ?? (isReplay ? null : await SoonestDeviceStatusOverrideAheadAsync(now, ct));
             if (span is not null)
             {
                 var multiplier = span.Metadata.TryReadDecimal("insulinNeedsScaleFactor");
@@ -706,34 +709,74 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// <summary>
     /// The pump-mode spans the facts read at <paramref name="now"/>: those open at it, and live, per mode with
     /// none open, the soonest open span starting no later than <see cref="AlertReadings.Bound"/> after it, as
-    /// the engine-semantics.md section 5.4 Host paragraph states. The ahead spans are a separate read, so
-    /// they cannot use up the cap of the current one. Read once for every pump-mode fact.
+    /// the engine-semantics.md section 5.4 Host paragraph states. The ahead spans are a separate, bounded read,
+    /// so no span beyond the bound can use up the cap of the current one or push the one sent out of its page.
+    /// Read once for every pump-mode fact. A live read also learns the newest start among the open spans, sent
+    /// or not, from a third read of the newest open span alone.
     /// </summary>
-    private async Task<IReadOnlyList<StateSpan>> ReadPumpModeSpansAsync(DateTime now, bool isReplay, CancellationToken ct)
+    private async Task<PumpModeSpans> ReadPumpModeSpansAsync(DateTime now, bool isReplay, CancellationToken ct)
     {
         var current = (await _deps.StateSpans.GetStateSpansAsync(
                 StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct))
             .Where(s => s.EndTimestamp is null || s.EndTimestamp > now)
             .ToList();
         if (isReplay)
-            return current;
+            return new PumpModeSpans(current, null);
 
         var ahead = (await _deps.StateSpans.GetStateSpansAsync(
                 StateSpanCategory.PumpMode, from: now, to: AlertReadings.Bound(now), active: true, cancellationToken: ct))
-            .Where(s => s.StartTimestamp > now && s.EndTimestamp is null);
+            .ToList();
+        var newestOpen = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, active: true, count: 1, cancellationToken: ct))
+            .ToList();
         var covered = current.Select(s => s.State).ToHashSet(StringComparer.Ordinal);
-        return
+        var sent = (IReadOnlyList<StateSpan>)
         [
             .. current,
-            .. ahead
+            .. OpenStartingAhead(ahead, now)
                 .Where(s => !covered.Contains(s.State))
                 .GroupBy(s => s.State, StringComparer.Ordinal)
                 .Select(g => g.MinBy(s => s.StartTimestamp)!),
         ];
+        var newest = current.Concat(ahead.Where(s => s.EndTimestamp is null)).Concat(newestOpen)
+            .Select(s => (DateTime?)s.StartTimestamp)
+            .Max();
+        return new PumpModeSpans(sent, new PumpModeSpansRead(now, newest));
     }
 
     /// <summary>
-    /// Every span <see cref="ReadPumpModeSpansAsync"/> returned, its state as written. Spans of different modes
+    /// The soonest override a device status wrote that starts after <paramref name="now"/> and no later
+    /// than <see cref="AlertReadings.Bound"/> after it: a fast uploader clock dates it ahead. Loop uploads
+    /// most overrides with a duration, so one with an end after its start is sent too. An override
+    /// written any other way is a plan, and stays held back until its time. Read with the copies
+    /// deduplication hides, since Loop reports one override as a treatment and as a device status, and the
+    /// treatment copy can be the group's primary. A device status exists only when the uploader reports the
+    /// override running, so its copy being hidden does not make the override a plan.
+    /// </summary>
+    private async Task<StateSpan?> SoonestDeviceStatusOverrideAheadAsync(DateTime now, CancellationToken ct) =>
+        StartingAhead(
+                await _deps.StateSpans.GetAllCopiesAsync(
+                    StateSpanCategory.Override, from: now, to: AlertReadings.Bound(now), cancellationToken: ct),
+                now)
+            .Where(s => s.Metadata.IsFromDeviceStatus() && (s.EndTimestamp is null || s.EndTimestamp > s.StartTimestamp))
+            .MinBy(s => s.StartTimestamp);
+
+    /// <summary>
+    /// The open spans of <paramref name="spans"/> that start after <paramref name="now"/> and no later than
+    /// <see cref="AlertReadings.Bound"/> after it, the ones a pump-mode fact may read as in force.
+    /// </summary>
+    private static IEnumerable<StateSpan> OpenStartingAhead(IEnumerable<StateSpan> spans, DateTime now) =>
+        StartingAhead(spans, now).Where(s => s.EndTimestamp is null);
+
+    private static IEnumerable<StateSpan> StartingAhead(IEnumerable<StateSpan> spans, DateTime now) =>
+        spans.Where(s => s.StartTimestamp > now && s.StartTimestamp <= AlertReadings.Bound(now));
+
+    /// <param name="Sent">The spans the facts read.</param>
+    /// <param name="Read">What a live read saw of the stored spans; null for a replay read.</param>
+    private sealed record PumpModeSpans(IReadOnlyList<StateSpan> Sent, PumpModeSpansRead? Read);
+
+    /// <summary>
+    /// Every span <see cref="ReadPumpModeSpansAsync"/> sent, its state as written. Spans of different modes
     /// overlap (a Suspended span runs on top of an Automatic or Manual one), so none is chosen over another; the
     /// engine reads the entry for the mode each leaf names.
     /// </summary>

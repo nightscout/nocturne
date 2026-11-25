@@ -928,6 +928,25 @@ public class StateSpanRepository : IStateSpanRepository
         return entity is null ? null : StateSpanMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var categoryString = category.ToString();
+        var entities = await db.StateSpans
+            .AsNoTracking()
+            .Where(s => s.Category == categoryString
+                        && s.StartTimestamp <= to
+                        && (s.EndTimestamp == null || s.EndTimestamp >= from))
+            .OrderBy(s => s.StartTimestamp)
+            .ToListAsync(cancellationToken);
+        return [.. entities.Select(StateSpanMapper.ToDomainModel)];
+    }
+
     /// <summary>
     /// Get state spans for multiple categories. With <paramref name="from"/> set, runs one query
     /// for the window and one per category for spans that started before it.
