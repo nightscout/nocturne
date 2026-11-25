@@ -76,7 +76,7 @@ public class NotTrueRecordingFloorTests
             LatestTimestamp = Noon,
             TrendRate = null,
             LastReadingAt = Noon,
-            ActiveOverride = new OverrideSnapshot(Noon.AddMinutes(-40), null, null, null),
+            ActiveOverride = new OverrideSnapshot(Noon.AddMinutes(-40)),
         };
 
         var evaluation = await engine.EvaluateRuleAsync(snapshot, context, AlertEngineOptions.Default, CancellationToken.None);

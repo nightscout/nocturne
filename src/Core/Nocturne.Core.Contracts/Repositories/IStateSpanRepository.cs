@@ -232,11 +232,12 @@ public interface IStateSpanRepository
     /// <summary>
     /// Every live span of <paramref name="category"/> overlapping [<paramref name="from"/>, <paramref name="to"/>],
     /// oldest start first, including the copies deduplication hides behind another record's primary. Not capped.
+    /// A null <paramref name="to"/> sets no later bound.
     /// </summary>
     Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
         StateSpanCategory category,
         DateTime from,
-        DateTime to,
+        DateTime? to,
         CancellationToken cancellationToken = default);
 
     /// <summary>

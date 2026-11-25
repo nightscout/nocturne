@@ -1322,18 +1322,21 @@ host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_a
 `held_since`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
 For a pump mode with no span open at `now`, the host also sends the soonest open span of that mode dated up to the
 tolerance ahead of `now`, as §4 selects a reading, since a device's clock usually dates it. It holds back a span dated
-further ahead. A live pass that reads pump modes reports such a span, as the reading selection reports a reading, under
-the fact `active_pump_modes`. A pass reads pump modes when a rule reads `pump_state`, or reads the suspension while the
-pump snapshot is fresh. The notification is raised for the latest start ahead and archived once no stored open pump-mode
-span is ahead of `now`. A span that ends or is removed archives it at the next such pass. A tenant with no such pass is
-not told. The host judges a span against the instant it chose the spans at, so a span is either sent or reported.
+further ahead. A live pass that reads pump modes reports a span that starts further ahead, open or closed, as the reading
+selection reports a reading, under the fact `active_pump_modes`. A pass reads pump modes when a rule reads `pump_state`,
+or reads the suspension while the pump snapshot is fresh. The notification is raised for the latest start ahead and
+archived once no stored pump-mode span that has not ended starts ahead of `now`. A span that is removed archives it at
+the next such pass. A tenant with no such pass is not told. The host judges a span against the instant it chose the
+spans at, so a span is either sent or reported. A closed span dated ahead is never sent.
 With no override in force at `now`, the host also sends the soonest override dated up to the tolerance ahead that a
 device status wrote (its metadata `collection` is `devicestatus`), open or with an end after its start, since an
 uploader's clock dates it. It looks among every copy of the override, because Loop reports one override as a treatment
-and as a device status, and deduplication can hide the device status copy behind the treatment one. An override
-written any other way is a plan and is held back until its time, as are the spans of every other category. A v4 request
-that sets `collection` to `devicestatus` on its own override makes the engine read it up to 5 minutes early. Replay
-sends only the spans open at its tick.
+and as a device status, and deduplication can hide the device status copy behind the treatment one. A live pass that
+reads the override (a rule reads `override_active`) reports such an override that starts further ahead, whether or not another override is in force,
+under the fact `active_override`, as it reports a pump-mode span. An override written any other way is a plan and is
+held back until its time, as are the spans of every other category, and is never reported. A v4 request that sets
+`collection` to `devicestatus` on its own override makes the engine read it up to 5 minutes early, and one dated
+further ahead raises the notification. Replay sends only the spans open at its tick and reports nothing.
 
 ---
 

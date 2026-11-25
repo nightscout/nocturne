@@ -504,18 +504,18 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (needs.NeedsOverride)
         {
             var span = await _deps.StateSpans.GetActiveAtAsync(
-                StateSpanCategory.Override, state: null, at: now, ct)
-                ?? (isReplay ? null : await SoonestDeviceStatusOverrideAheadAsync(now, ct));
-            if (span is not null)
+                StateSpanCategory.Override, state: null, at: now, ct);
+            if (!isReplay)
             {
-                var multiplier = span.Metadata.TryReadDecimal("insulinNeedsScaleFactor");
-                var name = span.Metadata.TryReadString("reasonDisplay");
+                var deviceStatus = await DeviceStatusOverridesAsync(now, ct);
+                span ??= StartingAhead(deviceStatus, now).MinBy(s => s.StartTimestamp);
                 enriched = enriched with
                 {
-                    ActiveOverride = new OverrideSnapshot(
-                        span.StartTimestamp, span.EndTimestamp, multiplier, name)
+                    OverridesRead = new SpansRead(now, deviceStatus.Select(s => (DateTime?)s.StartTimestamp).Max()),
                 };
             }
+            if (span is not null)
+                enriched = enriched with { ActiveOverride = new OverrideSnapshot(span.StartTimestamp) };
         }
 
         if (needs.NeedsSensorState)
@@ -711,8 +711,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// none open, the soonest open span starting no later than <see cref="AlertReadings.Bound"/> after it, as
     /// the engine-semantics.md section 5.4 Host paragraph states. The ahead spans are a separate, bounded read,
     /// so no span beyond the bound can use up the cap of the current one or push the one sent out of its page.
-    /// Read once for every pump-mode fact. A live read also learns the newest start among the open spans, sent
-    /// or not, from a third read of the newest open span alone.
+    /// Read once for every pump-mode fact. A live read also learns the newest start among the spans not ended
+    /// before <paramref name="now"/>, open or closed, sent or not, from a third read of that span alone.
     /// </summary>
     private async Task<PumpModeSpans> ReadPumpModeSpansAsync(DateTime now, bool isReplay, CancellationToken ct)
     {
@@ -726,54 +726,43 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         var ahead = (await _deps.StateSpans.GetStateSpansAsync(
                 StateSpanCategory.PumpMode, from: now, to: AlertReadings.Bound(now), active: true, cancellationToken: ct))
             .ToList();
-        var newestOpen = (await _deps.StateSpans.GetStateSpansAsync(
-                StateSpanCategory.PumpMode, from: now, active: true, count: 1, cancellationToken: ct))
+        var newestStored = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, count: 1, cancellationToken: ct))
             .ToList();
         var covered = current.Select(s => s.State).ToHashSet(StringComparer.Ordinal);
         var sent = (IReadOnlyList<StateSpan>)
         [
             .. current,
-            .. OpenStartingAhead(ahead, now)
+            .. StartingAhead(ahead, now)
                 .Where(s => !covered.Contains(s.State))
                 .GroupBy(s => s.State, StringComparer.Ordinal)
                 .Select(g => g.MinBy(s => s.StartTimestamp)!),
         ];
-        var newest = current.Concat(ahead.Where(s => s.EndTimestamp is null)).Concat(newestOpen)
-            .Select(s => (DateTime?)s.StartTimestamp)
-            .Max();
-        return new PumpModeSpans(sent, new PumpModeSpansRead(now, newest));
+        var newest = newestStored.FirstOrDefault()?.StartTimestamp;
+        return new PumpModeSpans(sent, new SpansRead(now, newest));
     }
 
     /// <summary>
-    /// The soonest override a device status wrote that starts after <paramref name="now"/> and no later
-    /// than <see cref="AlertReadings.Bound"/> after it: a fast uploader clock dates it ahead. Loop uploads
-    /// most overrides with a duration, so one with an end after its start is sent too. An override
-    /// written any other way is a plan, and stays held back until its time. Read with the copies
+    /// The overrides a device status wrote that have not ended before <paramref name="now"/>, open or with an
+    /// end after their start. A fast uploader clock dates one ahead: the soonest no later than
+    /// <see cref="AlertReadings.Bound"/> after <paramref name="now"/> is sent, and one further ahead is reported.
+    /// An override written any other way is a plan, and stays held back until its time. Read with the copies
     /// deduplication hides, since Loop reports one override as a treatment and as a device status, and the
     /// treatment copy can be the group's primary. A device status exists only when the uploader reports the
     /// override running, so its copy being hidden does not make the override a plan.
     /// </summary>
-    private async Task<StateSpan?> SoonestDeviceStatusOverrideAheadAsync(DateTime now, CancellationToken ct) =>
-        StartingAhead(
-                await _deps.StateSpans.GetAllCopiesAsync(
-                    StateSpanCategory.Override, from: now, to: AlertReadings.Bound(now), cancellationToken: ct),
-                now)
-            .Where(s => s.Metadata.IsFromDeviceStatus() && (s.EndTimestamp is null || s.EndTimestamp > s.StartTimestamp))
-            .MinBy(s => s.StartTimestamp);
-
-    /// <summary>
-    /// The open spans of <paramref name="spans"/> that start after <paramref name="now"/> and no later than
-    /// <see cref="AlertReadings.Bound"/> after it, the ones a pump-mode fact may read as in force.
-    /// </summary>
-    private static IEnumerable<StateSpan> OpenStartingAhead(IEnumerable<StateSpan> spans, DateTime now) =>
-        StartingAhead(spans, now).Where(s => s.EndTimestamp is null);
+    private async Task<IReadOnlyList<StateSpan>> DeviceStatusOverridesAsync(DateTime now, CancellationToken ct) =>
+        [
+            .. (await _deps.StateSpans.GetAllCopiesAsync(StateSpanCategory.Override, from: now, to: null, cancellationToken: ct))
+                .Where(s => s.Metadata.IsFromDeviceStatus() && (s.EndTimestamp is null || s.EndTimestamp > s.StartTimestamp)),
+        ];
 
     private static IEnumerable<StateSpan> StartingAhead(IEnumerable<StateSpan> spans, DateTime now) =>
         spans.Where(s => s.StartTimestamp > now && s.StartTimestamp <= AlertReadings.Bound(now));
 
     /// <param name="Sent">The spans the facts read.</param>
     /// <param name="Read">What a live read saw of the stored spans; null for a replay read.</param>
-    private sealed record PumpModeSpans(IReadOnlyList<StateSpan> Sent, PumpModeSpansRead? Read);
+    private sealed record PumpModeSpans(IReadOnlyList<StateSpan> Sent, SpansRead? Read);
 
     /// <summary>
     /// Every span <see cref="ReadPumpModeSpansAsync"/> sent, its state as written. Spans of different modes

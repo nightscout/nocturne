@@ -205,7 +205,7 @@ public class ClockAnomalyNoticeTests
         });
 
     private SensorContext PumpModesStartingAt(DateTime? newest) =>
-        Context() with { PumpModesRead = new PumpModeSpansRead(Now, newest) };
+        Context() with { PumpModesRead = new SpansRead(Now, newest) };
 
     [Fact]
     public async Task A_notice_raised_under_the_retired_pump_fact_stands_for_the_same_span_and_is_not_raised_again()
@@ -342,7 +342,7 @@ public class ClockAnomalyNoticeTests
         _clock.Advance(TimeSpan.FromSeconds(10));
 
         await _notice.ReportAsync(
-            Context() with { PumpModesRead = new PumpModeSpansRead(enrichedAt, start) }, [], CancellationToken.None);
+            Context() with { PumpModesRead = new SpansRead(enrichedAt, start) }, [], CancellationToken.None);
 
         Standing.Should().Equal(PumpModesFact);
     }
@@ -353,7 +353,7 @@ public class ClockAnomalyNoticeTests
         var enrichedAt = Now.AddMinutes(1);
 
         await _notice.ReportAsync(
-            Context() with { PumpModesRead = new PumpModeSpansRead(enrichedAt, Now.AddMinutes(6)) },
+            Context() with { PumpModesRead = new SpansRead(enrichedAt, Now.AddMinutes(6)) },
             [], CancellationToken.None);
 
         Standing.Should().BeEmpty();
@@ -384,6 +384,84 @@ public class ClockAnomalyNoticeTests
 
         Standing.Should().Equal(new[] { PumpModesFact }, "the notice stands for the latest start, 45 minutes in");
         _created.Should().Be(1);
+    }
+
+    private const string OverrideFact = "active_override";
+
+    private SensorContext OverridesStartingAt(DateTime? newest) =>
+        Context() with { OverridesRead = new SpansRead(Now, newest) };
+
+    [Fact]
+    public async Task A_device_status_override_beyond_the_tolerance_raises_its_own_notice()
+    {
+        await _notice.ReportAsync(OverridesStartingAt(Now.AddMinutes(20)), [], CancellationToken.None);
+
+        Standing.Should().Equal(OverrideFact);
+        _active.Single().Metadata![ClockAnomalyNotice.AheadUntilKey].Should()
+            .Be(Now.AddMinutes(20).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(null)]
+    public async Task An_override_read_with_nothing_beyond_the_tolerance_raises_nothing(int? newestStartMinutes)
+    {
+        await _notice.ReportAsync(
+            OverridesStartingAt(newestStartMinutes is { } m ? Now.AddMinutes(m) : null), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+        _created.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task An_override_and_a_pump_mode_span_ahead_raise_one_notice_each()
+    {
+        await _notice.ReportAsync(
+            Context() with { OverridesRead = new SpansRead(Now, Now.AddMinutes(20)), PumpModesRead = new SpansRead(Now, Now.AddMinutes(30)) },
+            [], CancellationToken.None);
+
+        Standing.Should().BeEquivalentTo([OverrideFact, PumpModesFact]);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-60)]
+    public async Task The_override_notice_is_archived_at_once_when_no_device_status_override_is_ahead(int? newestStartMinutes)
+    {
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(OverrideFact);
+
+        await _notice.ReportAsync(
+            OverridesStartingAt(newestStartMinutes is { } m ? Now.AddMinutes(m) : null), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty("no device-status override is ahead of now, though the one reported starts 20 minutes away");
+    }
+
+    [Fact]
+    public async Task The_override_notice_is_kept_once_the_override_comes_within_the_tolerance_and_archived_when_time_passes_it()
+    {
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(17));
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { OverrideFact }, "the override is still ahead, inside the tolerance");
+
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_pass_that_no_longer_reads_overrides_leaves_the_override_notice_to_its_instant()
+    {
+        await _notice.ReportAsync(OverridesStartingAt(T0.AddMinutes(20)), [], CancellationToken.None);
+
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { OverrideFact }, "the pass did not read overrides, so it cannot say the override is gone");
+
+        _clock.Advance(TimeSpan.FromMinutes(21));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().BeEmpty();
     }
 
     /// <summary>

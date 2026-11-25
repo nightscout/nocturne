@@ -211,7 +211,7 @@ public class StateSpanService : IStateSpanService
     public Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
         StateSpanCategory category,
         DateTime from,
-        DateTime to,
+        DateTime? to,
         CancellationToken cancellationToken = default)
         => _repository.GetAllCopiesAsync(category, from, to, cancellationToken);
 
