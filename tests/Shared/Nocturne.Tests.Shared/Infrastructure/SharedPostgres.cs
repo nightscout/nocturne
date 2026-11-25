@@ -175,6 +175,9 @@ public static class SharedPostgres
                 Username = user,
                 Password = password,
                 IncludeErrorDetail = true,
+                // Nothing drops a finished fixture's database, so its pools' idle connections hold
+                // server slots until pruned. Three pruning samples, so one idle between leases is kept.
+                ConnectionIdleLifetime = 30,
             }.ConnectionString;
 
         public async Task BuildMigratedTemplateAsync()
