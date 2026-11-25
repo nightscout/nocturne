@@ -44,15 +44,18 @@ public class SensorStateReportRepository
 
     /// <summary>
     /// Keeps the first row of each correlation id in the batch, and drops one a stored row holds, live
-    /// or deleted by the user (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
+    /// or deleted by the user (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>). The
+    /// check reads with the history clamp lifted, so a stored row the clamp hides holds its id as a shown one
+    /// does; it only decides what to insert, and returns no row.
     /// </summary>
     protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<SensorStateReportEntity> entities, CancellationToken ct)
     {
         var seen = new HashSet<Guid>();
         var first = entities.Where(e => e.CorrelationId is not { } id || seen.Add(id)).ToList();
-        var blocked = await ctx.GetBlockingCorrelationIdsAsync<SensorStateReportEntity>(
-            [.. first.Select(e => e.CorrelationId).OfType<Guid>()], ct);
+        HashSet<Guid> correlationIds = [.. first.Select(e => e.CorrelationId).OfType<Guid>()];
+        var blocked = await ctx.WriteWithHistoryClampLiftedAsync(
+            token => ctx.GetBlockingCorrelationIdsAsync<SensorStateReportEntity>(correlationIds, token), ct);
         return UpsertSplit.Empty(
             [.. first.Where(e => e.CorrelationId is not { } id || !blocked.Held.Contains(id))],
             first.Count(e => e.CorrelationId is { } id && blocked.DeletedByUser.Contains(id)));

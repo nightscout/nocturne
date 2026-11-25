@@ -13,6 +13,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -639,6 +640,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var uploaderList = models.Select(m => m.Uploader).OfType<V4Models.UploaderSnapshot>().ToList();
         var extrasList = models.Select(m => m.Extras).OfType<V4Models.DeviceStatusExtras>().ToList();
         var sensorStates = models.Select(m => m.SensorState).OfType<V4Models.SensorStateReport>().ToList();
+        using var kept = KeptCorrelationIds.Open();
 
         if (group is not null)
         {
@@ -661,9 +663,18 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         }
 
         // A sensor state report is a part of its status's extras: written only with them, under the
-        // correlation id its repository holds a re-send off by.
+        // correlation id its repository holds a re-send off by. That is the id the group's stored
+        // snapshots kept when the history clamp hides them (KeptCorrelationIds).
         async Task WriteExtrasAsync(List<V4Models.DeviceStatusExtras> extras)
         {
+            foreach (var e in extras)
+                e.CorrelationId = kept.Resolve(e.CorrelationId);
+            foreach (var s in sensorStates)
+            {
+                if (s.CorrelationId is { } id)
+                    s.CorrelationId = kept.Resolve(id);
+            }
+
             await BulkCreateAsync(_extrasRepo, extras, result, origin, ct);
             var groups = extras.Select(e => e.CorrelationId).ToHashSet();
             await BulkCreateAsync(
