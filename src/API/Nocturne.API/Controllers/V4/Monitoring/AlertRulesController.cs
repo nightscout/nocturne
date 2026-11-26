@@ -648,7 +648,7 @@ public class AlertRulesController : ControllerBase
             .SelectMany(d => new[]
             {
                 d.Verdict.State == AlertChannelState.NoRecipient ? d.Verdict.MemberSubjectId : null,
-                d.Channel.AddedBySubjectId,
+                d.Verdict.TypedIn ? d.Channel.AddedBySubjectId : null,
             })
             .OfType<Guid>()
             .ToHashSet();
@@ -660,6 +660,8 @@ public class AlertRulesController : ControllerBase
             response.MemberName = verdict is { State: AlertChannelState.NoRecipient, MemberSubjectId: { } member }
                 ? names.GetValueOrDefault(member)
                 : null;
+            response.TypedIn = verdict.TypedIn;
+            if (!verdict.TypedIn) continue;
             response.AddedByName = channel.AddedBySubjectId is { } adder ? names.GetValueOrDefault(adder) : null;
             response.StopsAt = channel.StopsAt;
         }

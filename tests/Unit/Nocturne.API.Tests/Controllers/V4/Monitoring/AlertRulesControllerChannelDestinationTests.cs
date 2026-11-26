@@ -833,6 +833,32 @@ public class AlertRulesControllerChannelDestinationTests
     }
 
     [Fact]
+    public async Task A_typed_whatsapp_number_stays_typed_when_the_rule_is_saved_after_a_member_links_it()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var ends = DateTime.UtcNow.AddDays(3);
+        ActAs(controller, Subject, ends);
+        var number = Typed(ChannelType.WhatsAppDm, "+" + WhatsAppWaId);
+        var ruleId = await CreateWithAsync(controller, number);
+        await LinkIdentityAsync(db, "whatsapp", WhatsAppWaId);
+
+        var saved = OkRule(await controller.UpdateRule(ruleId, new UpdateAlertRuleRequest
+        {
+            Name = "Renamed",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [number],
+        }, CancellationToken.None));
+
+        (await StoredChannelsAsync(db)).Should().ContainSingle().Which.Should().Match<AlertRuleChannelEntity>(
+            c => c.RecipientSubjectId == null && c.AddedBySubjectId == Subject && c.StopsAt == ends,
+            "a later unlink must leave the number delivering as it was typed in, not stop it for good");
+        saved.Channels.Should().ContainSingle().Which.Should().Match<AlertRuleChannelResponse>(
+            c => c.State == AlertChannelState.Active && c.TypedIn == false && c.StopsAt == null && c.AddedByName == null,
+            "the link decides it while it lasts, so the typed-in stop date does not apply");
+    }
+
+    [Fact]
     public async Task A_stopped_whatsapp_number_no_link_names_can_be_kept()
     {
         var (controller, db) = CreateController();

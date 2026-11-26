@@ -72,7 +72,8 @@ public class AlertChannelStatesTests
     {
         var states = await StatesAsync(Guid.CreateVersion7(), permissions: ["*"]);
 
-        states.Of(WhatsApp("+61499999999")).Should().Be(new AlertChannelVerdict(AlertChannelState.Active, null, null));
+        states.Of(WhatsApp("+61499999999")).Should().Be(
+            new AlertChannelVerdict(AlertChannelState.Active, null, null) { TypedIn = true });
         states.Of(WhatsApp("+61499999999", stopsAt: Now.AddDays(1))).IsActive.Should().BeTrue();
         states.Of(WhatsApp("+61499999999", stopsAt: Now.AddDays(-1))).State.Should().Be(AlertChannelState.Stopped);
     }

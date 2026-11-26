@@ -384,6 +384,7 @@ describe("ChannelsSection", () => {
 				channelType: ChannelType.Webhook,
 				destination: "https://example.test/hook",
 				destinationLabel: "",
+				typedIn: true,
 				...over,
 			};
 		}
@@ -557,6 +558,20 @@ describe("ChannelsSection", () => {
 
 			await expect.element(page.getByTestId("channel-state")).toBeVisible();
 			expect(page.getByRole("button", KEEP).elements()).toHaveLength(0);
+		});
+
+		it("offers to keep a stopped WhatsApp number that was typed in", async () => {
+			const channels = $state<ChannelDef[]>([
+				webhook({
+					channelType: ChannelType.WhatsAppDm,
+					destination: "+15551234567",
+					state: AlertChannelState.Stopped,
+					stopsAt: STOP,
+				}),
+			]);
+			render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning, ruleId: "rule-1" });
+
+			await expect.element(page.getByRole("button", KEEP)).toBeVisible();
 		});
 
 		it("does not offer to keep a channel that goes to a member", async () => {

@@ -137,7 +137,8 @@ public sealed class AlertChannelStates
         MembershipLiveness.HasEnded(channel.StopsAt, _now)
             ? new(AlertChannelState.Stopped, null,
                 $"Stopped at {channel.StopsAt:O}: the access of the member who added this channel has ended")
-            : new(AlertChannelState.Active, null, null);
+                { TypedIn = true }
+            : new(AlertChannelState.Active, null, null) { TypedIn = true };
 }
 
 /// <summary>
@@ -149,4 +150,10 @@ public sealed class AlertChannelStates
 public sealed record AlertChannelVerdict(AlertChannelState State, Guid? MemberSubjectId, string? Reason)
 {
     public bool IsActive => State == AlertChannelState.Active;
+
+    /// <summary>
+    /// Whether the channel was judged as typed in, by who added it and when that stops. A typed
+    /// WhatsApp number that a member has since linked is judged by the link, and this is false.
+    /// </summary>
+    public bool TypedIn { get; init; }
 }
