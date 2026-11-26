@@ -302,7 +302,7 @@ public class ResponseComparer
         var actualJson = actual.ToJsonString();
 
         if (expectedJson != actualJson
-            && !(ReloadLagToleranceFor(path) is { } tolerance && IsWithinTolerance(expectedJson, actualJson, tolerance)))
+            && !(ReloadLagToleranceFor(path) is { } rule && IsWithinTolerance(expectedJson, actualJson, rule)))
         {
             result.AddDifference(path, expectedJson, actualJson);
         }
@@ -310,21 +310,21 @@ public class ResponseComparer
 
     private static readonly Regex NumberToken = new(@"-?\d+(?:\.\d+)?", RegexOptions.Compiled);
 
-    private decimal? ReloadLagToleranceFor(string path)
+    private ReloadLagTolerance? ReloadLagToleranceFor(string path)
     {
         var segments = path.Split('.');
-        foreach (var (pattern, tolerance) in _options.ReloadLagTolerances)
+        foreach (var rule in _options.ReloadLagTolerances)
         {
-            var patternSegments = pattern.Split('.');
+            var patternSegments = rule.Path.Split('.');
             if (patternSegments.Length == segments.Length
                 && patternSegments.Zip(segments).All(pair => pair.First == "*" || pair.First == pair.Second))
-                return tolerance;
+                return rule;
         }
 
         return null;
     }
 
-    private static bool IsWithinTolerance(string expected, string actual, decimal tolerance)
+    private static bool IsWithinTolerance(string expected, string actual, ReloadLagTolerance rule)
     {
         var expectedNumbers = NumberToken.Matches(expected);
         var actualNumbers = NumberToken.Matches(actual);
@@ -335,13 +335,25 @@ public class ResponseComparer
             return false;
 
         // A display string is formatted text, so "0" against "0.00" is a difference in itself.
-        if (expected.StartsWith('"') && FractionDigits(expectedNumbers[0].Value) != FractionDigits(actualNumbers[0].Value))
+        if (expected.StartsWith('"') && !SameFormat(expectedNumbers[0].Value, actualNumbers[0].Value, rule))
             return false;
 
         var difference = decimal.Parse(expectedNumbers[0].Value, CultureInfo.InvariantCulture)
             - decimal.Parse(actualNumbers[0].Value, CultureInfo.InvariantCulture);
-        return Math.Abs(difference) <= tolerance;
+        return Math.Abs(difference) <= rule.Tolerance;
     }
+
+    private static bool SameFormat(string expected, string actual, ReloadLagTolerance rule)
+    {
+        var expectedDigits = FractionDigits(expected);
+        var actualDigits = FractionDigits(actual);
+        if (!rule.TrimsTrailingZeros)
+            return expectedDigits == actualDigits;
+
+        return !PaddedFraction(expected) && !PaddedFraction(actual) && Math.Abs(expectedDigits - actualDigits) <= 1;
+    }
+
+    private static bool PaddedFraction(string number) => FractionDigits(number) > 0 && number.EndsWith('0');
 
     private static int FractionDigits(string number)
     {
@@ -419,6 +431,14 @@ public record Difference(string Path, string? Expected, string? Actual);
 public record ValueNormaliser(Regex Pattern, string Replacement, IReadOnlySet<string> Fields);
 
 /// <summary>
+/// A body path whose number may differ by <paramref name="Tolerance"/>. <paramref name="TrimsTrailingZeros"/>
+/// marks a display that writes plain numbers, so a whole one has no fraction: "25g" is "24.9g" a tenth
+/// on, but a fraction ending in zero, or more than a digit longer than the other's, is a format difference.
+/// A padded display ("0.00") keeps its fraction digits, and a different count of them is a difference.
+/// </summary>
+public record ReloadLagTolerance(string Path, decimal Tolerance, bool TrimsTrailingZeros = false);
+
+/// <summary>
 /// Options for response comparison
 /// </summary>
 public class ComparisonOptions
@@ -474,26 +494,26 @@ public class ComparisonOptions
     /// a lag of a second or two crosses about once in 2,000 tests, so they compare exactly. Every
     /// other path compares exactly.
     /// </summary>
-    public static readonly IReadOnlyList<(string Path, decimal Tolerance)> ReloadLagToleranceTable =
+    public static readonly IReadOnlyList<ReloadLagTolerance> ReloadLagToleranceTable =
     [
-        ("Body.state.iob", 0.01m),
-        ("Body.state.bwp", 0.01m),
-        ("Body.iob.display", 0.01m),
-        ("Body.iob.displayLine", 0.01m),
-        ("Body.cob.cob", 0.02m),
-        ("Body.cob.treatmentCOB.cob", 0.02m),
-        ("Body.cob.display", 0.1m),
-        ("Body.cob.displayLine", 0.1m),
-        ("Body.cage.minFractions", 1m),
-        ("Body.iage.minFractions", 1m),
-        ("Body.bage.minFractions", 1m),
-        ("Body.sage.*.minFractions", 1m)
+        new("Body.state.iob", 0.01m),
+        new("Body.state.bwp", 0.01m),
+        new("Body.iob.display", 0.01m),
+        new("Body.iob.displayLine", 0.01m),
+        new("Body.cob.cob", 0.02m),
+        new("Body.cob.treatmentCOB.cob", 0.02m),
+        new("Body.cob.display", 0.1m),
+        new("Body.cob.displayLine", 0.1m, TrimsTrailingZeros: true),
+        new("Body.cage.minFractions", 1m),
+        new("Body.iage.minFractions", 1m),
+        new("Body.bage.minFractions", 1m),
+        new("Body.sage.*.minFractions", 1m)
     ];
 
     /// <summary>
     /// Body paths compared with a tolerance, empty unless <see cref="WithReloadLagTolerance"/>
     /// </summary>
-    public IReadOnlyList<(string Path, decimal Tolerance)> ReloadLagTolerances { get; init; } = [];
+    public IReadOnlyList<ReloadLagTolerance> ReloadLagTolerances { get; init; } = [];
 
     /// <summary>
     /// HTTP headers to compare

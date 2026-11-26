@@ -161,10 +161,25 @@ public static class ObservationWindow
     {
         Expression<Func<TValue>> instant = () => at;
         var started = Compare(start, instant, Expression.LessThanOrEqual);
-        var endsAfter = Compare(
-            end, instant, endAt == ActiveEnd.Inclusive ? Expression.GreaterThanOrEqual : Expression.GreaterThan);
-        return rows.Where(And(started, Combine(Expression.OrElse, IsOpen(end), endsAfter))!);
+        var notEnded = NotEnded(end, instant, endAt == ActiveEnd.Inclusive ? Expression.GreaterThanOrEqual : Expression.GreaterThan);
+        return rows.Where(And(started, notEnded)!);
     }
+
+    /// <summary>The spans that are open or end after <paramref name="at"/>: a span ending exactly at it has ended.</summary>
+    public static IQueryable<TEntity> NotEndedBy<TEntity, TValue>(
+        this IQueryable<TEntity> rows, Expression<Func<TEntity, TValue?>> end, TValue at)
+        where TValue : struct
+    {
+        Expression<Func<TValue>> instant = () => at;
+        return rows.Where(NotEnded(end, instant, Expression.GreaterThan));
+    }
+
+    private static Expression<Func<TEntity, bool>> NotEnded<TEntity, TValue>(
+        Expression<Func<TEntity, TValue?>> end,
+        Expression<Func<TValue>> instant,
+        Func<Expression, Expression, BinaryExpression> endsAfter)
+        where TValue : struct =>
+        Combine(Expression.OrElse, IsOpen(end), Compare(end, instant, endsAfter))!;
 
     private static Expression<Func<TEntity, bool>> IsOpen<TEntity, TValue>(Expression<Func<TEntity, TValue?>> end)
         where TValue : struct =>

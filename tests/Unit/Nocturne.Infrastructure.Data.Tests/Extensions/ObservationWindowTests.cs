@@ -287,5 +287,31 @@ public class ObservationWindowTests
         }
     }
 
+    [Fact]
+    public void NotEndedBy_ReadsAnOpenSpanAndASpanEndingAfterTheInstantButNotOneEndingAtIt()
+    {
+        Named(AtTheInstant.AsQueryable().NotEndedBy(s => s.End, From)).Should().Equal(
+            "starts-after", "starts-at", "ends-after", "open-before", "open-at", "open-after");
+    }
+
+    [Fact]
+    public void NotEndedBy_DoesNotReadASpanEndingExactlyAtTheInstant()
+    {
+        Named(AtTheInstant.AsQueryable().NotEndedBy(s => s.End, From)).Should().NotContain("ends-at");
+    }
+
+    [Fact]
+    public void NotEndedBy_IsTranslatedToTheSameStatementForEveryInstantWithTheInstantAsAParameter()
+    {
+        using var db = OfflineDbContext.Create();
+
+        var first = db.StateSpans.NotEndedBy(s => s.EndTimestamp, From).ToQueryString();
+        var second = db.StateSpans.NotEndedBy(s => s.EndTimestamp, From.AddDays(9)).ToQueryString();
+
+        Statement(first).Should().Be(Statement(second));
+        Statement(first).Should().NotContain(From.Year.ToString());
+        Statement(first).Should().Contain("s.end_timestamp IS NULL OR s.end_timestamp > @at");
+    }
+
     private static string Statement(string sql) => sql[sql.IndexOf("SELECT", StringComparison.Ordinal)..];
 }
