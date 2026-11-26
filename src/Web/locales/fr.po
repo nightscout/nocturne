@@ -49724,25 +49724,17 @@ msgstr ""
 msgid "{0} declined {1} as staff of a team that was deleted."
 msgstr ""
 
-#. 0: actor; 1: entry.team.name
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} turned off \"the team manages its own staff\" for the team {1}. New staff now wait for an owner's approval."
-msgstr ""
+#~ msgid "{0} turned off \"the team manages its own staff\" for the team {1}. New staff now wait for an owner's approval."
+#~ msgstr ""
 
-#. 0: actor; 1: entry.team.name
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} let the team {1} approve its own staff."
-msgstr ""
+#~ msgid "{0} let the team {1} approve its own staff."
+#~ msgstr ""
 
-#. 0: actor
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} turned off \"the team manages its own staff\" for a team that was deleted."
-msgstr ""
+#~ msgid "{0} turned off \"the team manages its own staff\" for a team that was deleted."
+#~ msgstr ""
 
-#. 0: actor
-#: src/lib/components/members/MemberHistoryEntryRow.svelte
-msgid "{0} let a team that was deleted approve its own staff."
-msgstr ""
+#~ msgid "{0} let a team that was deleted approve its own staff."
+#~ msgstr ""
 
 #. 0: actor; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
@@ -49931,9 +49923,8 @@ msgstr ""
 msgid "Revoke the staff link {0}"
 msgstr ""
 
-#: src/lib/components/teams/TeamSitesSection.svelte
-msgid "Each site decides if the team or the site approves the team's staff. Only an owner of the site can change this."
-msgstr ""
+#~ msgid "Each site decides if the team or the site approves the team's staff. Only an owner of the site can change this."
+#~ msgstr ""
 
 #: src/lib/components/teams/TeamSitesSection.svelte
 msgid "The team decides which of its staff can see this site. Staff that the site declined stay declined."
@@ -50268,39 +50259,29 @@ msgstr ""
 msgid "They do not see this site's data through the team. They stay declined if they leave the team and join again, until you approve them or stop the team's access."
 msgstr ""
 
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "The team decides who on its staff can see this site"
-msgstr ""
+#~ msgid "The team decides who on its staff can see this site"
+#~ msgstr ""
 
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "On: new staff, and staff that the team gives more access, can see this site at once."
-msgstr ""
+#~ msgid "On: new staff, and staff that the team gives more access, can see this site at once."
+#~ msgstr ""
 
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "Off: each new staff member, and each one that the team gives more access, waits for an owner's approval."
-msgstr ""
+#~ msgid "Off: each new staff member, and each one that the team gives more access, waits for an owner's approval."
+#~ msgstr ""
 
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "If you change it to off, approved staff keep their access. If you change it to on, all waiting staff are approved."
-msgstr ""
+#~ msgid "If you change it to off, approved staff keep their access. If you change it to on, all waiting staff are approved."
+#~ msgstr ""
 
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "Approve all waiting staff?"
-msgstr ""
+#~ msgid "Approve all waiting staff?"
+#~ msgstr ""
 
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "Approve all"
-msgstr ""
+#~ msgid "Approve all"
+#~ msgstr ""
 
-#. 0: team.teamName
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "1 staff member of {0} waits for approval. If you change this setting to on, they are approved."
-msgstr ""
+#~ msgid "1 staff member of {0} waits for approval. If you change this setting to on, they are approved."
+#~ msgstr ""
 
-#. 0: waiting; 1: team.teamName
-#: src/lib/components/members/TeamStaffRule.svelte
-msgid "{0} staff members of {1} wait for approval. If you change this setting to on, they are all approved."
-msgstr ""
+#~ msgid "{0} staff members of {1} wait for approval. If you change this setting to on, they are all approved."
+#~ msgstr ""
 
 #: src/lib/components/members/TeamStaffRule.svelte
 msgid "The team decides who on its staff can see this site."
@@ -50410,4 +50391,164 @@ msgstr ""
 
 #: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
 msgid "Select one, and the page shows only the steps for it."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "You trust the whole team at this site, so you cannot approve or decline one staff member. Change the setting to decide again."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set the team {1} so that an owner approves each staff member."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set the team {1} so that the team decides who on its staff can see this site."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set the team {1} so that every staff member of the team can see this site."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set a team that was deleted so that an owner approves each staff member."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set a team that was deleted so that the team decides who on its staff can see this site."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set a team that was deleted so that every staff member of the team can see this site."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "You now trust the whole team."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Not approved"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Can see this site while you trust the whole team."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Can see this site while the site trusts the whole team."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Approve each staff member yourself?"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Trust the whole team?"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Let the team decide?"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Change setting"
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Each new staff member of {0} waits for your approval. Approved staff keep their access."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "# waiting staff member gets access while you trust the whole team."
+msgid_plural "# waiting staff members get access while you trust the whole team."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "# declined staff member gets access while you trust the whole team."
+msgid_plural "# declined staff members get access while you trust the whole team."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Every staff member of {0} can see this site. You get no notices about them."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "# waiting staff member is approved."
+msgid_plural "# waiting staff members are approved."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "New staff of {0} can see this site at once."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "# waiting staff member loses access until you approve them."
+msgid_plural "# waiting staff members lose access until you approve them."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "# declined staff member loses access at once."
+msgid_plural "# declined staff members lose access at once."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Keep the setting"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "This site trusts the whole team. Every staff member can see this site."
+msgstr ""
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Each site decides who approves the team's staff. Only an owner of the site can change this."
+msgstr ""
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "The site trusts the whole team. Every staff member can see this site."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "I approve each staff member"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "Each new staff member waits for your approval."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "The team decides, and I hear about new staff"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "New staff can see this site at once. You get a notice, and you can decline anyone."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "I trust the whole team"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "Every staff member can see this site. You get no notices about them, and you cannot decline one person."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "Who decides which staff of the team can see this site"
 msgstr ""
