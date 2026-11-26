@@ -44,7 +44,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         var auditContext = context.AuditContext;
 
         var auditEntries = new List<MutationAuditLogEntity>();
-        var now = DateTime.UtcNow;
+        var now = context.NowAtStoredPrecision();
 
         foreach (var entry in context.ChangeTracker.Entries())
         {

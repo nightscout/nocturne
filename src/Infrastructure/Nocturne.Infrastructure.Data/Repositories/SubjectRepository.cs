@@ -470,7 +470,7 @@ public class SubjectRepository : ISubjectRepository
                 .Where(s => s.Id == subjectId && s.EmailConfirmedAt == null && s.Email == storedEmail)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(x => x.EmailConfirmedAt, at)
-                    .SetProperty(x => x.UpdatedAt, NocturneDbContext.UtcNowAtStoredPrecision()), ct);
+                    .SetProperty(x => x.UpdatedAt, db.NowAtStoredPrecision()), ct);
             if (updated == 1)
             {
                 RefreshTrackedConfirmation(db, subjectId, at);

@@ -198,7 +198,7 @@ public static class SoftDeleteRestoreExtensions
 
             IReadOnlyList<Guid> promoted = dedup is { } restoredType && restoring.Count > 0
                 ? await DuplicateGroupPrimaries.RepointHeadlessGroupsAsync(
-                    ctx, restoredType, restoredIds, NocturneDbContext.UtcNowAtStoredPrecision(), token)
+                    ctx, restoredType, restoredIds, ctx.NowAtStoredPrecision(), token)
                 : [];
             if (typeof(TEntity) == typeof(SensorGlucoseEntity))
                 await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, restoredIds, token);
