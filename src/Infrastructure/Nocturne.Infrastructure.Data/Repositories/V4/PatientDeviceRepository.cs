@@ -99,6 +99,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
 
         var entities = await ctx.PatientDevices
             .AsNoTracking()
+            // OverlapsWindow takes a start that is always set; a null StartDate here means started before any range.
             .Where(e =>
                 (e.StartDate == null || e.StartDate <= toDate) &&
                 (e.EndDate == null || e.EndDate >= fromDate))
