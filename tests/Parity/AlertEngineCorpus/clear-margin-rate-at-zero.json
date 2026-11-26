@@ -11,8 +11,7 @@
         "direction": "falling",
         "rate": 2,
         "clear_margin": 2
-      },
-      "hysteresis_minutes": 0
+      }
     }
   ],
   "ticks": [

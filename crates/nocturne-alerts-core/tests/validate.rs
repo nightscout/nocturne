@@ -276,7 +276,6 @@ fn rule(condition_params: Value) -> Rule {
         id: Uuid::from_u128(1),
         condition_type: ConditionKind::Composite,
         condition_params,
-        hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,

@@ -11,8 +11,7 @@
         "operator": ">",
         "value": 2,
         "clear_margin": 1
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -22,8 +21,7 @@
         "operator": ">=",
         "value": 2,
         "clear_margin": 1
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000003",
@@ -33,8 +31,7 @@
         "operator": "<",
         "value": 10,
         "clear_margin": 5
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000004",
@@ -44,8 +41,7 @@
         "operator": "<=",
         "value": 10,
         "clear_margin": 5
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000005",
@@ -55,8 +51,7 @@
         "direction": "above",
         "value": 180,
         "clear_margin": 20
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000006",
@@ -66,8 +61,7 @@
         "direction": "falling",
         "rate": 2,
         "clear_margin": 1
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000007",
@@ -77,8 +71,7 @@
         "direction": "rising",
         "rate": 2,
         "clear_margin": 1
-      },
-      "hysteresis_minutes": 0
+      }
     }
   ],
   "ticks": [

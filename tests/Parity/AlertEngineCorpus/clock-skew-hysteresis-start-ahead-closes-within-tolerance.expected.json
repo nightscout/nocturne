@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "scenario": "tracker-hysteresis-zero-minutes",
+  "scenario": "clock-skew-hysteresis-start-ahead-closes-within-tolerance",
   "ticks": [
     {
-      "at": "2026-01-05T12:00:00Z",
+      "at": "2026-04-01T12:00:00Z",
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
@@ -18,12 +18,13 @@
           "tracker": {
             "state": "active",
             "excursion": 1
-          }
+          },
+          "next_change_at": "2026-04-01T12:11:00Z"
         }
       ]
     },
     {
-      "at": "2026-01-05T12:05:00Z",
+      "at": "2026-04-01T12:30:00Z",
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
@@ -38,13 +39,42 @@
           "tracker": {
             "state": "hysteresis",
             "excursion": 1,
-            "hysteresis_started_at": "2026-01-05T12:05:00Z"
-          }
+            "hysteresis_started_at": "2026-04-01T12:30:00Z"
+          },
+          "next_change_at": "2026-04-01T12:30:00.000000100Z"
         }
       ]
     },
     {
-      "at": "2026-01-05T12:10:00Z",
+      "at": "2026-04-01T12:10:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "hysteresis",
+            "excursion": 1,
+            "hysteresis_started_at": "2026-04-01T12:30:00Z"
+          },
+          "next_change_at": "2026-04-01T12:21:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "hysteresis_started_at",
+              "ahead_ms": 1200000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-04-01T12:27:00Z",
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
@@ -59,27 +89,28 @@
           "close_reason": "hysteresis",
           "tracker": {
             "state": "idle"
-          }
+          },
+          "next_change_at": "2026-04-01T12:38:00Z"
         }
       ]
     },
     {
-      "at": "2026-01-05T12:15:00Z",
+      "at": "2026-04-01T13:00:00Z",
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
-          "root": true,
+          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": true
+              "value": false
             }
           ],
-          "transition": "opened",
+          "transition": "none",
           "tracker": {
-            "state": "active",
-            "excursion": 2
-          }
+            "state": "idle"
+          },
+          "next_change_at": "2026-04-01T13:11:00Z"
         }
       ]
     }

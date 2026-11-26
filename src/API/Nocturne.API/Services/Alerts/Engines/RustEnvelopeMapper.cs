@@ -61,7 +61,6 @@ internal static class RustEnvelopeMapper
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
         ConditionParams = ParseJson(rule.ConditionParams),
-        HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
         OnUnknown = rule.OnUnknown,

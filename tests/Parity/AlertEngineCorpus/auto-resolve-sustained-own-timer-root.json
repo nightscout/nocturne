@@ -1,18 +1,36 @@
 {
   "schema_version": 1,
-  "name": "tracker-hysteresis-reentry-restarts-window",
-  "description": "a true tick in hysteresis resumes the same excursion; the next false tick starts a fresh window",
+  "name": "auto-resolve-sustained-own-timer-root",
+  "description": "a sustained inside auto_resolve_params keys its timer under the auto_resolve path root, not the rule body's root, and runs while the body's timer holds the excursion open",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
-      "condition_type": "threshold",
+      "condition_type": "sustained",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "minutes": 5,
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
       },
-      "hysteresis_minutes": 15,
-      "auto_resolve_enabled": false
+      "auto_resolve_enabled": true,
+      "auto_resolve_params": {
+        "type": "sustained",
+        "sustained": {
+          "minutes": 10,
+          "child": {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 60
+            }
+          }
+        }
+      }
     }
   ],
   "ticks": [
@@ -33,10 +51,24 @@
     {
       "at": "2026-01-05T12:05:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:05:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -61,38 +93,10 @@
     {
       "at": "2026-01-05T12:20:00Z",
       "context": {
-        "latest_value": 100,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:20:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:20:00Z",
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
-      "at": "2026-01-05T12:30:00Z",
-      "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:30:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:30:00Z",
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
-      "at": "2026-01-05T12:35:00Z",
-      "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:35:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:35:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

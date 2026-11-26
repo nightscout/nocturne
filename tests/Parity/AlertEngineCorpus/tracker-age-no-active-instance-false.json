@@ -12,7 +12,6 @@
         "operator": "\u003E=",
         "minutes": 0
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "next-change-hysteresis-window",
-  "description": "an excursion in hysteresis changes when its window closes",
+  "name": "unknown-hold-closes-elapsed-hysteresis",
+  "description": "under hold a held evaluation closes an excursion whose hysteresis the known false at 12:05 began, as the sweep's close does; the held evaluation after it opens nothing",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,17 +11,17 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 10,
       "auto_resolve_enabled": false
     }
   ],
   "ticks": [
     {
-      "at": "2026-03-02T12:00:00Z",
+      "at": "2026-01-05T12:00:00Z",
       "context": {
         "latest_value": 60,
-        "latest_timestamp": "2026-03-02T12:00:00Z",
-        "last_reading_at": "2026-03-02T12:00:00Z",
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -30,11 +30,12 @@
       }
     },
     {
-      "at": "2026-03-02T12:05:00Z",
+      "at": "2026-01-05T12:05:00Z",
       "context": {
-        "latest_value": 90,
-        "latest_timestamp": "2026-03-02T12:05:00Z",
-        "last_reading_at": "2026-03-02T12:05:00Z",
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -43,11 +44,18 @@
       }
     },
     {
-      "at": "2026-03-02T12:15:00Z",
+      "at": "2026-01-05T12:10:00Z",
       "context": {
-        "latest_value": 90,
-        "latest_timestamp": "2026-03-02T12:05:00Z",
-        "last_reading_at": "2026-03-02T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

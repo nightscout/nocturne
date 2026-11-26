@@ -157,8 +157,7 @@ fn evaluate_restarts_a_stored_hold_an_older_engine_wrote_over() {
         "rule": {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "threshold",
-            "condition_params": { "direction": "below", "value": 70 },
-            "hysteresis_minutes": 15
+            "condition_params": { "direction": "below", "value": 70 }
         },
         "context": {},
         "now": "2026-01-08T12:00:00Z",
@@ -504,7 +503,6 @@ fn hysteresis_request(now: &str, tracker: Value) -> Value {
             "id": "00000000-0000-0000-0000-00000000abce",
             "condition_type": "threshold",
             "condition_params": { "direction": "below", "value": 70 },
-            "hysteresis_minutes": 30,
         },
         "context": { "latest_value": 100, "latest_timestamp": now },
         "now": now,
@@ -533,28 +531,20 @@ fn hysteresis_start_round_trips_and_anchors_expiry() {
         json!("2026-01-05T12:05:00Z")
     );
 
-    let held = evaluate(&hysteresis_request(
-        "2026-01-05T12:30:00Z",
-        entered["tracker"].clone(),
-    ));
-    assert_eq!(held["result"]["transition"], json!("none"));
-    assert_eq!(
-        held["tracker"]["hysteresis_started_at"],
-        json!("2026-01-05T12:05:00Z")
-    );
-
     let closed = evaluate(&hysteresis_request(
-        "2026-01-05T12:35:00Z",
-        held["tracker"].clone(),
+        "2026-01-05T12:10:00Z",
+        entered["tracker"].clone(),
     ));
     assert_eq!(closed["result"]["transition"], json!("closed"));
     assert!(closed["tracker"].get("hysteresis_started_at").is_none());
 }
 
+/// The adopted start is ahead of `now` beyond the tolerance, so the window
+/// stays open and the adopted start is returned (engine-semantics.md §5.4).
 #[test]
 fn hysteresis_state_without_a_start_adopts_updated_at() {
     let response = evaluate(&hysteresis_request(
-        "2026-01-05T12:30:00Z",
+        "2026-01-05T12:04:00Z",
         json!({
             "state": "hysteresis",
             "active_excursion_ordinal": 1,

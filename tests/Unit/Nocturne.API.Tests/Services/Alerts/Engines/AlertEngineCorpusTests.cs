@@ -33,10 +33,14 @@ public class AlertEngineCorpusTests
         ("sensor-state-unknown-enum-name", typeof(SensorState), "rebooting"),
     ];
 
+    // The host keys state spans, trackers and active alerts in dictionaries, so it sends one entry
+    // per key (docs/alerts/engine-semantics.md §4). The FFI and Rust corpus suites run these scenarios.
+    private static readonly string[] DuplicateKeysThisHostCannotSend = ["context-duplicate-keys-last-wins"];
+
     public static TheoryData<string> ScenarioNames()
     {
         var data = new TheoryData<string>();
-        var skipped = NamesThisHostCannotSend.Select(n => n.Scenario);
+        var skipped = NamesThisHostCannotSend.Select(n => n.Scenario).Concat(DuplicateKeysThisHostCannotSend);
         foreach (var name in CorpusLocator.EnumerateScenarioNames().Except(skipped))
             data.Add(name);
         return data;
@@ -55,6 +59,19 @@ public class AlertEngineCorpusTests
 
         convert.Should().Throw<JsonException>();
     }
+
+    [Theory]
+    [MemberData(nameof(DuplicateKeyScenarios))]
+    public async Task A_duplicate_key_this_host_cannot_send_has_no_context_here(string scenarioName)
+    {
+        var (scenario, _) = await CorpusLocator.LoadScenarioAsync(scenarioName);
+
+        var convert = () => scenario.Ticks.ForEach(t => ScenarioConversions.ToSensorContext(t.Context));
+
+        convert.Should().Throw<ArgumentException>();
+    }
+
+    public static TheoryData<string> DuplicateKeyScenarios() => new(DuplicateKeysThisHostCannotSend);
 
     public static TheoryData<string, Type, string> UnsendableScenarios()
     {

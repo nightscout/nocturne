@@ -39,7 +39,6 @@ fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
         id: id(n),
         condition_type: kind,
         condition_params: params,
-        hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
@@ -171,7 +170,7 @@ fn a_continuous_fire_is_one_excursion_and_a_false_child_restarts_the_sustained_r
         reading(5, 60),  // 5 of 10
         reading(10, 60), // held: opens
         reading(15, 60), // continues
-        reading(20, 90), // hysteresis of 0 minutes, closed by the sweep at once
+        reading(20, 90), // hysteresis, closed by the sweep at once
         reading(25, 60), // run starts again: not a fire
         reading(30, 60),
         reading(35, 60), // held again: opens
@@ -188,37 +187,6 @@ fn a_continuous_fire_is_one_excursion_and_a_false_child_restarts_the_sustained_r
         ]
     );
     assert_eq!(out.events[2].at, t(20) + RESOLUTION);
-}
-
-#[test]
-fn a_hysteresis_window_keeps_a_brief_recovery_inside_one_excursion() {
-    let mut r = rule(1, ConditionKind::Threshold, below(70));
-    r.hysteresis_minutes = 15;
-    let ticks = [
-        reading(0, 60),  // opens
-        reading(5, 80),  // window starts
-        reading(10, 60), // resumes the same excursion
-        reading(15, 80), // window starts again
-        reading(20, 80),
-        reading(25, 80),
-    ];
-    let out = replay(&[r], ticks, until(60)).unwrap();
-
-    assert_eq!(
-        kinds(&out.events),
-        vec![
-            (0, id(1), ReplayEventKind::Fired),
-            (5, id(1), ReplayEventKind::HysteresisStarted),
-            (10, id(1), ReplayEventKind::HysteresisResumed),
-            (15, id(1), ReplayEventKind::HysteresisStarted),
-            (30, id(1), ReplayEventKind::Closed),
-        ]
-    );
-    assert_eq!(
-        out.events[4].at,
-        t(30),
-        "the window closes at its end, between readings"
-    );
 }
 
 #[test]

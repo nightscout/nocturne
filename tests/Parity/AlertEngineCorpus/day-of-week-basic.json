@@ -12,7 +12,6 @@
           "monday"
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
           "tuesday"
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -34,7 +32,6 @@
       "condition_params": {
         "days": []
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],
