@@ -19,16 +19,16 @@ number for the bot.
 
 1. Go to [Meta for Developers](https://developers.facebook.com/apps) and create an app.
 2. For the use case, select **Connect with customers through WhatsApp**.
-3. In **WhatsApp > API Setup**, add the phone number for the bot. You can also use the test
-   number that Meta gives you.
+3. Go to **Use cases > Customize > API Setup**.
+4. Add the phone number for the bot. You can also use the test number that Meta gives you.
 
 ## 2. Collect the credentials
 
 | Field | Where to find it |
 |-------|------------------|
 | **App Secret** | **App settings > Basic > App Secret** |
-| **Phone Number ID** | **WhatsApp > API Setup**. This is the ID of the number, not the phone number. |
-| **Access Token** | **WhatsApp > API Setup**. See the warning below. |
+| **Phone Number ID** | **Use cases > Customize > API Setup**. This is the ID of the number, not the phone number. |
+| **Access Token** | **Use cases > Customize > API Setup**. See the warning below. |
 | **Verify Token** | A value that you choose. Use a long random string. |
 
 <Callout type="warning" title="The API Setup token expires">
@@ -42,9 +42,8 @@ To make a token that does not expire:
 
 1. In Meta Business Settings, create a System User.
 2. Give the System User access to the app and to the WhatsApp Business Account.
-3. Generate a token for the System User, with the expiry set to **Never**.
-4. Give the token the `whatsapp_business_messaging` and `whatsapp_business_management`
-   permissions.
+3. Generate a token for the System User. In the same dialog, set the expiry to **Never** and
+   select the `whatsapp_business_messaging` and `whatsapp_business_management` permissions.
 
 To make a verify token, you can use `openssl rand -hex 32`.
 
@@ -87,7 +86,7 @@ The alert template in step 6 has no environment variable. To use a template, use
 Meta checks the webhook when you save it. Before you do this step, save the credentials in
 Nocturne and restart the Nocturne web service.
 
-1. In the Meta app, go to **WhatsApp > Configuration**.
+1. In the Meta app, go to **Use cases > Customize > Configuration**.
 2. In the **Webhook** section, select **Edit**.
 3. Set the **Callback URL** to the WhatsApp webhook of your instance:
 
@@ -97,7 +96,7 @@ Nocturne and restart the Nocturne web service.
 
 4. Set the **Verify Token** to the same value that you entered in Nocturne.
 5. Select **Verify and Save**.
-6. Under **Webhook fields**, subscribe to **messages** and **user_id_update**.
+6. Under **Webhook fields**, subscribe to **messages**.
 
 <Callout type="warning" title="The verify tokens must be the same">
 
@@ -106,8 +105,8 @@ Nocturne and restart the Nocturne web service.
 </Callout>
 
 Nocturne gets the **messages** field for each message that a person sends and for the status
-of each message that the bot sends. Meta sends **user_id_update** when the WhatsApp user ID of
-a person changes. The bot then continues to know that person.
+of each message that the bot sends. When the WhatsApp user ID or the phone number of a person
+changes, Meta also sends that change on this field. The bot then continues to know that person.
 
 ## 5. Link a WhatsApp account
 
@@ -116,8 +115,9 @@ WhatsApp has no slash command menu. People type the commands as messages.
 1. From WhatsApp, send `/connect` to the bot's number.
 2. Open the link that the bot sends.
 3. Sign in to Nocturne.
-4. Send `/status`. The bot replies with the accounts that you linked.
-5. Send `/bg` to get the latest glucose reading.
+4. Select **Connect**.
+5. Send `/status`. The bot replies with the account that you linked.
+6. Send `/bg` to get the latest glucose reading.
 
 If the instance has more than one site, send `/connect` with the slug of your site, for example
 `/connect myfamily`.
@@ -129,7 +129,8 @@ bot sends the list, at most one time in 10 minutes.
 ## 6. Receive alerts in WhatsApp
 
 1. Open an alert rule.
-2. Under **Delivery channels**, add **WhatsApp DM**.
+2. Under **Channels**, select **Add channel**, then select **WhatsApp DM**.
+3. Save the rule.
 
 The alert goes to the WhatsApp account that you linked with `/connect`. The alert has an
 **Acknowledge** button.
@@ -167,10 +168,12 @@ To deliver alerts outside the window, configure an alert template:
 If you do not enter a language, Nocturne uses `en`. The language must be the same as the
 language of the approved template.
 
-Example body:
+Meta can refuse a template that has too many variables for its length. Write fixed text around
+the variables. Example body:
 
 ```
-Nocturne alert for {{1}}: {{2}}. Glucose: {{3}}.
+Nocturne sent an alert for {{1}}. The alert is {{2}}. The latest glucose reading is {{3}}.
+Open Nocturne to see more.
 ```
 
 When the window is closed, Nocturne sends the alert as this template. The quick reply button

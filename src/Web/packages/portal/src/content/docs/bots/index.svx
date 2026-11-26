@@ -120,7 +120,7 @@ To push alerts to a connected platform:
 
 1. Go to **Alerts**.
 2. Create or edit an alert rule.
-3. Under **Delivery channels**, add the platform.
+3. Under **Channels**, select **Add channel**, then select the platform.
 4. Save the rule.
 
 The recipient must have a linked account on that platform. When the rule fires, the alert is
