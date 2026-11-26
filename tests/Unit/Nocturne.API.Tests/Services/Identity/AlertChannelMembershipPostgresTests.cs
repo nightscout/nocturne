@@ -415,7 +415,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         var deletion = new SubjectDeletion(
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
-            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            AccountLinkRoutes.Off,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             Mock.Of<IAuthAuditService>(),
             site.Clock,

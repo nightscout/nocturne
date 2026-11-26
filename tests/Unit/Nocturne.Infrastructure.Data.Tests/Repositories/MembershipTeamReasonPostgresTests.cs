@@ -517,8 +517,9 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var (reset, resetMember, _) = await MixedAsync(site, "remove-all-reset");
         var (deleted, deletedMember, _) = await TeamOnlyAsync(site, "remove-all-deleted");
 
-        (await site.Members.RemoveMembershipsOfSubjectAsync(reset, Ct)).Removed.Should().Be(1);
-        await new SubjectRepository(site.Factory, AccountLinkRoutes.Off).DeleteAsync(deleted, Ct);
+        (await SubjectDeletions.DeleteEvenLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, reset, Ct)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
+        await SubjectDeletions.DeleteAsync(site.Factory, AccountLinkRoutes.Off, deleted, Ct);
 
         (await RowStateAsync(resetMember)).Should().Be("absent");
         (await RowStateAsync(deletedMember)).Should().Be("absent");

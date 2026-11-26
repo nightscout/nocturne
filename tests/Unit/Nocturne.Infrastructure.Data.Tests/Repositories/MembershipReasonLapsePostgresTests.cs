@@ -291,7 +291,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         ReplaceRolesUnlessLastOwner,
         RemoveMemberUnlessLastOwner,
         DeleteRole,
-        RemoveMembershipsOfSubject,
+        DeleteSubjectEvenLastOwner,
         Recompute,
         DeleteSubject,
         RemoveMembersOfTenant,
@@ -306,7 +306,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     [InlineData(Writer.ReplaceRolesUnlessLastOwner)]
     [InlineData(Writer.RemoveMemberUnlessLastOwner)]
     [InlineData(Writer.DeleteRole)]
-    [InlineData(Writer.RemoveMembershipsOfSubject)]
+    [InlineData(Writer.DeleteSubjectEvenLastOwner)]
     [InlineData(Writer.Recompute)]
     [InlineData(Writer.DeleteSubject)]
     [InlineData(Writer.RemoveMembersOfTenant)]
@@ -339,9 +339,9 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             Writer.RemoveMemberUnlessLastOwner => OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
                 site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, T0, Ct),
             Writer.DeleteRole => site.Members.DeleteRoleAsync(site.Tenant, site.CaretakerRole, T0, Ct),
-            Writer.RemoveMembershipsOfSubject => site.Members.RemoveMembershipsOfSubjectAsync(subject, Ct),
+            Writer.DeleteSubjectEvenLastOwner => SubjectDeletions.DeleteEvenLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, subject, Ct),
             Writer.Recompute => MembershipReasons.RecomputeAsync(site.Factory, site.Tenant, subject, T0, Ct),
-            Writer.DeleteSubject => new SubjectRepository(site.Factory, AccountLinkRoutes.Off).DeleteAsync(subject, Ct),
+            Writer.DeleteSubject => SubjectDeletions.DeleteAsync(site.Factory, AccountLinkRoutes.Off, subject, Ct),
             _ => DevSnapshotMemberships.RemoveMembersOfTenantAsync(own, site.Tenant, Ct),
         };
 

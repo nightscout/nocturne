@@ -844,9 +844,9 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (token, _) = await LinkAsync(team, manager);
         (await ApproveAsync(token, owner, Grant(a, a.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
         (await ApproveAsync(token, owner, Grant(b, b.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
-        var onSiteA = new SubjectRepository(new SuppliedContextFactory(() => Context(tenant: a.Id)), AccountLinkRoutes.Off);
+        var onSiteA = new SuppliedContextFactory(() => Context(tenant: a.Id));
 
-        (await onSiteA.DeleteAsync(manager, default)).Should().BeOfType<SubjectChange.Changed>();
+        (await SubjectDeletions.DeleteAsync(onSiteA, AccountLinkRoutes.Off, manager, default)).Should().BeOfType<SubjectChange.Changed>();
 
         (await AccessCountAsync(team)).Should().Be(0);
         (await AuditOfAsync(team)).Where(r => r.EventType == AuthAuditEventType.TeamAccessStopped).Select(r => r.TenantId)
@@ -915,7 +915,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var roleDeletion = new TenantMembershipRepository(once, AccountLinkRoutes.Off)
             .DeleteRoleAsync(site.Id, site.Roles[RoleSeeds.Caretaker], Now, default);
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, roleDeletion);
-        var accountDeletion = new SubjectRepository(once, AccountLinkRoutes.Off).DeleteAsync(manager, default);
+        var accountDeletion = SubjectDeletions.DeleteAsync(once, AccountLinkRoutes.Off, manager, default);
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, roleDeletion, accountDeletion);
         await held.RollbackAsync();
 

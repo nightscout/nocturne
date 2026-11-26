@@ -44,6 +44,9 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
 
     private SubjectRepository Subjects() => new(new SuppliedContextFactory(() => Context()), AccountLinkRoutes.Off);
 
+    private Task<SubjectChange> DeleteSubjectAsync(Guid subjectId) =>
+        SubjectDeletions.DeleteAsync(new SuppliedContextFactory(() => Context()), AccountLinkRoutes.Off, subjectId, default);
+
     private Task<Guid> NewSubjectAsync(string name = "person") =>
         Subjects().CreateAsync(new NewSubject($"{name}-{Guid.NewGuid():N}"), CancellationToken.None);
 
@@ -284,7 +287,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var a = await NewSubjectAsync();
         var team = await Teams(a).CreateInviteTeamAsync(a);
 
-        (await Subjects().DeleteAsync(a, default)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteSubjectAsync(a)).Should().BeOfType<SubjectChange.Changed>();
 
         await using (var db = Context())
             (await db.Teams.AnyAsync(t => t.Id == team)).Should().BeFalse();
@@ -302,7 +305,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         (await Subjects().UpdateAsync(b, new SubjectEdit(IsActive: false), default)).Should().BeOfType<SubjectChange.Changed>(
             "deactivating a manager is allowed and leaves the team as it is");
 
-        var refused = await Subjects().DeleteAsync(a, default);
+        var refused = await DeleteSubjectAsync(a);
 
         refused.Should().BeEquivalentTo(new SubjectChange.LastManagerOf([new LastManagerTeam(team, "Invite team")]));
         (await Subjects().GetAsync(a, default)).Should().NotBeNull();
@@ -316,7 +319,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var team = await Teams(a).CreateInviteTeamAsync(a);
         var b = await AddManagerAsync(team, a, await NewSubjectAsync());
 
-        (await Subjects().DeleteAsync(b, default)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteSubjectAsync(b)).Should().BeOfType<SubjectChange.Changed>();
 
         (await Teams().GetAsync(team, a, Now, default))!.Managers.Select(m => m.SubjectId).Should().Equal(a);
         (await AuditOfAsync(team)).Should().NotContain(r => r.EventType == AuthAuditEventType.TeamDeleted);

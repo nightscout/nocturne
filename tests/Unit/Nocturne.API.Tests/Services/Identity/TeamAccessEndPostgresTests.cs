@@ -145,7 +145,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         return new SubjectDeletion(
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
-            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            AccountLinkRoutes.Off,
             new GrantRevocationService(NewSessions()),
             Mock.Of<IAuthAuditService>(),
             new FakeTimeProvider(new DateTimeOffset(Now)),

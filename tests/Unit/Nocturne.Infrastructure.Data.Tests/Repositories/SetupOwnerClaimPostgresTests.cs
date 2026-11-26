@@ -190,12 +190,12 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
             await holding.LockMembershipAsync(site.Tenant, holder, Ct);
             adoption = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).AdoptForSetupAsync(site.Owner, holder, identity, site.Slug, Ct);
             await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, adoption);
-            deletion = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).DeleteAsync(holder, Ct);
+            deletion = SubjectDeletions.DeleteAsync(site.Runtime, AccountLinkRoutes.Off, holder, Ct);
         }
         else
         {
             await holding.LockTeamManagersAsync(team, Ct);
-            deletion = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).DeleteAsync(holder, Ct);
+            deletion = SubjectDeletions.DeleteAsync(site.Runtime, AccountLinkRoutes.Off, holder, Ct);
             await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, deletion);
             adoption = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).AdoptForSetupAsync(site.Owner, holder, identity, site.Slug, Ct);
         }

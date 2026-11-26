@@ -138,20 +138,6 @@ public interface ITenantMembershipRepository
     Task<bool> AnyOtherOwnerAsync(Guid tenantId, Guid memberId, CancellationToken ct);
 
     /// <summary>
-    /// Removes every membership <paramref name="subjectId"/> holds, in any tenant, with every reason, and returns how
-    /// many, with the tenants whose last owner it was by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.
-    /// Each removed row records <see cref="MembershipEndHow.System"/>.
-    /// </summary>
-    /// <remarks>
-    /// On a platform context: the demo reset retires its visitor from every tenant it joined. It does
-    /// not refuse a last owner: anyone can get a session as the demo visitor, so a membership it holds
-    /// must go whatever role it carries. It holds the owner lock of every tenant the subject belongs
-    /// to, in ascending tenant id, until the removal commits, so the tenants it names are the ones
-    /// the commit leaves ownerless. Over a unit, call it inside the unit's commit.
-    /// </remarks>
-    Task<SubjectMembershipsRemoval> RemoveMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct);
-
-    /// <summary>
     /// Replaces the direct permissions of the membership's direct reason, null clearing them, and stamps
     /// it updated at <paramref name="now"/>; false when there is no such membership or it holds no direct reason.
     /// </summary>

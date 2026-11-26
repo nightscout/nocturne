@@ -98,7 +98,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         var service = new SubjectService(
             subjects, audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
         var deletion = new SubjectDeletion(
-            contexts, subjects, members,
+            contexts, subjects, AccountLinkRoutes.Off,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             audit, TimeProvider.System, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
         return new Scenario(tenant, person, role, service, deletion, new MemberHistoryReader(contexts));

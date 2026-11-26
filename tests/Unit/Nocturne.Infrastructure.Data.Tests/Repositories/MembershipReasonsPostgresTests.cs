@@ -159,7 +159,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     }
 
     [Fact]
-    public async Task RemovingASubjectsMemberships_RemovesTheirReasons()
+    public async Task DeletingASubjectEvenAsLastOwner_RemovesTheirReasons()
     {
         var a = await SeedTenantAsync("subject-a");
         var b = await SeedTenantAsync("subject-b");
@@ -168,7 +168,8 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await b.Members.AddMemberAsync(new NewTenantMember(b.Tenant, subject, [b.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct);
         var memberIds = new[] { await MemberIdAsync(a, subject), await MemberIdAsync(b, subject) };
 
-        (await a.Members.RemoveMembershipsOfSubjectAsync(subject, Ct)).Removed.Should().Be(2);
+        (await SubjectDeletions.DeleteEvenLastOwnerAsync(a.Factory, AccountLinkRoutes.Off, subject, Ct)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
 
         await AssertEveryMemberMatchesAsync(a);
         await AssertEveryMemberMatchesAsync(b);
