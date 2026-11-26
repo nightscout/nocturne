@@ -1,0 +1,5 @@
+Configure the sensor.
+
+The value increases.
+
+The setup page is open.

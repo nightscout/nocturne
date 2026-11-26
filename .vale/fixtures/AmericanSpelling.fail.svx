@@ -1,0 +1,9 @@
+The colour of the line is grey.
+
+Cancelled readings stay in the list.
+
+The behaviour of the alarm is set per site.
+
+The favourite chart opens first.
+
+THE COLOUR IS GREY.

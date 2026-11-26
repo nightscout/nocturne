@@ -1,0 +1,5 @@
+The sensor was paired.
+
+The server rotates the key.
+
+The sensor is replaced every ten days.

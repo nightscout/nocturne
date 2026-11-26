@@ -1,0 +1,13 @@
+Oops, that failed.
+
+Sorry, Nocturne could not save.
+
+Unfortunately the sync failed.
+
+Something went wrong.
+
+All set.
+
+Yay, the sensor is paired.
+
+AWESOME.

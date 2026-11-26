@@ -1,15 +1,19 @@
 # Rule 4.2: STE is short sentences with complete grammar, not telegraph style.
 # The possessive apostrophe is legal, so it is not matched here.
+#
+# The match ignores case, so a contraction in capitals ("DON'T") is still one.
+# Every token needs an apostrophe, so an acronym such as WHO is not affected.
 extends: existence
 message: "Rule 4.2: expand the contraction '%s'."
 link: .claude/skills/simple-english/SKILL.md
 level: error
+ignorecase: true
 nonword: true
 tokens:
   - '\b\w+n[''’]t\b'
   - '\b\w+[''’](?:ll|re|ve|d)\b'
-  - '\b[Ii]t[''’]s\b'
+  - '\bit[''’]s\b'
   # These words have no possessive, so 's after them is always a contraction.
-  - '\b(?:[Tt]here|[Tt]hat|[Ww]hat|[Hh]ere|[Ww]ho|[Ww]here|[Hh]e|[Ss]he)[''’]s\b'
-  # "Let's Encrypt" is a product name.
-  - '\b[Ll]et[''’]s\b(?! Encrypt)'
+  - '\b(?:there|that|what|here|who|where|when|why|how|he|she)[''’]s\b'
+  # "Let's Encrypt" is a product name, so only its capitalized spellings pass.
+  - '\blet[''’]s\b(?!\s(?-i:Encrypt|ENCRYPT)\b)'

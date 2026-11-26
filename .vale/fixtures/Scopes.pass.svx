@@ -1,0 +1,43 @@
+---
+title: Don't click, there's no leverage
+description: THERE'S a click. Leverage the API; ensure it.
+---
+
+import Click from './Click.svelte';
+
+<script>
+  const label = "don't click; leverage there's";
+</script>
+
+A code span holds `don't`, `there's`, `click` and `leverage`.
+
+```
+don't there's click leverage;
+```
+
+~~~
+don't there's click leverage;
+~~~
+
+A link URL is not prose: [the page](https://example.com/click/leverage/dont-there's).
+
+An autolink is not prose: <https://example.com/click/leverage>.
+
+An image URL is not prose: ![Chart](https://example.com/click-leverage.png).
+
+A reference link [holds a URL][ref].
+
+[ref]: https://example.com/click/leverage
+
+A key is not prose: <kbd>click</kbd>, <samp>don't</samp> and <var>there's</var>.
+
+<Screenshot
+  id="one"
+  alt="Click the colour; don't leverage there's"
+/>
+
+<Callout type="warning" title="Don't click; ensure leverage">
+
+  Select the row.
+
+</Callout>

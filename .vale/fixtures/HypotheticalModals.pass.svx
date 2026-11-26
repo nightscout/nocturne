@@ -1,0 +1,9 @@
+The server can send alerts.
+
+The sync could not finish.
+
+The report ends in May.
+
+Read the Mayo Clinic report.
+
+Maybe is not a valid value.

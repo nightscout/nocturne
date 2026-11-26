@@ -7,12 +7,15 @@
 #
 # "could not" is the past tense of "cannot", not a hypothetical, and Terms.yml
 # requires it in place of "unable to", so it is not matched.
+#
+# "May" is matched in lowercase and in capitals only. A capital "May" inside
+# a sentence is the month.
 extends: existence
 message: "Rule 3.2: '%s' is not an approved modal. For a capability, write 'can'. For a possibility, write 'possibly', or restructure with 'if'."
 link: .claude/skills/simple-english/SKILL.md
 level: warning
 ignorecase: true
 tokens:
-  - may
+  - '(?-i:may|MAY)'
   - might
   - 'could(?! not)'

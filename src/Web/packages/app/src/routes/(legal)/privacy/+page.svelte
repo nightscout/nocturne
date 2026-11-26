@@ -22,7 +22,7 @@
   This privacy policy explains what data Nocturne collects (very little), how it is stored, and your rights.
 </p>
 
-<h2>2. Data we DON'T collect</h2>
+<h2>2. Data we do not collect</h2>
 
 <p>
   Because Nocturne is self-hosted, we (the Nocturne project developers) do not have access to your data. Specifically:

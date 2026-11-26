@@ -1,2 +1,3 @@
-# Deliberate exceptions to the UI copy rules. One per line: rule<TAB>msgid.
+# Deliberate exceptions to the UI copy rules for app strings. One per line: rule<TAB>msgid.
 # Put a comment line above each entry that gives the reason.
+# A docs page does not use this file. It uses an inline Vale control with a reason comment.

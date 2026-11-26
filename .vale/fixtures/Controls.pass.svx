@@ -1,0 +1,22 @@
+<!-- vale Nocturne.Click = NO -->
+<!-- The Dexcom menu has an item named Click. -->
+
+Select the Click item.
+
+<!-- vale Nocturne.Click = YES -->
+
+<!-- Another product names a button Tap. -->
+<!-- vale Nocturne.Click = NO -->
+
+Select the Tap button.
+
+<!-- vale Nocturne.Click = YES -->
+
+<!-- The command name is quoted from the Dexcom guide. -->
+<!-- vale off -->
+
+Click and tap to leverage there's.
+
+<!-- vale on -->
+
+Select the row.

@@ -1,0 +1,5 @@
+Use the API.
+
+Make sure that the sensor is paired.
+
+The stream is live.

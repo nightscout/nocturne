@@ -1,0 +1,83 @@
+You can't save the profile.
+
+Nocturne won't sync.
+
+We'll sync the data.
+
+They're in the list.
+
+You've saved the profile.
+
+I'd wait.
+
+It's ready.
+
+There's no list.
+
+That's the point.
+
+What's next?
+
+Here's the list.
+
+Who's the owner?
+
+Where's the file?
+
+He's the owner.
+
+She's the owner.
+
+How's the sync?
+
+Why's the sync slow?
+
+When's the next sync?
+
+Let's start.
+
+What’s next?
+
+There’s no list.
+
+How’s the sync?
+
+THERE'S NO LIST.
+
+DON'T SAVE THE PROFILE.
+
+IT'S READY.
+
+HOW'S THE SYNC?
+
+WHY'S THE SYNC SLOW?
+
+WHEN'S THE NEXT SYNC?
+
+THAT'S THE POINT.
+
+WHAT'S NEXT?
+
+HERE'S THE LIST.
+
+WHO'S THE OWNER?
+
+WHERE'S THE FILE?
+
+HE'S THE OWNER.
+
+SHE'S THE OWNER.
+
+LET'S START.
+
+I'D WAIT.
+
+WE'LL SYNC THE DATA.
+
+THEY'RE IN THE LIST.
+
+YOU'VE SAVED THE PROFILE.
+
+Let's encrypt the backup.
+
+LET'S encrypt THE BACKUP.

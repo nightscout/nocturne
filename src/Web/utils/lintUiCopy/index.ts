@@ -12,7 +12,9 @@
 //   pnpm run lint:copy --gate-docs           docs-page errors fail the run too
 //
 // The portal docs pages (.svx) are Markdown, so Vale reads them directly. Their
-// findings print after the strings and fail the run only with --gate-docs.
+// findings print after the strings and fail the run only with --gate-docs. So
+// does an inline Vale control that stops linting without a reason comment
+// or is never started again.
 //
 // It also fails when a file compares a value against a literal that the catalog
 // holds as a string for that same file.
@@ -23,6 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findTranslatedComparisons } from "./comparedLiterals.ts";
 import { lintDocsProse } from "./docsProse.ts";
+import { findControlProblems } from "./inlineControls.ts";
 import {
   levels,
   runVale,
@@ -205,6 +208,8 @@ if (docs.error) {
   console.error(`The docs pass did not run: ${docs.error}`);
 }
 
+const controlProblems = findControlProblems(repoRoot, docsDir);
+
 const tally = (list: { severity: Level }[]) =>
   levels
     .map((l) => `${list.filter((f) => f.severity === l).length} ${l}s`)
@@ -213,7 +218,11 @@ const tally = (list: { severity: Level }[]) =>
 
 if (asJson) {
   console.log(
-    JSON.stringify({ strings: findings, docs: docsFindings }, null, 2),
+    JSON.stringify(
+      { strings: findings, docs: docsFindings, controlProblems },
+      null,
+      2,
+    ),
   );
 } else {
   const byRule = Map.groupBy(findings, (f) => f.rule);
@@ -244,8 +253,18 @@ if (asJson) {
     : "report only; --gate-docs makes them fail";
   const docsTally = docs.error ? "did not run" : tally(docsFindings);
   console.log(`\nDocs pages (${docsMode}): ${docsTally}.`);
+
+  if (controlProblems.length > 0) {
+    console.log(
+      `\nA Vale control must stand alone on one line. One that stops linting needs a reason, an HTML comment of at least three words on the line before or after it, and a later control that starts linting again in the exact form (${docsMode}).`,
+    );
+    for (const c of controlProblems) {
+      console.log(`  ${c.file}:${c.line} ${c.text} (${c.problem})`);
+    }
+  }
 }
 
 if (gateDocs && docs.error) process.exit(2);
+if (gateDocs && controlProblems.length > 0) process.exit(1);
 const failing = [...findings, ...(gateDocs ? docsFindings : [])];
 process.exit(failing.some((f) => f.severity === "error") ? 1 : 0);
