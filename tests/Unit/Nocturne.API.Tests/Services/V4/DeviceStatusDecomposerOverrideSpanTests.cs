@@ -273,6 +273,23 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
         span.EndTimestamp.Should().Be(At(3).AddMinutes(30));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecomposeAsync_RestatedAtTheInstantTheSpanEnded_ExtendsThatSpanInsteadOfOpeningAnother(bool batch)
+    {
+        List<DeviceStatus> statuses = [Restating(0, 300), Restating(1, 1800)];
+
+        if (batch)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(statuses);
+
+        var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
+        span.StartTimestamp.Should().Be(At(0));
+        span.EndTimestamp.Should().Be(At(1).AddMinutes(30));
+    }
+
     [Fact]
     public async Task DecomposeAsync_RestatedWithEarlierDeclaredEnd_DoesNotShortenSpan()
     {

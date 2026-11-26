@@ -13,6 +13,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -876,8 +877,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var covered = false;
         var conflicted = false;
         var restated = new List<StateSpan>();
-        var containing = spans[StateSpanCategory.Override]
-            .Where(s => s.StartTimestamp <= at && (s.EndTimestamp == null || s.EndTimestamp >= at))
+        // A span that ended at this instant is still met: the loop below restates or leaves it as it ended.
+        var containing = spans[StateSpanCategory.Override].AsQueryable()
+            .ActiveAt(s => s.StartTimestamp, s => s.EndTimestamp, at, ActiveEnd.Inclusive)
             .ToList();
         foreach (var span in containing)
         {

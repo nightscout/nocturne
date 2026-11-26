@@ -851,10 +851,8 @@ public class StateSpanRepository : IStateSpanRepository
         var categoryString = category.ToString();
         var entity = await db.StateSpans
             .AsNoTracking()
-            .Where(s => s.Category == categoryString
-                        && (state == null || s.State == state)
-                        && s.StartTimestamp <= at
-                        && (s.EndTimestamp == null || s.EndTimestamp > at))
+            .Where(s => s.Category == categoryString && (state == null || s.State == state))
+            .ActiveAt(s => s.StartTimestamp, s => s.EndTimestamp, at)
             .ExcludeDuplicates()
             .OrderByDescending(s => s.StartTimestamp)
             .FirstOrDefaultAsync(cancellationToken);

@@ -187,7 +187,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.TempBasals
             .AsNoTracking()
-            .Where(t => t.Timestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
+            .ActiveAt(t => t.Timestamp, t => t.EndTimestamp, at)
             .ExcludeDuplicates()
             .OrderByDescending(t => t.Timestamp)
             .FirstOrDefaultAsync(ct);

@@ -16,6 +16,19 @@ public enum OverlapEdges
 
     /// <summary>A span that ends at the window's start does not overlap it.</summary>
     EndAtFromExcluded = 2,
+
+    /// <summary>A span overlaps only where it shares a positive length with the window: one that only touches a bound does not.</summary>
+    BothExcluded = StartAtToExcluded | EndAtFromExcluded,
+}
+
+/// <summary>Whether a span that ends exactly at the instant is active at it.</summary>
+public enum ActiveEnd
+{
+    /// <summary>A span is active on <c>[start, end)</c>: at its end instant it is over.</summary>
+    Exclusive,
+
+    /// <summary>A span is active on <c>[start, end]</c>: it still counts at its end instant.</summary>
+    Inclusive,
 }
 
 /// <summary>What a span with no end means to an overlap window.</summary>
@@ -91,8 +104,7 @@ public static class ObservationWindow
     {
         var endsInWindow = from.HasValue ? EndsInWindow(end, () => from.Value, edges) : null;
         var startsInWindow = to.HasValue ? StartsInWindow(start, () => to.Value, edges) : null;
-        var isOpen = Expression.Lambda<Func<TEntity, bool>>(
-            Expression.Equal(end.Body, Expression.Constant(null, typeof(TValue?))), end.Parameters);
+        var isOpen = IsOpen(end);
 
         switch (open)
         {
@@ -134,6 +146,30 @@ public static class ObservationWindow
             rows = rows.Where(StartsInWindow(start, () => to.Value, edges));
         return rows;
     }
+
+    /// <summary>
+    /// The spans active at <paramref name="at"/>: started at or before it, and open or ending after it.
+    /// <paramref name="endAt"/> names whether a span ending exactly at it is active.
+    /// </summary>
+    public static IQueryable<TEntity> ActiveAt<TEntity, TValue>(
+        this IQueryable<TEntity> rows,
+        Expression<Func<TEntity, TValue>> start,
+        Expression<Func<TEntity, TValue?>> end,
+        TValue at,
+        ActiveEnd endAt = ActiveEnd.Exclusive)
+        where TValue : struct
+    {
+        Expression<Func<TValue>> instant = () => at;
+        var started = Compare(start, instant, Expression.LessThanOrEqual);
+        var endsAfter = Compare(
+            end, instant, endAt == ActiveEnd.Inclusive ? Expression.GreaterThanOrEqual : Expression.GreaterThan);
+        return rows.Where(And(started, Combine(Expression.OrElse, IsOpen(end), endsAfter))!);
+    }
+
+    private static Expression<Func<TEntity, bool>> IsOpen<TEntity, TValue>(Expression<Func<TEntity, TValue?>> end)
+        where TValue : struct =>
+        Expression.Lambda<Func<TEntity, bool>>(
+            Expression.Equal(end.Body, Expression.Constant(null, typeof(TValue?))), end.Parameters);
 
     private static Expression<Func<TEntity, bool>> EndsInWindow<TEntity, TEnd, TValue>(
         Expression<Func<TEntity, TEnd>> end, Expression<Func<TValue>> from, OverlapEdges edges) =>
