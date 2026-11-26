@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -12,7 +13,7 @@ public class UpdateStateSpanRequestValidator : AbstractValidator<UpdateStateSpan
 {
     public UpdateStateSpanRequestValidator()
     {
-        RuleFor(x => x.State).MaximumLength(100);
-        RuleFor(x => x.Source).MaximumLength(50);
+        RuleFor(x => x.State).MaximumLength(ColumnLengths.StateSpan.State);
+        RuleFor(x => x.Source).MaximumLength(ColumnLengths.StateSpan.Source);
     }
 }

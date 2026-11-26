@@ -29,14 +29,14 @@ public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWrite
     /// Pump manufacturer name
     /// </summary>
     [Column("manufacturer")]
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.PumpSnapshot.Manufacturer)]
     public string? Manufacturer { get; set; }
 
     /// <summary>
     /// Pump model name
     /// </summary>
     [Column("model")]
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.PumpSnapshot.Model)]
     public string? Model { get; set; }
 
     /// <summary>
@@ -49,7 +49,7 @@ public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWrite
     /// Human-readable reservoir display string
     /// </summary>
     [Column("reservoir_display")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PumpSnapshot.ReservoirDisplay)]
     public string? ReservoirDisplay { get; set; }
 
     /// <summary>
@@ -80,21 +80,21 @@ public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWrite
     /// Pump status string
     /// </summary>
     [Column("pump_status")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PumpSnapshot.PumpStatus)]
     public string? PumpStatus { get; set; }
 
     /// <summary>
     /// Canonical closed-loop operating mode (a PumpModeState name, e.g. "Automatic"/"Manual")
     /// </summary>
     [Column("pump_mode")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PumpSnapshot.PumpMode)]
     public string? PumpMode { get; set; }
 
     /// <summary>
     /// Pump clock time
     /// </summary>
     [Column("clock")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PumpSnapshot.Clock)]
     public string? Clock { get; set; }
 
     /// <summary>

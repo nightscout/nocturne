@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -34,7 +35,7 @@ public class TrackerPresetEntity : ITenantScoped
     /// Human-readable name (e.g., "G7", "Steel Cannula")
     /// </summary>
     [Column("name")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.TrackerPreset.Name)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -47,7 +48,7 @@ public class TrackerPresetEntity : ITenantScoped
     /// Default start notes to pre-fill when applying
     /// </summary>
     [Column("default_start_notes")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.TrackerPreset.DefaultStartNotes)]
     public string? DefaultStartNotes { get; set; }
 
     /// <summary>

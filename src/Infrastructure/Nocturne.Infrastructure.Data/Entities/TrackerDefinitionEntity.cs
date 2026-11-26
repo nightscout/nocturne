@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -35,14 +36,14 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// Human-readable name (e.g., "G7 Sensor", "Steel Cannula")
     /// </summary>
     [Column("name")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.TrackerDefinition.Name)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Optional description
     /// </summary>
     [Column("description")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.TrackerDefinition.Description)]
     public string? Description { get; set; }
 
     /// <summary>
@@ -55,7 +56,7 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// Lucide icon name for display
     /// </summary>
     [Column("icon")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.TrackerDefinition.Icon)]
     public string Icon { get; set; } = "activity";
 
     /// <summary>
@@ -92,7 +93,7 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// Optional: match treatment notes containing this string
     /// </summary>
     [Column("trigger_notes_contains")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.TrackerDefinition.TriggerNotesContains)]
     public string? TriggerNotesContains { get; set; }
 
     /// <summary>
@@ -126,7 +127,7 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// e.g., "Site Change", "Sensor Start"
     /// </summary>
     [Column("start_event_type")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.TrackerDefinition.StartEventType)]
     public string? StartEventType { get; set; }
 
     /// <summary>
@@ -134,7 +135,7 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// e.g., "Sensor Change", "Site Change"
     /// </summary>
     [Column("completion_event_type")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.TrackerDefinition.CompletionEventType)]
     public string? CompletionEventType { get; set; }
 
     /// <summary>

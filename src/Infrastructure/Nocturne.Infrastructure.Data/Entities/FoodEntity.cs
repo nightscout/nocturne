@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -38,35 +39,35 @@ public class FoodEntity : ITenantScoped, IAuditable, ISystemTimestamped, ISoftDe
     /// External food ID for connector imports
     /// </summary>
     [Column("external_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.Food.ExternalId)]
     public string? ExternalId { get; set; }
 
     /// <summary>
     /// Type of record ("food" or "quickpick")
     /// </summary>
     [Column("type")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.Food.Type)]
     public string Type { get; set; } = "food";
 
     /// <summary>
     /// Food category
     /// </summary>
     [Column("category")]
-    [MaxLength(200)]
+    [MaxLength(ColumnLengths.Food.Category)]
     public string Category { get; set; } = string.Empty;
 
     /// <summary>
     /// Food subcategory
     /// </summary>
     [Column("subcategory")]
-    [MaxLength(200)]
+    [MaxLength(ColumnLengths.Food.Subcategory)]
     public string Subcategory { get; set; } = string.Empty;
 
     /// <summary>
     /// Food name
     /// </summary>
     [Column("name")]
-    [MaxLength(500)]
+    [MaxLength(ColumnLengths.Food.Name)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -109,7 +110,7 @@ public class FoodEntity : ITenantScoped, IAuditable, ISystemTimestamped, ISoftDe
     /// Unit of measurement (g, ml, pcs, oz, or serving description)
     /// </summary>
     [Column("unit")]
-    [MaxLength(30)]
+    [MaxLength(ColumnLengths.Food.Unit)]
     public string Unit { get; set; } = "g";
 
     /// <summary>

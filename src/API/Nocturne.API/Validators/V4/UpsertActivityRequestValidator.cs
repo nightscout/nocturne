@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -12,7 +13,7 @@ public class UpsertActivityRequestValidator : AbstractValidator<UpsertActivityRe
 {
     public UpsertActivityRequestValidator()
     {
-        RuleFor(x => x.Type).MaximumLength(100);
-        RuleFor(x => x.EnteredBy).MaximumLength(50);
+        RuleFor(x => x.Type).MaximumLength(ColumnLengths.StateSpan.State);
+        RuleFor(x => x.EnteredBy).MaximumLength(ColumnLengths.StateSpan.Source);
     }
 }

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -19,6 +20,6 @@ public class CreateBasalInjectionRequestValidator : AbstractValidator<CreateBasa
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
         RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
-        RuleFor(x => x.Notes).MaximumLength(4096);
+        RuleFor(x => x.Notes).MaximumLength(ColumnLengths.BasalInjection.Notes);
     }
 }

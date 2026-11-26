@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -36,7 +37,7 @@ public class InAppNotificationEntity : ITenantScoped
     /// </summary>
     [Required]
     [Column("type")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.InAppNotification.Type)]
     public string Type { get; set; } = string.Empty;
 
     /// <summary>
@@ -51,14 +52,14 @@ public class InAppNotificationEntity : ITenantScoped
     /// Optional icon override (Lucide icon name) for custom notification rendering
     /// </summary>
     [Column("icon")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.InAppNotification.Icon)]
     public string? Icon { get; set; }
 
     /// <summary>
     /// Optional source system or subsystem that created this notification
     /// </summary>
     [Column("source")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.InAppNotification.Source)]
     public string? Source { get; set; }
 
     /// <summary>
@@ -74,14 +75,14 @@ public class InAppNotificationEntity : ITenantScoped
     /// </summary>
     [Required]
     [Column("title")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.InAppNotification.Title)]
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
     /// Optional secondary text providing additional context
     /// </summary>
     [Column("subtitle")]
-    [MaxLength(500)]
+    [MaxLength(ColumnLengths.InAppNotification.Subtitle)]
     public string? Subtitle { get; set; }
 
     /// <summary>
@@ -95,7 +96,7 @@ public class InAppNotificationEntity : ITenantScoped
     /// Used for grouping and automatic resolution
     /// </summary>
     [Column("source_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.InAppNotification.SourceId)]
     public string? SourceId { get; set; }
 
     /// <summary>

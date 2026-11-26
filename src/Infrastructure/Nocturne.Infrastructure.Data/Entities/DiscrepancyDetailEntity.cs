@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -54,7 +55,7 @@ public class DiscrepancyDetailEntity : ITenantScoped
     /// Field or path where discrepancy was found
     /// </summary>
     [Column("field")]
-    [MaxLength(500)]
+    [MaxLength(ColumnLengths.DiscrepancyDetail.Field)]
     [Required]
     public string Field { get; set; } = string.Empty;
 
@@ -62,7 +63,7 @@ public class DiscrepancyDetailEntity : ITenantScoped
     /// Value from Nightscout response
     /// </summary>
     [Column("nightscout_value")]
-    [MaxLength(2000)]
+    [MaxLength(ColumnLengths.DiscrepancyDetail.NightscoutValue)]
     [Required]
     public string NightscoutValue { get; set; } = string.Empty;
 
@@ -70,7 +71,7 @@ public class DiscrepancyDetailEntity : ITenantScoped
     /// Value from Nocturne response
     /// </summary>
     [Column("nocturne_value")]
-    [MaxLength(2000)]
+    [MaxLength(ColumnLengths.DiscrepancyDetail.NocturneValue)]
     [Required]
     public string NocturneValue { get; set; } = string.Empty;
 
@@ -78,7 +79,7 @@ public class DiscrepancyDetailEntity : ITenantScoped
     /// Description of the discrepancy
     /// </summary>
     [Column("description")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.DiscrepancyDetail.Description)]
     [Required]
     public string Description { get; set; } = string.Empty;
 

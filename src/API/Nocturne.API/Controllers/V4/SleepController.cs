@@ -130,6 +130,9 @@ public class SleepController : ControllerBase
         if (this.ValidateBulkSize(sessions, "Sleep session", "sessions", maxItems: 100) is { } invalid)
             return invalid;
 
+        if (await this.ValidateEachAsync(sessions, "Sleep session", cancellationToken) is { } rejected)
+            return rejected;
+
         var results = new List<SleepSession>(sessions.Length);
         try
         {

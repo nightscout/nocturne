@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -35,7 +36,7 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable, ISystemTimesta
     /// Free-text description when DiabetesType is "Other"
     /// </summary>
     [Column("diabetes_type_other")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.PatientRecord.DiabetesTypeOther)]
     public string? DiabetesTypeOther { get; set; }
 
     /// <summary>
@@ -62,21 +63,21 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable, ISystemTimesta
     /// Patient preferred name
     /// </summary>
     [Column("preferred_name")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.PatientRecord.PreferredName)]
     public string? PreferredName { get; set; }
 
     /// <summary>
     /// Patient pronouns
     /// </summary>
     [Column("pronouns")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PatientRecord.Pronouns)]
     public string? Pronouns { get; set; }
 
     /// <summary>
     /// URL to patient avatar image
     /// </summary>
     [Column("avatar_url")]
-    [MaxLength(2048)]
+    [MaxLength(ColumnLengths.PatientRecord.AvatarUrl)]
     public string? AvatarUrl { get; set; }
 
     /// <summary>
@@ -87,7 +88,7 @@ public class PatientRecordEntity : ITenantScoped, ISoftDeletable, ISystemTimesta
     /// fall back gracefully.
     /// </summary>
     [Column("timezone")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PatientRecord.Timezone)]
     public string? Timezone { get; set; }
 
     /// <summary>

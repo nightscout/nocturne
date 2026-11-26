@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
@@ -51,6 +52,11 @@ public class ConnectorFoodEntriesController : ControllerBase
         if (imports == null || imports.Length == 0)
         {
             return Ok(Array.Empty<ConnectorFoodEntry>());
+        }
+
+        if (await this.ValidateEachAsync(imports, "Food entry", HttpContext.RequestAborted) is { } rejected)
+        {
+            return rejected;
         }
 
         // Import is tenant-scoped; the subject only targets the meal-match suggestions raised off

@@ -12,6 +12,9 @@ public static class RecordColumnLengths
     /// <summary>The <c>sync_identifier</c> column.</summary>
     public const int SyncIdentifier = 256;
 
+    /// <summary>The <c>legacy_id</c> column.</summary>
+    public const int LegacyId = 255;
+
     /// <summary>The <c>pump_record_id</c> column.</summary>
     public const int PumpRecordId = 256;
 

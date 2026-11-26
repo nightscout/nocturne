@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -26,21 +27,21 @@ public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
     /// Source connector identifier (e.g., "myfitnesspal-connector")
     /// </summary>
     [Column("connector_source")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.ConnectorFoodEntry.ConnectorSource)]
     public string ConnectorSource { get; set; } = string.Empty;
 
     /// <summary>
     /// Entry ID from the connector source
     /// </summary>
     [Column("external_entry_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.ConnectorFoodEntry.ExternalEntryId)]
     public string ExternalEntryId { get; set; } = string.Empty;
 
     /// <summary>
     /// Food ID from the connector source
     /// </summary>
     [Column("external_food_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.ConnectorFoodEntry.ExternalFoodId)]
     public string ExternalFoodId { get; set; } = string.Empty;
 
     /// <summary>
@@ -65,7 +66,7 @@ public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
     /// Meal name (Breakfast/Lunch/Dinner/Snack)
     /// </summary>
     [Column("meal_name")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.ConnectorFoodEntry.MealName)]
     public string MealName { get; set; } = string.Empty;
 
     /// <summary>
@@ -102,7 +103,7 @@ public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
     /// Serving description provided by the connector
     /// </summary>
     [Column("serving_description")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.ConnectorFoodEntry.ServingDescription)]
     public string? ServingDescription { get; set; }
 
     /// <summary>

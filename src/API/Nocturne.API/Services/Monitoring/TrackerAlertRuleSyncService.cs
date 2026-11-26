@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -186,7 +187,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 minutes = minutes.Value,
             });
 
-            var name = Truncate($"{definition.Name}: {ThresholdLabel(definition, threshold)}", 128);
+            var name = Truncate($"{definition.Name}: {ThresholdLabel(definition, threshold)}", ColumnLengths.AlertRule.Name);
             var severity = MapSeverity(threshold.Urgency);
             var scopeClass = _scopeClassifier.Classify(AlertConditionType.TrackerAge, conditionParams);
 
@@ -327,7 +328,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
         // Snake_case, the condition models' wire form (ReservoirCondition).
         var conditionParams = JsonSerializer.Serialize(new { @operator = "<", value = units });
-        var name = Truncate($"{definition.Name}: below {units} U", 128);
+        var name = Truncate($"{definition.Name}: below {units} U", ColumnLengths.AlertRule.Name);
         var severity = MapSeverity(definition.LowReservoirUrgency);
         var scopeClass = _scopeClassifier.Classify(AlertConditionType.Reservoir, conditionParams);
 

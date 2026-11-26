@@ -101,7 +101,7 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(255)]
+    [MaxLength(RecordColumnLengths.LegacyId)]
     public string? LegacyId { get; set; }
 
     /// <summary>

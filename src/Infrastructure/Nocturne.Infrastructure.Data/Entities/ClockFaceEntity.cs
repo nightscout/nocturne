@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -33,7 +34,7 @@ public class ClockFaceEntity : ITenantScoped, ISystemTimestamped, IEntityCreated
     /// Human-readable name for the clock face
     /// </summary>
     [Column("name")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.ClockFace.Name)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>

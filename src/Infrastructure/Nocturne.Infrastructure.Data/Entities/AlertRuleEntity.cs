@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -27,14 +28,14 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     /// Display name of the alert rule
     /// </summary>
     [Column("name")]
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.AlertRule.Name)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Detailed description of the alert rule
     /// </summary>
     [Column("description")]
-    [MaxLength(512)]
+    [MaxLength(ColumnLengths.AlertRule.Description)]
     public string? Description { get; set; }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -48,7 +49,7 @@ public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped
     /// State within category (e.g., "Automatic", "Manual", "Connected")
     /// </summary>
     [Column("state")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.StateSpan.State)]
     [Required]
     public string State { get; set; } = string.Empty;
 
@@ -68,7 +69,7 @@ public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped
     /// Data source identifier (e.g., "glooko", "nightscout")
     /// </summary>
     [Column("source")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.StateSpan.Source)]
     public string? Source { get; set; }
 
     /// <inheritdoc />
@@ -87,7 +88,7 @@ public class StateSpanEntity : ILegacyIdentified, IAuditable, IEntityTimestamped
     /// <c>StateSpan.OriginalId</c>.
     /// </summary>
     [Column("original_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.StateSpan.LegacyId)]
     public string? LegacyId { get; set; }
 
     /// <summary>

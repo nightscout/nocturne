@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -56,7 +57,7 @@ public class DndWindowEntity : ITenantScoped
 
     /// <summary>What authored the window (e.g. <c>prelude-device</c>, <c>web</c>), for audit.</summary>
     [Column("source")]
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.DndWindow.Source)]
     public string? Source { get; set; }
 
     /// <summary>Server receipt time (row insert). Replay resolves "active at T" against this.</summary>

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -154,7 +155,7 @@ public class CreateDndWindowRequest
     public DateTime? EndsAt { get; set; }
 
     /// <summary>Audit label for what created the window (e.g. <c>web</c>, <c>prelude-device</c>).</summary>
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.DndWindow.Source)]
     public string? Source { get; set; }
 }
 

@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -70,8 +71,6 @@ public class LabHbA1cController : ControllerBase
             return Problem(detail: "Lab value must be equivalent to 3.0–20.0% (NGSP)", statusCode: 400, title: "Bad Request");
         if (request.MeasuredAt > DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
             return Problem(detail: "MeasuredAt cannot be in the future", statusCode: 400, title: "Bad Request");
-        if (request.Note is { Length: > LabHbA1cResult.MaxNoteLength })
-            return Problem(detail: $"Note cannot be longer than {LabHbA1cResult.MaxNoteLength} characters", statusCode: 400, title: "Bad Request");
 
         var created = await _repository.CreateAsync(
             new LabHbA1cResult
@@ -111,6 +110,6 @@ public class CreateLabHbA1cResultRequest
     public double? Value { get; set; }
     public string Unit { get; set; } = "percent";
 
-    /// <summary>Optional free-text note (e.g. lab name), at most <see cref="LabHbA1cResult.MaxNoteLength"/> characters.</summary>
+    /// <summary>Optional free-text note (e.g. lab name), at most <see cref="ColumnLengths.LabHbA1cResult.Note"/> characters.</summary>
     public string? Note { get; set; }
 }
