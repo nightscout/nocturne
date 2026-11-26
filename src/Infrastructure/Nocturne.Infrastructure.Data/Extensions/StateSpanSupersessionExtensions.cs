@@ -333,8 +333,7 @@ internal static class StateSpanSupersessionExtensions
             var spans = ctx.StateSpans.AsNoTracking()
                 .Where(s => s.Category == name)
                 .OverlapsWindow(
-                    s => s.StartTimestamp, s => s.EndTimestamp, earliest, latest,
-                    OverlapEdges.StartAtToExcluded | OverlapEdges.EndAtFromExcluded);
+                    s => s.StartTimestamp, s => s.EndTimestamp, earliest, latest, OverlapEdges.BothExcluded);
             await foreach (var span in spans.AsAsyncEnumerable().WithCancellation(ct))
             {
                 if (starts.TryGetValue(sameStateOnly ? span.State : string.Empty, out var lineStarts)

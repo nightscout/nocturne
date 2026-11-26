@@ -57,8 +57,8 @@ public interface ISleepSessionRepository
     Task<bool> AnySessionOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Whether any stage of a session overlaps <c>[from, to)</c>, as <see cref="AnySessionOverlappingAsync"/> reads
-    /// sessions. Reads one row at most.
+    /// Whether any stage of a session overlaps <c>[from, to)</c>: starts before <paramref name="to"/> and ends after
+    /// <paramref name="from"/>. Reads one row at most.
     /// </summary>
     Task<bool> AnyStageOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
 

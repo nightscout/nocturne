@@ -79,7 +79,7 @@ public class SleepSessionRepository : ISleepSessionRepository
     {
         await using var lease = await OpenAsync(cancellationToken);
         return await lease.Context.SleepStages.AsNoTracking()
-            .OverlapsWindow(e => e.StartTime, e => e.EndTime, from, to, OverlapEdges.StartAtToExcluded)
+            .OverlapsWindow(e => e.StartTime, e => e.EndTime, from, to, OverlapEdges.BothExcluded)
             .AnyAsync(cancellationToken);
     }
 

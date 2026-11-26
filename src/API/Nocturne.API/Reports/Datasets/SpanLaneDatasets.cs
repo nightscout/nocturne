@@ -122,7 +122,7 @@ internal sealed class AlertExcursionsDataset : LaneDataset
         var rows = await db.AlertExcursions.AsNoTracking()
             .OfCondition()
             .OverlapsWindow(
-                e => e.StartedAt, e => e.EndedAt, start, end, OverlapEdges.StartAtToExcluded | OverlapEdges.EndAtFromExcluded)
+                e => e.StartedAt, e => e.EndedAt, start, end, OverlapEdges.BothExcluded)
             .OrderBy(e => e.StartedAt).Take(limit)
             .Select(e => new { e.StartedAt, e.EndedAt, e.AcknowledgedAt, Rule = e.AlertRule!.Name, Severity = (AlertRuleSeverity?)e.AlertRule.Severity })
             .ToListAsync(cancellationToken);
@@ -291,7 +291,7 @@ internal sealed class CompressionLowsDataset : LaneDataset
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var rows = await db.CompressionLowSuggestions.AsNoTracking()
             .OverlapsWindow(
-                s => s.StartMills, s => s.EndMills, from, to, OverlapEdges.StartAtToExcluded | OverlapEdges.EndAtFromExcluded)
+                s => s.StartMills, s => s.EndMills, from, to, OverlapEdges.BothExcluded)
             .OrderBy(s => s.StartMills).Take(limit)
             .Select(s => new { s.StartMills, s.EndMills, s.Status, s.LowestGlucose })
             .ToListAsync(cancellationToken);
