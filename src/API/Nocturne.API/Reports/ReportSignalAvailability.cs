@@ -146,11 +146,11 @@ internal static class ReportDataSources
             [BasalInjections] = (db, r, from, to, _, ct) => db.BasalInjections.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [TempBasals] = (db, r, from, to, _, ct) =>
                 db.TempBasals
-                    .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.StartAtToExcluded)
+                    .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.BothExcluded)
                     .AnyAsync(ct),
             [ProfileActivations] = (db, r, from, to, _, ct) =>
                 db.ProfileActivations
-                    .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.StartAtToExcluded)
+                    .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.BothExcluded)
                     .AnyAsync(ct),
             [ApsSnapshots] = (db, r, from, to, _, ct) => db.ApsSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [PumpSnapshots] = (db, r, from, to, _, ct) => db.PumpSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
@@ -186,11 +186,11 @@ internal static class ReportDataSources
             [LeanMass] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.LeanMass, ct),
             [AlertExcursions] = (db, r, from, to, _, ct) =>
                 db.AlertExcursions.OfCondition()
-                    .OverlapsWindow(e => e.StartedAt, e => e.EndedAt, from, to, OverlapEdges.StartAtToExcluded)
+                    .OverlapsWindow(e => e.StartedAt, e => e.EndedAt, from, to, OverlapEdges.BothExcluded)
                     .AnyAsync(ct),
             [AlertInstances] = (db, r, from, to, _, ct) =>
                 db.AlertInstances.OfCondition().AnyAsync(e => e.TriggeredAt >= from && e.TriggeredAt < to, ct),
-            [Dnd] = (db, r, from, to, _, ct) => r.Dnd.AnyTouchingAsync(from, to, ct),
+            [Dnd] = (db, r, from, to, _, ct) => r.Dnd.AnyOverlappingAsync(from, to, ct),
             [SensorTrendRates] = (db, r, from, to, _, ct) =>
                 Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.TrendRate != null, ct),
             [SensorNoise] = (db, r, from, to, _, ct) =>
@@ -200,7 +200,7 @@ internal static class ReportDataSources
             {
                 var (start, end) = (Mills(from), Mills(to));
                 return db.CompressionLowSuggestions
-                    .OverlapsWindow(e => e.StartMills, e => e.EndMills, start, end, OverlapEdges.StartAtToExcluded)
+                    .OverlapsWindow(e => e.StartMills, e => e.EndMills, start, end, OverlapEdges.BothExcluded)
                     .AnyAsync(ct);
             },
         };
@@ -219,7 +219,7 @@ internal static class ReportDataSources
     private static Task<bool> SpansAsync(NocturneDbContext db, string[] categories, DateTime from, DateTime to, CancellationToken ct) =>
         db.StateSpans
             .Where(e => categories.Contains(e.Category))
-            .OverlapsWindow(e => e.StartTimestamp, e => e.EndTimestamp, from, to, OverlapEdges.StartAtToExcluded)
+            .OverlapsWindow(e => e.StartTimestamp, e => e.EndTimestamp, from, to, OverlapEdges.BothExcluded)
             .AnyAsync(ct);
 }
 

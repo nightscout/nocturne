@@ -749,7 +749,9 @@ public class AlertRepository : IAlertRepository
         return await context.AlertExcursions
             .AsNoTracking()
             .OfCondition()
-            .AnyAsync(e => e.AlertRuleId == ruleId && e.StartedAt <= at && (e.EndedAt == null || e.EndedAt >= at), ct);
+            .Where(e => e.AlertRuleId == ruleId)
+            .ActiveAt(e => e.StartedAt, e => e.EndedAt, at, ActiveEnd.Inclusive)
+            .AnyAsync(ct);
     }
 
     /// <summary>
