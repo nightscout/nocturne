@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -14,7 +15,7 @@ public class CarbRatioScheduleEntity : V4TimeSeriesEntityBase, IProfileScopedEnt
     /// Profile name this carb ratio schedule belongs to
     /// </summary>
     [Column("profile_name")]
-    [MaxLength(100)]
+    [MaxLength(RecordColumnLengths.ScheduleProfileName)]
     public string ProfileName { get; set; } = string.Empty;
 
     /// <summary>

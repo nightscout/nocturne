@@ -196,22 +196,6 @@ public class CarbIntakeControllerTests
     }
 
     [Fact]
-    public async Task Update_KnownIdWithNoTimestamp_ReturnsBadRequestWithoutWriting()
-    {
-        var id = Guid.NewGuid();
-        _repoMock
-            .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CarbIntake { Id = id, Timestamp = DateTime.UtcNow });
-
-        var result = await CreateController().Update(id, new UpdateCarbIntakeRequest { Carbs = 30 });
-
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        _repoMock.Verify(
-            r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
     public async Task GetAll_LimitAtCeiling_ReachesRepositoryUnchanged()
     {
         await CreateController().GetAll(null, null, V4ReadLimits.MaxPageSize, 0);

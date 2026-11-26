@@ -11,7 +11,7 @@ namespace Nocturne.API.Validators.V4;
 /// <item><description>Units must be greater than 0 and at most 1,000 (largest reservoirs hold 300 units).</description></item>
 /// <item><description>Timestamp must not be in the future (beyond 5 minutes of clock skew).</description></item>
 /// <item><description>Kind must be a valid <see cref="ReservoirReportKind"/> enum value.</description></item>
-/// <item><description>Device and App capped at 500 characters.</description></item>
+/// <item><description>The Device and App cap of <see cref="RecordColumnRules"/>.</description></item>
 /// </list>
 /// </remarks>
 /// <seealso cref="CreateReservoirReportRequest"/>
@@ -31,7 +31,7 @@ public class CreateReservoirReportRequestValidator : AbstractValidator<CreateRes
             .Must(t => t is null || t <= DateTimeOffset.UtcNow.AddMinutes(5))
             .WithMessage("Timestamp must not be in the future");
         RuleFor(x => x.Kind).IsInEnum().WithMessage("Kind must be a valid reservoir report kind");
-        RuleFor(x => x.Device).MaximumLength(500).When(x => x.Device is not null);
-        RuleFor(x => x.App).MaximumLength(500).When(x => x.App is not null);
+        RuleFor(x => x.Device).WithinUploaderLabel();
+        RuleFor(x => x.App).WithinUploaderLabel();
     }
 }

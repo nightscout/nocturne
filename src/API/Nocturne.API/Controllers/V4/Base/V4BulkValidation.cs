@@ -87,6 +87,30 @@ public static class V4BulkValidation
         if (items.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
             return controller.Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
 
+        return await controller.ValidateEachAsync(items, subject, ct);
+    }
+
+    /// <summary>
+    /// Runs the registered <see cref="IValidator{T}"/> over each item of a bulk payload and rejects
+    /// the payload at the first item it refuses. A request type with no validator registered is not
+    /// rejected.
+    /// </summary>
+    /// <remarks>
+    /// For an endpoint whose request is not an <see cref="IBulkUpsertRequest"/>, which sizes the payload
+    /// with <see cref="ValidateBulkSize{TRequest}"/> itself. The auto-validation filter does not descend
+    /// into a root-array body, so this is what runs the per-item rules there.
+    /// </remarks>
+    /// <param name="controller">The controller answering the request.</param>
+    /// <param name="items">The payload as bound from the body.</param>
+    /// <param name="subject">The payload's name, as it opens the rejection message ("Bolus").</param>
+    /// <param name="ct">Cancels the per-item validation.</param>
+    /// <returns>The error response to return, or <c>null</c> when every item is valid.</returns>
+    public static async Task<ObjectResult?> ValidateEachAsync<TRequest>(
+        this ControllerBase controller,
+        IReadOnlyList<TRequest> items,
+        string subject,
+        CancellationToken ct = default)
+    {
         if (controller.HttpContext?.RequestServices?.GetService(typeof(IValidator<TRequest>)) is not IValidator<TRequest> validator)
             return null;
 

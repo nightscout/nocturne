@@ -41,12 +41,12 @@ public class BodyWeightEntity
 
     /// <summary>Identifier of the device or app that captured the measurement.</summary>
     [Column("device")]
-    [MaxLength(255)]
+    [MaxLength(RecordColumnLengths.HealthSampleLabel)]
     public string? Device { get; set; }
 
     /// <summary>User or application that created this record.</summary>
     [Column("entered_by")]
-    [MaxLength(255)]
+    [MaxLength(RecordColumnLengths.HealthSampleLabel)]
     public string? EnteredBy { get; set; }
 
     /// <summary>Client-supplied ISO-8601 creation timestamp string.</summary>
