@@ -20,11 +20,14 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
     private static readonly ConcurrentDictionary<(Type EntityType, string PropertyName), AuditPropertyBehavior>
         PropertyBehaviorCache = new();
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
+
+    /// <summary>The <c>entity_type</c> an audit row records for <paramref name="entityType"/>.</summary>
+    internal static string EntityName(Type entityType) => entityType.Name.Replace("Entity", "");
 
     /// <inheritdoc />
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -83,7 +86,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             auditEntries.Add(MutationAuditLogEntity.Create(
                 context.TenantId,
                 auditContext,
-                entry.Entity.GetType().Name.Replace("Entity", ""),
+                EntityName(entry.Entity.GetType()),
                 GetEntityId(entry),
                 action,
                 changesJson,
@@ -174,7 +177,16 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         return JsonSerializer.Serialize(changes, JsonOptions);
     }
 
-    private static string BuildDeleteSnapshot(EntityEntry entry)
+    /// <summary>
+    /// The audit snapshot of an entity as it was before a delete: every property that is not its key or
+    /// <see cref="AuditIgnoredAttribute"/>, a <see cref="AuditRedactedAttribute"/> one as
+    /// <c>[redacted]</c> and an unreadable one as <c>[unreadable]</c>.
+    /// </summary>
+    internal static string BuildDeleteSnapshot(EntityEntry entry) => BuildSnapshot(entry, prop => prop.OriginalValue);
+
+    private static string BuildRestoreSnapshot(EntityEntry entry) => BuildSnapshot(entry, prop => prop.CurrentValue);
+
+    private static string BuildSnapshot(EntityEntry entry, Func<PropertyEntry, object?> read)
     {
         var snapshot = new Dictionary<string, object?>();
 
@@ -190,33 +202,15 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
 
             snapshot[prop.Metadata.Name] = behavior == AuditPropertyBehavior.Redacted
                 ? "[redacted]"
-                : Recorded(prop, prop.OriginalValue);
+                : Recorded(prop, read(prop));
         }
 
         return JsonSerializer.Serialize(snapshot, JsonOptions);
     }
 
-    private static string BuildRestoreSnapshot(EntityEntry entry)
-    {
-        var snapshot = new Dictionary<string, object?>();
-
-        foreach (var prop in entry.Properties)
-        {
-            if (prop.Metadata.IsPrimaryKey())
-                continue;
-
-            var behavior = GetPropertyBehavior(entry.Entity.GetType(), prop.Metadata.Name);
-
-            if (behavior == AuditPropertyBehavior.Ignored)
-                continue;
-
-            snapshot[prop.Metadata.Name] = behavior == AuditPropertyBehavior.Redacted
-                ? "[redacted]"
-                : Recorded(prop, prop.CurrentValue);
-        }
-
-        return JsonSerializer.Serialize(snapshot, JsonOptions);
-    }
+    /// <summary>Whether the property is left out of the audit log and of what counts as a change.</summary>
+    internal static bool IsAuditIgnored(Type entityType, string propertyName) =>
+        GetPropertyBehavior(entityType, propertyName) == AuditPropertyBehavior.Ignored;
 
     /// <summary>
     /// The value as recorded: a stored value its converter could not read is not known, so it is
@@ -227,7 +221,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             ? "[unreadable]"
             : value;
 
-    private static Guid GetEntityId(EntityEntry entry)
+    internal static Guid GetEntityId(EntityEntry entry)
     {
         var idProp = entry.Property("Id");
         return (Guid)idProp.CurrentValue!;
