@@ -20,7 +20,9 @@ public interface IRequestForwardingService
     /// <summary>
     /// Forwards a cloned request to the Nightscout instance.
     /// Returns <see langword="null"/> when the circuit breaker is open, avoiding unnecessary
-    /// network calls while Nightscout is unavailable.
+    /// network calls while Nightscout is unavailable. A path that
+    /// <see cref="CredentialPathRedactor.CarriesCredentialRoute"/> is not sent: the response carries
+    /// <see cref="CredentialPathRedactor.CredentialRouteMessage"/>.
     /// </summary>
     Task<TargetResponse?> ForwardToNightscoutAsync(
         ClonedRequest request,
@@ -56,7 +58,7 @@ public class RequestForwardingService : IRequestForwardingService
     private readonly NightscoutConnectorConfiguration _nightscoutConfig;
     private readonly NightscoutCircuitBreaker _circuitBreaker;
     private readonly ICorrelationService _correlationService;
-    private readonly IRequestPathRedactor _pathRedactor;
+    private readonly CredentialPathRedactor _pathRedactor;
     private readonly ILogger<RequestForwardingService> _logger;
 
     /// <summary>
@@ -68,7 +70,7 @@ public class RequestForwardingService : IRequestForwardingService
         NightscoutConnectorConfiguration nightscoutConfig,
         NightscoutCircuitBreaker circuitBreaker,
         ICorrelationService correlationService,
-        IRequestPathRedactor pathRedactor,
+        CredentialPathRedactor pathRedactor,
         ILogger<RequestForwardingService> logger)
     {
         _httpClientFactory = httpClientFactory;
@@ -85,6 +87,11 @@ public class RequestForwardingService : IRequestForwardingService
         ClonedRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (_pathRedactor.CarriesCredentialRoute(request.Path))
+        {
+            return new TargetResponse { Target = "Nightscout", ErrorMessage = CredentialPathRedactor.CredentialRouteMessage };
+        }
+
         if (_circuitBreaker.IsOpen)
         {
             _logger.LogWarning(

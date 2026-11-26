@@ -84,7 +84,7 @@ public class NightscoutClientSpanTests
     }
 
     [Fact]
-    public async Task The_span_of_a_forwarded_credential_route_does_not_hold_the_credential()
+    public async Task A_credential_route_is_not_forwarded_so_it_has_no_span()
     {
         const string accessToken = "readable-1a2b3c4d5e6f7a8b";
         await using var site = await StartSiteAsync(context => context.Response.WriteAsync("{}"));
@@ -102,14 +102,10 @@ public class NightscoutClientSpanTests
 
             var response = await service.ForwardToNightscoutAsync(
                 new ClonedRequest { Method = "GET", Path = $"/api/v2/authorization/request/{accessToken}" });
-            response!.IsSuccess.Should().BeTrue();
+            response!.ErrorMessage.Should().Be(CredentialPathRedactor.CredentialRouteMessage);
         });
 
-        var span = spans.Should().ContainSingle().Subject;
-        span.GetTagItem("url.full").Should()
-            .Be($"http://127.0.0.1:{port}/…/api/v2/authorization/request/%7BaccessToken%7D");
-        HoldsNoCredential(span);
-        span.TagObjects.Should().NotContain(tag => tag.Value is string && ((string)tag.Value).Contains(accessToken));
+        spans.Should().BeEmpty();
     }
 
     [Theory]

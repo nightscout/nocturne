@@ -22,7 +22,11 @@ namespace Nocturne.API.Configuration;
 /// </remarks>
 public sealed class CredentialPathRedactor : IRequestPathRedactor
 {
+    public const string CredentialRouteMessage = "The path holds a Nocturne credential, which is never sent to another host.";
+
     private static readonly string[] CredentialQueryParameters = ["token", "secret", "access_token"];
+
+    private static readonly Uri ResolutionBase = new("http://localhost/");
 
     private volatile CredentialRoute[] _routes = [];
 
@@ -87,26 +91,46 @@ public sealed class CredentialPathRedactor : IRequestPathRedactor
         return equals < 0 ? pair.Length : equals;
     }
 
+    /// <summary>
+    /// Whether <paramref name="pathAndQuery"/>, resolved as <see cref="Uri"/> resolves a relative
+    /// path (dot segments, backslashes and escapes) and with empty segments dropped, names a route
+    /// with a <see cref="CredentialRouteValueAttribute"/> segment. Nocturne minted that credential,
+    /// so no other host has a use for it and the request is never sent to one. A path that does not
+    /// resolve counts as one, as its target host may resolve it differently.
+    /// </summary>
+    public bool CarriesCredentialRoute(string pathAndQuery) =>
+        !Uri.TryCreate(ResolutionBase, pathAndQuery.TrimStart('/'), out var resolved)
+        || MatchingRoute(string.Join('/', resolved.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries)))
+            is not null;
+
     private string? RedactRoute(string path)
     {
-        var routes = _routes;
-        if (routes.Length == 0 || path.Length == 0)
+        if (MatchingRoute(path) is not { } route)
         {
             return null;
         }
 
-        var pathOnly = path.AsSpan();
-        var trimmed = pathOnly.Trim('/');
+        return string.Concat(
+            "/",
+            route.Redact(path.AsSpan().Trim('/').ToString().Split('/')),
+            path.Length > 1 && path.EndsWith('/') ? "/" : ""
+        );
+    }
 
+    private CredentialRoute? MatchingRoute(ReadOnlySpan<char> path)
+    {
+        var routes = _routes;
+        if (routes.Length == 0 || path.IsEmpty)
+        {
+            return null;
+        }
+
+        var trimmed = path.Trim('/');
         foreach (var route in routes)
         {
             if (route.Matches(trimmed))
             {
-                return string.Concat(
-                    "/",
-                    route.Redact(trimmed.ToString().Split('/')),
-                    pathOnly.Length > 1 && pathOnly.EndsWith('/') ? "/" : ""
-                );
+                return route;
             }
         }
 

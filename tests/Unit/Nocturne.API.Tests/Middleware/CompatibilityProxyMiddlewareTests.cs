@@ -87,7 +87,7 @@ public class CompatibilityProxyMiddlewareTests
         services.AddSingleton(_forwardingServiceMock.Object);
         services.AddSingleton(_comparisonServiceMock.Object);
         services.AddSingleton(_persistenceServiceMock.Object);
-        services.AddSingleton<IRequestPathRedactor>(CredentialRouteRedactor.Create());
+        services.AddSingleton(CredentialRouteRedactor.Create());
         // Register as their interfaces so scoped resolution works
         services.AddSingleton<IOptions<CompatibilityProxyConfiguration>>(config);
         services.AddScoped<IRequestForwardingService>(_ => _forwardingServiceMock.Object);
@@ -141,41 +141,39 @@ public class CompatibilityProxyMiddlewareTests
             Times.Once);
     }
 
-    /// <summary>
-    /// The upstream still needs the real request, but the stored analysis is readable through the
-    /// compatibility API and must not carry a credential path segment.
-    /// </summary>
-    [Fact]
-    public async Task CredentialRoute_ForwardsTheRealRequest_AndStoresTheRedactedPath()
+    [Theory]
+    [InlineData("/api/v2/authorization/request/noc_credentialthatmustnotleave")]
+    [InlineData("/API/V2/Authorization/Request/noc_credentialthatmustnotleave/")]
+    [InlineData("/api/v2/authorization/request/./noc_credentialthatmustnotleave")]
+    [InlineData("/api/v2//authorization/request/noc_credentialthatmustnotleave")]
+    [InlineData("/api/v2/authorization/request//noc_credentialthatmustnotleave")]
+    public async Task CredentialRoute_IsAnsweredByNocturne_AndNeitherForwardedNorStored(string path)
     {
-        const string path = "/api/v2/authorization/request/noc_credentialthatmustnotbestored";
-        var cloned = new ClonedRequest { Method = "GET", Path = path };
-        _cloningServiceMock.Setup(s => s.CloneRequestAsync(It.IsAny<HttpRequest>())).ReturnsAsync(cloned);
-        var stored = new TaskCompletionSource<string>();
-        _persistenceServiceMock
-            .Setup(s => s.StoreAnalysisAsync(
+        RequestDelegate next = async ctx =>
+        {
+            ctx.Response.StatusCode = 401;
+            ctx.Response.ContentType = "application/problem+json";
+            await ctx.Response.Body.WriteAsync(Encoding.UTF8.GetBytes("{\"status\":401}"));
+        };
+        var (middleware, context) = CreateMiddleware(proxyEnabled: true, next: next, path: path);
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(401);
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+        (await new StreamReader(context.Response.Body).ReadToEndAsync()).Should().Be("{\"status\":401}");
+        AssertNoBackgroundComparisonStarted();
+        _cloningServiceMock.Verify(s => s.CloneRequestAsync(It.IsAny<HttpRequest>()), Times.Never);
+        _forwardingServiceMock.Verify(
+            s => s.ForwardToNightscoutAsync(It.IsAny<ClonedRequest>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _persistenceServiceMock.Verify(
+            s => s.StoreAnalysisAsync(
                 It.IsAny<ResponseComparisonResult>(),
                 It.IsAny<CompatibilityProxyResponse>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<ResponseComparisonResult, CompatibilityProxyResponse, string, string, CancellationToken>(
-                (_, _, _, requestPath, _) => stored.TrySetResult(requestPath))
-            .ReturnsAsync(Guid.NewGuid());
-        var (middleware, context) = CreateMiddleware(proxyEnabled: true, path: path);
-
-        await middleware.InvokeAsync(context);
-
-        (await stored.Task.WaitAsync(Eventually.DefaultPatience)).Should().Be(CredentialRouteRedactor.TokenExchangePath);
-        _forwardingServiceMock.Verify(
-            s => s.ForwardToNightscoutAsync(cloned, It.IsAny<CancellationToken>()),
-            Times.Once);
-        _comparisonServiceMock.Verify(
-            s => s.CompareResponsesAsync(
-                It.IsAny<TargetResponse?>(),
-                It.IsAny<TargetResponse?>(),
-                It.IsAny<string>(),
-                It.Is<string?>(p => p != null && p.Contains("noc_"))),
+                It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

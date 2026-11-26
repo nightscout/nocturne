@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -5,6 +6,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Services.Compatibility;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
@@ -38,7 +40,7 @@ public class RequestForwardingServiceTests
             nightscoutConfig ?? new NightscoutConnectorConfiguration(),
             _circuitBreaker,
             _correlationServiceMock.Object,
-            new CredentialPathRedactor(),
+            CredentialRouteRedactor.Create(),
             _logger
         );
     }
@@ -231,7 +233,7 @@ public class RequestForwardingServiceTests
             new NightscoutConnectorConfiguration { Url = nightscoutUrl },
             _circuitBreaker,
             _correlationServiceMock.Object,
-            new CredentialPathRedactor(),
+            CredentialRouteRedactor.Create(),
             logger);
 
         await service.ForwardToNightscoutAsync(new ClonedRequest { Method = "GET", Path = "/api/v1/status?token=caller456" });
@@ -246,5 +248,88 @@ public class RequestForwardingServiceTests
             Assert.DoesNotContain("token=", line);
             Assert.DoesNotContain("AGYLdvgzOeq", line);
         });
+    }
+
+    private sealed class UncallableHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException($"A request was sent to {request.RequestUri}.");
+    }
+
+    [Theory]
+    [InlineData("/api/v2/authorization/request/noc_synthetic9f3c")]
+    [InlineData("/api/v2/authorization/request/noc_synthetic9f3c?count=1&token=noc_synthetic9f3c")]
+    [InlineData("/API/v2/authorization/request/noc_synthetic9f3c/")]
+    [InlineData("/api/v2/authorization/request/./noc_synthetic9f3c")]
+    [InlineData("/api/v2/authorization/x/../request/noc_synthetic9f3c")]
+    [InlineData(@"/api\v2\authorization\request\noc_synthetic9f3c")]
+    [InlineData("/api/v2/%61uthorization/request/noc_synthetic9f3c")]
+    [InlineData("/api/v2//authorization/request/noc_synthetic9f3c")]
+    [InlineData("/api/v2/authorization/request//noc_synthetic9f3c")]
+    [InlineData("https:api/v2/authorization/request/noc_synthetic9f3c")]
+    [InlineData("/api/v4/alert-invites/noc_synthetic9f3c")]
+    public async Task ForwardToNightscoutAsync_NeverSendsAPathThatHoldsANocturneCredential(string path)
+    {
+        _httpClientFactoryMock
+            .Setup(f => f.CreateClient(It.IsAny<string>()))
+            .Returns(() => new HttpClient(new UncallableHandler()));
+        var logger = new CapturingLogger();
+        var service = new RequestForwardingService(
+            _httpClientFactoryMock.Object,
+            Options.Create(new CompatibilityProxyConfiguration()),
+            new NightscoutConnectorConfiguration { Url = "https://ns.example/nightscout?token=abc123" },
+            _circuitBreaker,
+            _correlationServiceMock.Object,
+            CredentialRouteRedactor.Create(),
+            logger);
+        var spans = new List<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = _ => true,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity => { lock (spans) spans.Add(activity); },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var result = await service.ForwardToNightscoutAsync(new ClonedRequest
+        {
+            Method = "GET",
+            Path = path,
+            Headers = { ["Authorization"] = ["Bearer noc_synthetic9f3c"] },
+        });
+
+        Assert.NotNull(result);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(CredentialPathRedactor.CredentialRouteMessage, result.ErrorMessage);
+        Assert.Null(result.Body);
+        _httpClientFactoryMock.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never);
+        Assert.All(logger.Lines, line => Assert.DoesNotContain("synthetic9f3c", line));
+        lock (spans)
+        {
+            Assert.DoesNotContain(spans, span =>
+                span.DisplayName.Contains("synthetic9f3c")
+                || span.TagObjects.Any(tag => tag.Value?.ToString()?.Contains("synthetic9f3c") == true));
+        }
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries.json?count=1", "https://ns.example/api/v1/entries.json?count=1")]
+    [InlineData("/api/v2/authorization/permissions", "https://ns.example/api/v2/authorization/permissions")]
+    [InlineData("/api/v2/authorization/request", "https://ns.example/api/v2/authorization/request")]
+    [InlineData("/api/v2/authorization/request/a/b", "https://ns.example/api/v2/authorization/request/a/b")]
+    public async Task ForwardToNightscoutAsync_SendsAPathThatHoldsNoNocturneCredential(string path, string expected)
+    {
+        var handler = new RecordingHandler();
+        _httpClientFactoryMock
+            .Setup(f => f.CreateClient("NightscoutClient"))
+            .Returns(() => new HttpClient(handler, disposeHandler: false));
+        var service = CreateService(nightscoutConfig: new NightscoutConnectorConfiguration { Url = "https://ns.example" });
+
+        var result = await service.ForwardToNightscoutAsync(new ClonedRequest { Method = "GET", Path = path });
+
+        Assert.NotNull(result);
+        Assert.Equal(200, result.StatusCode);
+        Assert.Equal(expected, handler.RequestUri?.AbsoluteUri);
     }
 }
