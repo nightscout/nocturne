@@ -7,12 +7,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
@@ -145,6 +147,9 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton<IAlertDeliveryService, AlertDeliveryService>()
                 .AddSingleton<IExcursionOpenedHandler, ExcursionOpenedHandler>()
                 .AddSingleton<IExcursionResolutionHandler, ExcursionResolutionHandler>()
+                .AddSingleton<IExcursionTracker>(new ExcursionTracker(
+                    Tracker(), new AlertRuleEvaluationGate(), Time, NullLogger<ExcursionTracker>.Instance,
+                    new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), Time))))
                 .AddSingleton<IAlertSnoozeService, AlertSnoozeService>()
                 .AddSingleton(Mock.Of<IUnevaluableRuleNotice>())
                 .AddSingleton(NoHeldRules.Notice())
@@ -1284,23 +1289,28 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         (await tenant.OwedAsync(excursion)).Should().Be((null, null));
     }
 
+    /// <summary>Stores a value no member has in the rule's <paramref name="column"/>, as another image could.</summary>
+    private async Task MakeUnreadableAsync(Tenant tenant, string column, string value)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT set_config('app.current_tenant_id', @tenant::text, false);
+            UPDATE alert_rules SET {column} = @value WHERE id = @rule;
+            """;
+        cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant.Id));
+        cmd.Parameters.Add(new NpgsqlParameter("@rule", tenant.Rule.Id));
+        cmd.Parameters.Add(new NpgsqlParameter("@value", value));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     [Fact]
     public async Task An_opening_whose_enabled_rule_cannot_be_read_stays_owed()
     {
         var tenant = await SeedAsync();
         var excursion = await tenant.OpenAsync();
-        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
-        {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant::text, false);
-                UPDATE alert_rules SET condition_type = 'no_such_condition' WHERE id = @rule;
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant.Id));
-            cmd.Parameters.Add(new NpgsqlParameter("@rule", tenant.Rule.Id));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await MakeUnreadableAsync(tenant, "condition_type", "no_such_condition");
 
         await tenant.SweepAsync(tenant.Process(), AfterLease);
 
@@ -1311,5 +1321,136 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         await tenant.SweepAsync(tenant.Process(), AfterLease.AddMinutes(10));
 
         (await tenant.OwedAsync(excursion)).Opened.Should().BeNull("a closed excursion ends what its opening owed");
+    }
+
+    /// <summary>
+    /// When the rule's notice that it cannot be read is recorded: an hour after its excursion opened,
+    /// so the hold is told apart from one counted from the excursion or its tracker state.
+    /// </summary>
+    private static readonly DateTime NoticeAt = Opened.AddHours(1);
+
+    /// <summary>Records the notice for the rule as it is now stored, which no member can read.</summary>
+    private static async Task<string> RecordUnreadableNoticeAsync(Tenant tenant, DateTime at)
+    {
+        var repository = tenant.Repository();
+        var rule = (await repository.ReadEnabledRulesAsync(CancellationToken.None)).Unreadable.Single();
+        var version = UnevaluableRuleNotice.VersionOf(rule);
+        (await repository.RecordUnreadableRuleNoticeAsync(rule, version, at, CancellationToken.None)).Should().NotBeNull();
+        return version;
+    }
+
+    /// <summary>
+    /// The rule's severity becomes one no member has while its excursion is open and dispatched, and
+    /// its notice that it cannot be read is recorded at <see cref="NoticeAt"/>.
+    /// </summary>
+    private async Task<(Guid Excursion, ConcurrentQueue<string> Events, string Version)> OpenThenMakeUnreadableAsync(Tenant tenant)
+    {
+        var events = await RecordAlarmsAndNotificationsAsync(tenant);
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        await MakeUnreadableAsync(tenant, "severity", "normal");
+        return (excursion, events, await RecordUnreadableNoticeAsync(tenant, NoticeAt));
+    }
+
+    private static async Task SweepAtAsync(Tenant tenant, DateTimeOffset at, AlertRepository? repository = null)
+    {
+        tenant.Time.SetUtcNow(at);
+        await tenant.SweepAsync(tenant.Process(repository), at);
+    }
+
+    private static async Task<DateTime?> EndedAtAsync(Tenant tenant, Guid excursion)
+    {
+        await using var db = tenant.Context();
+        return await db.AlertExcursions.AsNoTracking().Where(e => e.Id == excursion).Select(e => e.EndedAt).SingleAsync();
+    }
+
+    [NativeFact]
+    public async Task An_open_excursion_of_a_rule_that_cannot_be_read_closes_once_its_notice_has_stood_for_the_hold_bound()
+    {
+        var tenant = await SeedAsync();
+        var (excursion, events, version) = await OpenThenMakeUnreadableAsync(tenant);
+        var bound = RustAlertEngine.HoldBound();
+
+        await SweepAtAsync(tenant, Opened + bound);
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("the hold counts from the notice, not from the excursion");
+
+        await SweepAtAsync(tenant, NoticeAt + bound - TimeSpan.FromMinutes(1));
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("a rule fixed within the bound keeps its alarm");
+        (await tenant.AlarmingAsync()).Should().NotBeNull();
+        events.Last(e => e is "notified" or "archived").Should().Be("notified");
+
+        await SweepAtAsync(tenant, NoticeAt + bound);
+
+        (await EndedAtAsync(tenant, excursion)).Should().Be(NoticeAt + bound);
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.HoldBound.ToWireString());
+        (await tenant.AlarmingAsync()).Should().BeNull("a rule left unreadable stops alarming at the bound");
+        events.Last(e => e is "notified" or "archived").Should().Be("archived");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+        (await tenant.Repository().GetStandingUnevaluableNoticesAsync(tenant.Rule.Id, CancellationToken.None))
+            .Should().ContainSingle("the rule still cannot be read").Which.ConditionVersion.Should().Be(version);
+        var archived = events.Count(e => e == "archived");
+
+        await SweepAtAsync(tenant, NoticeAt + bound + TimeSpan.FromMinutes(5));
+
+        events.Count(e => e == "archived").Should().Be(archived, "the excursion closes once");
+        tenant.Broadcasts.Verify(b => b.BroadcastAlertResolvedAsync(
+            It.Is<AlertResolvedEvent>(r => r.ExcursionId == excursion && r.Reason == ExcursionCloseReason.HoldBound)), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_hold_bound_close_whose_run_dies_after_the_commit_is_finished_by_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var (excursion, events, _) = await OpenThenMakeUnreadableAsync(tenant);
+        var bound = RustAlertEngine.HoldBound();
+        var dying = tenant.Hooked();
+        dying.AfterResolveInstances = () => throw new NpgsqlException("the process dies once the instance is resolved");
+
+        await FluentActions.Invoking(() => SweepAtAsync(tenant, NoticeAt + bound, dying))
+            .Should().ThrowAsync<NpgsqlException>();
+
+        (await EndedAtAsync(tenant, excursion)).Should().NotBeNull();
+        (await tenant.OwedAsync(excursion)).Closed.Should().NotBeNull("the close is owed until its work is done");
+        events.Last(e => e is "notified" or "archived").Should().Be("notified");
+
+        await SweepAtAsync(tenant, NoticeAt + bound + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1));
+
+        events.Last(e => e is "notified" or "archived").Should().Be("archived");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.HoldBound.ToWireString());
+    }
+
+    [NativeFact]
+    public async Task A_notice_past_the_bound_for_a_value_the_rule_no_longer_holds_closes_nothing()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        await MakeUnreadableAsync(tenant, "severity", "normal");
+        await RecordUnreadableNoticeAsync(tenant, Opened);
+        await MakeUnreadableAsync(tenant, "severity", "moderate");
+        await RecordUnreadableNoticeAsync(tenant, NoticeAt);
+
+        await SweepAtAsync(tenant, Opened + RustAlertEngine.HoldBound());
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("the value the rule holds has been unreadable for an hour less than the bound");
+    }
+
+    [NativeFact]
+    public async Task A_readable_rules_notice_past_the_bound_that_its_body_cannot_be_evaluated_closes_nothing()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        (await tenant.Repository().RecordUnevaluableNoticeAsync(tenant.Rule, "body", Opened, CancellationToken.None))
+            .Should().NotBeNull();
+
+        await SweepAtAsync(tenant, Opened + RustAlertEngine.HoldBound() + TimeSpan.FromMinutes(1));
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("only a rule that cannot be read is closed at the bound");
     }
 }

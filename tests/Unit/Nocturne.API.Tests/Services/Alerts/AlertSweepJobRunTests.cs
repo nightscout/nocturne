@@ -88,7 +88,7 @@ public class AlertSweepJobRunTests
     [Fact]
     public async Task A_notice_left_standing_when_the_tenants_only_rule_was_disabled_is_resolved()
     {
-        var notice = new StandingUnevaluableNotice(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "v1", Dispatched: true);
+        var notice = new StandingUnevaluableNotice(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "v1", DateTime.UnixEpoch, Dispatched: true);
         _repository
             .Setup(r => r.GetStandingUnevaluableNoticesAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([notice]);

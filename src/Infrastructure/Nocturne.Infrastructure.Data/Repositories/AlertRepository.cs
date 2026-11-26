@@ -701,6 +701,7 @@ public class AlertRepository : IAlertRepository
                 i.Id,
                 i.AlertExcursion!.AlertRuleId,
                 i.AlertExcursion.UnevaluableConditionVersion!,
+                i.AlertExcursion.StartedAt,
                 i.AlertExcursion.OpenedOwedAt == null
                 && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
 
