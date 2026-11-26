@@ -253,10 +253,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Tenant> SeedAsync()
     {

@@ -1,13 +1,15 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Services;
 
 /// <summary>
 /// The team reasons a subject's membership of a site holds when it agrees with the team's rows: one for
-/// each access to the site whose team has the subject as staff, approved there by its
-/// <c>team_site_staff</c> row, and whose staff member's ceiling is a seed role this release knows. Each
+/// each access to the site whose team has the subject as staff, whose <c>team_site_staff</c> row gives a
+/// reason (<see cref="GivesReason"/>), and whose staff member's ceiling is a seed role this release knows. Each
 /// gives the access's roles capped at that ceiling (<see cref="GrantOf"/>), the 24-hour limit when the
 /// access or the staff member has it, and the earlier of their two ends.
 /// </summary>
@@ -29,6 +31,38 @@ internal static class TeamReasons
     internal sealed record AccessRole(Guid Id, IReadOnlyList<string> Permissions);
 
     /// <summary>
+    /// Whether a staff member's row at a site gives them the team's reason there: when an owner approved
+    /// them, or whatever their row says when the site trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>),
+    /// and never while the site has stopped them (<see cref="Blocked"/>), whatever the rule.
+    /// </summary>
+    /// <remarks>
+    /// This is the one test of it: the sync, the startup check and the counts every page reads all go by it.
+    /// </remarks>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> GivesReason = s =>
+        (s.Status == TeamSiteStaffStatus.Approved || s.TeamTenantAccess!.StaffRule == TeamStaffRule.TeamTrusted)
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+
+    /// <summary>
+    /// Whether a staff member's row at a site waits for an owner's approval: pending, at a site that does not
+    /// trust the whole team and has not stopped them, so no owner is told a stopped person waits.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Waits = s =>
+        s.Status == TeamSiteStaffStatus.Pending
+        && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+
+    /// <summary>
+    /// Whether the site of a staff member's row has stopped them reaching it through any team
+    /// (<see cref="TeamSiteBlockEntity"/>): whatever the row and the rule say, it gives no reason.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Blocked = s =>
+        s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+
+    /// <summary>Whether a staff member's row at a site keeps them out by an owner's decline: declined, at a site that does not trust the whole team.</summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> DeclineApplies = s =>
+        s.Status == TeamSiteStaffStatus.Declined && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted;
+
+    /// <summary>
     /// What the team reasons of <paramref name="subjectId"/> on <paramref name="tenantId"/> give when they
     /// agree with the team's rows, keyed by access id, ends that have passed included; none for an owner of
     /// the site at <paramref name="now"/>. Reads the rows of that site only, on a context pinned to it or to
@@ -41,8 +75,8 @@ internal static class TeamReasons
             return new Dictionary<Guid, MembershipGrant>();
 
         var rows = await db.TeamSiteStaff.AsNoTracking()
-            .Where(s => s.Status == TeamSiteStaffStatus.Approved
-                && s.TeamTenantAccess!.TenantId == tenantId
+            .Where(GivesReason)
+            .Where(s => s.TeamTenantAccess!.TenantId == tenantId
                 && s.TeamMember!.SubjectId == subjectId
                 && s.TeamMember.Kind == TeamMemberKind.Staff)
             .Select(s => new

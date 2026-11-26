@@ -23,6 +23,7 @@ namespace Nocturne.API.Services.Alerts;
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Check each enabled rule's condition for a version that cannot be evaluated (<see cref="IUnevaluableRuleNotice"/>).</item>
+///   <item>Close the excursion of a rule that cannot be read once its notice has stood for the hold bound (<see cref="CloseUnreadableRulesPastTheHoldBoundAsync"/>).</item>
 ///   <item>Tell the owners of each channel of an enabled rule that does not send (<see cref="IAlertChannelNotice"/>).</item>
 ///   <item>Archive a clock-anomaly notification once no stored reading is ahead of the clock (<see cref="IClockAnomalyNotice.NeedsReadingReport"/>).</item>
 ///   <item>Evaluate every enabled rule against a newest reading no evaluation completed for (<see cref="EvaluateLostReadingAsync"/>).</item>
@@ -116,6 +117,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                      (CloseHysteresisWindowsAsync, "closing hysteresis windows"),
                      (CheckSnoozedInstancesAsync, "checking snoozed instances"),
                      (CheckRuleConditionsAsync, "checking rule conditions"),
+                     (CloseUnreadableRulesPastTheHoldBoundAsync, "closing excursions of rules that cannot be read"),
                      (CheckAlertChannelsAsync, "checking alert channels"),
                      (CheckClockAnomaliesAsync, "checking clock-anomaly notifications"),
                      (EvaluateLostReadingAsync, "evaluating a reading no evaluation completed for"),
@@ -128,7 +130,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             {
                 await pass(sweep, ct);
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Error {Pass} for tenant {TenantId}", what, tenantId);
                 failed ??= ex;
@@ -273,6 +275,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 logger.LogWarning(
                     "Excursion {ExcursionId} opened without being dispatched and has since closed or lost its rule; it is not sent",
                     transition.ExcursionId);
+                if (transition.EndedAt is not null)
+                    await resolutionHandler.CloseAgainIfEndedAsync(transition.ExcursionId, sweep.TenantId, ct);
                 await sweep.Repository.SettleTransitionAsync(transition.ExcursionId, transition.Kind, ct);
                 continue;
             }
@@ -282,7 +286,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 transition.ExcursionId, rule.Id);
             context ??= await OwedDispatchContextAsync(sweep, owed, rules, ct);
             await openedHandler.HandleOpenedAsync(
-                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], ct);
+                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], callerCloses: false, ct);
         }
     }
 
@@ -364,8 +368,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// <see cref="SmartSnoozeConfig"/> to enable it with count to spare, and then either its
     /// <see cref="SmartSnoozeConfig.Conditions"/> to hold against a context built from the tenant's
     /// fresh canonical reading, or, when it configures none, <see cref="SmartSnoozeTrendGate"/> to
-    /// pass. Anything else clears the snooze and hands the instance to
-    /// <see cref="IAlertSnoozeService.ResumeAsync"/>, which re-notifies if the alert still stands.
+    /// pass. Anything else hands the instance to <see cref="IAlertSnoozeService.ResumeAsync"/>, which
+    /// ends the snooze and re-notifies if the alert still stands. A resume that fails before it ends
+    /// the snooze leaves it lapsed for the next run, which decides it again.
     /// </summary>
     private async Task CheckSnoozedInstancesAsync(Sweep sweep, CancellationToken ct)
     {
@@ -443,13 +448,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             }
             else
             {
-                await sweep.Repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
-                    tenantId,
-                    instance.InstanceId,
-                    SnoozedUntil: DateTime.MinValue), ct);
-
                 logger.LogInformation(
-                    "Snooze cleared for instance {InstanceId} (count: {Count}/{Max}, reason: {Reason})",
+                    "Snooze lapsed for instance {InstanceId} (count: {Count}/{Max}, reason: {Reason})",
                     instance.InstanceId, instance.SnoozeCount, cfg.MaxCount, reason);
 
                 await ResumeAsync(sweep.Services, instance.InstanceId, ct);
@@ -460,8 +460,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     }
 
     /// <summary>
-    /// Re-notifies a cleared snooze through <see cref="IAlertSnoozeService.ResumeAsync"/>. One
-    /// instance's failure is logged, not rethrown, so the rest of the tenant's pass still runs.
+    /// Ends a lapsed snooze through <see cref="IAlertSnoozeService.ResumeAsync"/>, which re-notifies
+    /// when the alert still stands. One instance's failure is logged, not rethrown, so the rest of the
+    /// tenant's pass still runs.
     /// </summary>
     private async Task ResumeAsync(IServiceProvider services, Guid instanceId, CancellationToken ct)
     {
@@ -654,6 +655,40 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     private static async Task CheckRuleConditionsAsync(Sweep sweep, CancellationToken ct) =>
         await sweep.Services.GetRequiredService<IUnevaluableRuleNotice>()
             .CheckAsync(await sweep.ReadEnabledRulesAsync(ct), ct);
+
+    /// <summary>
+    /// Closes the open excursion of each enabled rule that cannot be read with
+    /// <see cref="ExcursionCloseReason.HoldBound"/> once the rule's notice for that version has stood
+    /// for <see cref="RustAlertEngine.HoldBound"/> (docs/alerts/engine-semantics.md §6.4). Evaluation,
+    /// auto-resolve and the hysteresis close all leave such a rule out, so nothing else ends it.
+    /// </summary>
+    private static async Task CloseUnreadableRulesPastTheHoldBoundAsync(Sweep sweep, CancellationToken ct)
+    {
+        var unreadable = (await sweep.ReadEnabledRulesAsync(ct)).Unreadable;
+        if (unreadable.Count == 0) return;
+
+        var notices = (await sweep.Repository.GetStandingUnevaluableNoticesAsync(null, ct))
+            .Where(n => unreadable.Any(rule => rule.Id == n.AlertRuleId
+                                               && UnevaluableRuleNotice.VersionOf(rule) == n.ConditionVersion))
+            .ToList();
+        if (notices.Count == 0) return;
+
+        var heldUntil = sweep.Now - RustAlertEngine.HoldBound();
+        var due = notices.Where(n => n.StartedAt <= heldUntil).ToList();
+        if (due.Count == 0) return;
+
+        var open = await sweep.Repository.GetActiveAlertSnapshotsAsync(ct);
+        due = due.Where(n => open.ContainsKey(n.AlertRuleId)).ToList();
+        if (due.Count == 0) return;
+
+        var tracker = sweep.Services.GetRequiredService<IExcursionTracker>();
+        var resolutionHandler = sweep.Services.GetRequiredService<IExcursionResolutionHandler>();
+        foreach (var notice in due)
+        {
+            var transition = await tracker.ForceCloseAsync(notice.AlertRuleId, ExcursionCloseReason.HoldBound, ct);
+            await resolutionHandler.HandleClosedAsync(transition, sweep.TenantId, ct);
+        }
+    }
 
     private static async Task CheckAlertChannelsAsync(Sweep sweep, CancellationToken ct) =>
         await sweep.Services.GetRequiredService<IAlertChannelNotice>()

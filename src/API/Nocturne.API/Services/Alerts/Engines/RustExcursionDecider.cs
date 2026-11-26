@@ -13,13 +13,11 @@ namespace Nocturne.API.Services.Alerts.Engines;
 internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursionDecider
 {
     public TrackerDecision Process(
-        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
-        DateTime now) =>
+        Guid ruleId, AlertTrackerState? state, bool conditionMet, bool autoResolveMet, DateTime now) =>
         errors.Track("tracker_process", () => ToDecision(state, RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
         {
             Tracker = RustEnvelopeMapper.BuildTracker(state),
             Now = now,
-            Config = ToWire(config),
             ConditionMet = conditionMet,
             AutoResolveMet = autoResolveMet,
         })));
@@ -34,20 +32,14 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursio
         })));
 
     public TrackerDecision CloseElapsedHysteresis(
-        Guid ruleId, AlertTrackerState? state, TrackerConfig config, DateTime now) =>
+        Guid ruleId, AlertTrackerState? state, DateTime now) =>
         errors.Track("tracker_close_elapsed_hysteresis", () => ToDecision(
             state,
             RustAlertEngine.TrackerCloseElapsedHysteresis(new RustTrackerCloseElapsedHysteresisRequest
             {
                 Tracker = RustEnvelopeMapper.BuildTracker(state),
                 Now = now,
-                Config = ToWire(config),
             })));
-
-    private static RustTrackerConfig ToWire(TrackerConfig config) => new()
-    {
-        HysteresisMinutes = config.HysteresisMinutes,
-    };
 
     /// <summary>A decision made without an evaluation keeps the facts a hold that goes on waits for.</summary>
     private static TrackerDecision ToDecision(AlertTrackerState? prior, RustTrackerResponse response) => new(

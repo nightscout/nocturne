@@ -1,7 +1,11 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -62,6 +66,89 @@ public class ArrayFilterPlanTests(SourceDeletePlanTests.NeverAnalysedDatabase db
             .And.NotMatchRegex(@"= ANY \(\$\d", "no array is a parameter: " + stamp);
     }
 
+    [Fact]
+    public async Task AFullDeduplicationRun_PlansItsTransactionBeforeItsFirstArrayFilter()
+    {
+        var statements = await FullRunStatementsAsync(ArrayFilterPlans.HashedArrayLength + 3, RecordType.SensorGlucose);
+
+        var firstArrayFilter = statements.FindIndex(IsArrayFilter);
+        firstArrayFilter.Should().BeGreaterThan(-1, "the run filters by the groups it read");
+        var firstPlan = statements.FindIndex(IsPlanSetting);
+        firstPlan.Should().BeGreaterThan(-1).And.BeLessThan(firstArrayFilter);
+    }
+
+    [Fact]
+    public async Task AFullDeduplicationRun_OverFewerGroupsThanAHashedArray_SetsNoPlan()
+    {
+        var statements = await FullRunStatementsAsync(ArrayFilterPlans.HashedArrayLength - 1, RecordType.SensorGlucose);
+
+        statements.Should().NotContain(s => IsPlanSetting(s));
+    }
+
+    [Fact]
+    public async Task AFullDeduplicationRun_OverFewerGroupsThanAHashedArrayButMoreMembers_PlansBeforeReadingTheirInfo()
+    {
+        var groups = ArrayFilterPlans.HashedArrayLength - 4;
+        (2 * groups).Should().BeGreaterThanOrEqualTo(ArrayFilterPlans.HashedArrayLength);
+
+        var statements = await FullRunStatementsAsync(groups, RecordType.CarbIntake);
+
+        var plan = statements.FindIndex(IsPlanSetting);
+        plan.Should().BeGreaterThan(-1, "the record ids of the primaries and their members reach a hashed array");
+        statements.FindLastIndex(IsArrayFilter).Should().BeGreaterThan(plan, "the member info read follows the setting");
+    }
+
+    private async Task<List<string>> FullRunStatementsAsync(int groups, RecordType recordType)
+    {
+        var tenant = Guid.NewGuid();
+        await db.SeedAsync(tenant, groups, recordType);
+        await using var source = RuntimePool();
+        await using var conn = await OpenAsync(source, tenant);
+        var recorder = new StatementRecorder();
+        await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(conn)
+            .AddInterceptors(recorder)
+            .Options) { TenantId = tenant };
+
+        await DeduplicationModules.Reconciler(ctx.AsFactory()).MergeAllAsync(recordType, default);
+        return recorder.Statements;
+    }
+
+    private static bool IsPlanSetting(string statement) =>
+        statement.Contains("SET LOCAL plan_cache_mode", StringComparison.Ordinal);
+
+    private static bool IsArrayFilter(string statement) =>
+        statement.Contains("= ANY (", StringComparison.Ordinal) || statement.Contains("unnest(", StringComparison.Ordinal);
+
+    private sealed class StatementRecorder : DbCommandInterceptor
+    {
+        public List<string> Statements { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Statements.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Statements.Add(command.CommandText);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<object> result,
+            CancellationToken cancellationToken = default)
+        {
+            Statements.Add(command.CommandText);
+            return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -114,7 +201,7 @@ public class ArrayFilterPlanTests(SourceDeletePlanTests.NeverAnalysedDatabase db
     private static async Task<NpgsqlConnection> OpenAsync(NpgsqlDataSource source, Guid tenant)
     {
         var conn = await source.OpenConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
         return conn;
     }
 

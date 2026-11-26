@@ -575,6 +575,42 @@ public class OAuthGrantServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateGrantAsync_ReturnsNullForARevokedGrantAndWritesNothing()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(
+            db, label: "Old Label", scopes: [Scope.GlucoseRead], revokedAt: DateTime.UtcNow);
+        var service = CreateService(db);
+
+        var result = await service.UpdateGrantAsync(
+            grantId, _ownerSubjectId, FullAccessBounds, label: "New Label", scopes: [Scope.TreatmentsRead]);
+
+        result.Should().BeNull();
+        var stored = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        stored.Label.Should().Be("Old Label");
+        stored.Scopes.Should().Equal([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrant_ForARevokedGrant_AnswersNotFoundAsForAMissingOne()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var revokedId = await SeedGrantAsync(db, revokedAt: DateTime.UtcNow);
+        var controller = CreateController(db, [Scope.GlucoseRead], ceiling: null);
+
+        var revoked = await controller.UpdateGrant(revokedId, new UpdateGrantRequest { Label = "Renamed" });
+        var missing = await controller.UpdateGrant(Guid.CreateVersion7(), new UpdateGrantRequest { Label = "Renamed" });
+
+        revoked.Result.Should().BeOfType<NotFoundObjectResult>()
+            .Which.Value.Should().BeEquivalentTo(
+                missing.Result.Should().BeOfType<NotFoundObjectResult>().Which.Value);
+    }
+
+    [Fact]
     public async Task UpdateGrantAsync_ReturnsNullForWrongOwner()
     {
         using var db = CreateDbContext();

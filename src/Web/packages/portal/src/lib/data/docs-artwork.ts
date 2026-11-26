@@ -17,6 +17,7 @@ export const DOCS_HERO: Record<string, DocsHero> = {
   // Landing and installation
   '': { artwork: 'paint-palette', palette: 'dusk', wrap: false },
   'getting-started': { artwork: 'sunrise', palette: 'ember' },
+  'managed-service': { artwork: 'apartment', palette: 'dusk' },
   installation: { artwork: 'world-globe', palette: 'water' },
   'installation/install-script': { artwork: 'spanner', palette: 'water' },
   'installation/docker-compose': { artwork: 'overlapping-shapes', palette: 'dusk' },

@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -107,7 +108,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     /// </summary>
     /// <param name="alertRuleId">The unique identifier of the alert rule.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The alert rule, or null if not found.</returns>
+    /// <returns>The alert rule, or null if not found or not readable (<see cref="AlertRuleMapper.IsReadable(AlertRuleEntity)"/>).</returns>
     public virtual async Task<AlertRule?> GetRuleAsync(
         Guid alertRuleId,
         CancellationToken ct = default)
@@ -117,7 +118,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == alertRuleId, ct);
 
-        return entity == null ? null : MapAlertRule(entity);
+        return entity is null || !AlertRuleMapper.IsReadable(entity) ? null : MapAlertRule(entity);
     }
 
     /// <inheritdoc/>

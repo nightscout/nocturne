@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -272,14 +273,8 @@ public class CredentialAtRestPassTests
         return credentialId;
     }
 
-    private static async Task<long> CountCredentialsAsync(NpgsqlDataSource dataSource, Guid credentialId)
-    {
-        await using var conn = await dataSource.OpenConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM totp_credentials WHERE id = @id";
-        cmd.Parameters.AddWithValue("@id", credentialId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
+    private static Task<long> CountCredentialsAsync(NpgsqlDataSource dataSource, Guid credentialId) =>
+        dataSource.ScalarAsync<long>("SELECT count(*) FROM totp_credentials WHERE id = @id", ("id", credentialId));
 
     private static async Task<byte[]> ReadSecretAsync(NpgsqlDataSource dataSource, Guid credentialId)
     {

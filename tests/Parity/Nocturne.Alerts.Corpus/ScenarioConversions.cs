@@ -39,7 +39,6 @@ public static class ScenarioConversions
             Name = rule.Name,
             ConditionType = conditionType,
             ConditionParams = rule.ConditionParams.GetRawText(),
-            HysteresisMinutes = rule.HysteresisMinutes,
             AutoResolveEnabled = rule.AutoResolveEnabled,
             AutoResolveParams = rule.AutoResolveParams?.GetRawText(),
             OnUnknown = rule.OnUnknown ?? AlertRuleOnUnknown.Hold,

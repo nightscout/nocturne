@@ -65,9 +65,8 @@ public class AuthenticationHandlerIntegrationTests : ApiIntegrationTestBase
         // Arrange - Nightscout clients send the SHA-1 of the secret, which is what a secret
         // carried over from Nightscout is stored as.
         var hashedSecret = ComputeSha1Hash(TestApiSecret);
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             await AuthTestHelpers.SeedApiSecretGrantAsync(conn, Fixture.TenantId, Fixture.OwnerSubjectId, hashedSecret);
         }
 

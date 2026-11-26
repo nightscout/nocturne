@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "name": "tracker-age-held-back-ahead-of-clock-is-unknown",
+  "description": "a duration run whose 30-minute threshold held when it was recorded (12:55, due 12:50) is held back, but its start (12:20) is beyond the clock tolerance ahead at 12:00, so the leaf is unknown and clock_anomaly reports active_trackers; at 12:16 the start is within the tolerance and the leaf is held back, false",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+        "operator": ">=",
+        "minutes": 30
+      },
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-05T12:20:00Z",
+            "recorded_at": "2026-01-05T12:55:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:16:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:16:00Z",
+        "last_reading_at": "2026-01-05T12:16:00Z",
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-05T12:20:00Z",
+            "recorded_at": "2026-01-05T12:55:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

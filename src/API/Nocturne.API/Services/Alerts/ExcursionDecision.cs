@@ -55,12 +55,6 @@ internal sealed record TrackerDecision(
     ExcursionCloseReason? CloseReason,
     TrackerPostState? Post);
 
-/// <summary>The rule configuration the excursion state machine reads.</summary>
-internal readonly record struct TrackerConfig(int HysteresisMinutes)
-{
-    public static TrackerConfig Of(AlertRule rule) => new(rule.HysteresisMinutes);
-}
-
 /// <summary>
 /// The excursion state machine (docs/alerts/engine-semantics.md §6) as pure decisions over a
 /// rule's persisted state. <see cref="ExcursionTracker"/> loads the state and persists the
@@ -73,12 +67,11 @@ internal interface IExcursionDecider
     /// only while the rule awaits re-arm (docs/alerts/engine-semantics.md §6.3).
     /// </summary>
     TrackerDecision Process(
-        Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
-        DateTime now);
+        Guid ruleId, AlertTrackerState? state, bool conditionMet, bool autoResolveMet, DateTime now);
 
     /// <summary>Closes the excursion, if there is one, from any state.</summary>
     TrackerDecision ForceClose(Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now);
 
     /// <summary>Closes an excursion in hysteresis once its window has elapsed.</summary>
-    TrackerDecision CloseElapsedHysteresis(Guid ruleId, AlertTrackerState? state, TrackerConfig config, DateTime now);
+    TrackerDecision CloseElapsedHysteresis(Guid ruleId, AlertTrackerState? state, DateTime now);
 }

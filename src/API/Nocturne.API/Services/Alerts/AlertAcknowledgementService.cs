@@ -58,7 +58,8 @@ internal sealed class AlertAcknowledgementService(
         // keeps the tray flashing for its window, so it must be acknowledgeable during it.
         var excursions = await db.AlertExcursions
             .OfCondition(includeTest: true)
-            .Where(e => e.TenantId == tenantId && (e.EndedAt == null || e.EndedAt > now))
+            .Where(e => e.TenantId == tenantId)
+            .NotEndedBy(e => e.EndedAt, now)
             .ToListAsync(ct);
 
         if (excursions.Count == 0)
@@ -118,9 +119,9 @@ internal sealed class AlertAcknowledgementService(
         // device_action test fire (future EndedAt) is acknowledgeable during its window.
         var excursion = await db.AlertExcursions
             .OfCondition(includeTest: true)
-            .FirstOrDefaultAsync(e => e.Id == excursionId
-                                       && e.TenantId == tenantId
-                                       && (e.EndedAt == null || e.EndedAt > now), ct);
+            .Where(e => e.Id == excursionId && e.TenantId == tenantId)
+            .NotEndedBy(e => e.EndedAt, now)
+            .FirstOrDefaultAsync(ct);
 
         if (excursion is null)
         {

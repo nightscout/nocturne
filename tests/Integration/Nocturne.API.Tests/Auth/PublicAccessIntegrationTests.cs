@@ -41,9 +41,7 @@ public class PublicAccessIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed an admin subject for managing public access
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Public Access Admin");
@@ -142,9 +140,7 @@ public class PublicAccessIntegrationTests : ApiIntegrationTestBase
 
     private async Task<(Guid PublicMemberId, Guid ReadableRoleId)> GetPublicMemberAndReadableRoleAsync()
     {
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var publicMemberId = await AuthTestHelpers.GetPublicMemberIdAsync(conn, _tenantId);
         var readableRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantId, RoleSeeds.Viewer);

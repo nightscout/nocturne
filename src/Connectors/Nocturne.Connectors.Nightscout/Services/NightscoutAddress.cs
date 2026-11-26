@@ -11,8 +11,9 @@ namespace Nocturne.Connectors.Nightscout.Services;
 ///     is built through this one model.
 /// </summary>
 /// <remarks>
-///     User info and fragment are dropped. Only <see cref="Origin"/> and <see cref="Masked"/> are free
-///     of credentials and may be logged, stored or shown. <see cref="Base"/>,
+///     User info and fragment are dropped. Everything after the origin may be the credential, so only
+///     <see cref="Origin"/> and <see cref="Shown"/> are free of credentials and may be logged, stored
+///     or shown. <see cref="Masked"/> is the form a telemetry span carries. <see cref="Base"/>,
 ///     <see cref="SocketIoPath"/>, <see cref="Query"/>, <see cref="Token"/> and <see cref="BaseUri"/>
 ///     may each carry one: the path, the query, or both.
 /// </remarks>
@@ -22,8 +23,10 @@ public sealed class NightscoutAddress
 
     public const string OutsideBaseMessage = "The path must stay under the Nightscout URL.";
 
-    /// <summary>A path segment at least this long is taken to be a credential.</summary>
+    /// <summary>A path segment at least this long is cut in a span.</summary>
     private const int LongSegment = 16;
+
+    private static readonly char[] PathStarts = ['/', '\\'];
 
     private NightscoutAddress(Uri uri)
     {
@@ -110,9 +113,10 @@ public sealed class NightscoutAddress
     /// <summary>
     ///     The base of <paramref name="nightscoutUrl"/> with no trailing slash, query, fragment or user
     ///     info. A value that does not read as an address is cut at its query or fragment, and loses
-    ///     any user info before its host. It still carries the path, so it is neither stored nor
-    ///     shown: it is what <see cref="Masked"/> shortens and what a migration source's digest is
-    ///     taken over.
+    ///     any user info before its host, which ends at a <c>/</c> or, as <see cref="Uri"/> reads an
+    ///     http(s) address, a <c>\</c>. It still carries the path, so it is neither stored nor
+    ///     shown: it is what <see cref="Shown"/> and <see cref="Masked"/> shorten and what a migration
+    ///     source's digest is taken over.
     /// </summary>
     public static string Display(string nightscoutUrl)
     {
@@ -124,7 +128,7 @@ public sealed class NightscoutAddress
 
         var schemeEnd = kept.IndexOf("://", StringComparison.Ordinal);
         var authorityStart = schemeEnd < 0 ? 0 : schemeEnd + 3;
-        var pathStart = kept.IndexOf('/', authorityStart);
+        var pathStart = kept.IndexOfAny(PathStarts, authorityStart);
         var authorityEnd = pathStart < 0 ? kept.Length : pathStart;
         var at = authorityEnd > authorityStart
             ? kept.LastIndexOf('@', authorityEnd - 1, authorityEnd - authorityStart)
@@ -133,15 +137,24 @@ public sealed class NightscoutAddress
     }
 
     /// <summary>
-    ///     <paramref name="nightscoutUrl"/> as it may be stored or shown: the host, port and path of
+    ///     <paramref name="nightscoutUrl"/> as it may be stored, shown or logged: the host and port of
+    ///     <see cref="Display"/>, followed by <c>/…</c> when a path follows them.
+    /// </summary>
+    public static string Shown(string nightscoutUrl)
+    {
+        var hostAndPath = HostAndPath(nightscoutUrl).TrimEnd(PathStarts);
+        var pathStart = hostAndPath.IndexOfAny(PathStarts);
+        return pathStart < 0 ? hostAndPath : hostAndPath[..pathStart] + "/…";
+    }
+
+    /// <summary>
+    ///     <paramref name="nightscoutUrl"/> as a telemetry span carries it: the host, port and path of
     ///     <see cref="Display"/> with no scheme, each path segment of <see cref="LongSegment"/> or
     ///     more characters cut to its first four followed by <c>…</c>.
     /// </summary>
     public static string Masked(string nightscoutUrl)
     {
-        var display = Display(nightscoutUrl);
-        var schemeEnd = display.IndexOf("://", StringComparison.Ordinal);
-        var hostAndPath = schemeEnd < 0 ? display : display[(schemeEnd + 3)..];
+        var hostAndPath = HostAndPath(nightscoutUrl);
         var pathStart = hostAndPath.IndexOf('/');
         if (pathStart < 0)
             return hostAndPath;
@@ -150,6 +163,13 @@ public sealed class NightscoutAddress
             .Split('/')
             .Select(segment => segment.Length >= LongSegment ? $"{segment[..4]}…" : segment);
         return hostAndPath[..pathStart] + string.Join('/', segments).TrimEnd('/');
+    }
+
+    private static string HostAndPath(string nightscoutUrl)
+    {
+        var display = Display(nightscoutUrl);
+        var schemeEnd = display.IndexOf("://", StringComparison.Ordinal);
+        return schemeEnd < 0 ? display : display[(schemeEnd + 3)..];
     }
 
     private string WithQuery(string url) =>

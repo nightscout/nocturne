@@ -2,11 +2,12 @@ import { randomBytes } from "node:crypto";
 import { Chat } from "chat";
 import type { Adapter } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createResendAdapter } from "@resend/chat-sdk-adapter";
 import { createPostgresState } from "@chat-adapter/state-pg";
 import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
+import { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
+import type { AlertTemplate } from "./whatsapp/alert-template.js";
 import { createLogger } from "./lib/logger.js";
 
 const logger = createLogger();
@@ -26,6 +27,8 @@ export interface PlatformCredentials {
   apiKey?: string;
   webhookSecret?: string;
   webhookSecretToken?: string;
+  alertTemplateName?: string;
+  alertTemplateLanguage?: string;
 }
 
 export interface BotOptions {
@@ -50,6 +53,28 @@ function telegramWebhookSecretToken(configured: string | undefined): string {
     "No Telegram webhook secret token is configured; Telegram webhook calls will be refused until one is set.",
   );
   return randomBytes(32).toString("hex");
+}
+
+/** Meta's language code a template is taken to be approved in when the settings name none. */
+const DEFAULT_TEMPLATE_LANGUAGE = "en";
+
+/**
+ * The approved template alerts are sent as outside the customer service window, from the stored
+ * WhatsApp settings. Without a name there is none, and such alerts fail.
+ */
+function whatsappAlertTemplate(configured: PlatformCredentials | undefined): AlertTemplate | null {
+  const name = configured?.alertTemplateName;
+  if (!name) return null;
+  return { name, language: configured.alertTemplateLanguage || DEFAULT_TEMPLATE_LANGUAGE };
+}
+
+/** A WhatsApp setting from the stored platform settings, else the environment. Refuses to start without one. */
+function whatsappSetting(name: string, stored: string | undefined, envVar: string): string {
+  const value = stored || process.env[envVar];
+  if (!value) {
+    throw new Error(`WhatsApp ${name} is required. Set it in the WhatsApp settings or ${envVar}.`);
+  }
+  return value;
 }
 
 export function createBot(options: BotOptions): Chat {
@@ -89,6 +114,8 @@ export function createBot(options: BotOptions): Chat {
     const configured = typeof telegram === "object" ? telegram : undefined;
     adapters.telegram = createTelegramAdapter({
       botToken: configured?.botToken,
+      // Kept history holds people's messages in the bot's state; see purgeThreadHistory.
+      persistThreadHistory: false,
       secretToken: telegramWebhookSecretToken(
         configured?.webhookSecretToken || process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN,
       ),
@@ -98,25 +125,17 @@ export function createBot(options: BotOptions): Chat {
   const whatsapp = platforms.whatsapp;
   if (whatsapp) {
     logger.info("Enabling WhatsApp adapter");
-    if (typeof whatsapp === "object") {
-      adapters.whatsapp = createWhatsAppAdapter({
-        accessToken: whatsapp.accessToken!,
-        appSecret: whatsapp.appSecret!,
-        phoneNumberId: whatsapp.phoneNumberId!,
-        verifyToken: whatsapp.verifyToken!,
-        userName: "nocturne",
-        logger,
-      });
-    } else {
-      adapters.whatsapp = createWhatsAppAdapter({
-        accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,
-        appSecret: process.env.WHATSAPP_APP_SECRET!,
-        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
-        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
-        userName: "nocturne",
-        logger,
-      });
-    }
+    const configured = typeof whatsapp === "object" ? whatsapp : undefined;
+    adapters.whatsapp = new NocturneWhatsAppAdapter({
+      accessToken: whatsappSetting("accessToken", configured?.accessToken, "WHATSAPP_ACCESS_TOKEN"),
+      appSecret: whatsappSetting("appSecret", configured?.appSecret, "WHATSAPP_APP_SECRET"),
+      phoneNumberId: whatsappSetting("phoneNumberId", configured?.phoneNumberId, "WHATSAPP_PHONE_NUMBER_ID"),
+      verifyToken: whatsappSetting("verifyToken", configured?.verifyToken, "WHATSAPP_VERIFY_TOKEN"),
+      apiUrl: process.env.WHATSAPP_API_URL,
+      alertTemplate: whatsappAlertTemplate(configured),
+      userName: "nocturne",
+      logger,
+    });
   }
 
   const resend = platforms.resend;
@@ -144,6 +163,9 @@ export function createBot(options: BotOptions): Chat {
   return new Chat({
     userName: "nocturne",
     adapters,
+    // A typed command holds its thread for its API calls; the default drops a second command sent
+    // meanwhile, or each but one of a batch Meta delivers again after an outage.
+    concurrency: "concurrent",
     state: createPostgresState({ url: options.postgresUrl }),
   });
 }

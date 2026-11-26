@@ -65,8 +65,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(database.Created.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(database.Created.AppConnectionString));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -125,10 +124,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
     public void PassTheDebounce() => Time.Advance(AlertFactEvaluationScheduler.Debounce);
 
     public NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.Created.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(_database.Created.AppConnectionString, tenant);
 
     public async Task<(TenantContext Tenant, Guid Rule)> SeedTenantAsync(
         string name,

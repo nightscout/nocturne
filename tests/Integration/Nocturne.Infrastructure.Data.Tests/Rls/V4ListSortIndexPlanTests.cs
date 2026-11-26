@@ -69,9 +69,9 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
         await PlanTestSupport.SeedAsync(fx, tenant, table, columns, values, Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
 
-        var capture = new PlanTestSupport.LastReaderCapture();
+        var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
             .AddInterceptors(capture)
@@ -79,7 +79,7 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
 
         await read(new TestNocturneDbContextFactory(ctx), DateTime.UtcNow.AddMinutes(1));
 
-        var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);
+        var plan = await QueryPlans.ExplainAsync(conn, capture.Command!);
         plan.Descendants("Index Name").Should().Contain(index, plan.ToString());
         plan.Descendants("Node Type").Should().NotContain(
             ["Seq Scan", "Sort", "Incremental Sort"], plan.ToString());

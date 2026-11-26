@@ -72,10 +72,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private sealed class Site(Guid tenant, string slug, Guid guest, SuppliedContextFactory contexts, FakeTimeProvider clock, BotService bot)
     {
@@ -418,7 +415,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         var deletion = new SubjectDeletion(
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
-            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            AccountLinkRoutes.Off,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             Mock.Of<IAuthAuditService>(),
             site.Clock,

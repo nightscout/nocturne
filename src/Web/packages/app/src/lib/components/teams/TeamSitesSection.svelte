@@ -3,6 +3,7 @@
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
   import { plural } from "#lib/utils/plural.js";
+  import { RULE_OWNER_APPROVES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
   import type { TeamSiteAccess } from "@nocturne/api-client";
 
   interface Props {
@@ -16,8 +17,7 @@
   <Card.Header>
     <Card.Title>Sites this team has access to</Card.Title>
     <Card.Description>
-      Each site decides if the team or the site approves the team's staff. Only an owner of the site can
-      change this.
+      Each site decides who approves the team's staff. Only an owner of the site can change this.
     </Card.Description>
   </Card.Header>
   <Card.Content>
@@ -43,12 +43,14 @@
             </p>
             {#if !site.hasEnded}
               <p class="text-sm text-muted-foreground">
-                {#if site.teamManagesStaff && (site.declinedStaffCount ?? 0) > 0}
-                  The team decides which of its staff can see this site. Staff that the site declined stay declined.
-                {:else if site.teamManagesStaff}
-                  The team decides which of its staff can see this site.
-                {:else}
+                {#if site.staffRule === RULE_TEAM_TRUSTED}
+                  The site trusts the whole team. Every staff member that the site did not stop can see this site.
+                {:else if site.staffRule === RULE_OWNER_APPROVES}
                   An owner of the site must approve each staff member.
+                {:else if (site.declinedStaffCount ?? 0) > 0}
+                  The team decides which of its staff can see this site. Staff that the site declined stay declined.
+                {:else}
+                  The team decides which of its staff can see this site.
                 {/if}
               </p>
               {#if (site.pendingStaffCount ?? 0) > 0}

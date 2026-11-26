@@ -29,7 +29,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// owner role, end and limit hold still from its check to its commit. An owner's edit of a team's access and
 /// the switch of who decides its staff take the same locks without the owner's row, since they insert no row
 /// naming the owner; an owner's decision on one staff member takes that member's row, the owners lock and the
-/// team access lock. A role edit takes the rows of the
+/// team access lock. An owner's stop of one person through every team, set or removed, takes the rows of that
+/// person and the owner, the owners lock and the team access lock. It and that person joining another team that
+/// follows the site are ordered by the site's team access lock, which each takes first, and again by the
+/// membership lock their syncs take before they read; the person's row (<c>KEY SHARE</c>) orders neither. A role edit takes the rows of the
 /// staff it may sync, the owners lock and the team access lock; a role deletion takes the owners lock, the
 /// team access lock, then the locks of the members who hold it. A staff member joining or being edited
 /// takes their row, the team's manager lock and the team access lock of every site the team follows. A
@@ -45,10 +48,12 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// subject and client, then the subject row, then one membership lock
 /// (<see cref="Nocturne.Core.Contracts.Auth.IOAuthGrantRepository.LockConsentAsync"/>). Each of these takes
 /// the locks of the memberships it changes last. Account deletion takes the subject's row, then the owners
-/// locks of an active subject's sites, then the manager locks of its teams, then the team access locks of every site the
-/// teams it will remove have access to, then its memberships' locks; removing every membership of a
-/// subject takes the row, the owners locks and then the manager locks, so both read the subject's
-/// memberships after a team write that removes one of their reasons commits.
+/// locks of its sites (only an active subject's, unless it removes even a last owner), then the manager
+/// locks of its teams, then the team access locks of every site the teams it will remove have access to,
+/// then its memberships' locks, so it reads the subject's memberships after a team write that removes one
+/// of their reasons commits. Only then does it stop what the subject made, which takes none of these locks,
+/// so a write that caps what the subject made under one of them has committed before the deletion writes
+/// those rows.
 /// </para>
 /// </remarks>
 internal static class MembershipLock

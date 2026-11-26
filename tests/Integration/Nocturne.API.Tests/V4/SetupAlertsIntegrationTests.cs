@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -478,9 +479,8 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     public async Task Self_CanAlertAMemberToUrgentLows_WhoStaysThereThroughASave_AndIsNotSentTheTest()
     {
         await RelationshipAsync("Self");
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Partner");
 
             var saved = await SaveAsync(Rules(55, 70, 250));

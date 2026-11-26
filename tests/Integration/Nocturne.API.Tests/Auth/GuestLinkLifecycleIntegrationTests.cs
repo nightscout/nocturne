@@ -36,9 +36,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the guest link tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Guest Link Test User");
@@ -188,9 +186,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task ActivateGuestLink_ExpiredCode_Rejected()
     {
         // Arrange - seed an expired link via SQL
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var (_, rawCode) = await AuthTestHelpers.SeedGuestLinkAsync(
             conn, _subjectId, expiresAt: DateTime.UtcNow.AddHours(-1));
@@ -217,9 +213,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task ActivateGuestLink_RevokedCode_Rejected()
     {
         // Arrange - seed a revoked link via SQL
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var (_, rawCode) = await AuthTestHelpers.SeedGuestLinkAsync(
             conn, _subjectId, revokedAt: DateTime.UtcNow.AddMinutes(-30));
@@ -240,9 +234,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task ActivateGuestLink_AlreadyActivated_Rejected()
     {
         // Arrange - seed an already-activated link via SQL
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var (_, rawCode) = await AuthTestHelpers.SeedGuestLinkAsync(
             conn, _subjectId, activatedAt: DateTime.UtcNow.AddMinutes(-10));
@@ -460,9 +452,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
     public async Task GuestSession_ReplayedAtAnotherTenantHost_Rejected()
     {
         // Arrange - seed a second tenant to replay the session cookie against
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var victimSlug = $"victim-{Guid.NewGuid():N}"[..20];
         var victimId = await AuthTestHelpers.SeedTenantAsync(Fixture, victimSlug, "Victim Tenant");
@@ -553,9 +543,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
         var grantId = links.EnumerateArray().First().GetProperty("id").GetGuid();
 
         // Seed a second subject
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var (_, otherAccessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
             conn, _tenantId, "Other User");

@@ -91,6 +91,12 @@ public interface ITeamRepository
     /// <summary>The teams with access to <paramref name="tenantId"/>, by name, each with its staff waiting for approval first.</summary>
     Task<IReadOnlyList<TenantTeamAccess>> ListAccessOfTenantAsync(Guid tenantId, DateTime now, CancellationToken ct);
 
+    /// <summary>
+    /// The people <paramref name="tenantId"/> stopped reaching it through any team, the latest first, staff of
+    /// a team with access to it or not, so an owner can always remove a stop.
+    /// </summary>
+    Task<IReadOnlyList<TenantTeamStaffBlock>> ListStaffBlocksOfTenantAsync(Guid tenantId, CancellationToken ct);
+
     /// <summary>The roles of <paramref name="tenantId"/> a team's access gives.</summary>
     Task<IReadOnlySet<Guid>> ListRolesHeldByTeamsAsync(Guid tenantId, CancellationToken ct);
 

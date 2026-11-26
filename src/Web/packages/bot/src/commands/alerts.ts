@@ -1,6 +1,7 @@
 import type { Chat } from "chat";
 import { AcknowledgedCard, ActiveAlertsCard } from "../cards/alert.js";
 import { createLogger } from "../lib/logger.js";
+import { settled } from "../lib/settled.js";
 import { getApi } from "../lib/request-context.js";
 import { requireLink, requireLinkForAction } from "../lib/require-link.js";
 import { decodeActionValue } from "../lib/action-value.js";
@@ -60,7 +61,7 @@ function confirmation(
 }
 
 export function registerAlertCommands(bot: Chat) {
-  bot.onAction("ack_alert", async (event) => {
+  bot.onAction("ack_alert", settled("ack_alert", async (event) => {
     await requireLinkForAction(event, async (link) => {
       const { excursionId, unreadableExcursion } = decodeActionValue(event.value);
       if (unreadableExcursion) {
@@ -97,9 +98,9 @@ export function registerAlertCommands(bot: Chat) {
         logger.error("Acknowledged, but could not confirm in the thread:", err);
       }
     });
-  });
+  }));
 
-  bot.onSlashCommand("/alerts", async (event) => {
+  bot.onSlashCommand("/alerts", settled("/alerts", async (event) => {
     await requireLink(event, async (link) => {
       try {
         const excursions = (await getApi().alerts.getActiveAlerts()) ?? [];
@@ -115,5 +116,5 @@ export function registerAlertCommands(bot: Chat) {
         await event.channel.post(failed("fetch alerts"));
       }
     });
-  });
+  }));
 }

@@ -58,14 +58,6 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    internal static async Task<object?> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteScalarAsync();
-    }
-
     internal static async Task<string?> InsertSqlStateAsync(string connectionString, Guid tenant, string? originalId)
     {
         await using var conn = new NpgsqlConnection(connectionString);
@@ -145,10 +137,7 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(connectionString);
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
@@ -210,14 +199,14 @@ public class KeySystemEventsOnOriginalIdTests(KeySystemEventsOnOriginalIdFixture
     [Fact]
     public async Task The_key_is_a_valid_unique_index_over_tenant_and_id_that_replaces_the_plain_one()
     {
-        var definition = (string?)await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.UpMigrator, """
+        var definition = (string?)await NpgsqlTestCommands.ScalarAsync<object?>(fixture.UpMigrator, """
             SELECT pg_get_indexdef(i.indexrelid)
             FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
             WHERE c.relname = 'ix_system_events_tenant_original_id' AND i.indisunique AND i.indisvalid
             """);
 
         definition.Should().NotBeNull().And.Contain("(tenant_id, original_id)");
-        (await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.UpMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.UpMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_system_events_original_id'")).Should().Be(0L);
     }
 
@@ -237,9 +226,9 @@ public class KeySystemEventsOnOriginalIdTests(KeySystemEventsOnOriginalIdFixture
     [Fact]
     public async Task Down_restores_the_plain_index_and_drops_the_unique_one_and_keeps_the_rows()
     {
-        (await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_system_events_tenant_original_id'")).Should().Be(0L);
-        (await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator, """
             SELECT NOT i.indisunique AND i.indisvalid
             FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
             WHERE c.relname = 'ix_system_events_original_id'

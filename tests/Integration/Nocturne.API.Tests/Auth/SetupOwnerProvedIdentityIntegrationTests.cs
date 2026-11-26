@@ -8,6 +8,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -395,10 +396,10 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
     private async Task SetMemberUsernameAsync(Guid subjectId, string? username)
     {
         await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
             UPDATE tenant_members SET username = @username WHERE tenant_id = @tenant AND subject_id = @subject;
-            """, ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", subjectId), ("username", (object?)username ?? DBNull.Value));
+            """, ("tenant", Fixture.TenantId), ("subject", subjectId), ("username", (object?)username ?? DBNull.Value));
     }
 
     /// <summary>
@@ -509,12 +510,12 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
                 break;
             case "membership":
                 var other = await AuthTestHelpers.SeedTenantAsync(Fixture, $"other-{Guid.NewGuid():N}"[..20], "Other");
+                await conn.PinTenantAsync(other);
                 await conn.ExecuteAsync("""
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
                     INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at)
                     VALUES (gen_random_uuid(), @tenant, @subject, now(), now());
                     """,
-                    ("tenantText", other.ToString()), ("tenant", other), ("subject", subjectId));
+                    ("tenant", other), ("subject", subjectId));
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(held), held, null);
@@ -528,15 +529,14 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
     private async Task GiveResumedAsync(Guid subjectId, string held)
     {
         await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
         var sql = held switch
         {
             "member invite" => """
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), '[]'::jsonb, false, now() + interval '1 day', 0, now());
                 """,
             "grant" => """
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, created_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, 'direct', '{}', now());
                 """,
@@ -552,7 +552,7 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
             _ => throw new ArgumentOutOfRangeException(nameof(held), held, null),
         };
         await conn.ExecuteAsync(sql,
-            ("subject", subjectId), ("tenant", Fixture.TenantId), ("tenantText", Fixture.TenantId.ToString()));
+            ("subject", subjectId), ("tenant", Fixture.TenantId));
     }
 
     /// <summary>
@@ -584,12 +584,12 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
                 break;
             case "two memberships":
                 var second = await AuthTestHelpers.SeedTenantAsync(Fixture, $"second-{Guid.NewGuid():N}"[..20], "Second");
+                await conn.PinTenantAsync(second);
                 await conn.ExecuteAsync("""
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
                     INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at)
                     VALUES (gen_random_uuid(), @tenant, @subject, now(), now());
                     """,
-                    ("tenantText", second.ToString()), ("tenant", second), ("subject", subjectId));
+                    ("tenant", second), ("subject", subjectId));
                 break;
             case "another global role":
                 await conn.ExecuteAsync("""

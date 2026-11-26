@@ -59,10 +59,7 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
     }
 
     private NocturneDbContext Context() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        TestContexts.Context(database.AppConnectionString);
 
     private async Task SeedTenantAsync(Guid tenant, int? retentionDays, int deletedDaysAgo)
     {

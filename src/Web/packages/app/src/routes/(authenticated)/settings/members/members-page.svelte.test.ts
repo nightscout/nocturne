@@ -11,6 +11,7 @@ import {
   type TenantMemberDto,
   type TenantRoleDto,
   type TenantTeamAccess,
+  type TenantTeamStaffBlock,
 } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { accessEndInstant } from "#lib/components/members/access-end.js";
@@ -31,12 +32,15 @@ const mocks = vi.hoisted(() => ({
   declineTeamStaff: vi.fn(),
   setTeamStaffRule: vi.fn(),
   editTeamAccess: vi.fn(),
+  blockTeamStaff: vi.fn(),
+  unblockTeamStaff: vi.fn(),
 }));
 
 let members: TenantMemberDto[];
 let lockedOut: LockedOutMember[] = [];
 let pendingRequests: MembershipRequestDto[] = [];
 let teamAccess: TenantTeamAccess[] = [];
+let staffBlocks: TenantTeamStaffBlock[] = [];
 
 const viewer: TenantRoleDto = {
   id: "22222222-2222-2222-2222-222222222222",
@@ -72,6 +76,9 @@ vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
     };
     return query;
   },
+  getTeamStaffBlocks: () => remoteQuery(() => staffBlocks),
+  blockTeamStaff: mocks.blockTeamStaff,
+  unblockTeamStaff: mocks.unblockTeamStaff,
   stopTeamAccess: (teamId: string) => mocks.stopTeamAccess(teamId),
   approveTeamStaff: mocks.approveTeamStaff,
   declineTeamStaff: mocks.declineTeamStaff,
@@ -763,6 +770,129 @@ describe("members page listing the teams with access", () => {
   });
 });
 
+describe("members page listing the people an owner stopped", () => {
+  const ownSubjectId = "55555555-5555-5555-5555-555555555555";
+  const wrenId = "99999999-9999-9999-9999-999999999999";
+  const ownerRole = { roleId: owner.id, name: "Owner", slug: "owner", permissions: ["*"] };
+  const viewerRole = { roleId: viewer.id, name: "Viewer", slug: "viewer", permissions: ["glucose.read"] };
+  const caller = (reasons: TenantMemberDto["reasons"]): TenantMemberDto => ({
+    ...member,
+    id: "77777777-7777-7777-7777-777777777777",
+    subjectId: ownSubjectId,
+    name: "Casey",
+    roles: [ownerRole],
+    hasDirect: true,
+    reasons,
+  });
+  const wren: TenantTeamStaffBlock = {
+    subjectId: wrenId,
+    displayName: "Wren",
+    blockedAt: "2026-11-20T10:00:00Z",
+    blockedBySubjectId: ownSubjectId,
+    blockedByName: "Casey",
+  };
+  const section = () => browserPage.getByRole("list", { name: "People you stopped" });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.user = { subjectId: ownSubjectId };
+    lockedOut = [];
+    pendingRequests = [];
+    roles = [viewer, owner];
+    members = [member, caller([{ kind: MemberReasonKind.Direct, roles: [ownerRole], hasEnded: false }])];
+    staffBlocks = [wren];
+    mocks.unblockTeamStaff.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    staffBlocks = [];
+    roles = [viewer];
+  });
+
+  it("lists each person stopped, with who stopped them and when", async () => {
+    render(MembersPage);
+
+    await expect.element(browserPage.getByRole("heading", { name: "People you stopped" })).toBeVisible();
+    await expect
+      .element(
+        browserPage.getByText(
+          "These people cannot see this site through any team. Access they have through you directly does not change.",
+        ),
+      )
+      .toBeVisible();
+    await expect.element(section()).toHaveTextContent("Wren");
+    await expect.element(section()).toHaveTextContent("Stopped by Casey");
+    await expect.element(section()).toHaveTextContent("2026");
+  });
+
+  it("names a deleted member who stopped a person", async () => {
+    staffBlocks = [{ ...wren, blockedBySubjectId: undefined, blockedByName: undefined }];
+    render(MembersPage);
+
+    await expect.element(section()).toHaveTextContent("Stopped by a deleted member");
+  });
+
+  it("lets an owner let a person back in after a confirmation", async () => {
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Let Wren back in" }).click();
+    const dialog = browserPage.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Let Wren back in?");
+    await expect.element(dialog).toHaveTextContent("Wren gets back what each team gives them at this site.");
+    expect(mocks.unblockTeamStaff).not.toHaveBeenCalled();
+
+    await dialog.getByRole("button", { name: "Let back in" }).click();
+
+    await vi.waitFor(() => expect(mocks.unblockTeamStaff).toHaveBeenCalledWith(wrenId));
+    await expect.element(browserPage.getByText("This person can see this site through teams again.")).toBeVisible();
+  });
+
+  it("words a refusal to let a person back in", async () => {
+    mocks.unblockTeamStaff.mockRejectedValue({
+      status: 409,
+      body: { message: "English detail", code: "caller_access_from_team" },
+    });
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Let Wren back in" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Let back in" }).click();
+
+    await expect
+      .element(browserPage.getByRole("alert"))
+      .toHaveTextContent(
+        "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in.",
+      );
+  });
+
+  it("lists the people the site stopped with no control, and does not speak as the owner, to a member who is not an owner", async () => {
+    members = [member, caller([{ kind: MemberReasonKind.Direct, roles: [viewerRole], hasEnded: false }])];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByRole("heading", { name: "People this site stopped" })).toBeVisible();
+    const list = browserPage.getByRole("list", { name: "People this site stopped" });
+    await expect.element(list).toHaveTextContent("Wren");
+    await expect
+      .element(
+        browserPage.getByText(
+          "These people cannot see this site through any team. Access they have directly on this site does not change.",
+        ),
+      )
+      .toBeVisible();
+    expect(browserPage.getByRole("heading", { name: "People you stopped" }).elements()).toHaveLength(0);
+    expect(browserPage.getByText("through you directly", { exact: false }).elements()).toHaveLength(0);
+    expect(browserPage.getByRole("button", { name: "Let Wren back in" }).elements()).toHaveLength(0);
+  });
+
+  it("does not show the section when no one is stopped", async () => {
+    staffBlocks = [];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("heading", { name: "People you stopped" }).elements()).toHaveLength(0);
+  });
+});
+
 describe("members page deciding about a team and its staff", () => {
   const ownSubjectId = "55555555-5555-5555-5555-555555555555";
   const clinicId = "66666666-6666-6666-6666-666666666666";
@@ -778,7 +908,7 @@ describe("members page deciding about a team and its staff", () => {
     hasEnded: false,
     approvedByName: "Sam",
     givenAt: "2026-11-01T00:00:00Z",
-    teamManagesStaff: false,
+    staffRule: "owner_approves",
     staff: [{ subjectId: wrenId, displayName: "Wren", status: "pending" }],
   });
   const caller = (reasons: TenantMemberDto["reasons"]): TenantMemberDto => ({
@@ -829,9 +959,9 @@ describe("members page deciding about a team and its staff", () => {
     render(MembersPage);
 
     await expect.element(browserPage.getByRole("button", { name: "Approve Wren" })).toBeVisible();
-    await expect.element(browserPage.getByText("Waits for your approval")).toBeVisible();
+    await expect.element(browserPage.getByText("Waits for your approval", { exact: true })).toBeVisible();
     await expect.element(browserPage.getByRole("button", { name: "Change the access of Clinic" })).toBeVisible();
-    await expect.element(browserPage.getByRole("switch")).toBeVisible();
+    await expect.element(browserPage.getByRole("radio", { name: /I trust the whole team/ })).toBeVisible();
   });
 
   it("gives no control to a member who manages members but is not an owner", async () => {
@@ -841,7 +971,7 @@ describe("members page deciding about a team and its staff", () => {
     await expect.element(browserPage.getByText("Wren", { exact: true })).toBeVisible();
     expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
     expect(browserPage.getByRole("button", { name: "Change the access of Clinic" }).elements()).toHaveLength(0);
-    expect(browserPage.getByRole("switch").elements()).toHaveLength(0);
+    expect(browserPage.getByRole("radio").elements()).toHaveLength(0);
   });
 
   it("gives no control to an owner whose direct reason has ended", async () => {

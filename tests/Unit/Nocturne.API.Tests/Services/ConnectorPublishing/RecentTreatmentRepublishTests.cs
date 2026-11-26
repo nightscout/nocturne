@@ -47,7 +47,7 @@ public class RecentTreatmentRepublishTests : IDisposable
 
     public RecentTreatmentRepublishTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
         _publisher = NewPublisher();
     }

@@ -452,6 +452,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
             ["uploader.BulkUpsertAsync"] = 1,
             ["extras.FindStoredAsync"] = 1,
             ["extras.BulkCreateAsync"] = 1,
+            ["sensorStates.BulkCreateAsync"] = 1,
             ["devices.ResolveManyAsync"] = 1,
             ["devices.GetPatientDeviceLinksAsync"] = 1,
             ["spans.GetStateSpansAroundAsync"] = 2,
@@ -472,6 +473,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         var pump = new Mock<IPumpSnapshotRepository>();
         var uploader = new Mock<IUploaderSnapshotRepository>();
         var extras = new Mock<IDeviceStatusExtrasRepository>();
+        var sensorStates = new Mock<ISensorStateReportRepository>();
         var spans = new Mock<IStateSpanService>();
         var devices = new Mock<IDeviceService>();
         var loop = new Mock<ILoopClosedLoopStamper>();
@@ -488,6 +490,8 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
                 [.. candidates.Select(_ => (V4Models.DeviceStatusExtras?)null)]);
         extras.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        sensorStates.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.SensorStateReport>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.SensorStateReport> records, WriteOrigin _, CancellationToken _) => [.. records]);
         pump.Setup(x => x.GetTimelineAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         aps.Setup(x => x.GetMarksAsync(It.IsAny<IReadOnlyCollection<string?>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
@@ -508,7 +512,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         ]);
 
         var decomposer = DeviceStatusDecomposerDoubles.Build(
-            aps.Object, pump.Object, uploader.Object, extras.Object,
+            aps.Object, pump.Object, uploader.Object, extras.Object, sensorStates.Object,
             stateSpans: spans.Object, devices: devices.Object, closedLoop: loop.Object);
 
         var statuses = Enumerable.Range(0, count).Select(i => new DeviceStatus
@@ -539,7 +543,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         return new (string Name, Mock Mock)[]
             {
                 ("aps", aps), ("pump", pump), ("uploader", uploader), ("extras", extras),
-                ("spans", spans), ("devices", devices), ("loop", loop),
+                ("sensorStates", sensorStates), ("spans", spans), ("devices", devices), ("loop", loop),
             }
             .SelectMany(m => m.Mock.Invocations.Select(call => $"{m.Name}.{call.Method.Name}"))
             .GroupBy(name => name)

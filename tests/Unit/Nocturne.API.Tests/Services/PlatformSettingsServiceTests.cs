@@ -48,4 +48,29 @@ public class PlatformSettingsServiceTests
     {
         TelegramFormatErrors("").Should().BeEmpty();
     }
+
+    [Fact]
+    public void WhatsApp_takes_an_optional_alert_template_name_and_language()
+    {
+        PlatformSettingsService.GetSchemas()["whatsapp"]
+            .Where(f => f.Name is "alertTemplateName" or "alertTemplateLanguage")
+            .Should().HaveCount(2).And.OnlyContain(f => !f.Required);
+    }
+
+    [Theory]
+    [InlineData("nocturne_alert", "en", true)]
+    [InlineData("glucose_alert_2", "en_US", true)]
+    [InlineData("Nocturne Alert", "en", false)]
+    [InlineData("nocturne_alert", "English", false)]
+    [InlineData("nocturne_alert", "en-US", false)]
+    public void An_alert_template_must_be_named_as_WhatsApp_Manager_names_it(string name, string language, bool valid)
+    {
+        var errors = PlatformSettingsService.ValidateFormats("whatsapp", new Dictionary<string, string>
+        {
+            ["alertTemplateName"] = name,
+            ["alertTemplateLanguage"] = language,
+        });
+
+        errors.Should().HaveCount(valid ? 0 : 1);
+    }
 }

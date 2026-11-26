@@ -93,12 +93,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
     private NocturneDbContext Context(Guid tenant) => Context(tenant, null);
 
     private NocturneDbContext Context(Guid tenant, IInterceptor? staged) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(staged is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors: staged is null ? [] : [staged]);
 
     private sealed record Seeded(Guid Tenant, Guid CodeId, SuppliedContextFactory Contexts);
 

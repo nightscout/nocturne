@@ -32,8 +32,10 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <para>
 /// An owner's decision about the team's staff at a site is a <c>team_access</c> row too, naming the team's
 /// name under <c>name</c>. A staff member approved or declined targets that staff member, so their own
-/// history reads it. A change of the switch has no target and holds the new value under
-/// <c>team_manages_staff</c>.
+/// history reads it. A change of the rule has no target and holds the new rule under <c>staff_rule</c>;
+/// rows written before the rule had three values hold a boolean under <c>team_manages_staff</c>. An owner's
+/// stop of one person through any team, set or removed, is a <c>team_access</c> row with no team that
+/// targets that person.
 /// </para>
 /// </remarks>
 internal static class TeamAudit
@@ -52,6 +54,9 @@ internal static class TeamAudit
     internal const string EndsAtKey = "ends_at";
     internal const string StoppedHow = "stopped";
     internal const string TeamDeletedHow = "team_deleted";
+    internal const string StaffRuleKey = "staff_rule";
+
+    /// <summary>The key of the rule's rows written before it had three values: true for <see cref="TeamStaffRule.TeamDecides"/>, false for <see cref="TeamStaffRule.OwnerApproves"/>.</summary>
     internal const string TeamManagesStaffKey = "team_manages_staff";
 
     public static void StageCreated(NocturneDbContext db, Guid teamId, string name) =>
@@ -154,7 +159,17 @@ internal static class TeamAudit
         {
             [AuthAuditKind.Key] = AuthAuditKind.TeamAccess,
             [NameKey] = teamName,
-            [TeamManagesStaffKey] = access.TeamManagesStaff,
+            [StaffRuleKey] = access.StaffRule,
+        });
+
+    /// <summary>
+    /// Stages an owner's stop of <paramref name="subjectId"/> at <paramref name="tenantId"/> through any team,
+    /// set or removed: <see cref="AuthAuditEventType.TeamStaffBlocked"/> or <see cref="AuthAuditEventType.TeamStaffUnblocked"/>.
+    /// </summary>
+    public static void StageStaffBlock(NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId) =>
+        AuthAuditRows.Stage(db, eventType, tenantId, teamId: null, subjectId, new Dictionary<string, object?>
+        {
+            [AuthAuditKind.Key] = AuthAuditKind.TeamAccess,
         });
 
     private static string HistoryLimit(TeamStaffNarrowing narrowing) =>

@@ -89,4 +89,229 @@ public class ObservationWindowTests
         where.Should().Contain("s.start_timestamp >= @from_Value AND s.start_timestamp <= @to_Value");
         where.Should().NotContain(From.Year.ToString());
     }
+
+    [Fact]
+    public void InHalfOpenWindow_IncludesTheLowerBoundAndExcludesTheUpper()
+    {
+        RowsAtEach().InHalfOpenWindow(r => r.Timestamp, From, To).Select(r => r.Timestamp)
+            .Should().Equal(From, From.AddMinutes(30));
+        RowsAtEach().InHalfOpenWindow(r => r.Timestamp, From, null).Should().HaveCount(4);
+        RowsAtEach().InHalfOpenWindow(r => r.Timestamp, null, To).Should().HaveCount(3);
+        RowsAtEach().InHalfOpenWindow(r => r.Timestamp, null, null).Should().HaveCount(Instants.Length);
+    }
+
+    [Fact]
+    public void InHalfOpenWindow_SendsTheSameStatementForEveryWindowWithTheBoundsAsParameters()
+    {
+        using var db = OfflineDbContext.Create();
+
+        var first = db.StateSpans.InHalfOpenWindow(s => s.StartTimestamp, From, To).ToQueryString();
+        var second = db.StateSpans.InHalfOpenWindow(s => s.StartTimestamp, From.AddDays(3), To.AddDays(9)).ToQueryString();
+
+        Statement(first).Should().Contain("s.start_timestamp >= @from_Value AND s.start_timestamp < @to_Value");
+        Statement(first).Should().Be(Statement(second));
+        Statement(first).Should().NotContain(From.Year.ToString());
+    }
+
+    private sealed class Span
+    {
+        public string Name { get; init; } = "";
+        public DateTime Start { get; init; }
+        public DateTime? End { get; init; }
+        public DateTime Ended => End ?? DateTime.MaxValue;
+    }
+
+    private static Span Ended(string name, DateTime start, DateTime end) => new() { Name = name, Start = start, End = end };
+
+    private static Span Open(string name, DateTime start) => new() { Name = name, Start = start };
+
+    private static readonly Span[] Spans =
+    [
+        Ended("ended-before", From.AddHours(-2), From.AddMilliseconds(-1)),
+        Ended("ends-at-from", From.AddHours(-2), From),
+        Ended("inside", From.AddMinutes(10), From.AddMinutes(20)),
+        Ended("starts-at-to", To, To.AddHours(1)),
+        Ended("starts-after", To.AddMilliseconds(1), To.AddHours(1)),
+        Open("open-before", From.AddHours(-3)),
+        Open("open-inside", From.AddMinutes(5)),
+        Open("open-after", To.AddHours(1)),
+    ];
+
+    private static IQueryable<Span> AllSpans() => Spans.AsQueryable();
+
+    private static string[] Named(IQueryable<Span> spans) => [.. spans.Select(s => s.Name)];
+
+    [Fact]
+    public void OverlapsWindow_ByDefault_ReadsASpanTouchingEitherBoundAndAnOpenSpanThatStartedByTheWindowsEnd()
+    {
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, From, To)).Should().Equal(
+            "ends-at-from", "inside", "starts-at-to", "open-before", "open-inside");
+    }
+
+    [Fact]
+    public void OverlapsWindow_StartAtToExcluded_DropsASpanStartingAtTheWindowsEnd()
+    {
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, From, To, OverlapEdges.StartAtToExcluded)).Should().Equal(
+            "ends-at-from", "inside", "open-before", "open-inside");
+    }
+
+    [Fact]
+    public void OverlapsWindow_EndAtFromExcluded_DropsASpanEndingAtTheWindowsStart()
+    {
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, From, To, OverlapEdges.EndAtFromExcluded)).Should().Equal(
+            "inside", "starts-at-to", "open-before", "open-inside");
+    }
+
+    [Fact]
+    public void OverlapsWindow_AlwaysReadingOpenSpans_KeepsAnOpenSpanThatStartedAfterTheWindow()
+    {
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, From, To, open: OpenSpanRule.AlwaysRead)).Should().Equal(
+            "ends-at-from", "inside", "starts-at-to", "open-before", "open-inside", "open-after");
+    }
+
+    [Fact]
+    public void OverlapsWindow_ReadingOpenSpansOnlyWhenStartedInTheWindow_DropsAnOpenSpanThatStartedBeforeIt()
+    {
+        Named(AllSpans().OverlapsWindow(
+                s => s.Start, s => s.End, From, null, open: OpenSpanRule.OnlyWhenStartedInWindow))
+            .Should().Equal("ends-at-from", "inside", "starts-at-to", "starts-after", "open-inside", "open-after");
+    }
+
+    [Fact]
+    public void OverlapsWindow_WithAnUpperBoundToo_ReadingOpenSpansOnlyWhenStartedInTheWindowStillStopsAtTheUpperBound()
+    {
+        Named(AllSpans().OverlapsWindow(
+                s => s.Start, s => s.End, From, To, open: OpenSpanRule.OnlyWhenStartedInWindow))
+            .Should().Equal("ends-at-from", "inside", "starts-at-to", "open-inside");
+    }
+
+    [Fact]
+    public void OverlapsWindow_WithOneBoundOrNone_AppliesOnlyThatBound()
+    {
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, From, null)).Should().Equal(
+            "ends-at-from", "inside", "starts-at-to", "starts-after", "open-before", "open-inside", "open-after");
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, null, To)).Should().Equal(
+            "ended-before", "ends-at-from", "inside", "starts-at-to", "open-before", "open-inside");
+        AllSpans().OverlapsWindow(s => s.Start, s => s.End, null, null).Should().HaveCount(Spans.Length);
+        AllSpans().OverlapsWindow(s => s.Start, s => s.End, null, null, open: OpenSpanRule.AlwaysRead)
+            .Should().HaveCount(Spans.Length);
+    }
+
+    [Fact]
+    public void OverlapsWindow_ForASpanThatCannotBeOpen_ReadsByTheSameBounds()
+    {
+        var ended = Spans.Where(s => s.End is not null).AsQueryable();
+
+        Named(ended.OverlapsWindow(s => s.Start, s => s.Ended, From, To)).Should().Equal(
+            "ends-at-from", "inside", "starts-at-to");
+        Named(ended.OverlapsWindow(s => s.Start, s => s.Ended, From, To, OverlapEdges.BothExcluded))
+            .Should().Equal("inside");
+    }
+
+    [Fact]
+    public void OverlapsWindow_IsTranslatedToTheSameStatementForEveryWindowWithTheBoundsAsParameters()
+    {
+        using var db = OfflineDbContext.Create();
+
+        string Sql(DateTime from, DateTime to, OverlapEdges edges, OpenSpanRule open) =>
+            db.StateSpans.OverlapsWindow(s => s.StartTimestamp, s => s.EndTimestamp, from, to, edges, open).ToQueryString();
+
+        foreach (var open in Enum.GetValues<OpenSpanRule>())
+        {
+            var first = Sql(From, To, OverlapEdges.StartAtToExcluded, open);
+            var second = Sql(From.AddDays(3), To.AddDays(9), OverlapEdges.StartAtToExcluded, open);
+
+            Statement(first).Should().Be(Statement(second));
+            Statement(first).Should().NotContain(From.Year.ToString());
+            Statement(first).Should().Contain("@from_Value").And.Contain("@to_Value");
+        }
+
+        db.CompressionLowSuggestions.OverlapsWindow(s => s.StartMills, s => s.EndMills, 10L, 20L, OverlapEdges.StartAtToExcluded)
+            .ToQueryString().Should().Contain("start_mills < @to_Value").And.Contain("end_mills >= @from_Value");
+    }
+
+    [Fact]
+    public void OverlapEdges_BothExcluded_IsEachExclusionTogether()
+    {
+        OverlapEdges.BothExcluded.Should().Be(OverlapEdges.StartAtToExcluded | OverlapEdges.EndAtFromExcluded);
+        Named(AllSpans().OverlapsWindow(s => s.Start, s => s.End, From, To, OverlapEdges.BothExcluded))
+            .Should().Equal("inside", "open-before", "open-inside");
+    }
+
+    private static readonly Span[] AtTheInstant =
+    [
+        Ended("starts-after", From.AddMilliseconds(1), From.AddHours(1)),
+        Ended("starts-at", From, From.AddHours(1)),
+        Ended("ended-before", From.AddHours(-1), From.AddMilliseconds(-1)),
+        Ended("ends-at", From.AddHours(-1), From),
+        Ended("ends-after", From.AddHours(-1), From.AddMilliseconds(1)),
+        Open("open-before", From.AddHours(-1)),
+        Open("open-at", From),
+        Open("open-after", From.AddMilliseconds(1)),
+    ];
+
+    [Fact]
+    public void ActiveAt_ByDefault_ReadsASpanOnStartInclusiveEndExclusive()
+    {
+        Named(AtTheInstant.AsQueryable().ActiveAt(s => s.Start, s => s.End, From)).Should().Equal(
+            "starts-at", "ends-after", "open-before", "open-at");
+    }
+
+    [Fact]
+    public void ActiveAt_ByDefault_DoesNotReadASpanEndingExactlyAtTheInstant()
+    {
+        Named(AtTheInstant.AsQueryable().ActiveAt(s => s.Start, s => s.End, From)).Should().NotContain("ends-at");
+    }
+
+    [Fact]
+    public void ActiveAt_WithAnInclusiveEnd_ReadsASpanEndingExactlyAtTheInstant()
+    {
+        Named(AtTheInstant.AsQueryable().ActiveAt(s => s.Start, s => s.End, From, ActiveEnd.Inclusive)).Should().Equal(
+            "starts-at", "ends-at", "ends-after", "open-before", "open-at");
+    }
+
+    [Fact]
+    public void ActiveAt_IsTranslatedToTheSameStatementForEveryInstantWithTheInstantAsAParameter()
+    {
+        using var db = OfflineDbContext.Create();
+
+        foreach (var endAt in Enum.GetValues<ActiveEnd>())
+        {
+            var first = db.StateSpans.ActiveAt(s => s.StartTimestamp, s => s.EndTimestamp, From, endAt).ToQueryString();
+            var second = db.StateSpans.ActiveAt(s => s.StartTimestamp, s => s.EndTimestamp, From.AddDays(9), endAt).ToQueryString();
+
+            Statement(first).Should().Be(Statement(second));
+            Statement(first).Should().NotContain(From.Year.ToString());
+            Statement(first).Should().Contain("s.start_timestamp <= @at").And.Contain("s.end_timestamp IS NULL");
+            Statement(first).Should().Contain(endAt == ActiveEnd.Inclusive ? "s.end_timestamp >= @at" : "s.end_timestamp > @at");
+        }
+    }
+
+    [Fact]
+    public void NotEndedBy_ReadsAnOpenSpanAndASpanEndingAfterTheInstantButNotOneEndingAtIt()
+    {
+        Named(AtTheInstant.AsQueryable().NotEndedBy(s => s.End, From)).Should().Equal(
+            "starts-after", "starts-at", "ends-after", "open-before", "open-at", "open-after");
+    }
+
+    [Fact]
+    public void NotEndedBy_DoesNotReadASpanEndingExactlyAtTheInstant()
+    {
+        Named(AtTheInstant.AsQueryable().NotEndedBy(s => s.End, From)).Should().NotContain("ends-at");
+    }
+
+    [Fact]
+    public void NotEndedBy_IsTranslatedToTheSameStatementForEveryInstantWithTheInstantAsAParameter()
+    {
+        using var db = OfflineDbContext.Create();
+
+        var first = db.StateSpans.NotEndedBy(s => s.EndTimestamp, From).ToQueryString();
+        var second = db.StateSpans.NotEndedBy(s => s.EndTimestamp, From.AddDays(9)).ToQueryString();
+
+        Statement(first).Should().Be(Statement(second));
+        Statement(first).Should().NotContain(From.Year.ToString());
+        Statement(first).Should().Contain("s.end_timestamp IS NULL OR s.end_timestamp > @at");
+    }
+
+    private static string Statement(string sql) => sql[sql.IndexOf("SELECT", StringComparison.Ordinal)..];
 }

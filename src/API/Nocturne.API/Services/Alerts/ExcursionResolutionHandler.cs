@@ -26,6 +26,25 @@ namespace Nocturne.API.Services.Alerts;
 public interface IExcursionResolutionHandler
 {
     Task HandleClosedAsync(ExcursionTransition transition, Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Runs the close of <paramref name="excursionId"/> once more when the excursion has ended or the
+    /// notice was resolved, for what a send raised after the close ran. Every send ends with it: an opening's
+    /// (<see cref="IExcursionOpenedHandler"/>), a snooze's re-notification
+    /// (<see cref="IAlertSnoozeService.ResumeAsync"/>) and a notice's dispatch
+    /// (<see cref="RuleNoticeDispatch"/>). No lock orders a send against a close: the instance lock
+    /// orders only the opening's instance, so a close that lands while a send runs finds only what
+    /// existed before it. The close is owed again first
+    /// (<see cref="IAlertRepository.OweCloseIfEndedAsync"/>), so a run that dies is finished by the
+    /// sweep. False, with nothing run, while the excursion is open or the notice stands.
+    /// </summary>
+    /// <remarks>
+    /// A notice counts as resolved only once its resolution has resolved its instance, the step that
+    /// writes the reason, so this never resolves it first and without one. A resolution that dies
+    /// between ending the notice and that step leaves the notice standing, and its check resolves it
+    /// again with its reason.
+    /// </remarks>
+    Task<bool> CloseAgainIfEndedAsync(Guid excursionId, Guid tenantId, CancellationToken ct);
 }
 
 internal sealed class ExcursionResolutionHandler(
@@ -37,6 +56,18 @@ internal sealed class ExcursionResolutionHandler(
     ILogger<ExcursionResolutionHandler> logger)
     : IExcursionResolutionHandler
 {
+    public async Task<bool> CloseAgainIfEndedAsync(Guid excursionId, Guid tenantId, CancellationToken ct)
+    {
+        if (!await repository.OweCloseIfEndedAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct))
+            return false;
+
+        logger.LogInformation(
+            "Excursion {ExcursionId} has ended; its close runs again for what was sent while it closed", excursionId);
+        await HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId), tenantId, ct);
+        return true;
+    }
+
     public async Task HandleClosedAsync(ExcursionTransition transition, Guid tenantId, CancellationToken ct)
     {
         if (transition.Type != ExcursionTransitionType.ExcursionClosed) return;

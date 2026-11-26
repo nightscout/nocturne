@@ -40,8 +40,7 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         using (var provision = CreateAuthenticatedClient())
             (await provision.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantAId = await AuthTestHelpers.GetTenantIdAsync(conn);
         await using (var cmd = conn.CreateCommand())
@@ -200,9 +199,8 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         var saved = await ReadAsync(await owner.PostAsJsonAsync(Route, new { name = "Two weeks", spec = Spec() }), HttpStatusCode.OK);
 
         Guid subject;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, "Reports Clamped");
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
@@ -233,18 +231,12 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         unclamped.GetProperty("result").GetProperty("panels")[1].GetProperty("rows")[0].GetProperty("readings").GetInt32().Should().Be(2);
 
         // A report the clamped member made before the clamp: its creator may not replace what every member's copy reads.
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE report_specs SET created_by_subject_id = @subject WHERE id = @id;
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantAId.ToString());
-            cmd.Parameters.AddWithValue("subject", subject);
-            cmd.Parameters.AddWithValue("id", saved.GetProperty("id").GetGuid());
-            await cmd.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(_tenantAId);
+            await conn.ExecuteAsync(
+                "UPDATE report_specs SET created_by_subject_id = @subject WHERE id = @id;",
+                ("subject", subject), ("id", saved.GetProperty("id").GetGuid()));
         }
         var own = await ReadAsync(await clamped.GetAsync($"{Route}/{saved.GetProperty("id").GetGuid()}"), HttpStatusCode.OK);
         own.GetProperty("canEdit").GetBoolean().Should().BeTrue("the clamped member made it");
@@ -258,19 +250,15 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     public async Task A_stored_spec_of_an_older_version_opens_with_the_validators_message()
     {
         var id = Guid.CreateVersion7();
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
+            await conn.PinTenantAsync(_tenantAId);
+            await conn.ExecuteAsync(
+                """
                 INSERT INTO report_specs (id, tenant_id, name, spec, version, created_at, updated_at)
                 VALUES (@id, @tenantId, 'Old', '{"version":0,"panels":[{"kind":"table","dataset":{"name":"glucose_series"}}]}'::jsonb, 0, now(), now());
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantAId.ToString());
-            cmd.Parameters.AddWithValue("id", id);
-            cmd.Parameters.AddWithValue("tenantId", _tenantAId);
-            await cmd.ExecuteNonQueryAsync();
+                """,
+                ("id", id), ("tenantId", _tenantAId));
         }
 
         using var a = Session(_slugA, _sessionA);
@@ -341,14 +329,8 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         }), HttpStatusCode.OK);
         (await a.DeleteAsync($"{Route}/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using (var tenant = conn.CreateCommand())
-        {
-            tenant.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            tenant.Parameters.AddWithValue("tenantId", _tenantAId.ToString());
-            await tenant.ExecuteNonQueryAsync();
-        }
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(_tenantAId);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT action, changes::text FROM mutation_audit_log WHERE entity_id = @id ORDER BY created_at";
         cmd.Parameters.AddWithValue("id", id);
@@ -441,20 +423,11 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
                 "the run's read audit row",
                 async () =>
                 {
-                    var found = new List<string>();
-                    await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-                    await conn.OpenAsync();
-                    await using var cmd = conn.CreateCommand();
-                    cmd.CommandText = """
-                        SELECT set_config('app.current_tenant_id', @t, false);
-                        SELECT endpoint FROM read_access_log WHERE endpoint LIKE '%/reports/custom%' AND created_at >= @since;
-                        """;
-                    cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
-                    cmd.Parameters.AddWithValue("since", since);
-                    await using var reader = await cmd.ExecuteReaderAsync();
-                    await reader.NextResultAsync();
-                    while (await reader.ReadAsync())
-                        found.Add(reader.GetString(0));
+                    await using var conn = await OpenPostgresAsync();
+                    await conn.PinTenantAsync(_tenantAId);
+                    var found = await conn.QueryAsync(
+                        "SELECT endpoint FROM read_access_log WHERE endpoint LIKE '%/reports/custom%' AND created_at >= @since;",
+                        reader => reader.GetString(0), ("since", since));
                     return found.Count > 0 ? found : null;
                 },
                 step: TimeSpan.FromMilliseconds(250));
@@ -503,13 +476,13 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     private async Task<List<(string Endpoint, int Status, string? Entities)>> ReadRunAuditRowsAsync(DateTime since)
     {
         await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(_tenantAId);
         return await conn.QueryAsync("""
-            SELECT set_config('app.current_tenant_id', @t, false);
             SELECT endpoint, status_code, entity_type FROM read_access_log
             WHERE endpoint LIKE 'POST /api/v4/reports/custom/run%' AND created_at >= @since;
             """,
             reader => (Endpoint: reader.GetString(0), Status: reader.GetInt32(1), Entities: reader.IsDBNull(2) ? null : reader.GetString(2)),
-            ("t", _tenantAId.ToString()), ("since", since));
+            ("since", since));
     }
 
     [Fact]
@@ -710,8 +683,7 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
 
     private async Task<(Guid Subject, string Session)> SeedViewerAsync(string name)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, name);
         await conn.ExecuteAsync("""
             DELETE FROM subject_roles WHERE subject_id = @subject;
@@ -751,19 +723,16 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task The_101st_report_is_refused_with_a_message()
     {
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
+            await conn.PinTenantAsync(_tenantAId);
+            await conn.ExecuteAsync(
+                """
                 INSERT INTO report_specs (id, tenant_id, name, spec, version, created_at, updated_at)
                 SELECT gen_random_uuid(), @tenantId, 'Seeded ' || n, '{"version":1,"panels":[]}'::jsonb, 1, now(), now()
                 FROM generate_series(1, 100) AS n;
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantAId.ToString());
-            cmd.Parameters.AddWithValue("tenantId", _tenantAId);
-            await cmd.ExecuteNonQueryAsync();
+                """,
+                ("tenantId", _tenantAId));
         }
 
         using var a = Session(_slugA, _sessionA);

@@ -33,9 +33,9 @@ public class SensorGlucoseStreamPredecessorPlanTests(RlsCompletenessFixture fx)
         await SeedLinksAsync(tenant);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
 
-        var capture = new PlanTestSupport.LastReaderCapture();
+        var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
             .AddInterceptors(capture)
@@ -53,7 +53,7 @@ public class SensorGlucoseStreamPredecessorPlanTests(RlsCompletenessFixture fx)
         };
         (await repository.GetStreamPredecessorAsync(reading, at.AddMinutes(-15))).Should().NotBeNull();
 
-        var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);
+        var plan = await QueryPlans.ExplainAsync(conn, capture.Command!);
         plan.Descendants("Node Type").Should().NotContain("Seq Scan", plan.ToString());
         plan.Descendants("Index Name").Should().Contain("ix_sensor_glucose_tenant_timestamp", plan.ToString());
     }
@@ -69,7 +69,7 @@ public class SensorGlucoseStreamPredecessorPlanTests(RlsCompletenessFixture fx)
     private async Task SeedLinksAsync(Guid tenant)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """

@@ -136,13 +136,17 @@ internal sealed class TeamTenantAccessEntityConfiguration : IEntityTypeConfigura
             .HasForeignKey(r => r.TeamTenantAccessId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        entity.Property(e => e.TeamManagesStaff)
-            .HasDefaultValue(true)
+        entity.Property(e => e.StaffRule)
+            .HasDefaultValue(TeamStaffRule.TeamDecides)
             .ValueGeneratedNever();
 
         entity.HasIndex(e => new { e.TeamId, e.TenantId }).IsUnique();
 
         entity.HasIndex(e => e.TenantId);
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_team_tenant_access_staff_rule",
+            $"staff_rule IN ('{TeamStaffRule.OwnerApproves}', '{TeamStaffRule.TeamDecides}', '{TeamStaffRule.TeamTrusted}')"));
     }
 }
 
@@ -202,5 +206,32 @@ internal sealed class TeamSiteDeclineEntityConfiguration : IEntityTypeConfigurat
         entity.HasIndex(e => new { e.TeamTenantAccessId, e.SubjectId }).IsUnique();
 
         entity.HasIndex(e => e.SubjectId);
+    }
+}
+
+internal sealed class TeamSiteBlockEntityConfiguration : IEntityTypeConfiguration<TeamSiteBlockEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamSiteBlockEntity> entity)
+    {
+        entity.HasOne(e => e.Tenant)
+            .WithMany()
+            .HasForeignKey(e => e.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.Subject)
+            .WithMany(s => s.TeamSiteBlocks)
+            .HasForeignKey(e => e.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.CreatedBy)
+            .WithMany()
+            .HasForeignKey(e => e.CreatedBySubjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity.HasIndex(e => new { e.TenantId, e.SubjectId }).IsUnique();
+
+        entity.HasIndex(e => e.SubjectId);
+
+        entity.HasIndex(e => e.CreatedBySubjectId);
     }
 }

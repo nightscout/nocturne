@@ -2,6 +2,7 @@ import type { Chat } from "chat";
 import { getUnscopedApi } from "../lib/request-context.js";
 import { requireLink } from "../lib/require-link.js";
 import { createLogger } from "../lib/logger.js";
+import { settled } from "../lib/settled.js";
 import { slashCommandHandle } from "../lib/platform-handle.js";
 
 const logger = createLogger();
@@ -9,7 +10,7 @@ const logger = createLogger();
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?$/;
 
 export function registerAccountCommands(bot: Chat, baseDomain: string) {
-  bot.onSlashCommand("/connect", async (event) => {
+  bot.onSlashCommand("/connect", settled("/connect", async (event) => {
     const slugArg = event.text?.trim().toLowerCase() || null;
 
     if (slugArg && !SLUG_RE.test(slugArg)) {
@@ -40,10 +41,19 @@ export function registerAccountCommands(bot: Chat, baseDomain: string) {
         ? `To connect your Nocturne account on **${slugArg}**, click here: ${link}\n\nThis link expires in 10 minutes.`
         : `To connect your Nocturne account, click here: ${link}\n\nThis link expires in 10 minutes. If your instance hosts multiple tenants, run \`/connect <your-slug>\` instead.`;
 
-      try {
-        await event.channel.postEphemeral(event.user, message, { fallbackToDM: true });
-      } catch {
-        await event.channel.post(message);
+      // Whoever opens the link binds this chat account to their Nocturne account, so it goes to
+      // the user alone, never to a channel others can read. Telegram has no ephemeral messages and
+      // refuses a direct message to a user who has not started a private chat with the bot.
+      const sent = await event.channel
+        .postEphemeral(event.user, message, { fallbackToDM: true })
+        .catch((err: unknown) => {
+          logger.warn("Could not send the /connect link privately:", err);
+          return null;
+        });
+      if (!sent) {
+        await event.channel.post(
+          "I could not send you the link privately. Send `/connect` to me in a direct message.",
+        );
       }
     } catch (err) {
       logger.error("Error handling /connect command:", err);
@@ -53,9 +63,9 @@ export function registerAccountCommands(bot: Chat, baseDomain: string) {
         { fallbackToDM: true },
       );
     }
-  });
+  }));
 
-  bot.onSlashCommand("/disconnect", async (event) => {
+  bot.onSlashCommand("/disconnect", settled("/disconnect", async (event) => {
     await requireLink(event, async (link) => {
       try {
         const api = getUnscopedApi();
@@ -78,9 +88,9 @@ export function registerAccountCommands(bot: Chat, baseDomain: string) {
         );
       }
     });
-  });
+  }));
 
-  bot.onSlashCommand("/status", async (event) => {
+  bot.onSlashCommand("/status", settled("/status", async (event) => {
     await requireLink(event, async (link) => {
       const defaultBadge = "";
       await event.channel.postEphemeral(
@@ -89,5 +99,5 @@ export function registerAccountCommands(bot: Chat, baseDomain: string) {
         { fallbackToDM: true },
       );
     });
-  });
+  }));
 }

@@ -8,9 +8,7 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::check_timestamp;
-use nocturne_alerts_core::excursion::{
-    CloseReason, ExcursionTracker, TrackerRuleConfig, Transition,
-};
+use nocturne_alerts_core::excursion::{CloseReason, ExcursionTracker, Transition};
 
 use crate::envelope::{WireTracker, ok, read_request, tracker_json};
 
@@ -19,26 +17,11 @@ use crate::envelope::{WireTracker, ok, read_request, tracker_json};
 const RULE: Uuid = Uuid::nil();
 
 #[derive(Deserialize)]
-struct WireConfig {
-    #[serde(default)]
-    hysteresis_minutes: i32,
-}
-
-impl From<&WireConfig> for TrackerRuleConfig {
-    fn from(c: &WireConfig) -> Self {
-        TrackerRuleConfig {
-            hysteresis_minutes: c.hysteresis_minutes,
-        }
-    }
-}
-
-#[derive(Deserialize)]
 struct ProcessRequest {
     schema_version: i64,
     /// Absent or null: never evaluated.
     #[serde(default)]
     tracker: Option<WireTracker>,
-    config: WireConfig,
     condition_met: bool,
     /// The auto-resolve tree this evaluation; read only while awaiting
     /// re-arm, and absent is false.
@@ -61,7 +44,6 @@ struct CloseElapsedRequest {
     schema_version: i64,
     #[serde(default)]
     tracker: Option<WireTracker>,
-    config: WireConfig,
     now: DateTime<Utc>,
 }
 
@@ -101,13 +83,8 @@ fn transition_json(t: Transition) -> Value {
 pub(crate) fn process(request_json: &str) -> Result<Value, String> {
     let req: ProcessRequest = read_request(request_json, |r: &ProcessRequest| r.schema_version)?;
     let mut tracker = restore(req.tracker.as_ref(), req.now)?;
-    let transition = tracker.process_evaluation(
-        RULE,
-        (&req.config).into(),
-        req.condition_met,
-        req.auto_resolve_met,
-        req.now,
-    );
+    let transition =
+        tracker.process_evaluation(RULE, req.condition_met, req.auto_resolve_met, req.now);
     Ok(respond(transition, &tracker))
 }
 
@@ -127,6 +104,6 @@ pub(crate) fn close_elapsed_hysteresis(request_json: &str) -> Result<Value, Stri
     let req: CloseElapsedRequest =
         read_request(request_json, |r: &CloseElapsedRequest| r.schema_version)?;
     let mut tracker = restore(req.tracker.as_ref(), req.now)?;
-    let transition = tracker.close_elapsed_hysteresis(RULE, (&req.config).into(), req.now);
+    let transition = tracker.close_elapsed_hysteresis(RULE, req.now);
     Ok(respond(transition, &tracker))
 }

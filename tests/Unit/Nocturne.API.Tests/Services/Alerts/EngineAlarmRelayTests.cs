@@ -220,6 +220,19 @@ public class EngineAlarmRelayTests
     }
 
     [Fact]
+    public async Task A_rule_holding_a_severity_no_member_has_sounds_and_ranks_as_critical()
+    {
+        await _tenant.SeedAsync(AlertRuleSeverity.Critical, "Urgent low", triggeredAt: AlarmTestTenant.Now.AddMinutes(-40));
+        var unreadable = await _tenant.SeedAsync((AlertRuleSeverity)(-1), "Legacy low", triggeredAt: AlarmTestTenant.Now.AddMinutes(-10));
+        _tenant.LatestReading(mgdl: 50);
+
+        var alarm = await _tenant.Relay().HighestAlarmingAsync(CancellationToken.None);
+
+        alarm!.EventName.Should().Be(EngineAlarmEvents.UrgentAlarm);
+        alarm.Notify.Group.Should().Be(unreadable.ExcursionId.ToString(), "both read as critical, so the newer one leads");
+    }
+
+    [Fact]
     public async Task A_new_subscriber_costs_no_read_for_a_trend_the_alarm_does_not_show()
     {
         await _tenant.SeedAsync(AlertRuleSeverity.Critical);

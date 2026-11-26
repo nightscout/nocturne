@@ -5,6 +5,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -231,8 +232,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     private async Task<string> SeedMemberInviteAsync(NpgsqlConnection conn, Guid tenantId)
     {
         var token = $"invite-{Guid.NewGuid():N}";
-        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenantText, false);",
-            ("tenantText", tenantId.ToString()));
+        await conn.PinTenantAsync(tenantId);
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Viewer);
         await conn.ExecuteAsync("""
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)

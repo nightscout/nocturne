@@ -99,7 +99,8 @@ public sealed class AlertChannelStates
     {
         switch (ChannelDestinations.ModeOf(channel.ChannelType))
         {
-            case ChannelDestinationMode.Member or ChannelDestinationMode.LinkedIdentity when _receivers is null:
+            case ChannelDestinationMode.Member or ChannelDestinationMode.LinkedIdentity
+                when _receivers is null && !ChannelDestinations.IsTypedIn(channel.ChannelType, channel.RecipientSubjectId):
                 return new(AlertChannelState.NoRecipient, null,
                     "Not sent: the members of this site could not be read");
 
@@ -114,22 +115,30 @@ public sealed class AlertChannelStates
             case ChannelDestinationMode.LinkedIdentity:
                 var platform = ChannelDestinations.PlatformOf(channel.ChannelType)!;
                 var account = AlertRuleChannelWriter.PlatformDisplayName(platform);
-                if (!_links.TryGetValue((platform, channel.Destination), out var linked))
-                    return new(AlertChannelState.NoRecipient, channel.RecipientSubjectId,
-                        $"No recipient: no member of this site has linked this {account} account");
+                if (!_links.TryGetValue((platform, ChannelDestinations.LinkKey(channel.ChannelType, channel.Destination)), out var linked))
+                    return ChannelDestinations.IsTypedIn(channel.ChannelType, channel.RecipientSubjectId)
+                        ? TypedIn(channel)
+                        : new(AlertChannelState.NoRecipient, channel.RecipientSubjectId,
+                            $"No recipient: no member of this site has linked this {account} account");
                 return _receivers!.Contains(linked)
                     ? new(AlertChannelState.Active, linked, null)
                     : new(AlertChannelState.NoRecipient, linked,
                         $"No recipient: the member linked to this {account} account is not a member of this site who holds any access");
 
-            case ChannelDestinationMode.UserSupplied when MembershipLiveness.HasEnded(channel.StopsAt, _now):
-                return new(AlertChannelState.Stopped, null,
-                    $"Stopped at {channel.StopsAt:O}: the access of the member who added this channel has ended");
+            case ChannelDestinationMode.UserSupplied:
+                return TypedIn(channel);
 
             default:
                 return new(AlertChannelState.Active, null, null);
         }
     }
+
+    private AlertChannelVerdict TypedIn(AlertRuleChannelSnapshot channel) =>
+        MembershipLiveness.HasEnded(channel.StopsAt, _now)
+            ? new(AlertChannelState.Stopped, null,
+                $"Stopped at {channel.StopsAt:O}: the access of the member who added this channel has ended")
+                { TypedIn = true }
+            : new(AlertChannelState.Active, null, null) { TypedIn = true };
 }
 
 /// <summary>
@@ -141,4 +150,10 @@ public sealed class AlertChannelStates
 public sealed record AlertChannelVerdict(AlertChannelState State, Guid? MemberSubjectId, string? Reason)
 {
     public bool IsActive => State == AlertChannelState.Active;
+
+    /// <summary>
+    /// Whether the channel was judged as typed in, by who added it and when that stops. A typed
+    /// WhatsApp number that a member has since linked is judged by the link, and this is false.
+    /// </summary>
+    public bool TypedIn { get; init; }
 }

@@ -76,10 +76,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
 
     private NocturneDbContext Context(Guid tenant, Guid? actor)
     {
-        var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
+        var context = TestContexts.Context(database.AppConnectionString)
             .ActingAs(actor is { } subject ? new TestAuditActor { SubjectId = subject } : null);
         context.TenantId = tenant;
         return context;
@@ -387,7 +384,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         await TenantService(Contexts(s.Tenant)).AddMemberAsync(s.Tenant, s.Person, [s.CaretakerRole]);
         await TenantService(Contexts(other.Tenant)).AddMemberAsync(other.Tenant, s.Person, []);
 
-        (await new SubjectRepository(Contexts(s.Tenant, s.Manager), AccountLinkRoutes.Off).DeleteAsync(s.Person, Ct))
+        (await SubjectDeletions.DeleteAsync(Contexts(s.Tenant, s.Manager), AccountLinkRoutes.Off, s.Person, Ct))
             .Should().BeOfType<SubjectChange.Changed>();
 
         foreach (var tenant in new[] { s.Tenant, other.Tenant })
@@ -412,22 +409,10 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
     {
         var s = await SeedAsync("deleted-owner");
 
-        (await new SubjectRepository(Contexts(s.Tenant, s.Manager), AccountLinkRoutes.Off).DeleteAsync(s.Manager, Ct))
+        (await SubjectDeletions.DeleteAsync(Contexts(s.Tenant, s.Manager), AccountLinkRoutes.Off, s.Manager, Ct))
             .Should().BeOfType<SubjectChange.LastOwnerOf>();
 
         (await RowsAsync(s.Tenant, s.Manager)).Should().NotContain(r => r.EventType == AuthAuditEventType.MemberRemoved);
-    }
-
-    [Fact]
-    public async Task TheDemoResetRemovesAsTheSystem()
-    {
-        var s = await SeedAsync("demo");
-        await TenantService(Contexts(s.Tenant)).AddMemberAsync(s.Tenant, s.Person, [s.CaretakerRole]);
-
-        await new TenantMembershipRepository(Contexts(Guid.Empty), AccountLinkRoutes.Off).RemoveMembershipsOfSubjectAsync(s.Person, Ct);
-
-        (await RowsAsync(s.Tenant, s.Person))[^1].Should().Match<Row>(r =>
-            r.EventType == AuthAuditEventType.MemberRemoved && r.How == "system" && r.Credential == "system");
     }
 
     [Fact]
@@ -497,7 +482,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         await TenantService(Contexts(s.Tenant)).AddMemberAsync(s.Tenant, s.Person, [s.CaretakerRole]);
         var team = await new TeamRepository(Contexts(s.Tenant)).CreateAsync(s.Person, "Night shift", Ct);
 
-        (await new SubjectRepository(Contexts(s.Tenant, s.Person), AccountLinkRoutes.Off).DeleteAsync(s.Person, Ct))
+        (await SubjectDeletions.DeleteAsync(Contexts(s.Tenant, s.Person), AccountLinkRoutes.Off, s.Person, Ct))
             .Should().BeOfType<SubjectChange.Changed>();
 
         await using var db = Context(Guid.Empty, null);

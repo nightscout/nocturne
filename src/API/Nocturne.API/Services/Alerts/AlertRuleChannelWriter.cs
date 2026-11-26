@@ -114,8 +114,11 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
                 if (ch.Destination is null)
                 {
                     var name = PlatformDisplayName(platform);
-                    return $"No linked {name} account for this user. Link {name} under "
-                        + $"Connectors & Apps, or enter a {name} user ID as the destination.";
+                    return platform == "whatsapp"
+                        ? "No linked WhatsApp account for this user. Send /connect to the Nocturne bot "
+                            + "in WhatsApp, or enter a WhatsApp number as the destination."
+                        : $"No linked {name} account for this user. Link {name} under "
+                            + $"Connectors & Apps, or enter a {name} user ID as the destination.";
                 }
             }
 
@@ -240,8 +243,11 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     public static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
 
     /// <summary>A chat platform's name as a person reads it.</summary>
-    internal static string PlatformDisplayName(string platform) =>
-        char.ToUpperInvariant(platform[0]) + platform[1..];
+    internal static string PlatformDisplayName(string platform) => platform switch
+    {
+        "whatsapp" => "WhatsApp",
+        _ => char.ToUpperInvariant(platform[0]) + platform[1..],
+    };
 
     /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
     private static string WireName(ChannelType channelType) =>
@@ -284,11 +290,14 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
         {
             var destination = req.Destination ?? string.Empty;
             var mode = ChannelDestinations.ModeOf(req.ChannelType);
-            var stamped = mode == ChannelDestinationMode.UserSupplied && saverId is not null;
             Guid? recipient = mode == ChannelDestinationMode.LinkedIdentity
-                              && links.TryGetValue((ChannelDestinations.PlatformOf(req.ChannelType)!, destination), out var linked)
+                              && links.TryGetValue(
+                                  (ChannelDestinations.PlatformOf(req.ChannelType)!,
+                                   ChannelDestinations.LinkKey(req.ChannelType, destination)),
+                                  out var linked)
                 ? linked
                 : null;
+            var stamped = ChannelDestinations.IsTypedIn(req.ChannelType, recipient) && saverId is not null;
             return new AlertRuleChannelWrite(
                 req.ChannelType,
                 destination,

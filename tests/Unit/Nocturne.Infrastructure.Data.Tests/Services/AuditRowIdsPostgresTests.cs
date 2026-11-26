@@ -19,10 +19,7 @@ public class AuditRowIdsPostgresTests(Repositories.TenantMembershipRepositoryPos
     private const int RowsPerSave = 50;
 
     private NocturneDbContext Context() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        TestContexts.Context(database.AppConnectionString);
 
     [Fact]
     public async Task RowsStagedInOneSaveReadBackByIdInTheOrderTheyWereStaged()

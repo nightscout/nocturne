@@ -81,7 +81,8 @@ public interface IOAuthGrantService
     );
 
     /// <summary>
-    /// Update grant label and/or scopes. Returns null if grant not found or not owned.
+    /// Update grant label and/or scopes. Returns null if the grant is not found, is not owned, or is
+    /// revoked, as <see cref="GetGrantForSubjectAsync"/> does.
     /// </summary>
     /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
     /// <param name="bounds">What bounds new scopes, by the kind of grant.</param>

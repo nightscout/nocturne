@@ -105,6 +105,9 @@ public class LegacyModulePortGuardTests
         InTest("tests/Unit/Nocturne.API.Tests/Services/Caching/LegacyReadCacheInvalidationTests.cs", "LegacyTreatmentTables", "checks the invalidation covers every model the treatment tables serve"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/ProfileActivations/NativeProfileSwitchesTests.cs", "LegacyProfileActivationTable", "reads the rows the profile activation table serves as treatments"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/ProfileActivations/ProfileActivationLegacyFieldsTests.cs", "LegacyTreatmentTables", "projects an activation through the treatment table that serves it"),
+        InTest("tests/Integration/Nocturne.API.Tests/Profiles/ProfileActivationWindowPlanTests.cs", "LegacyTreatmentTables", "runs the profile activation window read the treatment table serves, to read its plan"),
+        InTest("tests/Integration/Nocturne.API.Tests/Profiles/ProfileActivationWindowPlanTests.cs", "LegacyTreatmentRange", "runs the profile activation window read the treatment table serves, to read its plan"),
+        InTest("tests/Integration/Nocturne.API.Tests/Profiles/ProfileActivationWindowPlanTests.cs", "LegacyTreatmentRepositories", "runs the profile activation window read the treatment table serves, to read its plan"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Realtime/StorageDeleteBroadcastContractTests.cs", "SignalRTreatmentEventSink", "builds the treatment event sink to test what a delete broadcasts"),
         InTest("tests/Integration/Nocturne.API.Tests/UploadedInvalidTreatmentIntegrationTests.cs", "TreatmentService", "builds the service over a recording event sink, to test what an upload that deletes a treatment announces"),
         InTest("tests/Integration/Nocturne.API.Tests/UploadedInvalidTreatmentIntegrationTests.cs", "TreatmentReadService", "builds the store over a decomposer whose note repository fails, to test that a delete committed before the failure is announced"),
@@ -122,6 +125,8 @@ public class LegacyModulePortGuardTests
         InTest("tests/Unit/Nocturne.API.Tests/Services/Analytics/LoopAnalysisTempBasalCancelTests.cs", "TreatmentDecomposer", CallsStaticMapper),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Seeding/DemoLoopAnalysisTests.cs", "TreatmentDecomposer", CallsStaticMapper),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Seeding/DemoLoopHealthTests.cs", "TreatmentDecomposer", CallsStaticMapper),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/DeletedLegacyIdLookupIndexTests.cs", "EntryDecomposer", "reads the legacy-keyed repositories the decomposer takes, to tie the deleted-row index to the tables its lookup reads"),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/DeletedLegacyIdLookupIndexTests.cs", "DeviceStatusDecomposer", "reads the legacy-keyed repositories the decomposer takes, to tie the deleted-row index to the tables its lookup reads"),
     ];
 
     private static bool IsExempt(string path, string member, string name) =>

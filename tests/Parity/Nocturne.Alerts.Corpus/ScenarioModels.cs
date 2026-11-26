@@ -101,9 +101,6 @@ public sealed record ScenarioRule
     [JsonPropertyName("condition_params")]
     public required JsonElement ConditionParams { get; init; }
 
-    [JsonPropertyName("hysteresis_minutes")]
-    public int HysteresisMinutes { get; init; }
-
     [JsonPropertyName("auto_resolve_enabled")]
     public bool AutoResolveEnabled { get; init; }
 

@@ -12,6 +12,7 @@
   import { scopeLabels } from "#lib/constants/scope-labels.svelte.js";
   import { formatDateTime, formatMediumDate } from "#lib/utils/formatting.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
+  import { RULE_OWNER_APPROVES, RULE_TEAM_DECIDES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
 
   interface Props {
     entry: MemberHistoryEntry;
@@ -264,15 +265,23 @@
         {:else}
           {actor} declined {member} as staff of a team that was deleted.
         {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamStaffBlocked}
+        {actor} stopped {member} from seeing this site through any team.
+      {:else if entry.kind === MemberHistoryKind.TeamStaffUnblocked}
+        {actor} let {member} see this site through teams again.
       {:else if entry.kind === MemberHistoryKind.TeamStaffRuleChanged}
-        {#if entry.team?.name && entry.teamManagesStaff === false}
-          {actor} turned off "the team manages its own staff" for the team {entry.team.name}. New staff now wait for an owner's approval.
-        {:else if entry.team?.name && entry.teamManagesStaff === true}
-          {actor} let the team {entry.team.name} approve its own staff.
-        {:else if entry.teamManagesStaff === false}
-          {actor} turned off "the team manages its own staff" for a team that was deleted.
-        {:else if entry.teamManagesStaff === true}
-          {actor} let a team that was deleted approve its own staff.
+        {#if entry.team?.name && entry.staffRule === RULE_OWNER_APPROVES}
+          {actor} set the team {entry.team.name} so that an owner approves each staff member.
+        {:else if entry.team?.name && entry.staffRule === RULE_TEAM_DECIDES}
+          {actor} set the team {entry.team.name} so that the team decides who on its staff can see this site.
+        {:else if entry.team?.name && entry.staffRule === RULE_TEAM_TRUSTED}
+          {actor} set the team {entry.team.name} so that every staff member of the team can see this site.
+        {:else if entry.staffRule === RULE_OWNER_APPROVES}
+          {actor} set a team that was deleted so that an owner approves each staff member.
+        {:else if entry.staffRule === RULE_TEAM_DECIDES}
+          {actor} set a team that was deleted so that the team decides who on its staff can see this site.
+        {:else if entry.staffRule === RULE_TEAM_TRUSTED}
+          {actor} set a team that was deleted so that every staff member of the team can see this site.
         {:else if entry.team?.name}
           {actor} changed who approves the staff of the team {entry.team.name}. The detail is no longer stored.
         {:else}

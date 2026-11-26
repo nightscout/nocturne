@@ -68,4 +68,38 @@ public class EnumMemberValueConverterTests
 
         result.Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("normal")]
+    [InlineData("1")]
+    [InlineData("")]
+    public void A_tolerant_column_reads_a_value_no_member_has_as_unreadable(string dbValue)
+    {
+        var converter = new EnumMemberValueConverter<AlertRuleSeverity>(tolerant: true);
+
+        var result = converter.ConvertFromProviderExpression.Compile()(dbValue);
+
+        result.Should().Be(EnumMemberValueConverter<AlertRuleSeverity>.Unreadable);
+        Enum.IsDefined(result).Should().BeFalse();
+        converter.IsUnreadable(result).Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_tolerant_column_reads_a_member_as_a_strict_one_does()
+    {
+        var converter = new EnumMemberValueConverter<AlertRuleSeverity>(tolerant: true);
+
+        converter.ConvertFromProviderExpression.Compile()("Warning").Should().Be(AlertRuleSeverity.Warning);
+        converter.IsUnreadable(AlertRuleSeverity.Warning).Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_strict_column_throws_on_a_value_no_member_has()
+    {
+        var converter = new EnumMemberValueConverter<AlertRuleSeverity>();
+
+        var read = () => converter.ConvertFromProviderExpression.Compile()("normal");
+
+        read.Should().Throw<ArgumentException>();
+    }
 }

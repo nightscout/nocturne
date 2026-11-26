@@ -13,7 +13,6 @@
         ],
         "for_minutes": 10
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

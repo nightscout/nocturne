@@ -5,6 +5,7 @@ import { SlackAdapter } from "@chat-adapter/slack";
 import { createBot } from "./bot.js";
 import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
+import type { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
 
 /**
  * The Resend adapter resolves `react` from its own install, which this package
@@ -35,6 +36,13 @@ const bot = () =>
       },
       slack: { enabled: true, botToken: "not-a-token", signingSecret: "not-a-secret" },
       telegram: { enabled: true, botToken: "not-a-token" },
+      whatsapp: {
+        enabled: true,
+        accessToken: "not-a-token",
+        appSecret: "not-a-secret",
+        phoneNumberId: "1000",
+        verifyToken: "not-a-token",
+      },
     },
   });
 
@@ -57,6 +65,19 @@ describe("createBot", () => {
     expect(telegram).not.toBeInstanceOf(AccentedSlackAdapter);
     expect(telegram?.name).toBe("telegram");
   });
+
+  it.each(["discord", "slack", "telegram", "whatsapp"])(
+    "keeps no thread history for %s, so the bot's state holds no message text",
+    (name) => {
+      const adapter = bot().getAdapter(name) as unknown as {
+        persistThreadHistory?: boolean;
+        persistMessageHistory?: boolean;
+      };
+
+      expect(adapter.persistThreadHistory ?? false).toBe(false);
+      expect(adapter.persistMessageHistory ?? false).toBe(false);
+    },
+  );
 });
 
 describe("the Telegram webhook", () => {
@@ -127,5 +148,83 @@ describe("the Telegram webhook", () => {
 
     expect((await telegram.handleWebhook(update())).status).toBe(401);
     expect((await telegram.handleWebhook(update("env-secret"))).status).toBe(200);
+  });
+});
+
+describe("the WhatsApp webhook", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const whatsappWith = (whatsapp: boolean | { enabled: true; verifyToken: string }) =>
+    createBot({
+      postgresUrl: "postgres://nobody@localhost:5432/not-connected",
+      platforms: {
+        whatsapp:
+          typeof whatsapp === "boolean"
+            ? whatsapp
+            : { ...whatsapp, accessToken: "not-a-token", appSecret: "not-a-secret", phoneNumberId: "1000" },
+      },
+    }).getAdapter("whatsapp")!;
+
+  const verification = (verifyToken: string) =>
+    new Request(
+      `https://nocturne.test/api/v4/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=${verifyToken}&hub.challenge=1158201444`,
+    );
+
+  it("answers Meta's verification with the challenge when the verify token matches", async () => {
+    const response = await whatsappWith({ enabled: true, verifyToken: "the-token" }).handleWebhook(
+      verification("the-token"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("1158201444");
+  });
+
+  it("refuses Meta's verification when the verify token does not match", async () => {
+    const response = await whatsappWith({ enabled: true, verifyToken: "the-token" }).handleWebhook(
+      verification("a-guess"),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("takes the alert template from the WhatsApp settings alone", () => {
+    const adapterWith = (settings: Record<string, string>) =>
+      createBot({
+        postgresUrl: "postgres://nobody@localhost:5432/not-connected",
+        platforms: {
+          whatsapp: {
+            enabled: true,
+            accessToken: "not-a-token",
+            appSecret: "not-a-secret",
+            phoneNumberId: "1000",
+            verifyToken: "not-a-token",
+            ...settings,
+          },
+        },
+      }).getAdapter("whatsapp") as NocturneWhatsAppAdapter;
+
+    expect(adapterWith({}).alertTemplate).toBeNull();
+    expect(adapterWith({ alertTemplateName: "nocturne_alert", alertTemplateLanguage: "en_US" }).alertTemplate).toEqual({
+      name: "nocturne_alert",
+      language: "en_US",
+    });
+
+    expect(adapterWith({ alertTemplateName: "nocturne_alert" }).alertTemplate).toEqual({
+      name: "nocturne_alert",
+      language: "en",
+    });
+  });
+
+  it("checks the environment's verify token when configured from the environment", async () => {
+    vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "not-a-token");
+    vi.stubEnv("WHATSAPP_APP_SECRET", "not-a-secret");
+    vi.stubEnv("WHATSAPP_PHONE_NUMBER_ID", "1000");
+    vi.stubEnv("WHATSAPP_VERIFY_TOKEN", "env-token");
+    const whatsapp = whatsappWith(true);
+
+    expect((await whatsapp.handleWebhook(verification("a-guess"))).status).toBe(403);
+    expect((await whatsapp.handleWebhook(verification("env-token"))).status).toBe(200);
   });
 });

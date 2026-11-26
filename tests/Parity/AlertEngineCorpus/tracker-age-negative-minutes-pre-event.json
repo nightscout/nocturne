@@ -12,7 +12,6 @@
         "operator": "\u003E=",
         "minutes": -1440
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
         "operator": "\u003E=",
         "minutes": -360
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

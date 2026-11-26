@@ -300,7 +300,7 @@ as false or true.
 | `sensor_state` | `states: [..]` (`SensorState` names), `for_minutes?` | `SensorState`, `LatestValue`, now | the state at `now` (§4: none once its `until` has passed) is one of `states`; then if `for_minutes` set: `(now - Since).TotalMinutes >= for_minutes` (double) | no state and `LatestValue` present: **false** when every listed state is `no_value` (a reading with a value is not `no_value`), else **unknown** (a state no source reported may hold); no state and no value ⇒ **unknown**; a name the engine has no member for ⇒ **unknown**; `for_minutes` set and `Since` null ⇒ **unknown**; a state not listed ⇒ false. Not gated by the sensor's state: it reads it |
 | `eventual_glucose` | `operator`, `value` (mg/dL) or `value_from` | `ApsDetermination.EventualMgdl`, `ApsDetermination.At`, now, and what `value_from` names | `Compare` | no determination, or one without the value ⇒ **unknown** (`absent`); older than the rule's glucose freshness bound ⇒ **unknown** (`stale`, below) |
 | `carbs_required` | `operator`, `value` (grams) | `ApsDetermination.CarbsRequiredGrams`, `ApsDetermination.At`, now | `Compare` | as `eventual_glucose` |
-| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
+| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back. A **Duration** start beyond the clock tolerance ahead ⇒ **unknown** (§5.4), held back or not: the clock rule comes first, since a threshold measured from a start that has not happened yet is not known to have held |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
 `is_active`) is never unknown: no session is the state.
@@ -711,18 +711,31 @@ in §3 plus:
   bound) before `now`, its arrival being the earlier of its timestamp and when the host stored it;
   reports are ordered by that arrival, and `until` is that arrival plus 11 minutes. So a report
   dated ahead lasts 11 minutes from when it came, and an old report backfilled now never counts.
+  Of reports that arrived at the same instant, a state that is not ok is the newest, then a report
+  with no state, then an ok one, then the lower id, so the choice never depends on the order rows
+  are read in. Only a state that is not ok holds a glucose leaf, so a report that flagged the sensor
+  is not outvoted by one that arrived with it, and no state ranks above ok since it claims nothing
+  about the sensor. Only the newest report speaks: when it has no state, the sensor's state is
+  absent (a `sensor_state` leaf reads unknown and the glucose leaves are not held), whatever an
+  older report said.
 - When the backend stores a device status, it reads the status's CareLink `cgm.sensorState`
   (Medtronic Guardian sensors), then its `xdripjs.state` session code (Dexcom G5 and G6 through
-  Lookout, Logger and xdrip-js), each through an allowlist where every other value is no state, and
-  writes a sensor state report (`SensorStateReport`) for the first value an allowlist maps, under
-  the status's device and the data source it was stored under. A status with neither writes none.
-  The host reads the state only from these reports. A newest report whose state this build cannot
-  read is no state, and an older report does not stand in for it. An entry is added only from a real
+  Lookout, Logger and xdrip-js), each through an allowlist, and writes a sensor state report
+  (`SensorStateReport`) under the status's device and the data source it was stored under: with the
+  first value an allowlist maps, that state; with neither value mapped, a report with no state for
+  the first value stated, CareLink's first. A value the allowlists do not map is a state Nocturne
+  does not recognise, and it replaces the older state, since the sensor has moved on from what it
+  said before: the engine then sees the sensor's state absent (a `sensor_state` leaf reads unknown
+  and the glucose leaves are not held), never the older state and never a state name it does not
+  know. A status that states neither field (or an empty CareLink value) writes
+  none, as it says nothing new. The host reads the state only from these reports. A newest report
+  whose state this build cannot read is no state in the same way. An entry is added only from a real
   upload. CareLink's: `NO_ERROR_MESSAGE` ok, `WARM_UP` warming up, `CALIBRATION_REQUIRED`
   calibration needed, `SENSOR_ERROR` and `CHANGE_SENSOR` error, `SENSOR_END_OF_LIFE` expired.
   xdripjs: `0x02` warming up, `0x06` ok, `0x04`, `0x05`, `0x08` to `0x0a`, `0x0d` calibration
   needed, `0x0b`, `0x0c`, `0x10` to `0x12` error, `0x0f` expired. The routine calibration prompts
-  (`0x07`, `0x0e`), a stopped session (`0x01`) and excess noise (`0x03`) are no state. CareLink
+  (`0x07`, `0x0e`), a stopped session (`0x01`) and excess noise (`0x03`) are not mapped, so they
+  write a report with no state. CareLink
   writes a status and its readings under one device name (`CareLink {family}`) and its connector's
   data source, so they match. An upload through the v1 API names no data source on its readings or
   its statuses, so an xdripjs report has no source to match and is no state. Neither source gives a
@@ -833,6 +846,11 @@ in §3 plus:
 
   A condition operand naming an unknown member is a different case: the tree cannot be
   evaluated (§1.4).
+- **One entry per key.** A host sends one `active_state_spans` entry per `(category, state)`, one
+  `active_trackers` entry per `tracker_definition_id` and one `active_alerts` entry per `alert_id`.
+  If two entries share a key anyway, the last one in the list wins, as a tolerance, and the earlier
+  ones are not read. A span the engine ignores (an unknown category, above) takes no part. The
+  backend holds all three facts keyed, so it cannot send a duplicate.
 - `CurrentRuleId` / `CurrentPath`: threading state for sustained timers; provided by the
   driver (orchestrator/sweep/replay), maintained by the container evaluators as they
   descend.
@@ -943,9 +961,9 @@ The excursion tracker dedupes: a continuing outage is `continues`, and the first
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
 any other.
 
-A periodic evaluation is an evaluation to the tracker (§6). The backend stores no
-`HysteresisMinutes`: every rule reads 0, and the alerts redesign migrated it into
-`sustained` wrappers, which are cadence-independent. So no stored rule is affected.
+A periodic evaluation is an evaluation to the tracker (§6): an excursion in hysteresis closes
+on the next false one, or at the sweep's close (§6.1). A rule that waits before it clears says
+so with a `sustained` wrapper, which does not depend on the cadence.
 
 ### 5.2 Context facts
 
@@ -1172,7 +1190,7 @@ measures from the rule's `enabled_at` (§3), so it contributes `enabled_at` plus
 anchor, and a host can
 pre-arm that instant for a sensor that has never sent a reading. A leaf without an anchor, or
 whose guard holds it constant (a `has_ever_*` flag false, a `tracker_age` threshold held back at
-recording), contributes nothing, so an unknown leaf
+recording whose start is not beyond the tolerance ahead), contributes nothing, so an unknown leaf
 contributes nothing (a fact arriving is not a clock event; an unknown leaf whose anchor is
 known contributes as a known one: `pump_state` with `is_active` and `for_minutes` over an
 unrecognised mode, §3, moves from false to unknown there), as does a
@@ -1263,13 +1281,14 @@ The rule applies to every comparison of `now - anchor`:
 | `sustained` | a `sustained` run's start (§3) |
 | `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
 | `held_since` | the hold's bound (§6.4) |
+| `updated_at` | the tracker's last decision, which a held evaluation reads to tell whether its hold is continuous (§6.4) |
 
 Two instants are meant to be ahead of `now` and are exempt, so their elapsed time is negative
 until they pass: a **scheduled** (event) `tracker_age` instance's time, and `LatestReceivedAt`.
 The arrival is the host's own record of when it stored the reading, and replay reads a reading
 stored after its tick as fresh there (§8), so an arrival after `now` is fresh (§3).
 
-`enabled_at` and the three state instants are written from the host's clock, so they are ahead of
+`enabled_at` and the four state instants are written from the host's clock, so they are ahead of
 `now` only when that clock went back, or when two hosts' clocks differ. The rule treats them as
 any anchor.
 
@@ -1286,6 +1305,9 @@ What each kind does beyond the tolerance follows from the leaf being unknown:
   `signal_loss` and `staleness` measure from the readings that did arrive.
 - A glucose reading whose freshness runs from its timestamp is not known to be fresh, so the four
   judged leaves read unknown, as for a stale reading.
+- A duration `tracker_age` instance whose threshold is held back (§3) reads unknown, not false,
+  while its start is beyond the tolerance ahead, and the start is reported. From `start - 5
+  minutes` the start is within the tolerance and the threshold is held back, so the leaf is false.
 - A `sustained` run whose start is beyond the tolerance ahead returns unknown and is kept: the run
   neither completes nor breaks on that evaluation. Within the tolerance it reads zero elapsed,
   which is false, since `minutes > 0`. A run starts at or before `now` (§3), so only one started
@@ -1293,7 +1315,9 @@ What each kind does beyond the tolerance follows from the leaf being unknown:
   run at `now`.
 - A hysteresis window whose start is beyond the tolerance ahead does not close on that evaluation,
   by the tracker or by the sweep's `CloseElapsedHysteresisAsync`. Within the tolerance the start
-  reads as `now`, so a window of zero or fewer minutes closes.
+  reads as `now`, so the window closes.
+- A held evaluation reports a stored `UpdatedAt` beyond the tolerance ahead. The hold it starts
+  counts from `now`, once (§6.4).
 
 The engine cannot tell a forward step of the host's clock from time passing: a timer, a window or
 a bound that a step jumps past completes at once, as it would had the time passed. No rule here
@@ -1319,7 +1343,7 @@ the notification keeps the instant the fact was ahead to and is archived once `n
 notification is reported after the evaluation it comes from, and a failure to write it never stops
 an evaluation. Instants the
 host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_at`,
-`held_since`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
+`held_since`, `updated_at`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
 For a pump mode with no span open at `now`, the host also sends the soonest open span of that mode dated up to the
 tolerance ahead of `now`, as §4 selects a reading, since a device's clock usually dates it. It holds back a span dated
 further ahead. A live pass that reads pump modes reports a span that starts further ahead, open or closed, as the reading
@@ -1348,8 +1372,8 @@ hysteresis`.
 A rule numbers its own excursions 1, 2, ... in the order it opens them: opening one takes
 `LastExcursion + 1` and records it as `LastExcursion`, so an excursion is identified by its rule
 and that ordinal, and no counter is shared between rules. A state restored without
-`LastExcursion` reads it as the active excursion's ordinal, or 0. Rule inputs:
-`HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
+`LastExcursion` reads it as the active excursion's ordinal, or 0. Rule input: `OnUnknown`
+(§6.4). One evaluation whose root is known, or
 read as known by `OnUnknown`, = one `ProcessEvaluationAsync(ruleId, conditionMet,
 autoResolveMet)` call, where `autoResolveMet` is read only while the rule awaits re-arm
 (§6.3). Such a call ends any hold: it clears `HeldSince`. An evaluation the rule holds makes no
@@ -1376,15 +1400,13 @@ flag (§6.3) are dropped. Every operation reads it so.
 
 ### 6.1 Hysteresis expiry
 
-`expired = now >= HysteresisStartedAt + HysteresisMinutes`, with the window an exact
-whole-minute duration, and a start ahead of `now` read by §5.4: within 5 minutes it is `now`,
-beyond that the window does not expire on that evaluation. The start is the instant of the evaluation that entered hysteresis
-and does not move until the excursion resumes or closes, so a window closes on the first
-false evaluation at or past its end, whatever the evaluation cadence. A non-positive
-`HysteresisMinutes` has always expired: the excursion closes on the first false evaluation
-after the one that entered hysteresis. A window whose end is past the representable
-calendar never expires. A re-entry (a true evaluation) resumes the same excursion; the
-next false evaluation starts a fresh window.
+`expired = now >= HysteresisStartedAt`, with a start ahead of `now` read by §5.4: within 5
+minutes it is `now`, beyond that the window does not expire on that evaluation. The start is the
+instant of the evaluation that entered hysteresis and does not move until the excursion resumes
+or closes, so the excursion closes on the first false evaluation after the one that entered
+hysteresis. A rule sets no wait of its own: there is no stored column for one, and a rule that
+waits before it clears wraps its condition in `sustained`. A re-entry (a true evaluation)
+resumes the same excursion; the next false evaluation starts a fresh window.
 
 State persisted before `HysteresisStartedAt` existed has none while in hysteresis. Both
 engines adopt that state's `UpdatedAt` as the start, once, and persist it.
@@ -1457,7 +1479,7 @@ three words, stored as a string; any other word is an error in the `evaluate` en
 
 A **held** evaluation makes no `ProcessEvaluationAsync` call before its hold's bound (below).
 State, the open excursion, `HysteresisStartedAt`, `AwaitingRearm` and `UpdatedAt` stay as they
-were, and the transition is `none`. It records one thing: **`HeldSince`**, the instant the
+were (an `UpdatedAt` ahead of `now` aside, below), and the transition is `none`. It records one thing: **`HeldSince`**, the instant the
 current hold began. The first held evaluation of a hold sets it to `now`; held evaluations after
 it keep it; the first evaluation whose root is known, or read as known, clears it (§6), so a rule
 whose `OnUnknown` is `met` or `not_met` never has one. A rule never evaluated before has, after
@@ -1514,9 +1536,18 @@ state is never `active`, since only a known root, which ends the hold, makes it 
 stored state with `HeldSince < UpdatedAt < HeldSince + HOLD_BOUND`, or with `UpdatedAt >= HeldSince
 + HOLD_BOUND` that is `active`, was written after the hold began by an engine that does not record
 holds. A held evaluation reads it as no hold, and its hold starts at `now` as a first held evaluation
-(no report, no read as not met), and a close from hysteresis reads it as no hold. A host clock that
-went back can also leave `UpdatedAt` after `HeldSince`; the hold then starts again at each held
-evaluation until `now` passes `UpdatedAt`, so its bound comes later, never earlier.
+(no report, no read as not met), and a close from hysteresis reads it as no hold.
+
+**A decision ahead of the clock.** A host clock that went back can leave `UpdatedAt` ahead of
+`now`. A hold started then would have `UpdatedAt` after `HeldSince`, which reads as written over,
+so each held evaluation would start the hold again until `now` passed `UpdatedAt`. So the held
+evaluation that starts a hold also sets `UpdatedAt = now` when it is ahead. The state is then one
+this engine writes, the held evaluations after it keep the hold, and the bound is reached at that
+evaluation's `now + HOLD_BOUND`, not at `UpdatedAt + HOLD_BOUND`. Every held evaluation whose
+stored `UpdatedAt` is beyond the tolerance ahead reports it as `updated_at` (§5.4). Once a hold
+starts and sets it to `now`, the hold's later evaluations do not; a hold already running (its
+`UpdatedAt` at or before `HeldSince`) or past its bound when the clock goes back keeps the stored
+`UpdatedAt`, and its held evaluations report it until `now` is within the tolerance of it.
 
 Known limit: when the older engine wrote nothing after the hold began (an alert that stayed active
 and true writes no decision), the stored state is the same as a real hold and is trusted. No rule
@@ -1543,6 +1574,13 @@ enabled, so a rule disabled while held is never sent one and a rule enabled agai
 is told again; every query over `alert_excursions` excludes it through `AlertExcursionQueries`. The
 sweep also evaluates every enabled rule whose hold has lasted `HOLD_BOUND` and is not yet reported,
 so a rule that reads nothing on the wall clock reaches the bound with no reading.
+
+**A rule the host cannot read.** A stored rule whose condition type, severity or scope class names
+no member is not evaluated at all, so no evaluation, auto-resolve or hysteresis close (§6.1) moves
+its open excursion, and the host keeps it alarming. Its hold is counted from its unevaluable notice
+(§1.4) for that version of the row: once the notice has stood for `HOLD_BOUND`, the sweep
+force-closes the excursion (§6.2) with close reason `hold-bound`. A row fixed before then keeps its
+excursion; a row that changes to another unreadable value starts a new notice and a new count.
 
 ---
 
@@ -1613,13 +1651,38 @@ sending in exactly two cases, since an alert for a condition that has ended misl
 only places the order favours not sending:
 
 - its excursion has closed, read again under the lock its close's resolution of instances also
-  takes, so a close that came first stops the opening (a close that lands while the opening is
-  being sent can still leave its alert standing);
+  takes, so a close that came first stops the opening;
 - its rule is disabled or deleted.
+
+The lock orders the instance against a close, not the sends: a close that lands while the opening
+is being sent finds only what existed before the sends. So once they return, an opening whose
+excursion has closed owes its close again and runs it once more, unless the same evaluation's
+close (step 5) runs next and so after the sends. An owed opening found closed, whether by the
+sweep's read or by the instance lock, also runs the close again before it settles: a run that died
+after its sends and before that rerun may have left them standing. Every other send ends the same
+way, through the one rerun (`IExcursionResolutionHandler.CloseAgainIfEndedAsync`): a snooze's
+re-notification, once it is sent, and a notice's dispatch (§1.4, §6.4), whose resolution is its
+close. A re-notification owes its excursion's opening from before its send until that rerun is
+done, unless the opening is already owed, so the sweep finishes a run that dies as an owed opening.
+Its lapsed snooze ends in the same write that owes the opening and records the start of the
+re-notification, and only while the snooze is still the one that lapsed, so of two resumes of one
+lapse one sends. A run that dies before that write leaves the snooze lapsed for the next sweep, which
+decides it again (a smart snooze may then extend it). Owed delivery is judged per send: a rerun sends
+what the instance's latest send, the opening or the latest re-notification, left without an answer,
+counting only the delivery rows written since that send started. So a re-notification the run lost
+is sent again, and a channel that answered it is not. A
+notice counts as resolved once its instance is, the step that writes its reason, so the rerun never
+resolves it first and without one; a resolution that dies before that step leaves the notice
+standing, and its check resolves it again. Ending a notice owes its close, which the sweep finishes
+once its instance is resolved. A notice keeps its dispatch owed when it is resolved, until its
+dispatch or the sweep settles it, so the sweep runs its resolution again when the run dies first;
+the sweep finishes owed work of a notice only once it has been resolved, and a standing notice's
+dispatch stays with its own check.
 
 An acknowledgement is not a cutoff: an acknowledge-all made for another alarm must not consume an
 alert nobody received. An enabled rule whose stored row cannot be read keeps its opening owed,
-taken up again each lease, until one of the two cases applies. An owed `ExcursionClosed` is always
+taken up again each lease, until one of the two cases applies; its excursion closes at the latest
+at the hold bound (§6.4). An owed `ExcursionClosed` is always
 finished. A late alert is built from the context when it is sent, and
 carries that reading's time. The backend records the work owed on the excursion row
 (`opened_owed_at`, `closed_owed_at`), leases it for 2 minutes, and finishes it from the alert
@@ -1627,7 +1690,8 @@ sweep (`AlertSweepJob`), whose first run after a start is the start's pass.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the
-`do_not_disturb` *leaf* (§3) is in the crate.
+`do_not_disturb` *leaf* (§3) is in the crate. An instance with a delivery row may have reached a
+channel, so a late run of its opening never records it as silenced by a scope begun since.
 
 ---
 
@@ -1744,7 +1808,7 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
   only to rules in the set. A cycle keeps the given order for every rule. Two rules
   with one id are an error.
 - **State.** One fresh timer store and one fresh tracker for the whole call; nothing is read from
-  or written to persistent state. The tracker reads each rule's `hysteresis_minutes`,
+  or written to persistent state. The tracker reads each rule's
   `on_unknown` (§6.4) and re-arm (§6.3), and the leaves its `glucose_freshness_minutes` (§3), as
   live does. With no `enabled_at` (below), a path's first run starts no earlier than the
   evaluation that starts it, unless its child read false on an earlier one (§3).
@@ -1795,8 +1859,8 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
 - A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown` and
   `glucose_freshness_minutes`; without one it takes the stored rule's when it names one, else
   `hold` and the 11-minute default, so it replays as the live engine evaluates.
-- The backend stores no `hysteresis_minutes` (§5.1) and sends none, so its excursions close at
-  the first step after the evaluation that found the condition false.
+- An excursion closes at the first step after the evaluation that found the condition false
+  (§6.1).
 
 **What replay cannot know.** Replay does not simulate these, and its result does not show them:
 
@@ -1837,20 +1901,16 @@ these, each by at most its 30 s sweep:
   with the clock exactly where it falls; the backend's sweep lands up to 30 s later. So a
   condition true again within 30 s after a window's end is a new excursion in replay and a resume
   live, where the sweep has not closed the window yet. Replay hides an opening the backend makes
-  in three ways, all from the sweep's phase:
-  1. A wall-clock change less than 30 s before a hysteresis window ends. Replay sees it before
-     the end and resumes; the sweep sees it only after the end, closes the window and opens a new
-     excursion. This needs a window longer than zero, so it cannot happen in the backend, whose
-     hysteresis is 0 (§5.1).
-  2. The not-true lease of a wall-clock rule (§3). Live evaluates the rule at every sweep and
+  in two ways, both from the sweep's phase:
+  1. The not-true lease of a wall-clock rule (§3). Live evaluates the rule at every sweep and
      replay only at its changes, so `sustained` records its not-true instants at other moments
      and a run starts up to the cadence apart. A `sustained` body or auto-resolve can then
      complete before the reading goes stale in one and after it in the other.
-  3. An `alert_state` child's `for_minutes`. Where replay opens the parent again (one of its
+  2. An `alert_state` child's `for_minutes`. Where replay opens the parent again (one of its
      extra openings), the parent's `triggered_at` moves and the child's escalation clock starts
      over, so the escalation opens later in replay, or not at all.
 
-  Over generated cases at the backend's hysteresis of 0, replay hides of the order of one opening
+  Over generated cases, replay hides of the order of one opening
   in a hundred cases, and shows an order of magnitude more extra ones (`live_replay_pairs`).
 - **A parent's change seen by its `alert_state` children.** Replay evaluates parents first and
   steps a child at the instant its parent opens or closes (Active alerts). The backend evaluates a

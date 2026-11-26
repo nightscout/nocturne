@@ -176,8 +176,7 @@ public class TeamsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutpu
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         return await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name);
     }

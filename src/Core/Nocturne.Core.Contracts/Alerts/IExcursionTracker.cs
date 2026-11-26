@@ -87,7 +87,7 @@ public interface IExcursionTracker
 
     /// <summary>
     /// Closes the rule's excursion with reason <see cref="ExcursionCloseReason.Hysteresis"/> when
-    /// it is in hysteresis and <c>HysteresisMinutes</c> have elapsed since it entered, without
+    /// it is in hysteresis and its start is not beyond the clock tolerance ahead, without
     /// evaluating the condition. The periodic counterpart of the expiry check
     /// <see cref="ProcessEvaluationAsync"/> makes on a false evaluation, so a window still
     /// expires when no evaluation arrives.

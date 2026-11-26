@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -15,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -126,8 +128,8 @@ public class AlertsController : ControllerBase
             Id = e.Id,
             AlertRuleId = e.AlertRuleId,
             RuleName = e.AlertRule?.Name ?? string.Empty,
-            ConditionType = e.AlertRule?.ConditionType ?? AlertConditionType.Threshold,
-            Severity = e.AlertRule?.Severity ?? AlertRuleSeverity.Warning,
+            ConditionType = AlertRuleMapper.Readable(e.AlertRule?.ConditionType ?? AlertConditionType.Threshold),
+            Severity = AlertRuleMapper.Readable(e.AlertRule?.Severity ?? AlertRuleSeverity.Warning),
             StartedAt = e.StartedAt,
             AcknowledgedAt = e.AcknowledgedAt,
             AcknowledgedBy = namesAcknowledger ? e.AcknowledgedBy : null,
@@ -236,8 +238,8 @@ public class AlertsController : ControllerBase
                 Id = e.Id,
                 AlertRuleId = e.AlertRuleId,
                 RuleName = e.RuleName,
-                ConditionType = e.ConditionType,
-                Severity = e.Severity,
+                ConditionType = AlertRuleMapper.Readable(e.ConditionType),
+                Severity = AlertRuleMapper.Readable(e.Severity),
                 StartedAt = e.StartedAt,
                 EndedAt = e.EndedAt,
                 AcknowledgedAt = e.AcknowledgedAt,
@@ -445,7 +447,10 @@ public class AlertsController : ControllerBase
     public async Task<ActionResult> MarkFailed(
         Guid deliveryId, [FromBody] MarkFailedRequest request, CancellationToken ct)
     {
-        await _deliveryService.MarkFailedAsync(deliveryId, request.Error, ct);
+        if (request.PlatformMessageId is { Length: > 0 } messageId)
+            await _deliveryService.MarkSentMessageFailedAsync(deliveryId, messageId, request.Error, ct);
+        else
+            await _deliveryService.MarkFailedAsync(deliveryId, request.Error, ct);
         return NoContent();
     }
 
@@ -485,6 +490,29 @@ public class AlertsController : ControllerBase
             .ToListAsync(ct);
 
         return Ok(deliveries);
+    }
+
+    /// <summary>
+    /// The payload a delivery was dispatched with, for a delivery adapter that sends the alert again
+    /// in another form after the platform refused the first, such as a WhatsApp template outside the
+    /// customer service window. The adapter keeps only the delivery's id, so the payload, which holds
+    /// health data, is read here rather than kept in the adapter's own state.
+    /// </summary>
+    [HttpGet("deliveries/{id:guid}/payload")]
+    [Authorize]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [ProducesResponseType(typeof(Nocturne.Core.Models.AlertPayload), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Nocturne.Core.Models.AlertPayload>> GetDeliveryPayload(Guid id, CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var json = await db.AlertDeliveries
+            .AsNoTracking()
+            .Where(d => d.Id == id)
+            .Select(d => d.Payload)
+            .FirstOrDefaultAsync(ct);
+        var payload = json is null ? null : JsonSerializer.Deserialize<Nocturne.Core.Models.AlertPayload>(json);
+        return payload is null ? NotFound() : Ok(payload);
     }
 }
 
@@ -637,6 +665,12 @@ public class MarkDeliveredRequest
 public class MarkFailedRequest
 {
     public string Error { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The message the platform failed after accepting it; see
+    /// <see cref="IAlertDeliveryService.MarkSentMessageFailedAsync"/>.
+    /// </summary>
+    public string? PlatformMessageId { get; set; }
 }
 
 public class PendingDeliveryResponse

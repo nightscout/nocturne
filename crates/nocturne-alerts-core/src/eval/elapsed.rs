@@ -247,8 +247,9 @@ fn ceil_to_tick(at: DateTime<Utc>) -> Option<DateTime<Utc>> {
 
 /// A wall-clock leaf (`wall_clock::is_wall_clock`) as it stands in `ctx` at
 /// `now`, for a rule enabled at `enabled_at`; `None` for any other kind.
-/// `now` decides only whether the sensor's state has lapsed: every elapsed
-/// time is measured from the returned leaf.
+/// `now` decides only whether the sensor's state has lapsed and whether a
+/// tracker run's start is beyond the tolerance ahead: every elapsed time is
+/// measured from the returned leaf.
 pub(crate) fn clock_leaf(
     payload: &Payload,
     ctx: &SensorContext,
@@ -260,7 +261,7 @@ pub(crate) fn clock_leaf(
         Payload::Staleness(p) => super::glucose::staleness(p, ctx, enabled_at),
         Payload::SiteAge(p) => super::device::site_age(p, ctx),
         Payload::SensorAge(p) => super::device::sensor_age(p, ctx),
-        Payload::TrackerAge(p) => super::device::tracker_age(p, ctx),
+        Payload::TrackerAge(p) => super::device::tracker_age(p, ctx, now),
         Payload::LoopStale(p) => {
             super::device::loop_stale(p, ctx.last_aps_cycle_at, ClockAnchor::LastApsCycleAt, ctx)
         }

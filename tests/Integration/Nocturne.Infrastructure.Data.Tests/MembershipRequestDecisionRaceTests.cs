@@ -31,7 +31,7 @@ public class MembershipRequestDecisionRaceTests
     public async Task A_deny_made_while_an_approval_holds_the_request_is_refused_and_the_approval_stands()
     {
         var seed = await SeedAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var approving = await ContextAsync(provider, seed.Tenant);
         await using var denying = await ContextAsync(provider, seed.Tenant);
         var approvingUnit = DbUnitOfWork.Own(approving);
@@ -66,7 +66,7 @@ public class MembershipRequestDecisionRaceTests
     public async Task An_approval_made_while_a_deny_holds_the_request_adds_no_member_and_the_deny_stands()
     {
         var seed = await SeedAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var denying = await ContextAsync(provider, seed.Tenant);
         await using var approving = await ContextAsync(provider, seed.Tenant);
         var denyingUnit = DbUnitOfWork.Own(denying);
@@ -109,15 +109,6 @@ public class MembershipRequestDecisionRaceTests
 
     private sealed record Seed(Guid Tenant, Guid Subject, Guid Role, Guid Request);
 
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
-    }
-
     private static async Task<NocturneDbContext> ContextAsync(ServiceProvider provider, Guid tenantId)
     {
         var context = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync();
@@ -140,7 +131,7 @@ public class MembershipRequestDecisionRaceTests
             await cmd.ExecuteNonQueryAsync();
         }
 
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var db = await ContextAsync(provider, tenant);
         var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = "Asker" };
         var role = new TenantRoleEntity

@@ -12,8 +12,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -106,7 +106,7 @@ public partial class TeamAccessEndPostgresTests
         var team = await TeamAsync("Clinic");
         await JoinStaffAsync(team, 3);
 
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
 
         CountOf(Waiting(site.Owner)).Should().Be(3);
         LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().BeEmpty();
@@ -148,7 +148,7 @@ public partial class TeamAccessEndPostgresTests
         await JoinStaffAsync(team, 2);
         CountOf(Waiting(site.Owner)).Should().Be(3);
 
-        await SetStaffRuleAsync(site, team, true);
+        await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
 
         Waiting(site.Owner).Should().BeNull();
         LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().ContainSingle();
@@ -199,7 +199,7 @@ public partial class TeamAccessEndPostgresTests
                 await DeclineStaffAsync(site, team, site.Owner, staff);
                 break;
             case Ending.SwitchOn:
-                await SetStaffRuleAsync(site, team, true);
+                await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
                 break;
             case Ending.Leave:
                 await Service(Guid.Empty, staff).RemoveStaffAsync(team.Id, staff, staff, Ct);
@@ -226,7 +226,7 @@ public partial class TeamAccessEndPostgresTests
         (await Members(site.Tenant).AddMemberAsync(new NewTenantMember(site.Tenant, second, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct))
             .Should().BeTrue();
         await DirectMemberAsync(site, await NewSubjectAsync("viewer"), null);
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
 
         await JoinStaffAsync(team, 2);
 
@@ -250,7 +250,7 @@ public partial class TeamAccessEndPostgresTests
         var team = await TeamAsync("Clinic");
         var staffOwner = await NewSubjectAsync("staff-owner");
         await AddOwnerAsync(site, staffOwner);
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         await JoinStaffAsync(team, staffOwner);
         (await StatusAsync(access, staffOwner)).Should().Be(TeamSiteStaffStatus.Pending);
         Waiting(site.Owner).Should().BeNull("an owner is not counted");
@@ -298,7 +298,7 @@ public partial class TeamAccessEndPostgresTests
         var team = await TeamAsync("Clinic");
         var promoted = await NewSubjectAsync("promoted");
         await DirectMemberAsync(site, promoted, null);
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         await JoinStaffAsync(team, 2);
         Waiting(promoted).Should().BeNull();
 
@@ -314,7 +314,7 @@ public partial class TeamAccessEndPostgresTests
         var team = await TeamAsync("Clinic");
         var former = await NewSubjectAsync("former-owner");
         await AddOwnerAsync(site, former);
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         await JoinStaffAsync(team, 2);
         CountOf(Waiting(former)).Should().Be(2);
 
@@ -346,11 +346,12 @@ public partial class TeamAccessEndPostgresTests
         var recount = new StaffNotices([new TeamSiteKey(site.Tenant, team.Id)], []);
         var past = $"{Now.AddHours(-1):yyyy-MM-dd HH:mm:ss}";
 
-        await ExecuteAsync($"UPDATE team_members SET ends_at = '{past}' WHERE team_id = '{team.Id}' AND subject_id = '{ended}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_members SET ends_at = '{past}' WHERE team_id = '{team.Id}' AND subject_id = '{ended}'");
         await Announcer(Contexts(Guid.Empty)).AnnounceAsync(recount);
         CountOf(Waiting(site.Owner)).Should().Be(1);
 
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             UPDATE team_tenant_access SET access_ends_at = '{past}' WHERE id = '{access}';
             """);
@@ -380,7 +381,7 @@ public partial class TeamAccessEndPostgresTests
     }
 
     private Task ApproveRowAsync(Site site, Guid access, Guid staff) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             UPDATE team_site_staff SET status = '{TeamSiteStaffStatus.Approved}'
              WHERE team_tenant_access_id = '{access}'
@@ -456,7 +457,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("notice-refused");
         var team = await TeamAsync("Clinic");
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await NewSubjectAsync("staff");
         var token = await StaffInviteAsync(team, new TeamStaffNarrowing(null, false, null));
         (await Service(Guid.Empty, staff).JoinStaffAsync(token, staff, Ct)).Refusal.Should().BeNull();

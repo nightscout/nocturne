@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -86,11 +87,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
     }
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor(), failure)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly, interceptors: [failure]);
 
     private async Task<(AlertRulesController Controller, Guid Tenant, Guid Rule, Failure Failure)> CreateAsync(
         string clientConfiguration = "{}")
@@ -287,5 +284,62 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         (await db.AlertConditionTimers.AsNoTracking().Select(t => t.ConditionPath).ToListAsync())
             .Should().BeEquivalentTo("threshold", "snooze[1].sustained");
         (await StoredAsync(tenant, rule)).Should().Be((70, true, true));
+    }
+
+    private const string CompositeBody =
+        """{"operator":"and","conditions":[{"type":"threshold","threshold":{"direction":"below","value":70}}]}""";
+
+    /// <summary>
+    /// The editor sends back the stand-ins the rule was shown with, so the save changes nothing it
+    /// can compare; it still stores members, and the rule, evaluated again, starts from no hold.
+    /// </summary>
+    [NativeTheory]
+    [InlineData("condition_type", "threshold_low", "composite", "warning")]
+    [InlineData("severity", "normal", "threshold", "critical")]
+    [InlineData("scope_class", "sideways", "threshold", "warning")]
+    public async Task A_save_from_the_editor_of_a_rule_holding_a_value_no_member_has_stores_members_and_clears_the_hold(
+        string column, string unreadable, string conditionType, string severity)
+    {
+        var (controller, tenant, rule, _) = await CreateAsync();
+        var body = conditionType == "composite" ? CompositeBody : Body;
+        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT set_config('app.current_tenant_id', '{tenant}', false);
+                UPDATE alert_rules SET {column} = @value, condition_params = @body::jsonb WHERE id = '{rule}';
+                """;
+            cmd.Parameters.Add(new NpgsqlParameter("@value", unreadable));
+            cmd.Parameters.Add(new NpgsqlParameter("@body", body));
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var shown = (AlertRuleResponse)((OkObjectResult)(await controller.GetRule(rule, CancellationToken.None)).Result!).Value!;
+        shown.ReviewReason.Should().Be(column switch
+        {
+            "condition_type" => AlertRuleReviewReasons.ConditionTypeUnrecognized,
+            "severity" => AlertRuleReviewReasons.SeverityUnrecognized,
+            _ => null,
+        });
+
+        var saved = await controller.UpdateRule(rule, new UpdateAlertRuleRequest
+        {
+            Name = shown.Name!,
+            ConditionType = shown.ConditionType,
+            ConditionParams = JsonSerializer.Deserialize<JsonElement>(body),
+            Severity = shown.Severity,
+            IsEnabled = true,
+            AutoResolveEnabled = true,
+            AutoResolveParams = JsonSerializer.Deserialize<JsonElement>(Resolve),
+        }, CancellationToken.None);
+
+        ((AlertRuleResponse)((OkObjectResult)saved.Result!).Value!).ReviewReason.Should().BeNull();
+        await using var db = Context(tenant, new Failure());
+        (await db.Database
+                .SqlQuery<string>($"SELECT condition_type || ',' || severity || ',' || scope_class AS \"Value\" FROM alert_rules WHERE id = {rule}")
+                .SingleAsync())
+            .Should().Be($"{conditionType},{severity},low", "the scope class is classified again, here as the stubbed classifier's low");
+        (await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == rule)).AwaitingRearm
+            .Should().BeFalse("the save made the rule evaluable, so it goes through the re-arm");
     }
 }

@@ -35,8 +35,7 @@ public class TrackerLegacyFallbackIntegrationTests(ApiIntegrationTestFixture fix
         using var client = CreateAuthenticatedClient();
         (await client.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Fallback Test User");
     }

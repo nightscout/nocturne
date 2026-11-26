@@ -1,4 +1,3 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -33,6 +32,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -233,7 +233,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
-            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
         services.AddSingleton(AccountLinkRoutes.Off);
         return services;

@@ -148,7 +148,7 @@ public partial class TeamRepository
             AccessEndsAt = grant.AccessEndsAt,
             ApprovedBySubjectId = approver.SubjectId,
             CreatedFromLinkId = link.Id,
-            TeamManagesStaff = grant.TeamManagesStaff,
+            StaffRule = grant.StaffRule,
             AccessRoles = roles.Select(role => new TeamTenantAccessRoleEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -162,7 +162,7 @@ public partial class TeamRepository
             .Select(m => new { m.Id, m.SubjectId })
             .ToListAsync(ct);
         foreach (var member in staff)
-            db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, member.SubjectId, grant.TeamManagesStaff, ct));
+            db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, member.SubjectId, grant.StaffRule, ct));
 
         var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(ct);
         TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));
@@ -223,7 +223,7 @@ public partial class TeamRepository
     /// <remarks>
     /// Bounded as an approval is (<see cref="LockAccessApprovalAsync"/>), by the editor's direct reason and
     /// credential and never by the link the access was made from, since an edit can give the team more. It
-    /// leaves each staff member's decision and the switch as they are, so it sends no one back to waiting.
+    /// leaves each staff member's decision and the rule as they are, so it sends no one back to waiting.
     /// Takes the rows of the team's staff, the site's owners lock, the team's manager lock and the site's team
     /// access lock (<see cref="MembershipLock"/>). Null, writing nothing, when a staff member joined between
     /// the read of the staff and those locks: the caller runs it again.
@@ -341,7 +341,7 @@ public partial class TeamRepository
                 a.ApprovedBySubjectId,
                 ApprovedByName = a.ApprovedBy == null ? null : a.ApprovedBy.Name,
                 a.SysCreatedAt,
-                a.TeamManagesStaff,
+                a.StaffRule,
                 Staff = db.TeamSiteStaff
                     .Where(s => s.TeamTenantAccessId == a.Id && s.TeamMember!.Kind == TeamMemberKind.Staff)
                     .OrderBy(s => s.Status != TeamSiteStaffStatus.Pending)
@@ -359,6 +359,13 @@ public partial class TeamRepository
                     .ToList(),
             })
             .ToListAsync(ct);
+        var blocked = (await db.TeamSiteStaff.AsNoTracking()
+                .Where(s => s.TeamTenantAccess!.TenantId == tenantId)
+                .Where(TeamReasons.Blocked)
+                .Select(s => s.TeamMember!.SubjectId)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet();
         return rows.Select(r => new TenantTeamAccess(
             r.TeamId,
             r.TeamName,
@@ -369,14 +376,36 @@ public partial class TeamRepository
             r.ApprovedBySubjectId,
             r.ApprovedByName,
             DateTime.SpecifyKind(r.SysCreatedAt, DateTimeKind.Utc),
-            r.TeamManagesStaff,
+            r.StaffRule,
             r.Staff.Select(s => new TenantTeamStaff(
                 s.SubjectId,
                 s.DisplayName,
                 s.Status,
                 new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
                 MembershipLiveness.HasEnded(s.EndsAt, now),
-                TeamSuggestableRoles.NameOf(s.RoleCeilingSlug))).ToList())).ToList();
+                TeamSuggestableRoles.NameOf(s.RoleCeilingSlug),
+                blocked.Contains(s.SubjectId))).ToList())).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<TenantTeamStaffBlock>> ListStaffBlocksOfTenantAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
+        var blocks = await db.TeamSiteBlocks.AsNoTracking()
+            .Where(b => b.TenantId == tenantId)
+            .OrderByDescending(b => b.SysCreatedAt)
+            .ThenBy(b => b.SubjectId)
+            .Select(b => new
+            {
+                b.SubjectId,
+                b.Subject!.Name,
+                b.SysCreatedAt,
+                b.CreatedBySubjectId,
+                CreatedByName = b.CreatedBy == null ? null : b.CreatedBy.Name,
+            })
+            .ToListAsync(ct);
+        return blocks.Select(b => new TenantTeamStaffBlock(
+            b.SubjectId, b.Name, DateTime.SpecifyKind(b.SysCreatedAt, DateTimeKind.Utc), b.CreatedBySubjectId, b.CreatedByName)).ToList();
     }
 
     /// <inheritdoc/>
@@ -408,7 +437,7 @@ public partial class TeamRepository
             await unit.Context.LockTeamStaffNoticesAsync(tenantId, teamId, token);
             var access = await unit.Context.TeamTenantAccess.AsNoTracking()
                 .Where(a => a.TenantId == tenantId && a.TeamId == teamId)
-                .Select(a => new { a.Id, TeamName = a.Team!.Name, a.AccessEndsAt })
+                .Select(a => new { a.Id, TeamName = a.Team!.Name, a.AccessEndsAt, a.StaffRule })
                 .FirstOrDefaultAsync(token);
             if (access is null)
             {
@@ -419,13 +448,13 @@ public partial class TeamRepository
             var waiting = MembershipLiveness.HasEnded(access.AccessEndsAt, now)
                 ? []
                 : await unit.Context.TeamSiteStaff.AsNoTracking()
+                    .Where(TeamReasons.Waits)
                     .Where(s => s.TeamTenantAccessId == access.Id
-                        && s.Status == TeamSiteStaffStatus.Pending
                         && s.TeamMember!.Kind == TeamMemberKind.Staff
                         && (s.TeamMember.EndsAt == null || s.TeamMember.EndsAt > now))
                     .Select(s => s.TeamMember!.SubjectId)
                     .ToListAsync(token);
-            await work(new TeamStaffWaiting(access.TeamName, waiting));
+            await work(new TeamStaffWaiting(access.TeamName, waiting, access.StaffRule == TeamStaffRule.TeamTrusted));
         }, ct);
     }
 
@@ -500,16 +529,16 @@ public partial class TeamRepository
                 a.LimitTo24Hours,
                 a.AccessEndsAt,
                 a.SysCreatedAt,
-                a.TeamManagesStaff,
-                Pending = db.TeamSiteStaff.Count(s => s.TeamTenantAccessId == a.Id && s.Status == TeamSiteStaffStatus.Pending),
-                Declined = db.TeamSiteStaff.Count(s => s.TeamTenantAccessId == a.Id && s.Status == TeamSiteStaffStatus.Declined),
+                a.StaffRule,
+                Pending = db.TeamSiteStaff.Where(s => s.TeamTenantAccessId == a.Id).Count(TeamReasons.Waits),
+                Declined = db.TeamSiteStaff.Where(s => s.TeamTenantAccessId == a.Id).Count(TeamReasons.DeclineApplies),
             })
             .ToListAsync(ct);
         return sites.Select(s => new TeamSiteAccess(
             s.TenantId, s.DisplayName, s.RoleNames, s.LimitTo24Hours, Utc(s.AccessEndsAt),
             MembershipLiveness.HasEnded(s.AccessEndsAt, now),
             DateTime.SpecifyKind(s.SysCreatedAt, DateTimeKind.Utc),
-            s.TeamManagesStaff, s.Pending, s.Declined)).ToList();
+            s.StaffRule, s.Pending, s.Declined)).ToList();
     }
 
     /// <summary>

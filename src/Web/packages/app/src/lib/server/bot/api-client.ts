@@ -89,6 +89,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
         api.alerts.markFailed(deliveryId, request, signal),
       getPendingDeliveries: (channelType, signal) =>
         api.alerts.getPendingDeliveries(channelType?.flatMap(toChannelType), signal),
+      getDeliveryPayload: (deliveryId, signal) => api.alerts.getDeliveryPayload(deliveryId, signal),
     },
     system: {
       heartbeat: (request, signal) => api.system.heartbeat(request, signal),

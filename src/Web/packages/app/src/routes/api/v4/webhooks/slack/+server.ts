@@ -1,7 +1,4 @@
 import type { RequestHandler } from "./$types";
-import { getBot } from "#lib/server/bot/index.js";
+import { handleBotWebhook } from "#lib/server/bot/webhook.js";
 
-export const POST: RequestHandler = async ({ request }) => {
-	const bot = await getBot();
-	return bot.webhooks.slack(request);
-};
+export const POST: RequestHandler = (event) => handleBotWebhook("slack", event);

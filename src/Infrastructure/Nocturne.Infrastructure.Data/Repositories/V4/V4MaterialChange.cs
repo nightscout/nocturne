@@ -1,7 +1,6 @@
-using System.Collections.Concurrent;
-using System.Reflection;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Interceptors;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -15,8 +14,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 internal static class V4MaterialChange
 {
-    private static readonly ConcurrentDictionary<(Type, string), bool> AuditIgnoredCache = new();
-
     /// <summary>True if the tracked entity has at least one material (non-PK, non-[AuditIgnored]) modified property.</summary>
     public static bool HasMaterialChange(EntityEntry entry)
     {
@@ -24,11 +21,6 @@ internal static class V4MaterialChange
         return entry.Properties.Any(prop =>
             prop.IsModified
             && !prop.Metadata.IsPrimaryKey()
-            && !IsAuditIgnored(entityType, prop.Metadata.Name));
+            && !MutationAuditInterceptor.IsAuditIgnored(entityType, prop.Metadata.Name));
     }
-
-    private static bool IsAuditIgnored(Type entityType, string propertyName)
-        => AuditIgnoredCache.GetOrAdd((entityType, propertyName), key =>
-            key.Item1.GetProperty(key.Item2, BindingFlags.Public | BindingFlags.Instance)
-                ?.GetCustomAttribute<AuditIgnoredAttribute>() is not null);
 }

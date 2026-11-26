@@ -68,7 +68,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
     public TreatmentDecomposerDeleteTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
     }
 
     public void Dispose()

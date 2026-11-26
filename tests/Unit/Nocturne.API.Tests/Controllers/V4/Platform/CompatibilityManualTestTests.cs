@@ -142,10 +142,11 @@ public class CompatibilityManualTestTests
     }
 
     [Theory]
-    [InlineData("https://user:pass@ns.example/nightscout/?token=synthetic-token", "ns.example/nightscout")]
-    [InlineData("https://ns.example/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/", "ns.example/AGYL…")]
+    [InlineData("https://user:pass@ns.example/nightscout/?token=synthetic-token", "ns.example/…")]
+    [InlineData("https://ns.example/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/", "ns.example/…")]
+    [InlineData("https://ns.example:8443/?token=synthetic-token", "ns.example:8443")]
     [InlineData("", "")]
-    public void The_configuration_shows_the_nightscout_url_masked(string configured, string expected)
+    public void The_configuration_shows_the_nightscout_url_as_its_host_with_no_path(string configured, string expected)
     {
         var response = Controller(new RecordingLogger(), new NightscoutConnectorConfiguration { Url = configured })
             .GetConfiguration();

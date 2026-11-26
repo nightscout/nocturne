@@ -2,10 +2,13 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TenantRoleDto, TenantTeamAccess } from "@nocturne/api-client";
+import { SetTeamStaffRuleRequestSchema } from "@nocturne/api-client/schemas";
 
 const mocks = vi.hoisted(() => ({
   approveTeamStaff: vi.fn(),
   declineTeamStaff: vi.fn(),
+  blockTeamStaff: vi.fn(),
+  unblockTeamStaff: vi.fn(),
   setTeamStaffRule: vi.fn(),
   editTeamAccess: vi.fn(),
 }));
@@ -33,16 +36,20 @@ const team: TenantTeamAccess = {
   limitTo24Hours: false,
   hasEnded: false,
   givenAt: "2026-11-01T00:00:00Z",
-  teamManagesStaff: true,
+  staffRule: "team_decides",
   staff: [waiting, approved],
 };
 
-function show(canDecide = true, roles: { roles?: TenantRoleDto[]; rolesFailed?: boolean } = { roles: [viewer] }) {
+function show(
+  canDecide = true,
+  roles: { roles?: TenantRoleDto[]; rolesFailed?: boolean } = { roles: [viewer] },
+  shown: TenantTeamAccess = team,
+) {
   const onStale = vi.fn();
   const onSuccess = vi.fn();
   const onRetryRoles = vi.fn();
   render(TeamAccessCard, {
-    team,
+    team: shown,
     canStop: true,
     canDecide,
     roles: roles.roles,
@@ -63,6 +70,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.approveTeamStaff.mockResolvedValue(undefined);
   mocks.declineTeamStaff.mockResolvedValue(undefined);
+  mocks.blockTeamStaff.mockResolvedValue(undefined);
+  mocks.unblockTeamStaff.mockResolvedValue(undefined);
   mocks.setTeamStaffRule.mockResolvedValue(undefined);
   mocks.editTeamAccess.mockResolvedValue(undefined);
 });
@@ -118,14 +127,47 @@ describe("TeamAccessCard commands", () => {
     );
   });
 
-  it("turns the switch off with the team", async () => {
-    show();
+  it.each([
+    ["I trust the whole team", "team_trusted", "You now trust the whole team."],
+    ["I approve each staff member", "owner_approves", "Each new staff member now waits for an owner's approval."],
+  ])("sends the rule chosen with %s, after the confirmation, in a body the generated schema accepts", async (label, staffRule, done) => {
+    const { onSuccess } = show();
 
-    await page.getByRole("switch").click();
+    await page.getByRole("radio", { name: new RegExp(label) }).click();
+    await page.getByRole("button", { name: "Change setting" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Change setting" }).click();
 
-    await vi.waitFor(() =>
-      expect(mocks.setTeamStaffRule).toHaveBeenCalledWith({ teamId, request: { teamManagesStaff: false } }),
-    );
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledWith(done));
+    expect(mocks.setTeamStaffRule).toHaveBeenCalledWith({ teamId, request: { staffRule } });
+    const parsed = SetTeamStaffRuleRequestSchema.safeParse(mocks.setTeamStaffRule.mock.calls[0][0].request);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({ staffRule });
+  });
+
+  it("offers no approval or decline while the site trusts the whole team, and says who can see the site", async () => {
+    const declined = { subjectId: "77777777-7777-7777-7777-777777777777", displayName: "Kit", status: "declined" };
+    show(true, { roles: [viewer] }, { ...team, staffRule: "team_trusted", staff: [waiting, approved, declined] });
+
+    await expect
+      .element(
+        page.getByText(
+          "You trust the whole team, so you do not approve or decline one staff member. You can still stop one person's access.",
+        ),
+      )
+      .toBeVisible();
+    const list = page.getByRole("list", { name: "Staff of Clinic" });
+    await expect.element(list.getByText("Not approved")).toBeVisible();
+    await expect.element(list.getByText("Declined", { exact: true })).toBeVisible();
+    expect(list.getByText("Can see this site while you trust the whole team.").elements()).toHaveLength(2);
+    expect(page.getByRole("button", { name: /^(Approve|Decline) / }).elements()).toHaveLength(0);
+  });
+
+  it("tells a reader who is not an owner that the declined can see the site while it trusts the whole team", async () => {
+    const declined = { subjectId: "77777777-7777-7777-7777-777777777777", displayName: "Kit", status: "declined" };
+    show(false, { roles: [viewer] }, { ...team, staffRule: "team_trusted", staff: [declined] });
+
+    await expect.element(page.getByText("Can see this site while the site trusts the whole team.")).toBeVisible();
+    expect(page.getByText("You trust the whole team", { exact: false }).elements()).toHaveLength(0);
   });
 
   it("sends the whole edit with the team and closes the form once it is saved", async () => {
@@ -142,12 +184,12 @@ describe("TeamAccessCard commands", () => {
     await expect.element(page.getByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
-  it("offers no change of access, switch or decision to a reader who is not an owner", async () => {
+  it("offers no change of access, staff setting or decision to a reader who is not an owner", async () => {
     show(false);
 
     await expect.element(page.getByText("Wren", { exact: true })).toBeVisible();
     expect(page.getByRole("button", { name: "Change the access of Clinic" }).elements()).toHaveLength(0);
-    expect(page.getByRole("switch").elements()).toHaveLength(0);
+    expect(page.getByRole("radio").elements()).toHaveLength(0);
     expect(page.getByRole("button", { name: /^(Approve|Decline) / }).elements()).toHaveLength(0);
   });
 
@@ -159,7 +201,7 @@ describe("TeamAccessCard commands", () => {
     await page.getByRole("button", { name: "Approve Wren" }).click();
 
     await expect.element(page.getByRole("button", { name: "Decline Ari" })).toBeDisabled();
-    await expect.element(page.getByRole("switch")).toBeDisabled();
+    await expect.element(page.getByRole("radio", { name: /I trust the whole team/ })).toBeDisabled();
     await expect.element(page.getByRole("button", { name: "Change the access of Clinic" })).toBeDisabled();
     finish();
     await expect.element(page.getByRole("button", { name: "Decline Ari" })).toBeEnabled();
@@ -169,6 +211,11 @@ describe("TeamAccessCard commands", () => {
 describe("TeamAccessCard refusals of a staff decision", () => {
   it.each([
     [403, "team_staff_decision_not_owner", "Only an owner of this site can decide which staff of a team can see this site."],
+    [
+      409,
+      "team_staff_team_trusted",
+      "You trust the whole team at this site, so you cannot approve or decline one staff member. Change the setting to decide again.",
+    ],
     [
       409,
       "caller_access_from_team",
@@ -197,11 +244,13 @@ describe("TeamAccessCard refusals of a staff decision", () => {
     expect(onStale).toHaveBeenCalled();
   });
 
-  it("words a refusal of the switch", async () => {
+  it("words a refusal of the staff setting", async () => {
     mocks.setTeamStaffRule.mockRejectedValue(refusal(403, "team_staff_decision_not_owner"));
     show();
 
-    await page.getByRole("switch").click();
+    await page.getByRole("radio", { name: /I trust the whole team/ }).click();
+    await page.getByRole("button", { name: "Change setting" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Change setting" }).click();
 
     await expect
       .element(page.getByRole("alert"))
@@ -252,6 +301,75 @@ describe("TeamAccessCard refusals of an edit", () => {
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect.element(page.getByRole("alert")).toHaveTextContent("This team no longer has access.");
+    expect(onStale).toHaveBeenCalled();
+  });
+});
+
+describe("TeamAccessCard stopping a staff member", () => {
+  it("stops a staff member with their subject, even while the site trusts the whole team", async () => {
+    const { onSuccess } = show(true, { roles: [viewer] }, { ...team, staffRule: "team_trusted" });
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await vi.waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("This person no longer sees this site through any team."),
+    );
+    expect(mocks.blockTeamStaff).toHaveBeenCalledWith(approved.subjectId);
+  });
+
+  it("lets a stopped staff member back in with their subject", async () => {
+    const { onSuccess } = show(true, { roles: [viewer] }, { ...team, staff: [{ ...approved, blocked: true }] });
+
+    await page.getByRole("button", { name: "Let Ari back in" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Let back in" }).click();
+
+    await vi.waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("This person can see this site through teams again."),
+    );
+    expect(mocks.unblockTeamStaff).toHaveBeenCalledWith(approved.subjectId);
+  });
+
+  it.each([
+    [403, "team_staff_decision_not_owner", "Only an owner of this site can stop a person's access through teams or let them back in."],
+    [
+      409,
+      "caller_access_from_team",
+      "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in.",
+    ],
+  ])("words a %i %s of a stop on the card", async (status, code, sentence) => {
+    mocks.blockTeamStaff.mockRejectedValue(refusal(status, code));
+    show();
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent(sentence);
+    expect(page.getByText("English detail").elements()).toHaveLength(0);
+  });
+
+  it("words a refusal of letting a staff member back in on the card", async () => {
+    mocks.unblockTeamStaff.mockRejectedValue(refusal(403, "team_staff_decision_not_owner"));
+    show(true, { roles: [viewer] }, { ...team, staff: [{ ...approved, blocked: true }] });
+
+    await page.getByRole("button", { name: "Let Ari back in" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Let back in" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Only an owner of this site can stop a person's access through teams or let them back in.");
+  });
+
+  it("says the person is no longer staff here, and reads the list again, on a 404", async () => {
+    mocks.blockTeamStaff.mockRejectedValue({ status: 404, body: { message: "Not found" } });
+    const { onStale } = show();
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("This person is no longer on the staff of a team that has access to this site.");
     expect(onStale).toHaveBeenCalled();
   });
 });

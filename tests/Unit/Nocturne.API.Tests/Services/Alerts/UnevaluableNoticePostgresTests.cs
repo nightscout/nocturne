@@ -44,10 +44,7 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>A repository on connections of its own, as one instance of the API has.</summary>
     private AlertRepository Instance(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
@@ -141,8 +138,8 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
 
         (await repository.GetStandingUnevaluableNoticesAsync(null, CancellationToken.None))
             .Should().BeEquivalentTo([
-                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, false),
-                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, false),
+                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, At, false),
+                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, At, false),
             ]);
         await repository.ResolveInstancesForExcursionAsync(first.ExcursionId, At, "manual", CancellationToken.None);
         (await repository.GetStandingUnevaluableNoticesAsync(rule, CancellationToken.None))

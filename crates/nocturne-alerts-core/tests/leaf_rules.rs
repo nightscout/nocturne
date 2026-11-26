@@ -1723,35 +1723,40 @@ fn tracker_model(c: &Case) -> Verdict {
     let reference = ago_of_instant(&instance["reference_at"]);
     let scheduled = instance["scheduled"].as_bool().unwrap();
     let minutes = whole(c, "minutes");
-    if !scheduled && let Some(recorded) = field(instance, "recorded_at").map(ago_of_instant) {
-        let due = reference - minutes * 60;
-        let already = match operator(c) {
-            ">=" => due >= recorded,
-            ">" => due > recorded,
-            _ => false,
-        };
-        if already {
-            return verdict(false, "held back");
-        }
-    }
+    let held_back = !scheduled
+        && field(instance, "recorded_at")
+            .map(ago_of_instant)
+            .is_some_and(|recorded| {
+                let due = reference - minutes * 60;
+                match operator(c) {
+                    ">=" => due >= recorded,
+                    ">" => due > recorded,
+                    _ => false,
+                }
+            });
     let elapsed = if scheduled {
         Some(reference)
     } else {
         passed(reference)
     };
-    elapsed.map_or_else(
-        || unknown("ahead"),
-        |p| {
-            verdict(
-                compared_minutes(c, "minutes", p),
-                if scheduled { "event" } else { "duration" },
-            )
-        },
+    let Some(p) = elapsed else {
+        return unknown(if held_back {
+            "ahead, so not held back"
+        } else {
+            "ahead"
+        });
+    };
+    if held_back {
+        return verdict(false, "held back");
+    }
+    verdict(
+        compared_minutes(c, "minutes", p),
+        if scheduled { "event" } else { "duration" },
     )
 }
 
 /// A duration instance recorded at its threshold's due time, or a second either side of it,
-/// about a third of the time.
+/// about a third of the time, and some of those started beyond the clock tolerance ahead.
 fn tracker_case() -> BoxedStrategy<Case> {
     (
         full_context(),
@@ -1759,34 +1764,43 @@ fn tracker_case() -> BoxedStrategy<Case> {
         word_value::<CmpOp>(),
         -5..=5i32,
         option::weighted(0.4, -1..=1i64),
+        option::weighted(0.6, select(vec![-301i64, -3600])),
     )
-        .prop_map(|(mut ctx, id, operator, minutes, recorded_beside_due)| {
-            let id = id.to_string();
-            let instance = ctx
-                .get_mut("active_trackers")
-                .and_then(Value::as_array_mut)
-                .and_then(|all| {
-                    all.iter_mut()
-                        .find(|t| t["tracker_definition_id"] == id.as_str())
+        .prop_map(
+            |(mut ctx, id, operator, minutes, recorded_beside_due, ahead)| {
+                let id = id.to_string();
+                let instance = ctx
+                    .get_mut("active_trackers")
+                    .and_then(Value::as_array_mut)
+                    .and_then(|all| {
+                        all.iter_mut()
+                            .find(|t| t["tracker_definition_id"] == id.as_str())
+                    });
+                if let (Some(instance), Some(beside)) = (instance, recorded_beside_due) {
+                    if let Some(ago) = ahead {
+                        instance["reference_at"] =
+                            Value::from((base() - TimeDelta::seconds(ago)).to_rfc3339());
+                        instance["scheduled"] = Value::from(false);
+                    }
+                    let due = ago_of_instant(&instance["reference_at"]) - i64::from(minutes) * 60;
+                    instance["recorded_at"] = Value::from(
+                        (base() - TimeDelta::seconds(due) + TimeDelta::seconds(beside))
+                            .to_rfc3339(),
+                    );
+                }
+                let payload = json!({
+                    "tracker_definition_id": id,
+                    "operator": operator,
+                    "minutes": minutes
                 });
-            if let (Some(instance), Some(beside)) = (instance, recorded_beside_due) {
-                let due = ago_of_instant(&instance["reference_at"]) - i64::from(minutes) * 60;
-                instance["recorded_at"] = Value::from(
-                    (base() - TimeDelta::seconds(due) + TimeDelta::seconds(beside)).to_rfc3339(),
-                );
-            }
-            let payload = json!({
-                "tracker_definition_id": id,
-                "operator": operator,
-                "minutes": minutes
-            });
-            case(ctx, payload)
-        })
+                case(ctx, payload)
+            },
+        )
         .boxed()
 }
 
 family!(
-    tracker_age_is_false_without_an_instance_and_for_a_threshold_held_when_a_duration_was_recorded,
+    tracker_age_is_false_without_an_instance_and_for_a_threshold_held_when_a_duration_was_recorded_unless_its_start_is_ahead,
     ConditionKind::TrackerAge,
     tracker_case(),
     tracker_model,
@@ -1796,7 +1810,9 @@ family!(
         "false:event",
         "true:duration",
         "false:duration",
-        "false:held back"
+        "false:held back",
+        "unknown:ahead",
+        "unknown:ahead, so not held back"
     ]
 );
 

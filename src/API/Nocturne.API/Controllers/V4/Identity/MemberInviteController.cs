@@ -394,14 +394,17 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <summary>
-    /// Turns "the team manages its own staff" on or off for a team with access to the current tenant.
-    /// Off keeps the staff already approved, and each new or widened staff member waits for an owner.
-    /// On approves every waiting staff member at once and keeps the declined declined. Only an owner may.
+    /// Sets who decides which staff of a team with access to the current tenant reach it (<see cref="TeamStaffRule"/>).
+    /// To an owner approving keeps the staff already approved, and each new or widened staff member waits for an
+    /// owner. To the team deciding, from either other rule, approves every waiting staff member at once and keeps
+    /// the declined declined. Trusting the whole team gives every staff member access, the waiting and the declined
+    /// too, until the site stops trusting it. Only an owner may.
     /// </summary>
     [HttpPut("team-access/{teamId:guid}/staff-rule")]
     [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -412,9 +415,65 @@ public class MemberInviteController : ControllerBase
             return Challenge();
         if (HttpContext.GetSubjectId() is not { } callerId)
             return Unauthorized();
+        if (!TeamStaffRule.IsKnown(request.StaffRule))
+            return this.StaffRuleInvalidProblem();
 
         return StaffDecisionResult(
-            await access.SetStaffRuleAsync(_tenantAccessor.TenantId, teamId, callerId, request.TeamManagesStaff, ct));
+            await access.SetStaffRuleAsync(_tenantAccessor.TenantId, teamId, callerId, request.StaffRule, ct));
+    }
+
+    /// <summary>
+    /// The people the current tenant stopped reaching it through any team, the latest first, with when and
+    /// who. A person no longer staff of any team is listed too, so the stop can always be removed.
+    /// </summary>
+    [HttpGet("team-staff-blocks")]
+    [RequireScope(Scope.MembersInvite, Scope.MembersManage, Scope.SharingManage)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<TenantTeamStaffBlock>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetTeamStaffBlocks([FromServices] ITeamRepository teams, CancellationToken ct) =>
+        Ok(await teams.ListStaffBlocksOfTenantAsync(_tenantAccessor.TenantId, ct));
+
+    /// <summary>
+    /// Stops a person reaching the current tenant through any team, now and later, under every staff rule.
+    /// Access they have directly does not change. The person must be staff of a team with access to the
+    /// tenant. A stop already set changes nothing. Only an owner may.
+    /// </summary>
+    [HttpPost("team-staff-blocks/{subjectId:guid}")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory", "GetTeamStaffBlocks"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> BlockTeamStaff(Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(await access.BlockStaffAsync(_tenantAccessor.TenantId, callerId, subjectId, ct));
+    }
+
+    /// <summary>
+    /// Lets a person reach the current tenant through teams again, with what their staff rows and each team's
+    /// staff rule give. Removing a stop that is not there changes nothing. Only an owner may.
+    /// </summary>
+    [HttpDelete("team-staff-blocks/{subjectId:guid}")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory", "GetTeamStaffBlocks"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UnblockTeamStaff(Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(await access.UnblockStaffAsync(_tenantAccessor.TenantId, callerId, subjectId, ct));
     }
 
     /// <summary>
@@ -880,6 +939,10 @@ public class MemberInviteController : ControllerBase
             TeamProblemCodes.StaffDecisionNotOwner,
             "Only an owner of the site can decide which of a team's staff have access to it.",
             StatusCodes.Status403Forbidden),
+        OwnerDecision.TeamTrusted => this.ProblemWithCode(
+            TeamProblemCodes.StaffTeamTrusted,
+            "This site trusts the whole team, so an owner does not decide about one staff member.",
+            StatusCodes.Status409Conflict),
         _ => NotFound(),
     };
 
@@ -956,8 +1019,11 @@ public record SetMemberRolesRequest(List<Guid> RoleIds);
 public record SetMemberPermissionsRequest(List<string>? DirectPermissions);
 public record SetMemberLimitTo24HoursRequest(bool LimitTo24Hours);
 
-/// <param name="TeamManagesStaff">Whether the team's staff are approved at the site as they join.</param>
-public record SetTeamStaffRuleRequest(bool TeamManagesStaff);
+public sealed record SetTeamStaffRuleRequest
+{
+    /// <summary>Who decides which of the team's staff reach the site, a <see cref="TeamStaffRule"/> value.</summary>
+    public required string StaffRule { get; init; }
+}
 
 /// <summary>Everything a team's access gives after an owner's edit. Each member must be sent; it is not a patch.</summary>
 public sealed record EditTeamAccessRequest

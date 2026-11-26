@@ -254,9 +254,8 @@ public class TrackerRepository : ITrackerRepository, ITrackerConsumableLock
         var ids = definitionIds.ToList();
         var instances = await db
             .TrackerInstances.AsNoTracking()
-            .Where(i => ids.Contains(i.DefinitionId)
-                && i.StartedAt <= at
-                && (i.CompletedAt == null || i.CompletedAt > at))
+            .Where(i => ids.Contains(i.DefinitionId))
+            .ActiveAt(i => i.StartedAt, i => i.CompletedAt, at)
             .OrderByDescending(i => i.StartedAt)
             .Select(i => new
             {
@@ -328,9 +327,8 @@ public class TrackerRepository : ITrackerRepository, ITrackerConsumableLock
     )
     {
         await using var lease = await OpenAsync(cancellationToken);
-        return ToDomain(await lease.Context.TrackerInstances.AsNoTracking()
+        return ToDomain(await RunsOverlapping(lease.Context.TrackerInstances.AsNoTracking(), from, to)
             .Include(i => i.Definition)
-            .Where(i => i.StartedAt < to && (i.CompletedAt == null || i.CompletedAt > from))
             .OrderBy(i => i.StartedAt).Take(limit)
             .ToListAsync(cancellationToken));
     }
@@ -343,9 +341,12 @@ public class TrackerRepository : ITrackerRepository, ITrackerConsumableLock
     )
     {
         await using var lease = await OpenAsync(cancellationToken);
-        return await lease.Context.TrackerInstances.AnyAsync(
-            e => e.StartedAt < to && (e.CompletedAt == null || e.CompletedAt >= from), cancellationToken);
+        return await RunsOverlapping(lease.Context.TrackerInstances, from, to).AnyAsync(cancellationToken);
     }
+
+    internal static IQueryable<TrackerInstanceEntity> RunsOverlapping(
+        IQueryable<TrackerInstanceEntity> runs, DateTime from, DateTime to) =>
+        runs.OverlapsWindow(i => i.StartedAt, i => i.CompletedAt, from, to, OverlapEdges.BothExcluded);
 
     /// <inheritdoc />
     public virtual async Task<TrackerInstance?> GetInstanceByIdAsync(

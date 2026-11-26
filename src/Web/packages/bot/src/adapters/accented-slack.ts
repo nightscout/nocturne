@@ -29,6 +29,9 @@ const asCard = (message: AdapterPostableMessage): CardElement | undefined => {
  *   files today; the day it carries a glucose chart, this path silently loses it
  *   while an unrecognised severity uploads it. Close this before adding one.
  * - **No debug logging.** Stock logs channel, thread and block count per post.
+ * - **No block detail on `invalid_blocks`.** Stock adds Slack's per-block
+ *   validation details to the error with `enrichInvalidBlocksError`, which is
+ *   internal to `@chat-adapter/slack`; here the error carries Slack's bare message.
  *
  * Mentions and error mapping are not gaps: both are reproduced below.
  */

@@ -6,6 +6,8 @@ import type { TenantTeamAccess } from "@nocturne/api-client";
 vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   approveTeamStaff: vi.fn(),
   declineTeamStaff: vi.fn(),
+  blockTeamStaff: vi.fn(),
+  unblockTeamStaff: vi.fn(),
   setTeamStaffRule: vi.fn(),
   editTeamAccess: vi.fn(),
 }));
@@ -21,7 +23,7 @@ const team = (teamId: string, teamName: string): TenantTeamAccess => ({
   limitTo24Hours: false,
   hasEnded: false,
   givenAt: "2026-11-01T00:00:00Z",
-  teamManagesStaff: true,
+  staffRule: "team_decides",
   staff: [],
 });
 

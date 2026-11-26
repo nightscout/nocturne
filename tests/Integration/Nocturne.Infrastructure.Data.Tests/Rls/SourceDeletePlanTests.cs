@@ -45,7 +45,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
 
         deleted.Should().Be(Groups);
         recorder.Stamps.Should().HaveCount(2, "one update per chunk of ids");
-        var plan = await PlanTestSupport.ExplainAsync(conn, recorder.Stamps[0]);
+        var plan = await QueryPlans.ExplainAsync(conn, recorder.Stamps[0]);
         plan.Descendants("Relation Name").Should().Equal(
             ["sensor_glucose", "sensor_glucose"], "the update reads its table once: " + plan);
         plan.Descendants("Node Type").Should().NotContain(
@@ -125,7 +125,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         {
             var conn = new NpgsqlConnection(_database.AppConnectionString);
             await conn.OpenAsync();
-            await PlanTestSupport.SetTenantAsync(conn, tenant);
+            await QueryPlans.SetTenantAsync(conn, tenant);
             return conn;
         }
 
@@ -133,7 +133,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         /// <paramref name="groups"/> duplicate groups for <paramref name="tenant"/>, each a reading from
         /// <c>source-a</c>, its group's primary, and one from <c>source-b</c>.
         /// </summary>
-        public async Task SeedAsync(Guid tenant, int groups)
+        public async Task SeedAsync(Guid tenant, int groups, RecordType linkedType = RecordType.SensorGlucose)
         {
             await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
             await conn.OpenAsync();
@@ -160,7 +160,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
             cmd.Parameters.AddWithValue("tid", tenant);
             cmd.Parameters.AddWithValue("slug", $"srcplan-{tenant:N}");
             cmd.Parameters.AddWithValue("groups", groups);
-            cmd.Parameters.AddWithValue("type", RecordTypeKeys.Key(RecordType.SensorGlucose));
+            cmd.Parameters.AddWithValue("type", RecordTypeKeys.Key(linkedType));
             await cmd.ExecuteNonQueryAsync();
         }
     }

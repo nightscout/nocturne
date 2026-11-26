@@ -83,7 +83,7 @@ public partial class TeamAccessEndPostgresTests
         var site = await SiteAsync("edit-widen");
         var team = await TeamAsync("Clinic");
         var treatments = await TreatmentsRoleAsync(site);
-        var access = await FollowAsync(team, site, Gives(site, [treatments], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [treatments], staffRule: TeamStaffRule.OwnerApproves));
         var holding = await JoinStaffAsync(team);
         var first = await NewSubjectAsync("first");
         (await JoinAsync(team, first, new TeamStaffNarrowing(RoleSeeds.Viewer, false, null))).Refusal.Should().BeNull();
@@ -185,7 +185,7 @@ public partial class TeamAccessEndPostgresTests
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, declined, Ct)).Should().BeNull();
         (await StatusAsync(access, waiting)).Should().Be(TeamSiteStaffStatus.Pending);
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, waiting, Ct)).Should().BeNull();
-        (await Teams().ListAccessOfTenantAsync(site.Tenant, Now, Ct)).Should().ContainSingle().Which.TeamManagesStaff.Should().BeFalse();
+        (await Teams().ListAccessOfTenantAsync(site.Tenant, Now, Ct)).Should().ContainSingle().Which.StaffRule.Should().Be(TeamStaffRule.OwnerApproves);
     }
 
     [Fact]

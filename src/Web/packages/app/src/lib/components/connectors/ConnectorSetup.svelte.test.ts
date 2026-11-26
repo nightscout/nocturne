@@ -275,17 +275,17 @@ describe("ConnectorSetup", () => {
       grant.scopes = CARETAKER;
       stored.lockedKeys = ["url"];
       stored.address = true;
-      stored.configuration = { url: "mine.example/AGYL…" };
+      stored.configuration = { url: "mine.example/…" };
       render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
 
-      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/AGYL…");
+      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/…");
       await expect.element(page.getByTestId("locked-url")).toBeVisible();
       expect(page.getByRole("button", { name: "Change address" }).elements()).toHaveLength(0);
     });
 
     it("may change a destination the API does not lock", async () => {
       stored.address = true;
-      stored.configuration = { url: "mine.example/AGYL…" };
+      stored.configuration = { url: "mine.example/…" };
       render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
 
       await expect.element(page.getByRole("button", { name: "Change address" })).toBeEnabled();
@@ -308,13 +308,13 @@ describe("ConnectorSetup", () => {
   describe("a stored address", () => {
     beforeEach(() => {
       stored.address = true;
-      stored.configuration = { url: "mine.example/AGYL…", pollingInterval: 300 };
+      stored.configuration = { url: "mine.example/…", pollingInterval: 300 };
     });
 
-    it("is shown as the API masks it, and a save leaves it out", async () => {
+    it("is shown as the API shows it, and a save leaves it out", async () => {
       render(ConnectorSetup, { props: { connectorId: "nightscout", primaryAction: "save-only" } });
 
-      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/AGYL…");
+      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/…");
       await expect.element(page.getByRole("button", { name: "Change address" })).toBeVisible();
       expect(page.getByRole("textbox").elements()).toHaveLength(0);
 
@@ -344,7 +344,7 @@ describe("ConnectorSetup", () => {
       await page.getByRole("button", { name: "Change address" }).click();
       await page.getByRole("textbox", { name: "URL" }).fill("https://new.example/ns");
       await page.getByRole("button", { name: "Keep current address" }).click();
-      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/AGYL…");
+      await expect.element(page.getByTestId("address-url")).toHaveTextContent("mine.example/…");
 
       await page.getByRole("spinbutton").fill("500");
       await page.getByRole("button", { name: "Save" }).click();

@@ -64,6 +64,14 @@ public sealed class TeamReasonChanges
             recountSites.Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList(),
             _given.Where(g => !g.Held).Select(g => g.TenantId).Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList()));
 
+    /// <summary>
+    /// These changes, owing the owners of the sites once they commit a recount of the waiting staff of each
+    /// team and site in <paramref name="recount"/>, and no notice that a team's staff newly reach a site.
+    /// </summary>
+    public TeamReasonChanges WithRecounts(IEnumerable<TeamSiteKey> recount) => new(
+        _unit, _removals, _given, _write,
+        new StaffNotices(recount.Distinct().OrderBy(k => k.TenantId).ThenBy(k => k.TeamId).ToList(), []));
+
     /// <summary>The sites where a team reason changes, in ascending tenant id.</summary>
     public IReadOnlyList<Guid> Sites =>
         _removals.Select(r => r.TenantId).Concat(_given.Select(g => g.TenantId)).Distinct().Order().ToList();
@@ -80,6 +88,10 @@ public sealed class TeamReasonChanges
     /// reason as they lose another keeps the membership. What a member who keeps their membership made is
     /// capped at an end the changes lower. The unit must be pinned to the tenant.
     /// </summary>
+    /// <remarks>
+    /// Each add is saved before the next: an add reads the membership from the database, so a second add for a
+    /// subject who had none would otherwise make the membership twice.
+    /// </remarks>
     /// <returns>The grants the caps lowered, for the caller to evict their sessions once the unit commits.</returns>
     public async Task<IReadOnlyList<OAuthGrantRecord>> StageReasonsAtAsync(Guid tenantId, DateTime now, CancellationToken ct)
     {
@@ -95,6 +107,7 @@ public sealed class TeamReasonChanges
             {
                 await TenantMembershipRepository.StageAddTeamReasonAsync(
                     _unit.Context, given.TenantId, given.SubjectId, given.AccessId, given.Grant, MemberAccessSource.System, now, ct);
+                await _unit.Context.SaveChangesAsync(ct);
             }
         }
 
@@ -213,8 +226,8 @@ public sealed class TeamReasonChanges
 
     /// <summary>
     /// Brings the team reasons of every membership a team's rows reach into line with them, for the
-    /// startup check: one read finds each site and subject with an approved <c>team_site_staff</c> row or a
-    /// team reason, then each is synced (<see cref="SyncAsync"/>) in its own transaction, on a context
+    /// startup check: one read finds each site and subject with a <c>team_site_staff</c> row that gives a
+    /// reason (<see cref="TeamReasons.GivesReason"/>) or a team reason, then each is synced (<see cref="SyncAsync"/>) in its own transaction, on a context
     /// <paramref name="open"/> opens, under the subject's row and the site's team access lock, and what
     /// changes is handed to <paramref name="apply"/>, which stages and saves it. One that fails
     /// (<see cref="MembershipReasons.IsMembershipFailure"/>) is logged and the rest still run.
@@ -231,7 +244,8 @@ public sealed class TeamReasonChanges
         await using (var db = open())
         {
             reached = (await db.TeamSiteStaff.AsNoTracking()
-                    .Where(s => s.Status == TeamSiteStaffStatus.Approved && s.TeamMember!.Kind == TeamMemberKind.Staff)
+                    .Where(TeamReasons.GivesReason)
+                    .Where(s => s.TeamMember!.Kind == TeamMemberKind.Staff)
                     .Select(s => new { s.TeamTenantAccess!.TenantId, s.TeamMember!.SubjectId })
                     .Union(db.TenantMemberReasons.AsNoTracking()
                         .Where(r => r.Kind == MembershipReasonKind.Team)

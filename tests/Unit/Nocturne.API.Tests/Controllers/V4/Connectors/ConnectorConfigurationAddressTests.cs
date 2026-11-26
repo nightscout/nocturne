@@ -27,7 +27,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Connectors;
 
 /// <summary>
 /// The path or query of a connector's address can be the credential, so a read gives only its
-/// masked form, and a save keeps the stored address unless it names a new one
+/// shown form, and a save keeps the stored address unless it names a new one
 /// (<see cref="ConnectorAddresses"/>).
 /// </summary>
 public class ConnectorConfigurationAddressTests : IDisposable
@@ -35,7 +35,8 @@ public class ConnectorConfigurationAddressTests : IDisposable
     private const string Nightscout = "Nightscout";
     private const string PathSecret = "AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI";
     private const string StoredUrl = $"https://mine.example/{PathSecret}/?token=synthetic-token";
-    private const string StoredRealtimeUrl = $"https://live.example/{PathSecret}";
+    private const string ShortPathSecret = "s3cr3t";
+    private const string StoredRealtimeUrl = $"https://live.example:8443/{ShortPathSecret}";
 
     private static readonly string Stored =
         JsonSerializer.Serialize(new { url = StoredUrl, realtimeUrl = StoredRealtimeUrl, maxCount = 1000 });
@@ -101,26 +102,26 @@ public class ConnectorConfigurationAddressTests : IDisposable
     }
 
     [Fact]
-    public async Task A_read_gives_each_address_masked()
+    public async Task A_read_gives_each_address_as_its_host_with_no_path()
     {
         await SeedAsync();
 
         var read = await Controller(AuthType.SessionCookie, RoleSeeds.Owner).GetConfiguration(Nightscout, default);
 
         var configuration = Configuration(read);
-        configuration.GetProperty("url").GetString().Should().Be("mine.example/AGYL…");
-        configuration.GetProperty("realtimeUrl").GetString().Should().Be("live.example/AGYL…");
-        configuration.GetRawText().Should().NotContain(PathSecret).And.NotContain("synthetic-token");
+        configuration.GetProperty("url").GetString().Should().Be("mine.example/…");
+        configuration.GetProperty("realtimeUrl").GetString().Should().Be("live.example:8443/…");
+        configuration.GetRawText().Should().NotContain(PathSecret).And.NotContain(ShortPathSecret).And.NotContain("synthetic-token");
     }
 
     [Fact]
-    public async Task A_save_answers_with_each_address_masked()
+    public async Task A_save_answers_with_each_address_as_its_host_with_no_path()
     {
         var saved = await SaveAsync(AuthType.SessionCookie, RoleSeeds.Owner, Stored);
 
         var configuration = Configuration(saved);
-        configuration.GetProperty("url").GetString().Should().Be("mine.example/AGYL…");
-        configuration.GetRawText().Should().NotContain(PathSecret).And.NotContain("synthetic-token");
+        configuration.GetProperty("url").GetString().Should().Be("mine.example/…");
+        configuration.GetRawText().Should().NotContain(PathSecret).And.NotContain(ShortPathSecret).And.NotContain("synthetic-token");
         (await StoredAsync()).GetProperty("url").GetString().Should().Be(StoredUrl);
     }
 
@@ -167,13 +168,13 @@ public class ConnectorConfigurationAddressTests : IDisposable
     }
 
     [Fact]
-    public async Task A_sent_address_is_stored_as_sent_even_when_it_reads_as_the_masked_form()
+    public async Task A_sent_address_is_stored_as_sent_even_when_it_reads_as_the_shown_form()
     {
         await SeedAsync();
 
-        await SaveAsync(AuthType.SessionCookie, RoleSeeds.Owner, """{"url":"mine.example/AGYL…"}""");
+        await SaveAsync(AuthType.SessionCookie, RoleSeeds.Owner, """{"url":"mine.example/…"}""");
 
-        (await StoredAsync()).GetProperty("url").GetString().Should().Be("mine.example/AGYL…");
+        (await StoredAsync()).GetProperty("url").GetString().Should().Be("mine.example/…");
     }
 
     [Theory]

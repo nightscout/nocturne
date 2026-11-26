@@ -109,7 +109,7 @@ internal sealed class ClockAnomalyNotice(
 
     /// <summary>Instants the host writes from its own clock (docs/alerts/engine-semantics.md §5.4).</summary>
     internal static readonly IReadOnlySet<string> HostFacts =
-        new HashSet<string> { "enabled_at", "sustained", "hysteresis_started_at", "active_alerts" };
+        new HashSet<string> { "enabled_at", "sustained", "hysteresis_started_at", "held_since", "updated_at", "active_alerts" };
 
     /// <summary>
     /// The reading facts are observed by the reading selection, which sees every stored reading;

@@ -2,8 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -43,10 +43,7 @@ public class AddWriterGrantIdFixture : IAsyncLifetime
 
         await SeedAsync();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(_migratorConnectionString);
         await using (var context = new NocturneDbContext(options))
             await context.GetService<IMigrator>().MigrateAsync();
 

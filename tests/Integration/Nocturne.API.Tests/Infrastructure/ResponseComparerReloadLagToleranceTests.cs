@@ -52,6 +52,27 @@ public class ResponseComparerReloadLagToleranceTests
     }
 
     [Theory]
+    [InlineData("""{"cob":{"displayLine":"COB: 25g"}}""", """{"cob":{"displayLine":"COB: 24.9g"}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 0g"}}""", """{"cob":{"displayLine":"COB: 0.1g"}}""")]
+    public async Task A_whole_COB_display_matches_a_tenth_away_that_keeps_its_fraction(string expected, string actual)
+    {
+        (await MatchesAsync(Properties, expected, actual)).Should().BeTrue();
+        (await MatchesAsync(Properties, actual, expected)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("""{"cob":{"displayLine":"COB: 25g"}}""", """{"cob":{"displayLine":"COB: 24.8g"}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 25g"}}""", """{"cob":{"displayLine":"COB: 25.2g"}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 25g"}}""", """{"cob":{"displayLine":"COB: 25.0g"}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 25g"}}""", """{"cob":{"displayLine":"COB: 25.00g"}}""")]
+    [InlineData("""{"cob":{"displayLine":"COB: 25g"}}""", """{"cob":{"displayLine":"COB: 24.95g"}}""")]
+    public async Task A_whole_COB_display_does_not_match_beyond_a_tenth(string expected, string actual)
+    {
+        (await MatchesAsync(Properties, expected, actual)).Should().BeFalse();
+        (await MatchesAsync(Properties, actual, expected)).Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData("""{"cob":{"display":26.3}}""", """{"cob":{"display":26.1}}""")]
     [InlineData("""{"cob":{"displayLine":"COB: 26.3g"}}""", """{"cob":{"displayLine":"COB: 26.1g"}}""")]
     [InlineData("""{"cob":{"cob":26.253333}}""", """{"cob":{"cob":26.223333}}""")]

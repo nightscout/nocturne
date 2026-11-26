@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.WebSockets;
 using Nocturne.Tests.Shared.Infrastructure;
 using Activity = System.Diagnostics.Activity;
 using FluentAssertions;
@@ -9,10 +10,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Nocturne.API.Extensions;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Infrastructure.Outbound;
 using OpenTelemetry.Trace;
 
 namespace Nocturne.API.Tests.Migration;
@@ -77,34 +80,66 @@ public class NightscoutClientSpanTests
     }
 
     [Fact]
-    public async Task The_spans_of_the_realtime_listeners_polling_hold_the_masked_url()
+    public async Task The_realtime_listener_upgrades_to_a_websocket_whose_span_holds_the_masked_url()
     {
-        var site = new EngineIoPollingSite();
-        await using var app = await StartSiteAsync(site.AnswerAsync);
+        var site = new EngineIoSite();
+        await using var app = await site.StartAsync();
+        var updated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var (spans, port) = await ObserveAsync(
             app,
-            async (services, port, polled) =>
+            async (services, port, upgraded) =>
             {
                 using var client = NightscoutConnectorBackgroundService.NewClient(
                     NightscoutAddress.Resolve($"http://127.0.0.1:{port}/{Secret}/?token={Token}"),
-                    services.GetRequiredService<IHttpClientFactory>());
+                    services.GetRequiredService<IHttpClientFactory>(),
+                    services.GetRequiredService<IHttpMessageHandlerFactory>());
+                client.On("dataUpdate", _ =>
+                {
+                    updated.TrySetResult();
+                    return Task.CompletedTask;
+                });
                 using var deadline = new CancellationTokenSource(Eventually.DefaultPatience);
 
                 await client.ConnectAsync(deadline.Token);
-                await polled.WaitAsync(deadline.Token);
-
-                client.Connected.Should().BeTrue();
+                await upgraded.WaitAsync(deadline.Token);
+                await updated.Task.WaitAsync(deadline.Token);
             },
-            spans => spans.Any(span => span.DisplayName == "GET") && spans.Any(span => span.DisplayName == "POST"));
+            spans => spans.Any(IsUpgrade));
 
-        spans.Select(span => span.DisplayName).Should().Contain(["GET", "POST"]);
+        site.WebSocketUserAgent.Should().StartWith("Nocturne").And.Be(site.PollingUserAgent);
+        spans.Should().Contain(span => IsUpgrade(span));
         spans.Should().AllSatisfy(span =>
         {
             span.GetTagItem("url.full").Should().Be($"127.0.0.1:{port}/AGYL…/socket.io");
             HoldsNoCredential(span);
         });
     }
+
+    [Fact]
+    public async Task The_realtime_listeners_websocket_is_refused_a_link_local_target()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Configuration["Connectors:Nightscout:Enabled"] = "true";
+        new NightscoutConnectorInstaller().Install(builder.Services, builder.Configuration);
+        using var host = builder.Build();
+        using var http = host.Services.GetRequiredService<IHttpClientFactory>()
+            .CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName);
+        using var socket = new ConnectorClientWebSocket(
+            host.Services.GetRequiredService<IHttpMessageHandlerFactory>(),
+            NightscoutConnectorInstaller.RealtimeHttpClientName,
+            http.DefaultRequestHeaders);
+
+        var connect = () => socket.ConnectAsync(
+            new Uri($"ws://169.254.169.254/{Secret}/socket.io/?EIO=4&transport=websocket"),
+            CancellationToken.None);
+
+        await connect.Should().ThrowAsync<WebSocketException>()
+            .WithInnerException(typeof(OutboundRefusedException));
+    }
+
+    private static bool IsUpgrade(Activity span) =>
+        span.GetTagItem("http.response.status_code") is 101;
 
     private static void HoldsNoCredential(Activity span)
     {
@@ -180,46 +215,6 @@ public class NightscoutClientSpanTests
 
         lock (spans)
             return (spans.ToList(), port);
-    }
-
-    /// <summary>
-    /// An Engine.IO server, polling only, as far as a client's connect: it opens a session that offers
-    /// no upgrade, takes the namespace connect, answers it on the next poll, and holds every poll after.
-    /// </summary>
-    private sealed class EngineIoPollingSite
-    {
-        private int _polls;
-
-        public async Task AnswerAsync(HttpContext context)
-        {
-            context.Response.ContentType = "text/plain; charset=UTF-8";
-            if (HttpMethods.IsPost(context.Request.Method))
-            {
-                await context.Response.WriteAsync("ok");
-                return;
-            }
-
-            if (!context.Request.Query.ContainsKey("sid"))
-            {
-                await context.Response.WriteAsync(
-                    "0{\"sid\":\"session\",\"upgrades\":[],\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}");
-                return;
-            }
-
-            if (Interlocked.Increment(ref _polls) == 1)
-            {
-                await context.Response.WriteAsync("40{\"sid\":\"namespace\"}");
-                return;
-            }
-
-            try
-            {
-                await Task.Delay(Timeout.Infinite, context.RequestAborted);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }
     }
 
     private static async Task<WebApplication> StartSiteAsync(RequestDelegate answer)

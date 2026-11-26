@@ -350,20 +350,20 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     }
 
     [Fact]
-    public async Task RemovingASubjectsMembershipsAuditsEachOne()
+    public async Task DeletingASubjectEvenAsLastOwnerAuditsTheRoleAndPermissionEachMembershipHeld()
     {
         await SeedMemberAsync();
 
-        await Repository(new TestAuditActor { SubjectId = _actor })
-            .RemoveMembershipsOfSubjectAsync(_subject, CancellationToken.None);
+        (await SubjectDeletions.DeleteEvenLastOwnerAsync(
+                new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), AccountLinkRoutes.Off,
+                _subject, CancellationToken.None))
+            .Change.Should().BeOfType<SubjectChange.Changed>();
 
         var rows = await RowsAsync();
-        rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)
-            && a.TargetSubjectId == _subject && a.TenantId == _tenant);
-        rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
-            """{"role":"viewer","kind":"tenant"}""",
-            """{"permission":"glucose.read","kind":"tenant"}""",
-            """{"kind":"tenant","how":"system"}""");
+        rows.Should().OnlyContain(a => a.TargetSubjectId == _subject && a.TenantId == _tenant);
+        rows.Select(a => a.EventType).Should().BeEquivalentTo(
+            [AuthAuditEventType.RoleRemoved, AuthAuditEventType.RoleRemoved, AuthAuditEventType.MemberRemoved],
+            "the details of each row go with the account");
     }
 
     [Fact]

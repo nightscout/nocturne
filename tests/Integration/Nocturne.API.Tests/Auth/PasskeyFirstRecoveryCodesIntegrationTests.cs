@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -31,15 +32,12 @@ public class PasskeyFirstRecoveryCodesIntegrationTests : ApiIntegrationTestBase
     public override async Task DisposeAsync()
     {
         await using (var conn = await OpenPostgresAsync())
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM recovery_codes WHERE subject_id = ANY(@ids);
-                DELETE FROM tenant_members WHERE subject_id = ANY(@ids);
-                """;
-            cmd.Parameters.AddWithValue("ids", _members.ToArray());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            DELETE FROM recovery_codes WHERE subject_id = ANY(@ids);
+            DELETE FROM tenant_members WHERE subject_id = ANY(@ids);
+            """,
+            ("ids", _members.ToArray()));
 
         await base.DisposeAsync();
     }

@@ -11,13 +11,13 @@ namespace Nocturne.Core.Contracts.Auth;
 public interface ISubjectDeletion
 {
     /// <summary>
-    /// Deletes <paramref name="subjectId"/> with what they made. The stop commits per tenant before the
-    /// delete, so a delete refused after it leaves the subject in place with nothing they made live.
+    /// Deletes <paramref name="subjectId"/> with what they made. The stop commits with the delete, so a
+    /// refused delete stops nothing and a reader never sees what it stopped while the subject exists.
     /// </summary>
     /// <param name="subjectId">The subject to delete.</param>
     /// <param name="evenLastOwner">
-    /// Removes every membership first, refusing no last owner, as <see cref="Multitenancy.ITenantMembershipRepository.RemoveMembershipsOfSubjectAsync"/>
-    /// does, and names the tenants it left without an owner.
+    /// Refuses no last owner, removing every membership whatever role it carries, and names the
+    /// tenants it left without an owner.
     /// </param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>
