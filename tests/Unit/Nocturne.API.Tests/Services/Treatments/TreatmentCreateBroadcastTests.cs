@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Npgsql;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Glucose;
@@ -265,10 +266,10 @@ public class TreatmentCreateBroadcastTests
             });
         _projection
             .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t2", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException());
+            .ThrowsAsync(new NpgsqlException("connection broken"));
         _projection
             .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException());
+            .ThrowsAsync(new NpgsqlException("connection broken"));
 
         var act = () => _service.CreateTreatmentsAsync(
             [new Treatment { Id = ClientId, EventType = "Temporary Override", Mills = mills, Duration = 60, IsValid = false }, target]);

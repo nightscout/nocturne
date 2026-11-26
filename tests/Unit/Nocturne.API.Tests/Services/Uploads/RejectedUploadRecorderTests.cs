@@ -149,6 +149,31 @@ public class RejectedUploadRecorderTests
         VerifyNotified(Times.Once());
     }
 
+    [Fact]
+    public async Task A_defect_keeping_a_refusal_is_not_swallowed()
+    {
+        var defect = new InvalidOperationException("a second operation was started on this context");
+        _store.Setup(s => s.UpsertAsync(It.IsAny<RejectedUpload>(), It.IsAny<CancellationToken>())).ThrowsAsync(defect);
+
+        var record = () => _recorder.RecordTreatmentsAsync([Refused(new Treatment { Id = "t-1", Notes = "hi" })]);
+
+        (await record.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
+    public async Task A_defect_telling_the_owner_is_not_swallowed()
+    {
+        var defect = new InvalidOperationException("a second operation was started on this context");
+        _notifications.Setup(n => n.ArchiveBySourceAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationArchiveReason>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var record = () => _recorder.RecordTreatmentsAsync([Refused(new Treatment { Id = "t-1", Notes = "hi" })]);
+
+        (await record.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(defect);
+    }
+
     [Theory]
     [MemberData(nameof(StoreFailures))]
     public async Task A_notification_that_cannot_be_written_does_not_fail_the_record(Exception failure)

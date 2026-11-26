@@ -98,6 +98,20 @@ public class TreatmentsCreatePartialFailureTests
     }
 
     [Fact]
+    public async Task Post_WhenATreatmentHitsADefect_LeavesItToTheExceptionHandlerInsteadOfAnsweringAPartialBatch()
+    {
+        var defect = new InvalidOperationException("a second operation was started on this context");
+        _decomposer
+            .Setup(d => d.DecomposeAsync(
+                It.Is<Treatment>(t => t.Notes == "second"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _controller.CreateTreatments(Batch());
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
     public async Task Post_WhenATreatmentFailsToStore_DoesNotAttemptTheOnesAfterIt()
     {
         await _controller.CreateTreatments(Batch());

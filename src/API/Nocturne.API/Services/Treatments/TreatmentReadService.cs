@@ -209,14 +209,24 @@ internal class TreatmentReadService : ITreatmentStore
                 servedBefore = await ServedBeforeInvalidAsync(treatments, ct);
             await _decomposer.DecomposeBatchAsync(treatments, origin, ct, decomposition);
         }
-        catch (Exception ex) when (Stops(ex))
+        catch (Exception ex) when (Stops(ex, ct))
         {
             throw Stopped(ex, decomposition);
         }
-        catch (Exception) when (stored is not null)
+        catch (Exception ex) when (stored is not null)
         {
+            _logger.LogError(ex, "Failed to store a batch of {Count} treatments", treatments.Count);
             RecordInvalidated();
-            await ReportCommittedAsync(treatments, decomposition, stored);
+            try
+            {
+                await ReportCommittedAsync(treatments, decomposition, stored);
+            }
+            catch (Exception reportFailure)
+            {
+                _logger.LogError(
+                    reportFailure, "Could not report what a failed batch of {Count} treatments committed", treatments.Count);
+            }
+
             throw;
         }
 
@@ -229,7 +239,7 @@ internal class TreatmentReadService : ITreatmentStore
         {
             created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
         }
-        catch (Exception ex) when (Stops(ex))
+        catch (Exception ex) when (Stops(ex, ct))
         {
             var failedAt = accepted.First(i => LegacyTreatmentStore.NeedsRead(decomposition.Of(i)));
             _logger.LogError(ex, "Failed to read back treatment {Id}; ending the batch", treatments[failedAt].Id);
@@ -328,7 +338,7 @@ internal class TreatmentReadService : ITreatmentStore
             for (var k = 0; k < created.Count; k++)
                 stored.Add(Marked(created[k], decomposition, indices[k]));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogWarning(
                 ex, "Stored treatments {Ids} could not be read back", wrote.Select(w => w.Item1.Id));
@@ -360,9 +370,12 @@ internal class TreatmentReadService : ITreatmentStore
     private static StoredTreatment Marked(StoredTreatment stored, TreatmentDecomposition decomposition, int index) =>
         stored with { UpstreamEdit = decomposition.IsUpstreamEdit(index) };
 
-    /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
-    private static bool Stops(Exception ex) =>
-        StoreFailure.Is(ex) || ex is TimeoutException or InvalidOperationException or OperationCanceledException;
+    /// <summary>
+    /// A failure that ends the batch, rather than one treatment's refusal: a failure of the store, or the
+    /// caller's own cancellation. Anything else is a defect and reaches the caller.
+    /// </summary>
+    private static bool Stops(Exception ex, CancellationToken ct) =>
+        StoreFailure.Is(ex) || (ex is OperationCanceledException && ct.IsCancellationRequested);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Treatment?>> ReadBackAsync(

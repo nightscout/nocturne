@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Castle.DynamicProxy;
+using Npgsql;
 using Nocturne.API.Helpers;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Treatments;
@@ -160,7 +161,7 @@ public class TreatmentBatchFailureIntegrationTests(ApiIntegrationTestFixture fix
         await using var scope = TenantJobScope.Open(
             Fixture.Services, new TenantContext(Fixture.TenantId, "", "", true, false), "test:treatment-batch");
         var notes = new ProxyGenerator().CreateInterfaceProxyWithTarget(
-            scope.ServiceProvider.GetRequiredService<INoteRepository>(), new TimesOutWritingNotes());
+            scope.ServiceProvider.GetRequiredService<INoteRepository>(), new FailsWritingNotes());
         var decomposer = TreatmentDecomposerDoubles.Resolved(scope.ServiceProvider, notes);
         var store = ActivatorUtilities.CreateInstance<TreatmentReadService>(scope.ServiceProvider, decomposer);
 
@@ -180,13 +181,13 @@ public class TreatmentBatchFailureIntegrationTests(ApiIntegrationTestFixture fix
         (await db.Set<NoteEntity>().CountAsync()).Should().Be(0);
     }
 
-    /// <summary>Times out every note write.</summary>
-    private sealed class TimesOutWritingNotes : IInterceptor
+    /// <summary>Fails every note write as a lost connection does.</summary>
+    private sealed class FailsWritingNotes : IInterceptor
     {
         public void Intercept(IInvocation invocation)
         {
             if (invocation.Method.Name == nameof(INoteRepository.BulkUpsertAsync))
-                throw new TimeoutException();
+                throw new NpgsqlException("connection broken");
 
             invocation.Proceed();
         }
