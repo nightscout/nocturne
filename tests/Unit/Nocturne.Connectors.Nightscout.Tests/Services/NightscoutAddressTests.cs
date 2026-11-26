@@ -221,18 +221,66 @@ public class NightscoutAddressTests
     }
 
     [Theory]
-    [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/api", "ns.example.com/AGYL…/api")]
-    [InlineData("https://ns.example.com/", "ns.example.com")]
-    [InlineData("http://ns.example.com:1337/api/v1", "ns.example.com:1337/api/v1")]
-    [InlineData("MongoDB: nightscout", "MongoDB: nightscout")]
-    [InlineData("https://ns.example.com/0123456789abcde/", "ns.example.com/0123456789abcde")]
-    [InlineData("https://ns.example.com/0123456789abcdef", "ns.example.com/0123…")]
-    [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/BGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI", "ns.example.com/AGYL…/BGYL…")]
-    [InlineData("https://user:pass@NS.example.com:443/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=synthetic-token#x", "ns.example.com/AGYL…")]
-    [InlineData("ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI", "ns.example.com/AGYL…")]
-    [InlineData("a-very-long-host-name.example.com/nightscout", "a-very-long-host-name.example.com/nightscout")]
-    public void Masked_keeps_host_port_and_path_and_cuts_each_long_path_segment(string configured, string expected)
+    [InlineData("https://ns.example.com/api/v1/status.json", "https://ns.example.com/api/v1/status.json")]
+    [InlineData("https://ns.example.com:443/api/v1/status.json", "https://ns.example.com/api/v1/status.json")]
+    [InlineData("http://ns.example.com:1337/pebble?units=mgdl", "http://ns.example.com:1337/pebble")]
+    [InlineData("https://ns.example.com/s3cr3t/api/v1/status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://ns.example.com/s3cr3t/pebble", "https://ns.example.com/…/pebble")]
+    [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/api/v3/entries", "https://ns.example.com/…/api/v3/entries")]
+    [InlineData("https://ns.example.com/a/b/c/api/v1/status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://ns.example.com/api/s3cr3t/api/v1/status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://ns.example.com/s3cr3t/api/api/v1/status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://ns.example.com/pebble/s3cr3t/socket.io/", "https://ns.example.com/…/socket.io")]
+    [InlineData("https://ns.example.com/S3CR3T/API/v1/status.json", "https://ns.example.com/…/API/v1/status.json")]
+    [InlineData("https://ns.example.com/s3cr3t/api/v1/entries.json?count=1&token=synthetic-token", "https://ns.example.com/…/api/v1/entries.json")]
+    [InlineData("https://ns.example.com/s3cr3t/socket.io/?EIO=4&transport=polling&token=synthetic-token", "https://ns.example.com/…/socket.io")]
+    [InlineData("https://user:pass@ns.example.com/s3cr3t/api/v1/status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://user:pass@ns.example.com/api/v1/status.json", "https://ns.example.com/api/v1/status.json")]
+    [InlineData("http://[::1]:8080/s3cr3t/socket.io/?EIO=4", "http://[::1]:8080/…/socket.io")]
+    [InlineData("http://[::1]:8080/api/v1/status.json", "http://[::1]:8080/api/v1/status.json")]
+    [InlineData(@"https://ns.example.com/s3cr3t\api\v1\status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://ns.example.com/s3cr3t/entries", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/s3cr3t", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/s3cr3t/?token=synthetic-token", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/s3cr3t/login", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/v1x/s3cr3t/status", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/v1x/s3cr3t/api/v2/status.json", "https://ns.example.com/…/api/v2/status.json")]
+    [InlineData("https://ns.example.com/s3cr3t/socket.io/login", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/s3cr3t/pebble/login", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/s3cr3t/api", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/v1/s3cr3t/api/v1/status.json", "https://ns.example.com/…/api/v1/status.json")]
+    [InlineData("https://ns.example.com/s3cr3t", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/s3cr3t/", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com", "https://ns.example.com")]
+    [InlineData("https://ns.example.com/", "https://ns.example.com")]
+    [InlineData("https://ns.example.com/?token=synthetic-token", "https://ns.example.com")]
+    public void ShownRequest_keeps_the_origin_and_the_route_and_marks_what_lies_between_without_showing_it(
+        string request,
+        string expected)
     {
-        NightscoutAddress.Masked(configured).Should().Be(expected);
+        var shown = NightscoutAddress.ShownRequest(new Uri(request));
+
+        shown.Should().Be(expected);
+        shown.Should().NotContainAny("s3cr3t", "S3CR3T", "AGYL", "token", "user", "pass", "?", "#", "a/b/c", @"\");
+    }
+
+    [Theory]
+    [InlineData("https://ns.example.com", "https://ns.example.com")]
+    [InlineData("https://ns.example.com/", "https://ns.example.com")]
+    [InlineData("http://ns.example.com:1337/?token=synthetic-token", "http://ns.example.com:1337")]
+    [InlineData("https://ns.example.com/s3cr3t", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/s3cr3t/?token=synthetic-token", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/api/v2/s3cr3t", "https://ns.example.com/…")]
+    [InlineData("https://ns.example.com/s3cr3t/socket.io", "https://ns.example.com/…")]
+    [InlineData("https://user:pass@ns.example.com/s3cr3t", "https://ns.example.com/…")]
+    [InlineData("http://[::1]:8080/s3cr3t", "http://[::1]:8080/…")]
+    public void ShownBase_shows_the_origin_and_marks_a_path_even_when_it_is_shaped_like_a_route(
+        string configured,
+        string expected)
+    {
+        var shown = NightscoutAddress.Resolve(configured).ShownBase;
+
+        shown.Should().Be(expected);
+        shown.Should().NotContainAny("s3cr3t", "token", "user", "pass", "?");
     }
 }

@@ -28,6 +28,7 @@ public class CompatibilityController : ControllerBase
     private readonly IDiscrepancyPersistenceService _persistenceService;
     private readonly IDiscrepancyAnalysisRepository _repository;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IRequestPathRedactor _pathRedactor;
 
     private readonly CompatibilityProxyConfiguration _configuration;
     private readonly NightscoutConnectorConfiguration? _nightscoutConfig;
@@ -40,6 +41,7 @@ public class CompatibilityController : ControllerBase
         IDiscrepancyPersistenceService persistenceService,
         IDiscrepancyAnalysisRepository repository,
         IHttpClientFactory httpClientFactory,
+        IRequestPathRedactor pathRedactor,
         IOptions<CompatibilityProxyConfiguration> configuration,
         ILogger<CompatibilityController> logger,
         NightscoutConnectorConfiguration? nightscoutConfig = null
@@ -48,6 +50,7 @@ public class CompatibilityController : ControllerBase
         _persistenceService = persistenceService;
         _repository = repository;
         _httpClientFactory = httpClientFactory;
+        _pathRedactor = pathRedactor;
 
         _configuration = configuration.Value;
         _nightscoutConfig = nightscoutConfig;
@@ -302,6 +305,7 @@ public class CompatibilityController : ControllerBase
                 request.Method?.ToUpperInvariant() == "POST" ? HttpMethod.Post : HttpMethod.Get,
                 nightscoutUrl
             );
+            nsRequest.ShowRedacted(address, queryPath, _pathRedactor);
 
             if (!string.IsNullOrWhiteSpace(request.ApiSecret))
             {

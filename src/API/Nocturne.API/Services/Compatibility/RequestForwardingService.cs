@@ -56,6 +56,7 @@ public class RequestForwardingService : IRequestForwardingService
     private readonly NightscoutConnectorConfiguration _nightscoutConfig;
     private readonly NightscoutCircuitBreaker _circuitBreaker;
     private readonly ICorrelationService _correlationService;
+    private readonly IRequestPathRedactor _pathRedactor;
     private readonly ILogger<RequestForwardingService> _logger;
 
     /// <summary>
@@ -67,6 +68,7 @@ public class RequestForwardingService : IRequestForwardingService
         NightscoutConnectorConfiguration nightscoutConfig,
         NightscoutCircuitBreaker circuitBreaker,
         ICorrelationService correlationService,
+        IRequestPathRedactor pathRedactor,
         ILogger<RequestForwardingService> logger)
     {
         _httpClientFactory = httpClientFactory;
@@ -74,6 +76,7 @@ public class RequestForwardingService : IRequestForwardingService
         _nightscoutConfig = nightscoutConfig;
         _circuitBreaker = circuitBreaker;
         _correlationService = correlationService;
+        _pathRedactor = pathRedactor;
         _logger = logger;
     }
 
@@ -127,6 +130,7 @@ public class RequestForwardingService : IRequestForwardingService
             using var httpRequest = new HttpRequestMessage(
                 new HttpMethod(request.Method),
                 requestUri);
+            httpRequest.ShowRedacted(address, forwardedPath, _pathRedactor);
 
             // Add correlation ID header for tracking
             if (!string.IsNullOrEmpty(correlationId))

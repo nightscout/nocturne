@@ -8,13 +8,22 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.Compatibility;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Nightscout;
+using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Infrastructure.Outbound;
 using OpenTelemetry.Trace;
 
@@ -23,26 +32,109 @@ namespace Nocturne.API.Tests.Migration;
 /// <summary>
 /// A Nightscout site's path can be its credential, so the span the HTTP client instrumentation
 /// records for a request through the import's client, any client of the Nightscout connector, the
-/// real-time listener, or the compatibility proxy's clients that reach a Nightscout holds the masked
-/// URL, as registered for the running API with the service defaults' tracing.
+/// real-time listener, or the compatibility proxy's clients that reach a Nightscout shows the origin,
+/// <c>/…</c> for what the site's path holds, and the Nightscout route, as registered for the running
+/// API with the service defaults' tracing.
 /// </summary>
 public class NightscoutClientSpanTests
 {
     private const string Secret = "AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI";
+    private const string ShortSecret = "s3cr3t";
     private const string RedirectSecret = "BGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI";
     private const string Token = "synthetic-token";
     private const string ControlClient = "connector-client-without-the-mark";
 
     [Theory]
     [MemberData(nameof(NightscoutClientRequestLoggingTests.NightscoutClients), MemberType = typeof(NightscoutClientRequestLoggingTests))]
-    public async Task The_span_of_a_request_through_the_client_holds_the_masked_url(string client)
+    public async Task The_span_of_a_request_through_the_client_shows_the_origin_and_the_route(string client)
     {
         await using var site = await StartSiteAsync(context => context.Response.WriteAsync("{}"));
 
         var (spans, port) = await ObserveAsync(site, (services, port) => GetAsync(services, client, port, Secret));
 
         var span = spans.Should().ContainSingle().Subject;
-        span.GetTagItem("url.full").Should().Be($"127.0.0.1:{port}/AGYL…/api/v1/status.json");
+        span.GetTagItem("url.full").Should().Be($"http://127.0.0.1:{port}/…/api/v1/status.json");
+        HoldsNoCredential(span);
+    }
+
+    [Theory]
+    [MemberData(nameof(NightscoutClientRequestLoggingTests.NightscoutClients), MemberType = typeof(NightscoutClientRequestLoggingTests))]
+    public async Task The_span_of_a_request_under_a_short_secret_segment_does_not_show_it(string client)
+    {
+        await using var site = await StartSiteAsync(context => context.Response.WriteAsync("{}"));
+
+        var (spans, port) = await ObserveAsync(site, (services, port) => GetAsync(services, client, port, ShortSecret));
+
+        var span = spans.Should().ContainSingle().Subject;
+        span.GetTagItem("url.full").Should().Be($"http://127.0.0.1:{port}/…/api/v1/status.json");
+        HoldsNoCredential(span);
+    }
+
+    [Theory]
+    [MemberData(nameof(NightscoutClientRequestLoggingTests.NightscoutClients), MemberType = typeof(NightscoutClientRequestLoggingTests))]
+    public async Task The_span_of_a_request_to_a_site_with_no_path_shows_the_origin_and_the_route(string client)
+    {
+        await using var site = await StartSiteAsync(context => context.Response.WriteAsync("{}"));
+
+        var (spans, port) = await ObserveAsync(site, (services, port) => GetAsync(services, client, port, secret: null));
+
+        var span = spans.Should().ContainSingle().Subject;
+        span.GetTagItem("url.full").Should().Be($"http://127.0.0.1:{port}/api/v1/status.json");
+        HoldsNoCredential(span);
+    }
+
+    [Fact]
+    public async Task The_span_of_a_forwarded_credential_route_does_not_hold_the_credential()
+    {
+        const string accessToken = "readable-1a2b3c4d5e6f7a8b";
+        await using var site = await StartSiteAsync(context => context.Response.WriteAsync("{}"));
+
+        var (spans, port) = await ObserveAsync(site, async (services, port) =>
+        {
+            var service = new RequestForwardingService(
+                services.GetRequiredService<IHttpClientFactory>(),
+                Options.Create(new CompatibilityProxyConfiguration()),
+                new NightscoutConnectorConfiguration { Url = $"http://127.0.0.1:{port}/{ShortSecret}?token={Token}" },
+                new NightscoutCircuitBreaker(),
+                Mock.Of<ICorrelationService>(),
+                CredentialRouteRedactor.Create(),
+                NullLogger<RequestForwardingService>.Instance);
+
+            var response = await service.ForwardToNightscoutAsync(
+                new ClonedRequest { Method = "GET", Path = $"/api/v2/authorization/request/{accessToken}" });
+            response!.IsSuccess.Should().BeTrue();
+        });
+
+        var span = spans.Should().ContainSingle().Subject;
+        span.GetTagItem("url.full").Should()
+            .Be($"http://127.0.0.1:{port}/…/api/v2/authorization/request/%7BaccessToken%7D");
+        HoldsNoCredential(span);
+        span.TagObjects.Should().NotContain(tag => tag.Value is string && ((string)tag.Value).Contains(accessToken));
+    }
+
+    [Theory]
+    [InlineData("api/v2/" + ShortSecret, "…")]
+    [InlineData(ShortSecret, "…")]
+    [InlineData("", "")]
+    public async Task The_span_of_the_health_probe_shows_the_base_marked_however_it_is_shaped(
+        string basePath, string shownPath)
+    {
+        await using var site = await StartSiteAsync(context => context.Response.WriteAsync("{}"));
+
+        var (spans, port) = await ObserveAsync(site, async (services, port) =>
+        {
+            var healthCheck = new CompatibilityProxyHealthCheck(
+                Options.Create(new CompatibilityProxyConfiguration()),
+                services.GetRequiredService<IHttpClientFactory>(),
+                NullLogger<CompatibilityProxyHealthCheck>.Instance,
+                new NightscoutConnectorConfiguration { Url = $"http://127.0.0.1:{port}/{basePath}?token={Token}" });
+
+            var result = await healthCheck.CheckHealthAsync(new HealthCheckContext());
+            result.Data["nightscout"].Should().Be("healthy");
+        });
+
+        var span = spans.Should().ContainSingle().Subject;
+        span.GetTagItem("url.full").Should().Be($"http://127.0.0.1:{port}/{shownPath}".TrimEnd('/'));
         HoldsNoCredential(span);
     }
 
@@ -58,7 +150,7 @@ public class NightscoutClientSpanTests
     }
 
     [Fact]
-    public async Task Each_hop_of_a_redirect_the_link_local_guard_follows_holds_the_masked_url()
+    public async Task Each_hop_of_a_redirect_the_link_local_guard_follows_shows_the_origin_and_the_route()
     {
         await using var site = await StartSiteAsync(context =>
         {
@@ -74,13 +166,13 @@ public class NightscoutClientSpanTests
             (services, port) => GetAsync(services, nameof(NightscoutConnectorService), port, Secret));
 
         spans.Select(span => span.GetTagItem("url.full")).Should().Equal(
-            $"127.0.0.1:{port}/AGYL…/api/v1/status.json",
-            $"127.0.0.1:{port}/BGYL…/api/v1/status.json");
+            $"http://127.0.0.1:{port}/…/api/v1/status.json",
+            $"http://127.0.0.1:{port}/…/api/v1/status.json");
         spans.Should().AllSatisfy(HoldsNoCredential);
     }
 
     [Fact]
-    public async Task The_realtime_listener_upgrades_to_a_websocket_whose_span_holds_the_masked_url()
+    public async Task The_realtime_listener_upgrades_to_a_websocket_whose_span_shows_the_origin_and_the_route()
     {
         var site = new EngineIoSite();
         await using var app = await site.StartAsync();
@@ -111,7 +203,8 @@ public class NightscoutClientSpanTests
         spans.Should().Contain(span => IsUpgrade(span));
         spans.Should().AllSatisfy(span =>
         {
-            span.GetTagItem("url.full").Should().Be($"127.0.0.1:{port}/AGYL…/socket.io");
+            var scheme = IsUpgrade(span) ? "ws" : "http";
+            span.GetTagItem("url.full").Should().Be($"{scheme}://127.0.0.1:{port}/…/socket.io");
             HoldsNoCredential(span);
         });
     }
@@ -143,18 +236,20 @@ public class NightscoutClientSpanTests
 
     private static void HoldsNoCredential(Activity span)
     {
-        span.DisplayName.Should().NotContain(Secret).And.NotContain(RedirectSecret).And.NotContain(Token);
+        span.DisplayName.Should().NotContain(Secret).And.NotContain(ShortSecret).And.NotContain(RedirectSecret).And.NotContain(Token);
         span.TagObjects.Should().NotContain(tag =>
             tag.Value is string
             && (((string)tag.Value).Contains(Secret)
+                || ((string)tag.Value).Contains(ShortSecret)
                 || ((string)tag.Value).Contains(RedirectSecret)
                 || ((string)tag.Value).Contains(Token)));
     }
 
-    private static async Task GetAsync(IServiceProvider services, string client, int port, string secret)
+    private static async Task GetAsync(IServiceProvider services, string client, int port, string? secret)
     {
         using var http = services.GetRequiredService<IHttpClientFactory>().CreateClient(client);
-        using var response = await http.GetAsync($"http://127.0.0.1:{port}/{secret}/api/v1/status.json?token={Token}");
+        var path = secret is null ? "" : $"/{secret}";
+        using var response = await http.GetAsync($"http://127.0.0.1:{port}{path}/api/v1/status.json?token={Token}");
         response.EnsureSuccessStatusCode();
     }
 
