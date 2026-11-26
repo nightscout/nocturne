@@ -548,6 +548,7 @@ msgstr "Verifizierungscode"
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 #: src/lib/components/teams/TeamStaffSection.svelte
 #: src/lib/components/tenants/SiteAddressCard.svelte
 #: src/lib/components/trackers/CreateTrackersFromLegacyDialog.svelte
@@ -1329,6 +1330,7 @@ msgstr "Schweregrad"
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 #: src/lib/components/settings/ClientDevices.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 #: src/lib/components/teams/TeamStaffSection.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
@@ -14407,6 +14409,7 @@ msgstr "Gruppenaktionen"
 #~ msgstr "Entpacken (bei einem einzelnen Kind)"
 
 #: src/lib/components/alerts/RuleBuilderRow.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 msgid "<0/> Remove group"
 msgstr "<0/> Gruppe entfernen"
 
@@ -16526,6 +16529,7 @@ msgid "Revoke this device? It will stop receiving alerts until it re-registers."
 msgstr "Zugriff dieses Geräts widerrufen? Es empfängt keine Alarme mehr, bis es erneut registriert wird."
 
 #: src/lib/components/settings/ClientDevices.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Rename"
 msgstr "<0/> Umbenennen"
@@ -23772,6 +23776,8 @@ msgid "any of"
 msgstr "mindestens eine"
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 msgid "Remove group"
 msgstr "Gruppe entfernen"
 
@@ -45305,6 +45311,7 @@ msgid "Only members who can manage this site's settings can change glucose proce
 msgstr "Nur Mitglieder, die die Einstellungen dieser Website verwalten dürfen, können die Glukoseverarbeitung ändern."
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "People"
 msgstr "Personen"
@@ -48942,6 +48949,7 @@ msgid "Nocturne did not add the passkey. To try again, select Add passkey."
 msgstr "Nocturne hat den Passkey nicht hinzugefügt. Um es erneut zu versuchen, wähle Passkey hinzufügen."
 
 #: src/lib/components/members/TeamStaffList.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
 #: src/lib/components/teams/TeamStaffSection.svelte
 #: src/lib/teams/member-kind.svelte.ts
 msgid "Staff"
@@ -50168,6 +50176,7 @@ msgid "Each new staff member now waits for an owner's approval."
 msgstr ""
 
 #: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/teams/TeamStaffReach.svelte
 msgid "Could not change the setting. Try again."
 msgstr ""
 
@@ -50460,6 +50469,7 @@ msgstr ""
 
 #: src/lib/components/members/TeamStaffRule.svelte
 #: src/lib/components/members/TeamStaffRule.svelte
+#: src/lib/components/teams/TeamStaffReach.svelte
 msgid "Change setting"
 msgstr ""
 
@@ -50509,6 +50519,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/lib/components/members/TeamStaffRule.svelte
+#: src/lib/components/teams/TeamStaffReach.svelte
 msgid "Keep the setting"
 msgstr ""
 
@@ -50581,10 +50592,8 @@ msgstr ""
 msgid "This person is no longer on the staff of a team that has access to this site."
 msgstr ""
 
-#: src/lib/components/members/TeamAccessCard.svelte
-#: src/lib/components/members/TeamStaffBlocksSection.svelte
-msgid "This person can see this site through teams again."
-msgstr ""
+#~ msgid "This person can see this site through teams again."
+#~ msgstr ""
 
 #: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/members/TeamStaffBlocksSection.svelte
@@ -50632,10 +50641,8 @@ msgstr ""
 msgid "<0/> Let back in"
 msgstr ""
 
-#. 0: name
-#: src/lib/components/members/TeamStaffLetBackIn.svelte
-msgid "{0} gets back what each team gives them at this site. If they have approval, or you trust the whole team, they see this site's data again. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out."
-msgstr ""
+#~ msgid "{0} gets back what each team gives them at this site. If they have approval, or you trust the whole team, they see this site's data again. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out."
+#~ msgstr ""
 
 #: src/lib/components/members/TeamStaffList.svelte
 msgid "You trust the whole team, so you do not approve or decline one staff member. You can still stop one person's access."
@@ -50725,4 +50732,374 @@ msgstr ""
 #. 0: senderName
 #: src/lib/components/layout/NotificationItem.svelte
 msgid "From {0} · connected app"
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The group name is empty or too long. Change the name and try again."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Another group of this team has this name. Use a different name."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Nocturne does not know this setting. Reload the page and try again."
+msgstr ""
+
+#. 0: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} added this site to a group."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted added this site to a group."
+msgstr ""
+
+#. 0: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} removed this site from a group."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted removed this site from a group."
+msgstr ""
+
+#. 0: entry.team.name; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} added {1} to a group with this site."
+msgstr ""
+
+#. 0: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted added {0} to a group with this site."
+msgstr ""
+
+#. 0: entry.team.name; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} removed {1} from a group with this site."
+msgstr ""
+
+#. 0: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted removed {0} from a group with this site."
+msgstr ""
+
+#. 0: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} removed a group with this site."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted removed a group with this site."
+msgstr ""
+
+#. 0: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} set its staff to see only the people in their groups."
+msgstr ""
+
+#. 0: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} set its staff to see every person that the team follows."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted set its staff to see only the people in their groups."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted set its staff to see every person that the team follows."
+msgstr ""
+
+#. 0: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The team {0} changed which people its staff see. The detail is no longer stored."
+msgstr ""
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A team that was deleted changed which people its staff see. The detail is no longer stored."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "You let this person back in. Each team gives them what it gave before."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "Staff are the people who work for a team. Approved staff can see this site through the team. When a team limits its staff to their groups, only its staff in a group with this site can see it, as this site allows."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "{0} gets back what each team gives them at this site. If they have approval, or you trust the whole team, they see this site's data again. If a team limits its staff to their groups, they must also be in a group with this site. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Not in a group with this site, so they cannot see it through the team."
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Each new staff member of {0} in a group with this site waits for your approval. Approved staff stay approved."
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Every staff member of {0} that you did not stop and that is in a group with this site can see this site. You get no notices about them."
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Every staff member of {0} that is in a group with this site can see this site. You get no notices about them."
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "New staff of {0} can see this site as soon as the team puts them in a group with this site."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "This site trusts the whole team. Every staff member that the site did not stop and that is in a group with this site can see this site."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "This site trusts the whole team. Every staff member that is in a group with this site can see this site."
+msgstr ""
+
+#: src/lib/components/teams/StaffInvitesSection.svelte
+msgid "A staff member works for the team and sees the sites that the team has access to, that let them in and that have a group with them. A staff member cannot manage the team. A link stops working when the manager who made it leaves the team."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not add the group. Try again."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not rename the group. Try again."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Groups"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Put the people that the team follows and its staff into groups, for example one group for each clinic."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Add a group"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Group name"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "<0/> Add group"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "This team has no groups."
+msgstr ""
+
+#. 0: group.name
+#. 0: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Rename the group {0}"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not remove the group. Try again."
+msgstr ""
+
+#. 0: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Remove the group {0}"
+msgstr ""
+
+#. 0: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Remove the group {0}? Its staff stop seeing its people through the team, unless they are in another group together."
+msgstr ""
+
+#. 0: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Remove the group {0}? No access changes now, because staff see every person the team follows."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "No one is in this group."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "No person or staff member in this group has current access. You can remove the group."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "No person is in this group."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "· Access ended"
+msgstr ""
+
+#. 0: person.displayName; 1: group.name
+#. 0: member.displayName; 1: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Remove {0} from {1}"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not remove the person from the group. Try again."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "The team has no current access to a person. A site must give the team access first."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Every person that the team follows is in this group."
+msgstr ""
+
+#. 0: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Person to add to {0}"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Choose a person"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not add the person to the group. Try again."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Add person"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "No staff member is in this group."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not remove the staff member from the group. Try again."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "The team has no current staff. Make a link in Invite staff to add a staff member."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Every current staff member is in this group."
+msgstr ""
+
+#. 0: group.name
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Staff member to add to {0}"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Choose a staff member"
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Could not add the staff member to the group. Try again."
+msgstr ""
+
+#: src/lib/components/teams/TeamGroupsSection.svelte
+msgid "Add staff member"
+msgstr ""
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "The site trusts the whole team. Every staff member that the site did not stop and that is in a group with this site can see this site."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Staff see every person the team follows"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Groups do not change what the staff see."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Staff see only the people in their groups"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "A staff member sees a person through the team only when they are both in one group."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Let staff see only the people in their groups?"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Let staff see every person the team follows?"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "<0/> Change setting"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Staff lose # access through the team to a person that they are not in a group with."
+msgid_plural "Staff lose # accesses through the team to people that they are not in a group with."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "No staff member loses access through the team now."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "A new staff member sees no one through the team until you add them to a group."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Staff see every person that the team follows again, as each site allows."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Which people the staff see"
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffReach.svelte
+msgid "Each site still decides which staff of the team can see it."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "Each new staff member in a group with this site waits for your approval."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "New staff in a group with this site can see it at once. You get a notice, and you can decline anyone."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffRuleChoices.svelte
+msgid "Every staff member in a group with this site can see it. You get no notices about them, and you cannot decline one person."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffSection.svelte
+msgid "The people who work for the team. A staff member can see a site when the site lets them in and they are in a group with the site."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffSection.svelte
+msgid "In no group. Sees no one through the team."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffSection.svelte
+msgid "Sees # person through the team."
+msgid_plural "Sees # people through the team."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/teams/TeamStaffSection.svelte
+msgid "Sees no one through the team."
 msgstr ""
