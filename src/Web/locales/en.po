@@ -50698,3 +50698,19 @@ msgstr "{0} not linked. {1}"
 #: src/lib/components/alerts/channelText.svelte.ts
 msgid "Sent to the WhatsApp account you linked."
 msgstr "Sent to the WhatsApp account you linked."
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "WhatsApp lets the bot send a message only for 24 hours after a person last sent it a message. After that time, WhatsApp delivers only an approved template."
+msgstr "WhatsApp lets the bot send a message only for 24 hours after a person last sent it a message. After that time, WhatsApp delivers only an approved template."
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "To send alerts after that time, create a utility template in WhatsApp Manager and get approval for it. Its body has three variables: <0/> is the person, <1/> is the alert name and <2/> is the glucose reading. Add one quick reply button, for example Acknowledge. Then enter the template name and language here. If you do not enter a language, the bot uses <3/>."
+msgstr "To send alerts after that time, create a utility template in WhatsApp Manager and get approval for it. Its body has three variables: <0/> is the person, <1/> is the alert name and <2/> is the glucose reading. Add one quick reply button, for example Acknowledge. Then enter the template name and language here. If you do not enter a language, the bot uses <3/>."
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Meta charges for each template message. If you do not set a template, these alerts fail. A notice that a rule cannot run or is on hold is not sent as a template."
+msgstr "Meta charges for each template message. If you do not set a template, these alerts fail. A notice that a rule cannot run or is on hold is not sent as a template."
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Alerts outside the 24-hour window"
+msgstr "Alerts outside the 24-hour window"
