@@ -441,6 +441,7 @@ msgstr ""
 #: src/lib/components/members/PendingInvitesList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
 #: src/lib/components/members/TeamStaffList.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -40703,6 +40704,7 @@ msgid "<0/> {0} records in the last {1} days"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectionStatusLabel.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "Stopped"
 msgstr ""
 
@@ -48239,6 +48241,7 @@ msgstr ""
 
 #: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "Stop access"
 msgstr ""
 
@@ -48248,6 +48251,7 @@ msgid "Stop the access of {0}"
 msgstr ""
 
 #: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "<0/> Stop access"
 msgstr ""
 
@@ -50428,9 +50432,8 @@ msgstr ""
 msgid "You now trust the whole team."
 msgstr ""
 
-#: src/lib/components/members/TeamStaffList.svelte
-msgid "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
-msgstr ""
+#~ msgid "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
+#~ msgstr ""
 
 #: src/lib/components/members/TeamStaffList.svelte
 msgid "Not approved"
@@ -50518,9 +50521,8 @@ msgstr ""
 msgid "Each site decides who approves the team's staff. Only an owner of the site can change this."
 msgstr ""
 
-#: src/lib/components/teams/TeamSitesSection.svelte
-msgid "The site trusts the whole team. Every staff member can see this site."
-msgstr ""
+#~ msgid "The site trusts the whole team. Every staff member can see this site."
+#~ msgstr ""
 
 #: src/lib/components/teams/TeamStaffRuleChoices.svelte
 msgid "I approve each staff member"
@@ -50549,3 +50551,137 @@ msgstr ""
 #: src/lib/components/teams/TeamStaffRuleChoices.svelte
 msgid "Who decides which staff of the team can see this site"
 msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Only an owner of this site can stop a person's access through teams or let them back in."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in."
+msgstr ""
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} stopped {1} from seeing this site through any team."
+msgstr ""
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} let {1} see this site through teams again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "This person no longer sees this site through any team."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Could not stop the access of this person. Try again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "This person is no longer on the staff of a team that has access to this site."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "This person can see this site through teams again."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "Could not let this person back in. Try again."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "People you stopped"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "People this site stopped"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "These people cannot see this site through any team. Access they have through you directly does not change."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "These people cannot see this site through any team. Access they have directly on this site does not change."
+msgstr ""
+
+#. 0: block.blockedByName ?? "a deleted member"; 1: formatMediumDateTime(block.blockedAt)
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "Stopped by {0} · {1}"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "Let {0} back in?"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "Let back in"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "Let {0} back in"
+msgstr ""
+
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "<0/> Let back in"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "{0} gets back what each team gives them at this site. If they have approval, or you trust the whole team, they see this site's data again. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "You trust the whole team, so you do not approve or decline one staff member. You can still stop one person's access."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Cannot see this site through any team."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Stop {0}'s access?"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Stop {0}'s access"
+msgstr ""
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "{0} stops seeing this site's data through every team, now and later. Access they have through you directly does not change. You can undo this."
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Every staff member of {0} that you did not stop can see this site. You get no notices about them."
+msgstr ""
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "This site trusts the whole team. Every staff member that the site did not stop can see this site."
+msgstr ""
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "The site trusts the whole team. Every staff member that the site did not stop can see this site."
+msgstr ""
+
+#: src/lib/components/teams/TeamStaffSection.svelte
+msgid "Stopped by # site."
+msgid_plural "Stopped by # sites."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "One site you would see through this team stopped your access."
+msgid_plural "# sites you would see through this team stopped your access."
+msgstr[0] ""
+msgstr[1] ""
