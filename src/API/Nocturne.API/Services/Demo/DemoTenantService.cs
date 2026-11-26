@@ -346,18 +346,11 @@ public sealed class DemoTenantService
                 subjectId, tenant.Slug);
         }
 
-        switch (deletion.Change)
+        if (deletion.Change is SubjectChange.LastManagerOf stillManager)
         {
-            case SubjectChange.LastOwnerOf stillOwner:
-                _logger.LogError(
-                    "Demo member {SubjectId} became the last owner of {Slugs} again before its delete, so it was kept",
-                    subjectId, string.Join(", ", stillOwner.OwnedTenants.Select(t => t.Slug)));
-                break;
-            case SubjectChange.LastManagerOf stillManager:
-                _logger.LogError(
-                    "Demo member {SubjectId} is the last manager of teams {TeamIds}, so it was kept",
-                    subjectId, string.Join(", ", stillManager.ManagedTeams.Select(t => t.TeamId)));
-                break;
+            _logger.LogError(
+                "Demo member {SubjectId} is the last manager of teams {TeamIds}, so it was kept",
+                subjectId, string.Join(", ", stillManager.ManagedTeams.Select(t => t.TeamId)));
         }
     }
 

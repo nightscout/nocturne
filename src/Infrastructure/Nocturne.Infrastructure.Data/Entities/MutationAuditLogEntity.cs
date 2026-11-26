@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// <summary>
 /// Audit log entry recording a mutation to a clinical entity.
 /// Written once. Retention deletes it, and the actor's deletion clears its client address
-/// (<see cref="Nocturne.Core.Contracts.Auth.ISubjectRepository.DeleteAsync"/>).
+/// (<see cref="Repositories.SubjectRepository.DeleteAsync"/>).
 /// </summary>
 [Table("mutation_audit_log")]
 public class MutationAuditLogEntity : ITenantScoped, IAuditLogRow

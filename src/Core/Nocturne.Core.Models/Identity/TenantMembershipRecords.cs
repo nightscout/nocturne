@@ -271,12 +271,6 @@ public sealed record PlatformAdminMembership(Guid SubjectId, Guid TenantId, stri
 /// </summary>
 public sealed record PlatformAdminDirectory(IReadOnlyList<PlatformAdminMembership> Memberships, int ActivePlatformAdmins);
 
-/// <summary>
-/// What removing every membership of a subject did: how many it removed, and the tenants whose
-/// last owner it was by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.
-/// </summary>
-public sealed record SubjectMembershipsRemoval(int Removed, IReadOnlyList<LastOwnerTenant> TenantsLeftWithoutOwner);
-
 /// <summary>What removing a membership's direct reason did.</summary>
 /// <param name="Outcome">Whether it was removed, or why not.</param>
 /// <param name="MembershipKept">Whether the membership stays for another reason; false when it went with the direct reason.</param>

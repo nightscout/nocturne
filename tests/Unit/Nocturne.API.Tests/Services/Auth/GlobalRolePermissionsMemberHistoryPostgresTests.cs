@@ -85,9 +85,7 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
         var history = new MemberHistoryReader(contexts);
         (await history.GetAsync(tenant, null, 100, 0, Now, Ct)).Data.Should().BeEmpty();
 
-        (await new SubjectRepository(
-            new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off)
-            .DeleteAsync(admin, Ct)).Should().BeOfType<SubjectChange.Changed>();
+        (await SubjectDeletions.DeleteAsync(new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off, admin, Ct)).Should().BeOfType<SubjectChange.Changed>();
 
         (await PermissionRowsAsync(roleId)).Should().ContainSingle().Which.DetailsJson.Should().BeNull();
         (await history.GetAsync(tenant, null, 100, 0, Now, Ct)).Data.Should().BeEmpty();

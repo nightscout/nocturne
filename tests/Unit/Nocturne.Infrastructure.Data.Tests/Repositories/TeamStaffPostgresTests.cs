@@ -64,6 +64,9 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
 
     private SubjectRepository Subjects() => new(Contexts(), AccountLinkRoutes.Off);
 
+    private Task<SubjectChange> DeleteSubjectAsync(Guid subjectId) =>
+        SubjectDeletions.DeleteAsync(Contexts(), AccountLinkRoutes.Off, subjectId, default);
+
     private Task<Guid> NewSubjectAsync(string name = "person") =>
         Subjects().CreateAsync(new NewSubject($"{name}-{Guid.NewGuid():N}"), default);
 
@@ -589,7 +592,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var staff = await JoinStaffAsync(team, manager);
         var accesses = await AccessIdsAsync(team);
 
-        (await Subjects().DeleteAsync(staff, default)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteSubjectAsync(staff)).Should().BeOfType<SubjectChange.Changed>();
 
         (await SiteStaffRowsOfAsync(accesses)).Should().Be(0);
         (await Teams().GetAsync(team, manager, Now, default))!.Staff.Should().BeEmpty();
@@ -1018,7 +1021,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
 
         (await Teams(manager).RemoveManagerAsync(team, manager, manager, Now, default)).Should().Be(ManagerGuardedChange.LastManager);
 
-        (await Subjects().DeleteAsync(manager, default)).Should().BeEquivalentTo(new SubjectChange.LastManagerOf([new LastManagerTeam(team, "Camp")]));
+        (await DeleteSubjectAsync(manager)).Should().BeEquivalentTo(new SubjectChange.LastManagerOf([new LastManagerTeam(team, "Camp")]));
         (await Teams().GetAsync(team, manager, Now, default))!.Staff.Should().ContainSingle();
     }
 

@@ -318,8 +318,8 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         if (clamped)
             scope.ServiceProvider.GetRequiredService<ICategoryReadContext>().ClampMemberHistory();
 
-        var repository = new SubjectRepository(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off);
-        return (await repository.DeleteAsync(_leaver, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>().Subject;
+        var contexts = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
+        return (await SubjectDeletions.DeleteAsync(contexts, AccountLinkRoutes.Off, _leaver, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>().Subject;
     }
 
     private async Task<Dictionary<Guid, (string? Name, string? Ip)>> MutationRowsAsync(Guid tenant)
