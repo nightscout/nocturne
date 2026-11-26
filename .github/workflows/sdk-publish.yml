@@ -19,12 +19,12 @@ env:
 
 jobs:
   # A missing registry secret skips that target instead of failing the release run. Untagged runs
-  # publish nothing, so they still build every target.
+  # publish nothing, so they still build every target. Targets that publish through trusted
+  # publishing (C#, TypeScript, Python, Rust) hold no secret and are not checked here.
   secrets:
     runs-on: ubuntu-latest
     permissions: {}
     outputs:
-      typescript: ${{ steps.check.outputs.typescript }}
       kotlin: ${{ steps.check.outputs.kotlin }}
       java: ${{ steps.check.outputs.java }}
       swift: ${{ steps.check.outputs.swift }}
@@ -32,7 +32,6 @@ jobs:
       - name: Check registry secrets
         id: check
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           MAVEN_SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}
           MAVEN_SIGNING_PASSWORD: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
@@ -52,7 +51,6 @@ jobs:
             echo "$target=$ready" >> "$GITHUB_OUTPUT"
           }
 
-          check typescript NPM_TOKEN
           check kotlin MAVEN_SIGNING_KEY MAVEN_SIGNING_PASSWORD MAVEN_USERNAME MAVEN_PASSWORD
           check java MAVEN_SIGNING_KEY MAVEN_SIGNING_PASSWORD MAVEN_USERNAME MAVEN_PASSWORD
           check swift SWIFT_SDK_DEPLOY_KEY
@@ -179,9 +177,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: dotnet nuget push nupkg/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
+  # npm trusted publishing: the package's trusted publisher names this repository and this
+  # workflow, with no environment, so the job must not declare one. Provenance comes with it.
   publish-typescript:
-    needs: [generate-spec, secrets]
-    if: needs.secrets.outputs.typescript == 'true' || !startsWith(github.ref, 'refs/tags/v')
+    needs: generate-spec
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -212,9 +211,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "24"
+          node-version: ${{ env.NODE_VERSION }}
           check-latest: true
           registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: Ensure npm supports trusted publishing
+        run: |
+          if ! printf '%s\n' 11.5.1 "$(npm --version)" | sort -V -C; then
+            npm install -g npm@^11.5.1
+          fi
+          npm --version
 
       - name: Build
         working-directory: sdk/typescript/out
@@ -225,9 +232,7 @@ jobs:
       - name: Publish to npm
         if: startsWith(github.ref, 'refs/tags/v')
         working-directory: sdk/typescript/out
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
   publish-kotlin:
     needs: [generate-spec, secrets]
