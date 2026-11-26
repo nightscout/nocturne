@@ -351,8 +351,7 @@ public partial class TeamAccessEndPostgresTests
         await Announcer(Contexts(Guid.Empty)).AnnounceAsync(recount);
         CountOf(Waiting(site.Owner)).Should().Be(1);
 
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE team_tenant_access SET access_ends_at = '{past}' WHERE id = '{access}';
             """);
         await Announcer(Contexts(Guid.Empty)).AnnounceAsync(recount);
@@ -381,8 +380,7 @@ public partial class TeamAccessEndPostgresTests
     }
 
     private Task ApproveRowAsync(Site site, Guid access, Guid staff) =>
-        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE team_site_staff SET status = '{TeamSiteStaffStatus.Approved}'
              WHERE team_tenant_access_id = '{access}'
                AND team_member_id IN (SELECT id FROM team_members WHERE subject_id = '{staff}');

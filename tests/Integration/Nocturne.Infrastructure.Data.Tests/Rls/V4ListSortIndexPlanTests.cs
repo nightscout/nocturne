@@ -97,7 +97,7 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
         await PlanTestSupport.SeedAsync(fx, tenant, table, columns, values, Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()

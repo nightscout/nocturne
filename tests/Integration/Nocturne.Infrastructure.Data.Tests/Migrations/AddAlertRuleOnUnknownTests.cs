@@ -49,15 +49,11 @@ public class AddAlertRuleOnUnknownFixture : IAsyncLifetime
 
     private async Task SeedAsync(Guid tenant, string name)
     {
-        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'on-unknown-{tenant:N}', 'on-unknown', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"on-unknown-{tenant:N}", "on-unknown");
         await InsertRuleAsync(tenant, name);
     }
 
-    private Task InsertRuleAsync(Guid tenant, string name) => NpgsqlTestCommands.ExecuteAsync(_migrator, $$"""
-        SELECT set_config('app.current_tenant_id', '{{tenant}}', false);
+    private Task InsertRuleAsync(Guid tenant, string name) => NpgsqlTestCommands.ExecuteAsTenantAsync(_migrator, tenant, $$"""
         INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, sort_order, severity)
         VALUES (gen_random_uuid(), '{{tenant}}', '{{name}}', 'threshold', '{"direction":"below","value":70}', 0, 'warning');
         """);
@@ -79,8 +75,7 @@ public class AddAlertRuleOnUnknownFixture : IAsyncLifetime
         foreach (var tenant in new[] { TenantA, TenantB })
         {
             await using var transaction = await conn.BeginTransactionAsync();
-            await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', true)", conn))
-                await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(tenant, local: true);
             await using var cmd = new NpgsqlCommand(sql, conn);
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())

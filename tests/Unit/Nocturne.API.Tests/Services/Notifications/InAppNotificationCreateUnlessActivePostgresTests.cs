@@ -43,14 +43,7 @@ public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationC
             await using (var conn = new NpgsqlConnection(MigratorConnectionString))
             {
                 await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                    VALUES (@id, @slug, 'notification-test', true, now(), now())
-                    """;
-                cmd.Parameters.AddWithValue("id", tenant);
-                cmd.Parameters.AddWithValue("slug", $"notification-{tenant:N}");
-                await cmd.ExecuteNonQueryAsync();
+                await conn.SeedTenantAsync(tenant, $"notification-{tenant:N}", "notification-test");
             }
             return (new InAppNotificationRepository(new NocturneDbContext(Options) { TenantId = tenant }.AsFactory()),
                 new NocturneDbContext(Options) { TenantId = tenant });

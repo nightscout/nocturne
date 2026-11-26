@@ -40,16 +40,7 @@ internal static class TenantReaderData
         var tenant = Guid.NewGuid();
 
         await using (var conn = await fx.OpenMigratorConnectionAsync())
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'reader-matrix', true, now(), now())
-                """;
-            AddParam(cmd, "@id", tenant);
-            AddParam(cmd, "@slug", $"reader-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+            await conn.SeedTenantAsync(tenant, $"reader-{tenant:N}", "reader-matrix");
 
         var now = DateTime.UtcNow;
         await using var db = await root.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(tenant);
@@ -136,13 +127,5 @@ internal static class TenantReaderData
         p.ParameterName = name;
         p.Value = value;
         cmd.Parameters.Add(p);
-    }
-
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public TenantContext? Context { get; private set; }
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

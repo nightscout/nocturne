@@ -94,10 +94,7 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
         _migrator = database.MigratorConnectionString;
 
         foreach (var tenant in new[] { TenantA, TenantB, TenantC })
-            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES ('{tenant}', 'mask-{tenant:N}', 'mask', true, now(), now());
-                """);
+            await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"mask-{tenant:N}", "mask");
 
         await InsertSourceAsync(Current, TenantA, "Api", CurrentUrl, CurrentUrl,
             createdAt: "2026-01-01", lastMigrationAt: "2026-02-01", lastData: "2026-01-31");

@@ -51,10 +51,7 @@ public class AddTeamAccessFixture : IAsyncLifetime
     internal async Task<Guid> NewTenantAsync()
     {
         var tenant = Guid.CreateVersion7();
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'access-{tenant:N}', 'Site', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"access-{tenant:N}", "Site");
         return tenant;
     }
 

@@ -67,8 +67,7 @@ public partial class TeamAccessEndPostgresTests
         new(site.Tenant, roles, limit, end, staffRule);
 
     private async Task ApproveSiteRowsAsync(Site site) =>
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE team_site_staff SET status = 'approved'
              WHERE team_tenant_access_id IN (SELECT id FROM team_tenant_access WHERE tenant_id = '{site.Tenant}');
             """);

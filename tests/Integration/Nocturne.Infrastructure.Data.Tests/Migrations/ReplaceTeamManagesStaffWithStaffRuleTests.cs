@@ -65,9 +65,8 @@ public class ReplaceTeamManagesStaffWithStaffRuleFixture : IAsyncLifetime
     {
         var tenant = Guid.CreateVersion7();
         var team = Guid.CreateVersion7();
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"rule-{tenant:N}", "Site");
         await ExecuteAsync(_migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'rule-{tenant:N}', 'Site', true, now(), now());
             INSERT INTO teams (id, name) VALUES ('{team}', 'Clinic');
             """);
         return (tenant, team);

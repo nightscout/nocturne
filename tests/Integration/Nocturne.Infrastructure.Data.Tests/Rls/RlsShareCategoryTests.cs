@@ -366,7 +366,7 @@ public class RlsShareCategoryTests
     private async Task SeedSensorStateReportsAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantId);
+        await conn.SeedTenantAsync(tenantId, $"rls-{tenantId:N}", "rls-test");
         await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             "INSERT INTO sensor_state_reports (id, tenant_id, timestamp, state, reported_field, reported_value, data_source, device) VALUES " +
@@ -378,7 +378,7 @@ public class RlsShareCategoryTests
     private async Task SeedProfileActivationsAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantId);
+        await conn.SeedTenantAsync(tenantId, $"rls-{tenantId:N}", "rls-test");
         await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             "INSERT INTO profile_activations (id, tenant_id, start_timestamp, end_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms, snapshot_is_customized) VALUES " +
@@ -403,7 +403,7 @@ public class RlsShareCategoryTests
     private async Task SeedStateSpansAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantId);
+        await conn.SeedTenantAsync(tenantId, $"rls-{tenantId:N}", "rls-test");
         await conn.PinTenantAsync(tenantId);
         await ExecuteAsync(conn,
             "INSERT INTO state_spans (id, tenant_id, category, state, start_timestamp, end_timestamp, created_at, updated_at) VALUES " +
@@ -537,7 +537,7 @@ public class RlsShareCategoryTests
     private async Task SeedAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantId);
+        await conn.SeedTenantAsync(tenantId, $"rls-{tenantId:N}", "rls-test");
         await conn.PinTenantAsync(tenantId);
 
         await ExecuteAsync(conn,
@@ -569,18 +569,6 @@ public class RlsShareCategoryTests
             "VALUES (gen_random_uuid(), @tid, now() - interval '30 hours', 1.0, false, 'Manual', now(), now())", tenantId);
     }
 
-    private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'rls-test', true, now(), now())
-            """;
-        AddParam(cmd, "@id", tenantId);
-        AddParam(cmd, "@slug", $"rls-{tenantId:N}");
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     private static Task ExecuteAsync(NpgsqlConnection conn, string sql, Guid tenantId) =>
         conn.ExecuteAsync(sql, ("tid", tenantId));
 
@@ -589,14 +577,13 @@ public class RlsShareCategoryTests
         NpgsqlConnection conn, Guid tenantId, bool isShare, string visibleCategories, bool fullHistory = false,
         string? historyClamped = null)
     {
+        await conn.PinTenantAsync(tenantId);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
-            "SELECT set_config('app.current_tenant_id', @tid, false), " +
-            "set_config('app.is_share', @share, false), " +
+            "SELECT set_config('app.is_share', @share, false), " +
             "set_config('app.visible_categories', @cats, false), " +
             "set_config('app.share_full_history', @full_history, false)" +
             (historyClamped is null ? "" : ", set_config('app.history_clamped', @history_clamped, false)");
-        AddParam(cmd, "@tid", tenantId.ToString());
         AddParam(cmd, "@share", isShare ? "true" : "false");
         AddParam(cmd, "@cats", visibleCategories);
         AddParam(cmd, "@full_history", fullHistory ? "true" : "false");

@@ -91,13 +91,10 @@ public class ConnectorFoodEntryResolutionOrderTests
 
     private static async Task HoldAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid tenant, Guid entry)
     {
+        await connection.PinTenantAsync(tenant, local: true);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            SELECT id FROM connector_food_entries WHERE id = @entry FOR UPDATE;
-            """;
-        command.Parameters.Add(new NpgsqlParameter("tenant", tenant.ToString()));
+        command.CommandText = "SELECT id FROM connector_food_entries WHERE id = @entry FOR UPDATE;";
         command.Parameters.Add(new NpgsqlParameter("entry", entry));
         await command.ExecuteNonQueryAsync();
     }

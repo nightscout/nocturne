@@ -33,15 +33,13 @@ public partial class TeamAccessEndPostgresTests
             database.MigratorConnectionString, $"UPDATE team_members SET ends_at = '{Sql(end)}' WHERE subject_id = '{staff}'");
 
     private Task SetAccessEndAsync(Site site, Guid access, DateTime end) =>
-        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE team_tenant_access SET access_ends_at = '{Sql(end)}' WHERE id = '{access}';
             """);
 
     /// <summary>Moves the end of the reason <paramref name="access"/> gives, and the row's, as a build that synced at that end left them.</summary>
     private Task SetReasonEndAsync(Site site, Guid staff, Guid access, DateTime end) =>
-        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE tenant_member_reasons SET access_ends_at = '{Sql(end)}'
              WHERE source_id = '{access}'
                AND tenant_member_id IN (SELECT id FROM tenant_members WHERE tenant_id = '{site.Tenant}' AND subject_id = '{staff}');

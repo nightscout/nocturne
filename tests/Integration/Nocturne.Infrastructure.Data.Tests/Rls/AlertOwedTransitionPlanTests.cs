@@ -33,7 +33,7 @@ public class AlertOwedTransitionPlanTests(RlsCompletenessFixture fx)
         await SeedExcursionsAsync(tenant, rule);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -76,7 +76,7 @@ public class AlertOwedTransitionPlanTests(RlsCompletenessFixture fx)
     private async Task SeedExcursionsAsync(Guid tenant, Guid rule)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         await using (var insert = conn.CreateCommand())
         {

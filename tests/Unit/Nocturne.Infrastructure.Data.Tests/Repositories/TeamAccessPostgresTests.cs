@@ -71,15 +71,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, @name, true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"team-access-{tenant:N}"));
-            cmd.Parameters.Add(new NpgsqlParameter("@name", name));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"team-access-{tenant:N}", name);
         }
 
         await Members().SeedRolesAsync(tenant, default);

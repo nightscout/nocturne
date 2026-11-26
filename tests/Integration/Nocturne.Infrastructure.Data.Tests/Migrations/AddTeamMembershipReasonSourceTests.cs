@@ -38,10 +38,7 @@ public class AddTeamMembershipReasonSourceFixture : IAsyncLifetime
     {
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(BeforeReasons, "team_reason_source");
         Migrator = database.MigratorConnectionString;
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'team-reason-{Tenant:N}', 'Site', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, Tenant, $"team-reason-{Tenant:N}", "Site");
         await SeedMemberAsync(Migrator, Tenant, PlainMember, "NULL", "NULL");
         await SeedMemberAsync(Migrator, Tenant, EndingMember, "'[\"glucose.read\"]'", "'2026-12-01T00:00:00Z'");
         await MigrateAsync(Migrator);

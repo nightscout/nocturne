@@ -16,10 +16,9 @@ public class SchemaConstraintFixture : IAsyncLifetime
             (await SharedPostgres.CreateMigratedDatabaseAsync("schema_constraints")).MigratorConnectionString;
 
         await using var conn = await OpenPinnedAsync();
+        await conn.SeedTenantAsync(Tenant, "tenant", "Tenant");
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{{Tenant}}', 'tenant', 'Tenant', true, now(), now());
             INSERT INTO connector_configurations
               (id, tenant_id, connector_name, configuration, secrets, schema_version, last_modified, sys_created_at, sys_updated_at, is_healthy)
             VALUES
@@ -60,9 +59,7 @@ public class SchemaConstraintFixture : IAsyncLifetime
     {
         var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var pin = conn.CreateCommand();
-        pin.CommandText = $"SELECT set_config('app.current_tenant_id', '{Tenant}', false);";
-        await pin.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(Tenant);
         return conn;
     }
 }

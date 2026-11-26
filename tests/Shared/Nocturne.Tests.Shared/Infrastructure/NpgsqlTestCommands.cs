@@ -64,6 +64,26 @@ public static class NpgsqlTestCommands
             "SELECT set_config('app.current_tenant_id', @tenantId, @local);",
             ("tenantId", tenantId.ToString()), ("local", local));
 
+    /// <summary>
+    /// Inserts an active tenant row. The slug defaults to one derived from <paramref name="id"/>, so two
+    /// tenants never collide; give one where the test reads it back.
+    /// </summary>
+    public static Task SeedTenantAsync(
+        this NpgsqlConnection conn, Guid id, string? slug = null, string displayName = "Test") =>
+        conn.ExecuteAsync(
+            """
+            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
+            VALUES (@id, @slug, @name, true, now(), now())
+            """,
+            ("id", id), ("slug", slug ?? $"tenant-{id:N}"), ("name", displayName));
+
+    public static async Task SeedTenantAsync(
+        string connectionString, Guid id, string? slug = null, string displayName = "Test")
+    {
+        await using var conn = await OpenAsync(connectionString);
+        await conn.SeedTenantAsync(id, slug, displayName);
+    }
+
     public static async Task<int> ExecuteAsync(
         this NpgsqlDataSource dataSource, string sql, params (string Name, object Value)[] parameters)
     {
@@ -84,6 +104,18 @@ public static class NpgsqlTestCommands
     {
         await using var conn = await dataSource.OpenConnectionAsync();
         return await conn.QueryAsync(sql, read, parameters);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="sql"/> on one connection pinned to <paramref name="tenantId"/>, so every
+    /// statement in it reads and writes as that tenant.
+    /// </summary>
+    public static async Task<int> ExecuteAsTenantAsync(
+        string connectionString, Guid tenantId, string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var conn = await OpenAsync(connectionString);
+        await conn.PinTenantAsync(tenantId);
+        return await conn.ExecuteAsync(sql, parameters);
     }
 
     public static async Task<int> ExecuteAsync(

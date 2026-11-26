@@ -32,10 +32,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "tenant_member_reasons");
         Migrator = database.MigratorConnectionString;
 
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'member-reasons', 'member-reasons', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, Tenant, "member-reasons", "member-reasons");
         await InsertSubjectAsync(Owner);
         await InsertMemberAsync(SeededMember, Owner);
 
@@ -73,8 +70,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     internal async Task<Guid> NewInviteAsync()
     {
         var invite = Guid.CreateVersion7();
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(Migrator, Tenant, $"""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES ('{invite}', '{Tenant}', '{Owner}', '{invite:N}', false, now() + interval '1 day', 0, now());
             """);
@@ -99,8 +95,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     private Task<int> NewTeamAccessAsync(Guid access)
     {
         var team = Guid.CreateVersion7();
-        return NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        return NpgsqlTestCommands.ExecuteAsTenantAsync(Migrator, Tenant, $"""
             INSERT INTO teams (id, name) VALUES ('{team}', 'Team {team:N}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{Tenant}', false)
@@ -240,8 +235,7 @@ public class AddTenantMemberReasonsTests(AddTenantMemberReasonsFixture fixture)
         (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}' AND created_from_invite_id = '{invite}'"))
             .Should().Be(1);
 
-        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{AddTenantMemberReasonsFixture.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(fixture.Migrator, AddTenantMemberReasonsFixture.Tenant, $"""
             DELETE FROM member_invites WHERE id = '{invite}';
             """);
 

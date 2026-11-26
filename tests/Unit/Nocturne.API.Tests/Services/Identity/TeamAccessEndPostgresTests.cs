@@ -160,10 +160,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-access-end', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, $"{slug}-{tenant:N}", "team-access-end");
         var members = Members(tenant);
         await members.SeedRolesAsync(tenant, Ct);
         var ownerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, Ct))!.Value;

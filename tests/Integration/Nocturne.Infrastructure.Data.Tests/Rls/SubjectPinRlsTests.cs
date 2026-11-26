@@ -47,10 +47,7 @@ public class SubjectPinRlsTests : IAsyncLifetime
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         foreach (var tenant in _tenants.Append(_otherTenant))
         {
-            await conn.ExecuteAsync("""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'subject-pin', true, now(), now())
-                """, ("id", tenant), ("slug", $"pin-{tenant:N}"));
+            await conn.SeedTenantAsync(tenant, $"pin-{tenant:N}", "subject-pin");
         }
 
         foreach (var subject in Subjects)

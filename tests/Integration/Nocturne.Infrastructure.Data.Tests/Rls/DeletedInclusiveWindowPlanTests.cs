@@ -57,7 +57,7 @@ public class DeletedInclusiveWindowPlanTests(RlsCompletenessFixture fx)
         await PlanTestSupport.SeedAsync(fx, tenant, table, string.Format(Columns, ""), string.Format(values, "interval '30 days'"), Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -132,7 +132,7 @@ public class DeletedInclusiveWindowPlanTests(RlsCompletenessFixture fx)
         await PlanTestSupport.SeedAsync(fx, tenant, table, columns, string.Format(valuesTemplate, "interval '30 days'", values), Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()

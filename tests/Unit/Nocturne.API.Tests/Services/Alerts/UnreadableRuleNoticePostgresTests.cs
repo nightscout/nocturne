@@ -76,14 +76,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'unreadable-rule-notice', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"unreadable-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"unreadable-{tenant:N}", "unreadable-rule-notice");
         }
 
         var contexts = new SuppliedContextFactory(() => Context(tenant));
@@ -160,9 +153,9 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
         var id = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $$"""
-            SELECT set_config('app.current_tenant_id', '{{tenant}}', false);
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
                                      sort_order, created_at, updated_at)
@@ -188,9 +181,9 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
             UPDATE alert_rules SET {assignment} WHERE id = '{ruleId}';
             """;
         if (value is not null)
@@ -620,13 +613,10 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
-            SELECT condition_type, severity, scope_class, review_reason FROM alert_rules WHERE id = '{ruleId}';
-            """;
+        cmd.CommandText = $"SELECT condition_type, severity, scope_class, review_reason FROM alert_rules WHERE id = '{ruleId}';";
         await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
         await reader.ReadAsync();
         return (reader.GetString(0), reader.GetString(1), reader.GetString(2),
             reader.IsDBNull(3) ? null : reader.GetString(3));

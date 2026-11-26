@@ -285,14 +285,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'lost-evaluation', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"lost-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"lost-{tenant:N}", "lost-evaluation");
         }
 
         var rule = Guid.CreateVersion7();
@@ -758,9 +751,9 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(tenant.Id);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT set_config('app.current_tenant_id', '{tenant.Id}', false);
             UPDATE alert_rules SET {column} = @value WHERE id = '{tenant.RuleId}';
             """;
         cmd.Parameters.Add(new NpgsqlParameter("@value", value));

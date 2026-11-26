@@ -86,12 +86,7 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT id, suggested_json::text, enacted_json::text, loop_json::text FROM aps_snapshots;";
@@ -113,13 +108,11 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
 
         await using var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'Tenant B', true, now(), now());
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
 
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO aps_snapshots
               (id, tenant_id, timestamp, aps_system, enacted, suggested_json, enacted_json,
                predicted_iob_json, predicted_zt_json, predicted_uam_json)
@@ -132,8 +125,10 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
                '{"bg": 91, "tick": null, "timestamp": "2026-01-01T00:05:00Z", "predBGs": null}',
                '{"bg": 91, "rate": 0.6, "timestamp": "2026-01-01T00:05:00Z", "predBGs": {{curves}} }',
                '[120, 115, 110]', '[120, 118]', '[120, 130]');
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO aps_snapshots
               (id, tenant_id, timestamp, aps_system, enacted, suggested_json, enacted_json,
                predicted_iob_json, predicted_zt_json, predicted_uam_json)
@@ -154,10 +149,7 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
                  "enacted": {"rate": 2.0, "duration": 30, "received": true},
                  "predicted": {"values": [130, 125, 120], "startDate": "2026-01-01T00:15:00Z"} }',
                '[130, 125, 120]');
-
-            SELECT set_config('app.current_tenant_id', '', false);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 

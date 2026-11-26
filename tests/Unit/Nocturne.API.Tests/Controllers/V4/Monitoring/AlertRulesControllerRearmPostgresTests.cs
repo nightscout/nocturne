@@ -96,14 +96,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'rearm-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"rearm-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"rearm-{tenant:N}", "rearm-test");
         }
 
         var failure = new Failure();
@@ -305,9 +298,9 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
+            await conn.PinTenantAsync(tenant);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                SELECT set_config('app.current_tenant_id', '{tenant}', false);
                 UPDATE alert_rules SET {column} = @value, condition_params = @body::jsonb WHERE id = '{rule}';
                 """;
             cmd.Parameters.Add(new NpgsqlParameter("@value", unreadable));

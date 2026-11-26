@@ -33,7 +33,7 @@ public class SensorGlucoseStreamPredecessorPlanTests(RlsCompletenessFixture fx)
         await SeedLinksAsync(tenant);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -69,7 +69,7 @@ public class SensorGlucoseStreamPredecessorPlanTests(RlsCompletenessFixture fx)
     private async Task SeedLinksAsync(Guid tenant)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """

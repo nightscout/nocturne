@@ -135,15 +135,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
         await using (var conn = new NpgsqlConnection(_database.Created.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, @name, true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant.TenantId));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", tenant.Slug));
-            cmd.Parameters.Add(new NpgsqlParameter("@name", name));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant.TenantId, tenant.Slug, name);
         }
 
         var rule = Guid.CreateVersion7();

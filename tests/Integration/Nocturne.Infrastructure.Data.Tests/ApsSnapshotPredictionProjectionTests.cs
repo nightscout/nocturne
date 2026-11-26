@@ -137,17 +137,8 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
     {
         var tenant = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'prediction-projection-test', true, now(), now());
-                SELECT set_config('app.current_tenant_id', @tid::text, false);
-                """;
-            cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"pred-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.SeedTenantAsync(tenant, $"pred-{tenant:N}", "prediction-projection-test");
+        await conn.PinTenantAsync(tenant);
 
         foreach (var row in rows)
         {
@@ -187,12 +178,7 @@ public class ApsSnapshotPredictionProjectionTests(RlsCompletenessFixture fx)
         Guid tenant, Func<ApsSnapshotRepository, DateTime, DateTime, Task<T>> read, StatementRecorder? recorder = null)
     {
         await using var conn = await fx.OpenAppConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenant);
 
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)

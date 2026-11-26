@@ -241,13 +241,8 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
     private async Task<Run> SeedAsync()
     {
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(
-            database.MigratorConnectionString,
-            """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'unevaluable-rule-notice', true, now(), now())
-            """,
-            ("id", tenant), ("slug", $"unevaluable-{tenant:N}"));
+        await NpgsqlTestCommands.SeedTenantAsync(
+            database.MigratorConnectionString, tenant, $"unevaluable-{tenant:N}", "unevaluable-rule-notice");
 
         var run = new Run
         {

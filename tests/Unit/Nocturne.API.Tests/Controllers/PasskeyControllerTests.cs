@@ -2218,14 +2218,6 @@ public class PasskeyControllerTests : IDisposable
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
     }
 
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     /// <summary>
     /// The scopes the complete step files its request in. Each starts unresolved, as a scope opened
     /// in code does, so the step must pin the tenant itself.

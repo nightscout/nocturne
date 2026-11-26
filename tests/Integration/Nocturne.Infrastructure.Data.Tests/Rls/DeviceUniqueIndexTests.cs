@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -35,15 +36,15 @@ public class DeviceUniqueIndexTests
         var tenantB = Guid.NewGuid();
 
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantA);
-        await InsertTenantAsync(conn, tenantB);
+        await conn.SeedTenantAsync(tenantA, $"dev-{tenantA:N}", "device-index-test");
+        await conn.SeedTenantAsync(tenantB, $"dev-{tenantB:N}", "device-index-test");
 
         // Two different patients running Loop on an iPhone produce the identical
         // generic uploader identity. Both inserts must succeed.
-        await SetCurrentTenantAsync(conn, tenantA);
+        await conn.PinTenantAsync(tenantA);
         await InsertDeviceAsync(conn, tenantA, "Uploader", "iPhone", "unknown");
 
-        await SetCurrentTenantAsync(conn, tenantB);
+        await conn.PinTenantAsync(tenantB);
         var act = () => InsertDeviceAsync(conn, tenantB, "Uploader", "iPhone", "unknown");
 
         await act.Should().NotThrowAsync(
@@ -57,8 +58,8 @@ public class DeviceUniqueIndexTests
         var tenant = Guid.NewGuid();
 
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenant);
-        await SetCurrentTenantAsync(conn, tenant);
+        await conn.SeedTenantAsync(tenant, $"dev-{tenant:N}", "device-index-test");
+        await conn.PinTenantAsync(tenant);
 
         await InsertDeviceAsync(conn, tenant, "InsulinPump", "Insulet", "Omnipod 5");
         var act = () => InsertDeviceAsync(conn, tenant, "InsulinPump", "Insulet", "Omnipod 5");
@@ -67,20 +68,6 @@ public class DeviceUniqueIndexTests
         thrown.Which.SqlState.Should().Be(
             "23505",
             "within a single tenant the live (category, type, serial) device identity must remain unique");
-    }
-
-    private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants
-                (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES
-                (@id, @slug, 'device-index-test', true, now(), now())
-            """;
-        AddParam(cmd, "@id", tenantId);
-        AddParam(cmd, "@slug", $"dev-{tenantId:N}");
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task InsertDeviceAsync(
@@ -98,14 +85,6 @@ public class DeviceUniqueIndexTests
         AddParam(cmd, "@type", type);
         AddParam(cmd, "@serial", serial);
         await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetCurrentTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        AddParam(cmd, "@tid", tenantId.ToString());
-        await cmd.ExecuteScalarAsync();
     }
 
     private static void AddParam(NpgsqlCommand cmd, string name, object value)

@@ -76,14 +76,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'Site', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"team-staff-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"team-staff-{tenant:N}", "Site");
         }
 
         await Members().SeedRolesAsync(tenant, default);
@@ -207,12 +200,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var builder = new NpgsqlConnectionStringBuilder(database.MigratorConnectionString) { Pooling = false };
         await using var conn = new NpgsqlConnection(builder.ConnectionString);
         await conn.OpenAsync();
-        await using (var pin = conn.CreateCommand())
-        {
-            pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false)";
-            pin.Parameters.Add(new NpgsqlParameter("@tenant", tenant.ToString()));
-            await pin.ExecuteScalarAsync();
-        }
+        await conn.PinTenantAsync(tenant);
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """

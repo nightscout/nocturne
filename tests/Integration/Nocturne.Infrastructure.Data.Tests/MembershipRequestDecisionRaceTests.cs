@@ -8,7 +8,6 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -120,16 +119,7 @@ public class MembershipRequestDecisionRaceTests
     {
         var tenant = Guid.NewGuid();
         await using (var conn = await _fx.OpenMigratorConnectionAsync())
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'decision-race-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"decide-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
-        }
+            await conn.SeedTenantAsync(tenant, $"decide-{tenant:N}", "decision-race-test");
 
         await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var db = await ContextAsync(provider, tenant);

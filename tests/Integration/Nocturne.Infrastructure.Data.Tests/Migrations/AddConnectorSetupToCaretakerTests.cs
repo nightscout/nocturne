@@ -97,9 +97,8 @@ public class AddConnectorSetupToCaretakerFixture : IAsyncLifetime
         foreach (var (id, slug, isSystem, permissions) in roles)
         {
             var tenant = Guid.CreateVersion7();
+            await NpgsqlTestCommands.SeedTenantAsync(connectionString, tenant, $"caretaker-{tenant:N}", "Site");
             await NpgsqlTestCommands.ExecuteAsync(connectionString, $"""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES ('{tenant}', 'caretaker-{tenant:N}', 'Site', true, now(), now());
                 INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
                 VALUES ('{id}', '{tenant}', '{slug}', '{slug}', '{JsonSerializer.Serialize(permissions)}', {(isSystem ? "true" : "false")}, now(), now());
                 """);

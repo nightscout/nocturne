@@ -349,14 +349,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'owed-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"owed-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"owed-{tenant:N}", "owed-test");
         }
 
         var rule = Guid.CreateVersion7();
@@ -604,9 +597,9 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
+            await conn.PinTenantAsync(tenant.Id);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant::text, false);
                 INSERT INTO alert_excursions (id, tenant_id, alert_rule_id, started_at)
                 VALUES (@id, @tenant, @rule, @at);
                 INSERT INTO alert_excursions (id, tenant_id, alert_rule_id, started_at, ended_at)
@@ -1630,12 +1623,11 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(tenant.Id);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT set_config('app.current_tenant_id', @tenant::text, false);
             UPDATE alert_rules SET {column} = @value WHERE id = @rule;
             """;
-        cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant.Id));
         cmd.Parameters.Add(new NpgsqlParameter("@rule", tenant.Rule.Id));
         cmd.Parameters.Add(new NpgsqlParameter("@value", value));
         await cmd.ExecuteNonQueryAsync();

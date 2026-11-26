@@ -66,10 +66,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-reason', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, $"{slug}-{tenant:N}", "team-reason");
         var factory = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, Ct);
@@ -121,8 +118,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var reason = Guid.CreateVersion7();
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var limit = limitTo24Hours ? "true" : "false";
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             {(member is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, access_ends_at, sys_created_at, sys_updated_at)
                 VALUES ('{memberId}', '{site.Tenant}', '{subject}', {limit}, {ends}, now(), now());
@@ -423,8 +419,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("fk");
         var (_, member, access) = await MixedAsync(site, "fk-mixed");
 
-        var deleteAccess = () => NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        var deleteAccess = () => NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             DELETE FROM team_tenant_access WHERE id = '{access}';
             """);
         (await deleteAccess.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);

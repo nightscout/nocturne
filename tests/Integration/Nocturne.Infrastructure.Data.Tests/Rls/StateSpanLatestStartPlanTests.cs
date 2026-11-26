@@ -43,7 +43,7 @@ public class StateSpanLatestStartPlanTests(RlsCompletenessFixture fx)
             Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -26,12 +27,7 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
         await SeedAsync(tenant);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenant);
 
         var recorder = new ParameterRecorder();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -59,11 +55,10 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
     private async Task SeedAsync(Guid tenant)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
+        await conn.SeedTenantAsync(tenant, $"srcdel-{tenant:N}", "source-delete-test");
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@tid, @slug, 'source-delete-test', true, now(), now());
-            SELECT set_config('app.current_tenant_id', @tid::text, false);
             WITH g AS MATERIALIZED (
                 SELECT gen_random_uuid() AS canonical, gen_random_uuid() AS a, gen_random_uuid() AS b,
                        date_trunc('minute', now()) - make_interval(mins => i) AS ts
@@ -81,7 +76,6 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
             ANALYZE sensor_glucose, linked_records;
             """;
         cmd.Parameters.AddWithValue("tid", tenant);
-        cmd.Parameters.AddWithValue("slug", $"srcdel-{tenant:N}");
         cmd.Parameters.AddWithValue("groups", Groups);
         cmd.Parameters.AddWithValue("type", RecordTypeKeys.Key(RecordType.SensorGlucose));
         await cmd.ExecuteNonQueryAsync();

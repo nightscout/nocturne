@@ -52,10 +52,7 @@ public class AddTeamGroupsFixture : IAsyncLifetime
     internal async Task<Guid> NewSiteAsync()
     {
         var tenant = Guid.CreateVersion7();
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'group-{tenant:N}', 'Site', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"group-{tenant:N}", "Site");
         return tenant;
     }
 

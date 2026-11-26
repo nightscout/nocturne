@@ -37,32 +37,31 @@ public class V4GoldenFixture : IAsyncLifetime
         MigratorConnectionString = database.MigratorConnectionString;
         AppConnectionString = database.AppConnectionString;
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        // MutationAuditInterceptor resolves IHttpContextAccessor (registered by the API in prod).
-        services.AddHttpContextAccessor();
-        services.AddSingleton<ITenantAccessor>(_accessor);
-        // Scoped, mirroring the API's request-scoped registration, so a golden can attribute its
-        // own scope to a user without leaking that attribution into the next test.
-        services.AddScoped<TestAuditContext>();
-        services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        services.AddPostgreSqlInfrastructure(
-            AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
-        services.AddSingleton<BroadcastCapture>();
-        services.AddScoped<IRecordChangeSubscriber, CapturingRecordChangeSubscriber>();
-        services.AddScoped<IRecordChangeSubscriber, CacheInvalidationSubscriber>();
-        // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
-        // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
-        services.AddSingleton<EntryCapture>();
-        services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
-        services.AddSingleton<CacheInvalidationCapture>();
-        services.AddSingleton<Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation>(
-            sp => sp.GetRequiredService<CacheInvalidationCapture>());
-        services.AddSingleton<GlucoseReadingCapture>();
-        services.AddScoped<IGlucoseReadingBroadcaster>(sp =>
-            new CapturingGlucoseReadingBroadcaster(sp.GetRequiredService<GlucoseReadingCapture>()));
-        RegisterV4Repositories(services);
-        _provider = services.BuildServiceProvider();
+        _provider = TestContexts.BuildProvider(
+            AppConnectionString,
+            postgres: c => c.HistoryCommitMarginMilliseconds = 0,
+            configure: services =>
+            {
+                services.AddSingleton<ITenantAccessor>(_accessor);
+                // Scoped, mirroring the API's request-scoped registration, so a golden can attribute its
+                // own scope to a user without leaking that attribution into the next test.
+                services.AddScoped<TestAuditContext>();
+                services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
+                services.AddSingleton<BroadcastCapture>();
+                services.AddScoped<IRecordChangeSubscriber, CapturingRecordChangeSubscriber>();
+                services.AddScoped<IRecordChangeSubscriber, CacheInvalidationSubscriber>();
+                // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
+                // chokepoint's entries projection fires into EntryCapture (additive; non-glucose goldens ignore it).
+                services.AddSingleton<EntryCapture>();
+                services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
+                services.AddSingleton<CacheInvalidationCapture>();
+                services.AddSingleton<Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation>(
+                    sp => sp.GetRequiredService<CacheInvalidationCapture>());
+                services.AddSingleton<GlucoseReadingCapture>();
+                services.AddScoped<IGlucoseReadingBroadcaster>(sp =>
+                    new CapturingGlucoseReadingBroadcaster(sp.GetRequiredService<GlucoseReadingCapture>()));
+                RegisterV4Repositories(services);
+            });
     }
 
     /// <summary>The shared broadcast collector recording every chokepoint fan-out across all V4 repos.</summary>

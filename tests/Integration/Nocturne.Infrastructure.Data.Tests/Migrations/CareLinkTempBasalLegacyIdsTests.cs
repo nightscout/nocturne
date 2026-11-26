@@ -109,12 +109,7 @@ public class CareLinkTempBasalLegacyIdsFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using (var cmd = conn.CreateCommand())
             {
@@ -150,13 +145,11 @@ public class CareLinkTempBasalLegacyIdsFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'Tenant B', true, now(), now());
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
 
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO temp_basals
               (id, tenant_id, data_source, start_timestamp, rate, origin, legacy_id, sync_identifier,
                sys_updated_at, deleted_at, deleted_by_user, is_duplicate)
@@ -210,8 +203,10 @@ public class CareLinkTempBasalLegacyIdsFixture : IAsyncLifetime
                1781093079000, '{{CareLink}}', true),
               ('{{Guid.CreateVersion7()}}', '{{TenantA}}', '{{GroupOfUserDeletedInA}}', 'tempbasal', '{{UserDeletedMemberInA}}',
                1781093079000, '{{CareLink}}', false);
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO temp_basals
               (id, tenant_id, data_source, start_timestamp, rate, origin, legacy_id, sync_identifier,
                sys_updated_at, deleted_at, deleted_by_user, is_duplicate)
@@ -225,10 +220,7 @@ public class CareLinkTempBasalLegacyIdsFixture : IAsyncLifetime
             VALUES
               ('{{Guid.CreateVersion7()}}', '{{TenantB}}', '{{GroupOfSweptInB}}', 'tempbasal', '{{SweptAloneInB}}',
                1781092479000, '{{CareLink}}', true);
-
-            SELECT set_config('app.current_tenant_id', '', false);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 

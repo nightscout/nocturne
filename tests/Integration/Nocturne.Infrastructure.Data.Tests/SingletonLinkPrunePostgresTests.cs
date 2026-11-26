@@ -12,7 +12,6 @@ using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -142,14 +141,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     {
         var tenantId = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'singleton-prune-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenantId));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"prune-{tenantId:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenantId, $"prune-{tenantId:N}", "singleton-prune-test");
         return tenantId;
     }
 }

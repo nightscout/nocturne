@@ -242,7 +242,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     private async Task<long> CountAsync(Guid tenant)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"SELECT COUNT(*) FROM {AuditTable} WHERE tenant_id = @tid";
         AddParam(cmd, "@tid", tenant);
@@ -253,19 +253,10 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
 
-        await using (var insertTenant = conn.CreateCommand())
-        {
-            insertTenant.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'audit-purge-test', true, now(), now())
-                """;
-            AddParam(insertTenant, "@id", tenant);
-            AddParam(insertTenant, "@slug", $"audit-purge-{tenant:N}");
-            await insertTenant.ExecuteNonQueryAsync();
-        }
+        await conn.SeedTenantAsync(tenant, $"audit-purge-{tenant:N}", "audit-purge-test");
 
         // Row inserts run under the tenant so the multitenant RLS policy admits them.
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         for (var i = 0; i < rows; i++)
         {
@@ -281,21 +272,13 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     private async Task SeedRecentRowAsync(Guid tenant)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             $"INSERT INTO {AuditTable} (id, tenant_id, entity_type, action, created_at) "
             + "VALUES (gen_random_uuid(), @tid, 'SensorGlucose', 'update', now())";
         AddParam(cmd, "@tid", tenant);
         await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        AddParam(cmd, "@tid", tenant.ToString());
-        await cmd.ExecuteScalarAsync();
     }
 
     private async Task<long> ProbeCountAsync(Guid tenant)

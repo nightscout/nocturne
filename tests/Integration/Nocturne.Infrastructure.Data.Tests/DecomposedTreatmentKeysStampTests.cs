@@ -67,24 +67,10 @@ public class DecomposedTreatmentKeysStampTests(RlsCompletenessFixture fx)
     {
         var tenant = Guid.NewGuid();
         await using (var migrator = await fx.OpenMigratorConnectionAsync())
-        await using (var cmd = migrator.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'decomposed-treatment-stamp', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"dts-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+            await migrator.SeedTenantAsync(tenant, $"dts-{tenant:N}", "decomposed-treatment-stamp");
 
         var conn = await fx.OpenAppConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenant);
 
         var recorder = new StatementRecorder();
         var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()

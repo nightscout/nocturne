@@ -288,7 +288,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await using var conn = new NpgsqlConnection(database.AppConnectionString);
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant, local: true);
         await using var cmd = new NpgsqlCommand(sql, conn);
         await using var reader = await cmd.ExecuteReaderAsync();
         var rows = new List<string>();
@@ -302,16 +302,9 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await using var conn = new NpgsqlConnection(database.AppConnectionString);
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant, local: true);
         await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = new NpgsqlCommand("SELECT set_config('app.current_tenant_id', @t, true)", conn);
-        cmd.Parameters.AddWithValue("t", tenant.ToString());
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task<Guid> SeedTenantAsync()
@@ -319,13 +312,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand("""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'duplicate-flag-audit', true, now(), now())
-            """, conn);
-        cmd.Parameters.AddWithValue("id", tenant);
-        cmd.Parameters.AddWithValue("slug", $"dup-audit-{tenant:N}");
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"dup-audit-{tenant:N}", "duplicate-flag-audit");
         return tenant;
     }
 }

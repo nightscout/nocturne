@@ -45,9 +45,8 @@ public class AddMembershipNextReasonLapseFixture : IAsyncLifetime
         var subject = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
+        await conn.SeedTenantAsync(tenant, $"lapse-{tenant:N}", "Site");
         await using var cmd = new NpgsqlCommand($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'lapse-{tenant:N}', 'Site', true, now(), now());
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{subject}', 'member', true, false, now(), now(), 'Approved');
             INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, access_ends_at, sys_created_at, sys_updated_at)

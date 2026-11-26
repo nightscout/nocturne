@@ -46,9 +46,8 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "backfill_member_reasons");
         _migrator = database.MigratorConnectionString;
 
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, Tenant, "backfill-reasons", "backfill-reasons");
         await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'backfill-reasons', 'backfill-reasons', true, now(), now());
             INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
             VALUES ('{OwnerRole}', '{Tenant}', 'Owner', 'owner', '["*"]', true, now(), now()),
                    ('{ViewerRole}', '{Tenant}', 'Viewer', 'viewer', '["glucose.read"]', true, now(), now()),
@@ -62,8 +61,7 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
                 """);
         }
 
-        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(_migrator, Tenant, $"""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES ('{Invite}', '{Tenant}', '{Owner}', '{Invite:N}', true, now() + interval '1 day', 1, now());
             """);

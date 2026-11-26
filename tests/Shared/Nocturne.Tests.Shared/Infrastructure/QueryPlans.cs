@@ -11,14 +11,6 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 /// </summary>
 public static class QueryPlans
 {
-    public static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-        cmd.Parameters.AddWithValue("tid", tenant.ToString());
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     public static async Task<JsonElement> ExplainAsync(NpgsqlConnection conn, NpgsqlCommand captured)
     {
         await using var cmd = conn.CreateCommand();

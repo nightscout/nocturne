@@ -87,10 +87,10 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
         (await SendAsync(client, Bearer(token))).Response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var otherTenant = Guid.CreateVersion7();
+        await using (var seed = await OpenPostgresAsync())
+            await seed.SeedTenantAsync(otherTenant, $"other-{otherTenant:N}", "Other");
         await ExecuteAsync(
             $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{otherTenant}', 'other-{otherTenant:N}', 'Other', true, now(), now());
             UPDATE tenant_members SET tenant_id = '{otherTenant}' WHERE subject_id = @subject;
             """,
             subjectId);

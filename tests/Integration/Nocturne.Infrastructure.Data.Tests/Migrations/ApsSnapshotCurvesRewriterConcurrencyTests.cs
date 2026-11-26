@@ -30,10 +30,9 @@ public class ApsSnapshotCurvesRewriterConcurrencyFixture : IAsyncLifetime
         }
 
         await using var conn = await OpenPinnedAsync();
+        await conn.SeedTenantAsync(Tenant, "tenant-a", "Tenant A");
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{{Tenant}}', 'tenant-a', 'Tenant A', true, now(), now());
             INSERT INTO aps_snapshots
               (id, tenant_id, timestamp, aps_system, enacted, suggested_json,
                predicted_iob_json, predicted_zt_json, predicted_uam_json)
@@ -51,9 +50,7 @@ public class ApsSnapshotCurvesRewriterConcurrencyFixture : IAsyncLifetime
     {
         var conn = new NpgsqlConnection(ConnectionString);
         await conn.OpenAsync();
-        await using var pin = conn.CreateCommand();
-        pin.CommandText = $"SELECT set_config('app.current_tenant_id', '{Tenant}', false);";
-        await pin.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(Tenant);
         return conn;
     }
 

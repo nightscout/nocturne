@@ -38,10 +38,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         await using var conn = await _fx.OpenMigratorConnectionAsync();
         foreach (var tenant in Tenants)
         {
-            await conn.ExecuteAsync("""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'audit-scrub', true, now(), now())
-                """, ("id", tenant), ("slug", $"scrub-{tenant:N}"));
+            await conn.SeedTenantAsync(tenant, $"scrub-{tenant:N}", "audit-scrub");
         }
 
         foreach (var subject in new[] { _leaver, _bystander })

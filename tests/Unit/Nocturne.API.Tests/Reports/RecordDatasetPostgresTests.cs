@@ -66,14 +66,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
             await using (var conn = new NpgsqlConnection(MigratorConnectionString))
             {
                 await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                    VALUES (@id, @slug, 'report-records-test', true, now(), now())
-                    """;
-                cmd.Parameters.AddWithValue("id", tenant);
-                cmd.Parameters.AddWithValue("slug", $"report-records-{tenant:N}");
-                await cmd.ExecuteNonQueryAsync();
+                await conn.SeedTenantAsync(tenant, $"report-records-{tenant:N}", "report-records-test");
             }
 
             var now = Now.UtcDateTime;
@@ -273,14 +266,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'report-records-more', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("id", tenant);
-            cmd.Parameters.AddWithValue("slug", $"report-records-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"report-records-{tenant:N}", "report-records-more");
         }
         if (seed is not null)
         {
@@ -432,14 +418,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'report-records-empty', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("id", empty);
-            cmd.Parameters.AddWithValue("slug", $"report-records-{empty:N}");
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(empty, $"report-records-{empty:N}", "report-records-empty");
         }
 
         foreach (var name in Names)

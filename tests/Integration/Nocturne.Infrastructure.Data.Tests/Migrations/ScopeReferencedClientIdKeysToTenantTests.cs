@@ -70,10 +70,8 @@ public class ScopeReferencedClientIdKeysToTenantFixture : IAsyncLifetime
     {
         var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var pin = conn.CreateCommand();
-        pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-        pin.Parameters.AddWithValue("tenant", tenantId?.ToString() ?? string.Empty);
-        await pin.ExecuteNonQueryAsync();
+        if (tenantId is { } pinned)
+            await conn.PinTenantAsync(pinned);
         return conn;
     }
 
@@ -103,21 +101,21 @@ public class ScopeReferencedClientIdKeysToTenantFixture : IAsyncLifetime
     private async Task SeedAsync()
     {
         await using var conn = await OpenPinnedAsync(null);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'B', true, now(), now());
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "B");
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO foods (tenant_id, id, carbs, category, energy, fat, hidden, hide_after_use, name, portion, protein, subcategory)
             VALUES ('{{TenantB}}', '{{FoodB}}', 30, '', 0, 0, false, false, 'b food', 1, 0, '');
             INSERT INTO state_spans (tenant_id, id, category, state, start_timestamp)
             VALUES ('{{TenantB}}', '{{SpanB}}', 'TemporaryTarget', 'b', '2026-09-01T09:00:00Z');
             INSERT INTO sleep_sessions (tenant_id, id, created_at, detection_method, duration_ms, end_time, source, start_time, total_sleep_ms, type, updated_at)
             VALUES ('{{TenantB}}', '{{SessionB}}', now(), 'Device', 0, '2026-09-01T08:00:00Z', 'Oura', '2026-09-01T00:00:00Z', 0, 'Sleep', now());
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO foods (tenant_id, id, carbs, category, energy, fat, hidden, hide_after_use, name, portion, protein, subcategory)
             VALUES ('{{TenantA}}', '{{FoodA}}', 15, '', 0, 0, false, false, 'a food', 1, 0, ''),
                    ('{{TenantA}}', '{{DeletableFoodA}}', 20, '', 0, 0, false, false, 'a deletable food', 1, 0, '');
@@ -147,8 +145,7 @@ public class ScopeReferencedClientIdKeysToTenantFixture : IAsyncLifetime
             INSERT INTO sleep_biometric_samples (tenant_id, id, sleep_session_id, timestamp, heart_rate) VALUES
               ('{{TenantA}}', '5b000000-0000-7000-8000-000000000001', '{{SessionA}}', '2026-09-01T00:00:00Z', 50),
               ('{{TenantA}}', '5b000000-0000-7000-8000-000000000002', '{{SessionB}}', '2026-09-01T00:00:00Z', 90);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 

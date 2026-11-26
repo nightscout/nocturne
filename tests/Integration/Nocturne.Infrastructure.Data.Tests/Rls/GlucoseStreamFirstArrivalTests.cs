@@ -82,7 +82,7 @@ public class GlucoseStreamFirstArrivalTests(RlsCompletenessFixture fx) : IAsyncL
     {
         var id = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, _tenant);
+        await conn.PinTenantAsync(_tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO sensor_glucose
