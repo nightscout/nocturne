@@ -7,7 +7,12 @@ using Nocturne.Core.Models.Widget;
 namespace Nocturne.Core.Contracts.Multitenancy;
 
 /// <summary>Response envelope for the cross-tenant overview.</summary>
-public record TenantOverviewResponse(List<TenantOverviewItem> Tenants);
+/// <param name="HiddenCount">
+/// For one group's overview, how many people of the group, with access of the group's team that has not ended,
+/// the caller cannot read. A number only: nothing of those people is in any response. Null for the overview of
+/// everyone the caller follows.
+/// </param>
+public record TenantOverviewResponse(List<TenantOverviewItem> Tenants, int? HiddenCount);
 
 /// <summary>
 /// Per-tenant overview entry. <paramref name="ActiveAlertCount"/> and

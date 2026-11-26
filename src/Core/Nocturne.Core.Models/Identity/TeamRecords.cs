@@ -121,6 +121,12 @@ public sealed record TeamGroup(
     IReadOnlyList<TeamGroupStaff> Staff,
     bool HasNobodyCurrent);
 
+/// <summary>A group the caller is in as staff of a team whose end has not passed, as the People page lists it.</summary>
+/// <param name="SharesName">
+/// Whether another of the caller's groups has the same name, ignoring case, so the team's name has to tell them apart.
+/// </param>
+public sealed record StaffGroup(Guid Id, string Name, string TeamName, bool SharesName);
+
 /// <summary>What a manager's change to a team's groups, or to which people its staff reach, found.</summary>
 public enum TeamGroupChange
 {

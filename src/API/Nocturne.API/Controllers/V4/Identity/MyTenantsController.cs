@@ -9,6 +9,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -89,30 +90,68 @@ public class MyTenantsController : ControllerBase
         return Ok(tenants);
     }
 
-    /// <inheritdoc cref="ITenantOverviewService.GetOverviewAsync"/>
+    /// <summary>
+    /// Returns every person the caller may read glucose for, as <see cref="ITenantOverviewService.GetOverviewAsync"/>
+    /// orders them, or with <paramref name="group"/> only that group's
+    /// (<see cref="ITenantOverviewService.GetGroupOverviewAsync"/>).
+    /// </summary>
+    /// <param name="group">One of the caller's groups (<see cref="GetGroups"/>); 404 for any other.</param>
+    /// <param name="ct">Cancels the operation.</param>
     [HttpGet("overview")]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantOverviewResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<TenantOverviewResponse>> GetOverview(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TenantOverviewResponse>> GetOverview(
+        [FromQuery] Guid? group, CancellationToken ct)
     {
-        if (ResolveOwnSubject(new TenantOverviewResponse([]), out var caller, out var subjectId)
-            is { } answer)
-            return answer;
+        var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
+        if (!caller.IsAuthenticated)
+            return Unauthorized();
+
+        if (group is { } groupId)
+            return caller.SubjectId is { } member
+                && await _overviewService.GetGroupOverviewAsync(
+                    member, groupId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct)
+                    is { } groupOverview
+                ? Ok(groupOverview)
+                : NoSuchGroup();
+
+        // See ResolveOwnSubject for why a caller without a subject is answered, not refused.
+        if (caller.SubjectId is not { } subjectId)
+            return Ok(new TenantOverviewResponse([], null));
 
         var overview = await _overviewService.GetOverviewAsync(
             subjectId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
         return Ok(overview);
     }
 
-    /// <inheritdoc cref="ITenantOverviewService.GetReviewAsync"/>
+    /// <inheritdoc cref="ITenantOverviewService.GetGroupsAsync"/>
+    /// <param name="ct">Cancels the operation.</param>
+    [HttpGet("overview/groups")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<StaffGroup>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetGroups(CancellationToken ct)
+    {
+        if (ResolveOwnSubject(new List<StaffGroup>(), out _, out var subjectId) is { } answer)
+            return answer;
+
+        return Ok(await _overviewService.GetGroupsAsync(subjectId, ct));
+    }
+
+    /// <summary>
+    /// Returns the period statistics of every person <see cref="GetOverview"/> lists for the same
+    /// <paramref name="group"/> (<see cref="ITenantOverviewService.GetReviewAsync"/>).
+    /// </summary>
+    /// <param name="group">One of the caller's groups (<see cref="GetGroups"/>); 404 for any other.</param>
     /// <param name="days">The length of the period: 14, 30 or 90.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet("overview/review")]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantReviewResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantReviewResponse>> GetReview(
-        [FromQuery] int days = 14, CancellationToken ct = default)
+        [FromQuery] Guid? group, [FromQuery] int days = 14, CancellationToken ct = default)
     {
         // A caller without a subject is answered by the service, which states the periods: see
         // ResolveOwnSubject for why it is not refused.
@@ -126,10 +165,22 @@ public class MyTenantsController : ControllerBase
                 statusCode: StatusCodes.Status400BadRequest,
                 title: "Bad Request");
 
+        if (group is { } groupId)
+            return caller.SubjectId is { } subjectId
+                && await _overviewService.GetGroupReviewAsync(
+                    subjectId, groupId, TokenScopesOf(caller), caller.AuthType, days, caller.LimitTo24Hours, ct)
+                    is { } groupReview
+                ? Ok(groupReview)
+                : NoSuchGroup();
+
         var review = await _overviewService.GetReviewAsync(
             caller.SubjectId, TokenScopesOf(caller), caller.AuthType, days, caller.LimitTo24Hours, ct);
         return Ok(review);
     }
+
+    /// <summary>A group the caller is not in as current staff reads as one that does not exist.</summary>
+    private ObjectResult NoSuchGroup() =>
+        Problem(detail: "No such group.", statusCode: StatusCodes.Status404NotFound, title: "Not Found");
 
     /// <inheritdoc cref="ITenantOverviewService.GetPersonAsync"/>
     /// <param name="tenantId">The person's tenant.</param>

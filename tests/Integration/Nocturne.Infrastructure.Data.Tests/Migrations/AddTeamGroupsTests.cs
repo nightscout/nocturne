@@ -85,7 +85,8 @@ public class AddTeamGroupsFixture : IAsyncLifetime
         """);
 
     internal Task<int> NewStaffAsync(Guid group, Guid member) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-        INSERT INTO team_group_staff (id, team_group_id, team_member_id) VALUES ('{Guid.CreateVersion7()}', '{group}', '{member}');
+        INSERT INTO team_group_staff (id, team_group_id, team_id, team_member_id)
+        SELECT '{Guid.CreateVersion7()}', '{group}', g.team_id, '{member}' FROM team_groups g WHERE g.id = '{group}';
         """);
 
     internal Task<long> CountAsync(string sql) => NpgsqlTestCommands.ScalarAsync<long>(Migrator, sql);

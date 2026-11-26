@@ -5,8 +5,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
 /// A named group inside a team, holding some of the sites it follows and some of its staff. It has no end.
-/// Not tenant-scoped; its <c>subject_pin</c> policy is the same as <c>teams</c>': a context pinned to a subject
-/// sees only the groups of the teams the subject is a member of, and writes only those of the teams they manage.
+/// Not tenant-scoped. Its <c>subject_pin</c> policy lets a context pinned to a subject read every group of the
+/// teams they manage and the groups they are in as staff, and write only those of the teams they manage.
 /// </summary>
 /// <remarks>
 /// While the team narrows to groups (<see cref="Nocturne.Core.Models.Identity.TeamStaffReach.TheirGroups"/>),
@@ -48,9 +48,9 @@ public class TeamGroupEntity : ISystemTimestamped
 
 /// <summary>
 /// A site in a team's group. Keyed by the site, never by the team's access to it, so a site whose access is
-/// stopped and given again keeps its place. Not <c>ITenantScoped</c>: the team reads it across sites. It has
-/// the group's <c>subject_pin</c> policy and a restrictive <c>tenant_pin</c>, so a context pinned to a tenant
-/// sees and writes only that tenant's rows.
+/// stopped and given again keeps its place. Not <c>ITenantScoped</c>: the team reads it across sites. Its
+/// <c>subject_pin</c> policy reads as the group's, and a restrictive <c>tenant_pin</c> lets a context pinned to
+/// a tenant see and write only that tenant's rows.
 /// </summary>
 [Table("team_group_people")]
 public class TeamGroupPersonEntity : ISystemCreated
@@ -75,7 +75,8 @@ public class TeamGroupPersonEntity : ISystemCreated
 
 /// <summary>
 /// A staff member in a team's group, by their place in the team, which takes it with it when they leave.
-/// Not tenant-scoped; it has the group's <c>subject_pin</c> policy.
+/// Not tenant-scoped. Its <c>subject_pin</c> policy lets a context pinned to a subject read the places of the
+/// teams they manage and their own place, and write only those of the teams they manage.
 /// </summary>
 [Table("team_group_staff")]
 public class TeamGroupStaffEntity : ISystemCreated
@@ -88,6 +89,16 @@ public class TeamGroupStaffEntity : ISystemCreated
     public Guid TeamGroupId { get; set; }
 
     public TeamGroupEntity? TeamGroup { get; set; }
+
+    /// <summary>
+    /// The group's team, held here so that this table's policy does not read <c>team_groups</c>, whose own
+    /// policy reads this table to let a staff member see the groups they are in. PostgreSQL refuses policies
+    /// that read each other's tables.
+    /// </summary>
+    [Column("team_id")]
+    public Guid TeamId { get; set; }
+
+    public TeamEntity? Team { get; set; }
 
     [Column("team_member_id")]
     public Guid TeamMemberId { get; set; }

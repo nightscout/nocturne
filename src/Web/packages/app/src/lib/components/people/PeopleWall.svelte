@@ -25,7 +25,10 @@
     wallStep,
   } from "./wall-layout.js";
 
-  const overview = followPeople();
+  const overview = followPeople(
+    () => undefined,
+    () => {}
+  );
   const query = overview.query;
   const reveal = createOverlayReveal({ revealOnPointerMove: true });
   const clock = new Now(1000);

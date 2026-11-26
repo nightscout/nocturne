@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -26,6 +27,30 @@ public interface ITenantOverviewService
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// The groups the subject is in as current staff, for the People page's tabs
+    /// (<see cref="ITeamRepository.GetGroupsOfStaffAsync"/>).
+    /// </summary>
+    Task<IReadOnlyList<StaffGroup>> GetGroupsAsync(Guid subjectId, CancellationToken ct);
+
+    /// <summary>
+    /// <see cref="GetOverviewAsync"/> for only the people of <paramref name="groupId"/> whose team's access has
+    /// not ended, in the same order, with how many of them the subject cannot read
+    /// (<see cref="TenantOverviewResponse.HiddenCount"/>). Null when the subject is not in the group as current
+    /// staff.
+    /// </summary>
+    Task<TenantOverviewResponse?> GetGroupOverviewAsync(
+        Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours, CancellationToken ct);
+
+    /// <summary>
+    /// <see cref="GetReviewAsync"/> for only the people <see cref="GetGroupOverviewAsync"/> lists. Null when
+    /// the subject is not in the group as current staff.
+    /// </summary>
+    Task<TenantReviewResponse?> GetGroupReviewAsync(
+        Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        bool credentialLimitTo24Hours, CancellationToken ct);
 
     /// <summary>
     /// Returns the statistics of the last <paramref name="days"/> days, and the change in time in

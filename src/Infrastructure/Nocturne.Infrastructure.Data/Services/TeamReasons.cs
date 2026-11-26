@@ -31,6 +31,13 @@ internal static class TeamReasons
     internal sealed record AccessRole(Guid Id, IReadOnlyList<string> Permissions);
 
     /// <summary>
+    /// Whether a staff member's place in a group is of one team: the place's own team, its group's and its staff
+    /// member's. A place that names another team puts nobody in the group, whatever let it be written.
+    /// </summary>
+    internal static readonly Expression<Func<TeamGroupStaffEntity, bool>> PlaceAgrees = g =>
+        g.TeamId == g.TeamMember!.TeamId && g.TeamGroup!.TeamId == g.TeamMember.TeamId;
+
+    /// <summary>
     /// Whether a staff member's row at a site gives them the team's reason there: when an owner approved
     /// them, or whatever their row says when the site trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>),
     /// and never while the site has stopped them (<see cref="Blocked"/>), whatever the rule. While the team
@@ -47,8 +54,8 @@ internal static class TeamReasons
         (s.Status == TeamSiteStaffStatus.Approved || s.TeamTenantAccess!.StaffRule == TeamStaffRule.TeamTrusted)
         && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId)
         && (s.TeamTenantAccess!.Team!.StaffReach == TeamStaffReach.EveryPerson
-            || s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
-                && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
+            || s.TeamMember!.GroupPlaces.AsQueryable().Where(PlaceAgrees)
+                .Any(g => g.TeamGroup!.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
 
     /// <summary>
     /// Whether a staff member's row at a site waits for an owner's approval: pending, at a site that does not
@@ -60,16 +67,16 @@ internal static class TeamReasons
         && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted
         && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId)
         && (s.TeamTenantAccess!.Team!.StaffReach == TeamStaffReach.EveryPerson
-            || s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
-                && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
+            || s.TeamMember!.GroupPlaces.AsQueryable().Where(PlaceAgrees)
+                .Any(g => g.TeamGroup!.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
 
     /// <summary>
     /// Whether the staff member of a row and its site are in one group of the team, which is what
     /// <see cref="GivesReason"/> asks of them while the team narrows to groups.
     /// </summary>
     internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> SharesGroup = s =>
-        s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
-            && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId));
+        s.TeamMember!.GroupPlaces.AsQueryable().Where(PlaceAgrees)
+            .Any(g => g.TeamGroup!.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId));
 
     /// <summary>
     /// Whether the site of a staff member's row has stopped them reaching it through any team

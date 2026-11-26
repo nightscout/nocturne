@@ -13,6 +13,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
@@ -290,6 +291,28 @@ public class TenantOverviewReviewTests
         harness.Reads.Should().HaveCount(4, "a different period is a different key");
     }
 
+    [Fact]
+    public async Task A_groups_review_reads_only_the_people_of_the_group_the_caller_reads()
+    {
+        var subjectId = Guid.NewGuid();
+        var group = Guid.NewGuid();
+        var options = NewOptions();
+        var inGroup = SeedMembership(options, subjectId, "in-group", ReportReader);
+        var outside = SeedMembership(options, subjectId, "outside", ReportReader);
+        var harness = new Harness(options);
+        harness.Teams
+            .Setup(t => t.GetPeopleOfStaffGroupAsync(group, subjectId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid> { inGroup, Guid.NewGuid() });
+
+        var review = await harness.Service.GetGroupReviewAsync(
+            subjectId, group, FullTokenScopes, AuthType.SessionCookie, 14, false, CancellationToken.None);
+
+        review!.People.Select(p => p.TenantId).Should().Equal(inGroup);
+        harness.Reads.Select(r => r.Tenant).Should().OnlyContain(t => t == inGroup).And.NotBeEmpty();
+        (await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14))
+            .People.Select(p => p.TenantId).Should().BeEquivalentTo([inGroup, outside]);
+    }
+
     private sealed class Harness
     {
         private const int SamplesPerDay = 48;
@@ -297,6 +320,7 @@ public class TenantOverviewReviewTests
         public Dictionary<Guid, Func<DateTime, DateTime, IReadOnlyList<SensorGlucose>>> Series { get; } = [];
         public List<(Guid Tenant, DateTime From, DateTime To)> Reads { get; } = [];
         public Guid? Failing { get; init; }
+        public Mock<ITeamRepository> Teams { get; } = new();
         public TenantOverviewService Service { get; }
 
         public Harness(Microsoft.EntityFrameworkCore.DbContextOptions<NocturneDbContext> options)
@@ -365,6 +389,7 @@ public class TenantOverviewReviewTests
 
             Service = new TenantOverviewService(
                 new TenantMembershipRepository(new InMemoryContextFactory(options).AsNocturneFactory(), AccountLinkRoutes.Off),
+                Teams.Object,
                 provider.CreateScope().ServiceProvider,
                 new GlucoseStatusClassifier(
                     new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

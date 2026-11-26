@@ -9,6 +9,7 @@ using Moq;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Analytics;
@@ -624,6 +625,7 @@ public class TenantOverviewServiceTests
 
         var service = new TenantOverviewService(
             new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
+            Mock.Of<ITeamRepository>(),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
@@ -1117,6 +1119,7 @@ public class TenantOverviewServiceTests
 
         return new TenantOverviewService(
             new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
+            Mock.Of<ITeamRepository>(),
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
