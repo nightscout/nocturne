@@ -8,10 +8,13 @@ const logger = createLogger();
  * update again without limit, so a handler that fails once (a refused private message, an API
  * outage) would run every 30 seconds for as long as the bot runs.
  */
-export function settled<E>(name: string, handler: (event: E) => Promise<void>): (event: E) => Promise<void> {
-  return async (event) => {
+export function settled<A extends unknown[]>(
+  name: string,
+  handler: (...args: A) => Promise<void>,
+): (...args: A) => Promise<void> {
+  return async (...args) => {
     try {
-      await handler(event);
+      await handler(...args);
     } catch (err) {
       logger.error(`The ${name} handler failed:`, err);
     }

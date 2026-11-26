@@ -446,7 +446,10 @@ public class AlertsController : ControllerBase
     public async Task<ActionResult> MarkFailed(
         Guid deliveryId, [FromBody] MarkFailedRequest request, CancellationToken ct)
     {
-        await _deliveryService.MarkFailedAsync(deliveryId, request.Error, ct);
+        if (request.PlatformMessageId is { Length: > 0 } messageId)
+            await _deliveryService.MarkSentMessageFailedAsync(deliveryId, messageId, request.Error, ct);
+        else
+            await _deliveryService.MarkFailedAsync(deliveryId, request.Error, ct);
         return NoContent();
     }
 
@@ -638,6 +641,12 @@ public class MarkDeliveredRequest
 public class MarkFailedRequest
 {
     public string Error { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The message the platform failed after accepting it; see
+    /// <see cref="IAlertDeliveryService.MarkSentMessageFailedAsync"/>.
+    /// </summary>
+    public string? PlatformMessageId { get; set; }
 }
 
 public class PendingDeliveryResponse

@@ -538,6 +538,26 @@ describe("MemberHistoryEntryRow an owner's decisions about a team's staff", () =
   });
 
   it.each([
+    [MemberHistoryKind.TeamStaffBlocked, "Alex stopped Sam from seeing this site through any team."],
+    [MemberHistoryKind.TeamStaffUnblocked, "Alex let Sam see this site through teams again."],
+  ])("states %s", async (kind, line) => {
+    const row = await sentence({ kind });
+    await expect.element(row).toHaveTextContent(line);
+  });
+
+  it.each([
+    [MemberHistoryKind.TeamStaffBlocked, "A deleted member stopped a deleted member from seeing this site through any team."],
+    [MemberHistoryKind.TeamStaffUnblocked, "A deleted member let a deleted member see this site through teams again."],
+  ])("states %s when the person and the actor were deleted", async (kind, line) => {
+    const row = await sentence({
+      kind,
+      actor: { kind: MemberHistoryActorKind.Person, subjectId: undefined, name: undefined },
+      member: undefined,
+    });
+    await expect.element(row).toHaveTextContent(line);
+  });
+
+  it.each([
     ["owner_approves", "Alex set the team Clinic so that an owner approves each staff member."],
     ["team_decides", "Alex set the team Clinic so that the team decides who on its staff can see this site."],
     ["team_trusted", "Alex set the team Clinic so that every staff member of the team can see this site."],

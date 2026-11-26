@@ -39,16 +39,6 @@ public static class AlertRuleMapper
         c.AddedBySubjectId, c.StopsAt, c.RecipientSubjectId);
 
     /// <summary>
-    /// The review reason the rule's owner is shown: the condition type, or else the severity, that
-    /// the rule shows a stand-in for, else the stored reason. Never stored, so a writer that keeps
-    /// <see cref="AlertRuleRecord.ReviewReason"/> keeps only what a data repair wrote.
-    /// </summary>
-    public static string? ShownReviewReason(AlertRuleRecord record) =>
-        record.Unreadable.HasFlag(AlertRuleUnreadableValues.ConditionType) ? AlertRuleReviewReasons.ConditionTypeUnrecognized
-        : record.Unreadable.HasFlag(AlertRuleUnreadableValues.Severity) ? AlertRuleReviewReasons.SeverityUnrecognized
-        : record.ReviewReason;
-
-    /// <summary>
     /// False when the rule holds a condition type, severity or scope class no member has. Such a
     /// rule is not evaluated: it is reported (<see cref="UnreadableAlertRule"/>) until it is saved.
     /// </summary>

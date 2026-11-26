@@ -116,11 +116,15 @@ public interface IAlertRepository
     Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// Records that the opening of <paramref name="excursionId"/> owes its work, taken up at
-    /// <paramref name="now"/>, for a re-notification of it (<see cref="IAlertSnoozeService.ResumeAsync"/>).
-    /// False, with nothing written, when the opening already owes work or the excursion does not exist.
+    /// Ends the snooze of <paramref name="instanceId"/> while it still holds the lapsed value
+    /// <paramref name="lapsedUntil"/>, so of two resumes of one lapse only one ends it. With
+    /// <paramref name="renotifyAt"/>, the same write records it as the start of the instance's
+    /// latest send (<c>renotified_at</c>) and holds the excursion's opening owed, taken up then,
+    /// unless it already owes work, so a resume that dies after it is finished by the sweep
+    /// (<see cref="IAlertSnoozeService.ResumeAsync"/>).
     /// </summary>
-    Task<bool> OweOpeningAsync(Guid excursionId, DateTime now, CancellationToken ct);
+    Task<LapsedSnoozeEnd> EndLapsedSnoozeAsync(
+        Guid instanceId, DateTime lapsedUntil, DateTime? renotifyAt, CancellationToken ct);
 
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>

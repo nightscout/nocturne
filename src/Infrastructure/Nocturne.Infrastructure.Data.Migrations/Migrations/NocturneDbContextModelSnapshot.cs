@@ -431,6 +431,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("receipt_confirmed_at");
 
+                    b.Property<DateTime?>("RenotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("renotified_at");
+
                     b.Property<string>("ResolutionReason")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -5749,6 +5753,43 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                             t.HasCheckConstraint("ck_team_members_staff_columns", "kind = 'staff' OR (role_ceiling_slug IS NULL AND NOT limit_to_24_hours AND ends_at IS NULL AND created_from_staff_invite_id IS NULL)");
                         });
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteBlockEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CreatedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_subject_id");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBySubjectId");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("team_site_blocks");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteDeclineEntity", b =>
@@ -12089,6 +12130,32 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteBlockEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedBySubjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
+                        .WithMany("TeamSiteBlocks")
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Subject");
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteDeclineEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
@@ -12927,6 +12994,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("SubjectRoles");
+
+                    b.Navigation("TeamSiteBlocks");
 
                     b.Navigation("TotpCredentials");
                 });

@@ -430,4 +430,53 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
 
         fired.NotSent.Should().Equal(dryRun).And.ContainSingle();
     }
+
+    [Theory]
+    [InlineData("pending", null, "delivered")]
+    [InlineData("failed", "wamid.1", "failed")]
+    [InlineData("failed", "wamid.0", "delivered")]
+    [InlineData("failed", null, "delivered")]
+    public async Task A_report_of_the_send_keeps_only_a_failure_reported_for_the_same_message(
+        string before, string? failedMessageId, string after)
+    {
+        var deliveryId = await SeedWhatsAppDeliveryAsync(before, failedMessageId);
+
+        await CreateService().MarkDeliveredAsync(deliveryId, "wamid.1", null, CancellationToken.None);
+
+        await using var read = await _factory.CreateDbContextAsync();
+        var row = await read.AlertDeliveries.SingleAsync(d => d.Id == deliveryId);
+        row.Status.Should().Be(after);
+    }
+
+    [Fact]
+    public async Task A_failure_of_a_sent_message_records_the_message_with_the_error()
+    {
+        var deliveryId = await SeedWhatsAppDeliveryAsync("delivered", "wamid.1");
+
+        await CreateService().MarkSentMessageFailedAsync(deliveryId, "wamid.1", "the window is closed", CancellationToken.None);
+
+        await using var read = await _factory.CreateDbContextAsync();
+        var row = await read.AlertDeliveries.SingleAsync(d => d.Id == deliveryId);
+        row.Status.Should().Be("failed");
+        row.LastError.Should().Be("the window is closed");
+        row.PlatformMessageId.Should().Be("wamid.1");
+        row.RetryCount.Should().Be(1);
+    }
+
+    private async Task<Guid> SeedWhatsAppDeliveryAsync(string status, string? platformMessageId)
+    {
+        var instanceId = await SeedInstanceAsync();
+        var deliveryId = Guid.CreateVersion7();
+        await using var db = await _factory.CreateDbContextAsync();
+        db.AlertDeliveries.Add(new AlertDeliveryEntity
+        {
+            Id = deliveryId, TenantId = Tenant, AlertInstanceId = instanceId,
+            ChannelType = ChannelType.WhatsAppDm, Destination = "61400000000", Payload = "{}",
+            Status = status, LastError = status == "failed" ? "a failure" : null,
+            PlatformMessageId = platformMessageId,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return deliveryId;
+    }
 }

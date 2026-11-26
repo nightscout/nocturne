@@ -6,8 +6,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Alerts.Corpus;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Services.Monitoring;
+using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
@@ -18,7 +22,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -373,7 +376,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             Enum.IsDefined(record.Rule.ScopeClass).Should().BeTrue();
             record.Unreadable.Should().Be(unreadableValues);
             record.ReviewReason.Should().BeNull("nothing stored one");
-            AlertRuleMapper.ShownReviewReason(record).Should().Be(shownReason);
+            record.ShownReviewReason.Should().Be(shownReason);
         }
     }
 
@@ -394,7 +397,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             CancellationToken.None);
 
         (await StoredValuesAsync(harness.Tenant, rule)).Should().Be(("threshold", "warning", "undirected", (string?)null));
-        AlertRuleMapper.ShownReviewReason((await harness.Repository.GetRuleAsync(rule, CancellationToken.None))!)
+        (await harness.Repository.GetRuleAsync(rule, CancellationToken.None))!.ShownReviewReason
             .Should().BeNull("the rule now holds members, so nothing is left to review");
     }
 
@@ -456,6 +459,160 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
 
         deleted.Should().BeTrue();
         (await harness.Repository.GetRulesAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
+    private static AlertRuleRetirement Retirement() =>
+        new(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>());
+
+    private static IRuleScopeClassifier Classifier() =>
+        Mock.Of<IRuleScopeClassifier>(c => c.Classify(It.IsAny<AlertConditionType>(), It.IsAny<string>()) == RuleScopeClass.Low);
+
+    /// <summary>The tracker sync, with each managed rule referenced by another rule so a delete disables it.</summary>
+    private TrackerAlertRuleSyncService TrackerSync(Harness harness)
+    {
+        var references = new Mock<IAlertReferenceService>();
+        references
+            .Setup(r => r.FindReferencingRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Guid.NewGuid()]);
+        return new TrackerAlertRuleSyncService(
+            new SuppliedContextFactory(() => Context(harness.Tenant)), Classifier(), references.Object,
+            Rearms.Unannounced(), Retirement(), TimeProvider.System,
+            NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);
+    }
+
+    /// <summary>A tracker definition with one threshold, synced to its managed rule.</summary>
+    private async Task<(Guid Definition, Guid Rule)> SyncedTrackerRuleAsync(Harness harness)
+    {
+        var definition = new TrackerDefinitionEntity
+        {
+            Id = Guid.NewGuid(),
+            TenantId = harness.Tenant,
+            CreatedBy = "user-1",
+            Name = "Sensor",
+            Mode = TrackerMode.Duration,
+            LifespanHours = 240,
+            Category = TrackerCategory.Consumable,
+        };
+        definition.NotificationThresholds.Add(new TrackerNotificationThresholdEntity
+        {
+            Id = Guid.NewGuid(),
+            TenantId = harness.Tenant,
+            TrackerDefinitionId = definition.Id,
+            Hours = 24,
+            Urgency = NotificationUrgency.Warn,
+        });
+        await using (var db = Context(harness.Tenant))
+        {
+            db.TrackerDefinitions.Add(definition);
+            await db.SaveChangesAsync();
+        }
+
+        await TrackerSync(harness).SyncDefinitionAsync(definition.Id);
+        await using var read = Context(harness.Tenant);
+        return (definition.Id, (await read.AlertRules.AsNoTracking().SingleAsync()).Id);
+    }
+
+    private async Task SetThresholdUrgencyAsync(Guid tenant, NotificationUrgency urgency)
+    {
+        await using var db = Context(tenant);
+        (await db.TrackerNotificationThresholds.SingleAsync()).Urgency = urgency;
+        await db.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData("severity", "normal", "tracker_age", "critical", AlertRuleReviewReasons.SeverityUnrecognized)]
+    [InlineData("condition_type", "tracker_age_legacy", "composite", "warning", AlertRuleReviewReasons.ConditionTypeUnrecognized)]
+    public async Task A_tracker_disable_of_a_rule_holding_a_value_no_member_has_stores_the_reason_for_its_stand_in(
+        string column, string unreadable, string conditionType, string severity, string reason)
+    {
+        var harness = await CreateAsync();
+        var (definition, rule) = await SyncedTrackerRuleAsync(harness);
+        await UpdateRuleAsync(harness.Tenant, rule, $"{column} = @value", unreadable);
+
+        await TrackerSync(harness).DeleteRulesForDefinitionAsync(definition);
+
+        var stored = await StoredValuesAsync(harness.Tenant, rule);
+        (stored.ConditionType, stored.Severity, stored.ReviewReason).Should().Be((conditionType, severity, reason));
+    }
+
+    [Fact]
+    public async Task A_tracker_sync_that_sets_a_severity_over_a_stand_in_stores_no_reason()
+    {
+        var harness = await CreateAsync();
+        var (definition, rule) = await SyncedTrackerRuleAsync(harness);
+        await UpdateRuleAsync(harness.Tenant, rule, "severity = @value", "normal");
+
+        await TrackerSync(harness).SyncDefinitionAsync(definition);
+
+        (await StoredValuesAsync(harness.Tenant, rule)).Should().Be(("tracker_age", "warning", "low", (string?)null));
+    }
+
+    [Fact]
+    public async Task A_tracker_sync_whose_severity_is_the_stand_in_stores_the_reason_as_if_it_kept_the_stand_in()
+    {
+        var harness = await CreateAsync();
+        var (definition, rule) = await SyncedTrackerRuleAsync(harness);
+        await UpdateRuleAsync(harness.Tenant, rule, "severity = @value", "normal");
+        await SetThresholdUrgencyAsync(harness.Tenant, NotificationUrgency.Urgent);
+
+        await TrackerSync(harness).SyncDefinitionAsync(definition);
+
+        (await StoredValuesAsync(harness.Tenant, rule)).Should().Be(
+            ("tracker_age", "critical", "low", AlertRuleReviewReasons.SeverityUnrecognized),
+            "a sync cannot tell its critical from the stand-in it copied; the owner's next save clears it");
+    }
+
+    [Fact]
+    public async Task A_starter_save_of_a_rule_with_a_severity_no_member_has_stores_severity_unrecognized()
+    {
+        var harness = await CreateAsync();
+        var contexts = new SuppliedContextFactory(() => Context(harness.Tenant));
+        var setup = new AlertSetupService(
+            contexts,
+            new TenantRepository(contexts),
+            Mock.Of<ITenantGlucoseUnits>(u => u.ResolveAsync(It.IsAny<CancellationToken>()) == Task.FromResult("mg/dl")),
+            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            new SubjectRepository(contexts, AccountLinkRoutes.Off),
+            harness.Rules,
+            Classifier(),
+            Mock.Of<ISecretEncryptionService>(),
+            harness.Delivery.Object,
+            Rearms.Unannounced(),
+            Retirement(),
+            TimeProvider.System);
+        var request = new SaveAlertSetupRequest
+        {
+            Rules = [new StarterAlertRuleRequest { Kind = StarterAlertKind.Low, IsEnabled = true, Threshold = 70 }],
+            Channels = [new CreateAlertRuleChannelRequest { ChannelType = ChannelType.TelegramDm, Destination = "864203571" }],
+        };
+        var caller = Guid.NewGuid();
+        await setup.SaveAsync(caller, null, request, CancellationToken.None);
+        var low = (await harness.Rules.GetStarterRulesAsync(CancellationToken.None))[StarterAlertKind.Low].Rule.Id;
+        await UpdateRuleAsync(harness.Tenant, low, "severity = @value", "normal");
+
+        await setup.SaveAsync(caller, null, request, CancellationToken.None);
+
+        var stored = await StoredValuesAsync(harness.Tenant, low);
+        (stored.Severity, stored.ReviewReason).Should().Be(("critical", AlertRuleReviewReasons.SeverityUnrecognized));
+    }
+
+    [Fact]
+    public async Task An_editor_save_of_the_stand_in_severity_stores_no_reason()
+    {
+        var harness = await CreateAsync();
+        var rule = await SeedRuleAsync(harness.Tenant, "Legacy", "threshold", "normal");
+        var opened = (await harness.Repository.GetRuleAsync(rule, CancellationToken.None))!;
+
+        await harness.Rules.UpdateAsync(
+            rule,
+            new AlertRuleWrite(
+                opened.Rule.Name, null, AlertConditionType.Threshold, opened.Rule.ConditionParams, RuleScopeClass.Low,
+                AlertRuleSeverity.Critical, IsEnabled: true, SortOrder: 1, AllowThroughDnd: false,
+                AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
+            CancellationToken.None);
+
+        (await StoredValuesAsync(harness.Tenant, rule)).Should().Be(("threshold", "critical", "low", (string?)null),
+            "the owner looked at the rule and kept critical");
     }
 
     private async Task<(string ConditionType, string Severity, string ScopeClass, string? ReviewReason)> StoredValuesAsync(

@@ -441,6 +441,7 @@ msgstr "Unnamed {0}"
 #: src/lib/components/members/PendingInvitesList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
 #: src/lib/components/members/TeamStaffList.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -1284,8 +1285,9 @@ msgstr "Custom"
 msgid "Telegram"
 msgstr "Telegram"
 
-#~ msgid "WhatsApp"
-#~ msgstr "WhatsApp"
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "WhatsApp"
+msgstr "WhatsApp"
 
 #~ msgid "No notification channels are currently available."
 #~ msgstr "No notification channels are currently available."
@@ -30745,9 +30747,8 @@ msgstr "Channel ID"
 msgid "Chat ID"
 msgstr "Chat ID"
 
-#: src/lib/components/alerts/channelText.svelte.ts
-msgid "Phone (E.164)"
-msgstr "Phone (E.164)"
+#~ msgid "Phone (E.164)"
+#~ msgstr "Phone (E.164)"
 
 #: src/lib/components/alerts/channelText.svelte.ts
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
@@ -30777,9 +30778,8 @@ msgstr "Sent to the Telegram account you linked."
 msgid "Add the bot to the group, then use its chat ID (a negative number) or the group's @username."
 msgstr "Add the bot to the group, then use its chat ID (a negative number) or the group's @username."
 
-#: src/lib/components/alerts/channelText.svelte.ts
-msgid "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code."
-msgstr "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code."
+#~ msgid "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code."
+#~ msgstr "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code."
 
 #: src/lib/components/alerts/channelText.svelte.ts
 msgid "A channel ID is 17-20 digits."
@@ -30793,9 +30793,8 @@ msgstr "A channel ID starts with C, G or D."
 msgid "A group chat ID is a negative number, or an @username."
 msgstr "A group chat ID is a negative number, or an @username."
 
-#: src/lib/components/alerts/channelText.svelte.ts
-msgid "A phone number starts with + and a country code, digits only."
-msgstr "A phone number starts with + and a country code, digits only."
+#~ msgid "A phone number starts with + and a country code, digits only."
+#~ msgstr "A phone number starts with + and a country code, digits only."
 
 #. 0: channelDestinationLabel(meta.type) ?? channelLabel(meta.type)
 #: src/lib/components/alerts/channelText.svelte.ts
@@ -33160,10 +33159,8 @@ msgstr "Avg daily carbs"
 msgid "Select any day to view detailed report"
 msgstr "Select any day to view detailed report"
 
-#. 0: platformLabel(o.platform!)
-#: src/lib/components/alerts/ChannelsSection.svelte
-msgid "{0} not linked. Connect it in Connectors & apps to enable delivery."
-msgstr "{0} not linked. Connect it in Connectors & apps to enable delivery."
+#~ msgid "{0} not linked. Connect it in Connectors & apps to enable delivery."
+#~ msgstr "{0} not linked. Connect it in Connectors & apps to enable delivery."
 
 #: src/lib/components/alerts/DndPanel.svelte
 msgid "<0/> Disable"
@@ -40703,6 +40700,7 @@ msgid "<0/> {0} records in the last {1} days"
 msgstr "<0/> {0} records in the last {1} days"
 
 #: src/lib/components/connectors/ConnectionStatusLabel.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "Stopped"
 msgstr "Stopped"
 
@@ -48239,6 +48237,7 @@ msgstr "Approved by {0} · {1}"
 
 #: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "Stop access"
 msgstr "Stop access"
 
@@ -48248,6 +48247,7 @@ msgid "Stop the access of {0}"
 msgstr "Stop the access of {0}"
 
 #: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffList.svelte
 msgid "<0/> Stop access"
 msgstr "<0/> Stop access"
 
@@ -50428,9 +50428,8 @@ msgstr "{0} set a team that was deleted so that every staff member of the team c
 msgid "You now trust the whole team."
 msgstr "You now trust the whole team."
 
-#: src/lib/components/members/TeamStaffList.svelte
-msgid "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
-msgstr "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
+#~ msgid "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
+#~ msgstr "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again."
 
 #: src/lib/components/members/TeamStaffList.svelte
 msgid "Not approved"
@@ -50518,9 +50517,8 @@ msgstr "This site trusts the whole team. Every staff member can see this site."
 msgid "Each site decides who approves the team's staff. Only an owner of the site can change this."
 msgstr "Each site decides who approves the team's staff. Only an owner of the site can change this."
 
-#: src/lib/components/teams/TeamSitesSection.svelte
-msgid "The site trusts the whole team. Every staff member can see this site."
-msgstr "The site trusts the whole team. Every staff member can see this site."
+#~ msgid "The site trusts the whole team. Every staff member can see this site."
+#~ msgstr "The site trusts the whole team. Every staff member can see this site."
 
 #: src/lib/components/teams/TeamStaffRuleChoices.svelte
 msgid "I approve each staff member"
@@ -50549,6 +50547,157 @@ msgstr "Every staff member can see this site. You get no notices about them, and
 #: src/lib/components/teams/TeamStaffRuleChoices.svelte
 msgid "Who decides which staff of the team can see this site"
 msgstr "Who decides which staff of the team can see this site"
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Only an owner of this site can stop a person's access through teams or let them back in."
+msgstr "Only an owner of this site can stop a person's access through teams or let them back in."
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in."
+msgstr "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} stopped {1} from seeing this site through any team."
+msgstr "{0} stopped {1} from seeing this site through any team."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} let {1} see this site through teams again."
+msgstr "{0} let {1} see this site through teams again."
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "This person no longer sees this site through any team."
+msgstr "This person no longer sees this site through any team."
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "Could not stop the access of this person. Try again."
+msgstr "Could not stop the access of this person. Try again."
+
+#: src/lib/components/members/TeamAccessCard.svelte
+msgid "This person is no longer on the staff of a team that has access to this site."
+msgstr "This person is no longer on the staff of a team that has access to this site."
+
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "This person can see this site through teams again."
+msgstr "This person can see this site through teams again."
+
+#: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "Could not let this person back in. Try again."
+msgstr "Could not let this person back in. Try again."
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "People you stopped"
+msgstr "People you stopped"
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "People this site stopped"
+msgstr "People this site stopped"
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "These people cannot see this site through any team. Access they have through you directly does not change."
+msgstr "These people cannot see this site through any team. Access they have through you directly does not change."
+
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "These people cannot see this site through any team. Access they have directly on this site does not change."
+msgstr "These people cannot see this site through any team. Access they have directly on this site does not change."
+
+#. 0: block.blockedByName ?? "a deleted member"; 1: formatMediumDateTime(block.blockedAt)
+#: src/lib/components/members/TeamStaffBlocksSection.svelte
+msgid "Stopped by {0} · {1}"
+msgstr "Stopped by {0} · {1}"
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "Let {0} back in?"
+msgstr "Let {0} back in?"
+
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "Let back in"
+msgstr "Let back in"
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "Let {0} back in"
+msgstr "Let {0} back in"
+
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "<0/> Let back in"
+msgstr "<0/> Let back in"
+
+#. 0: name
+#: src/lib/components/members/TeamStaffLetBackIn.svelte
+msgid "{0} gets back what each team gives them at this site. If they have approval, or you trust the whole team, they see this site's data again. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out."
+msgstr "{0} gets back what each team gives them at this site. If they have approval, or you trust the whole team, they see this site's data again. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out."
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "You trust the whole team, so you do not approve or decline one staff member. You can still stop one person's access."
+msgstr "You trust the whole team, so you do not approve or decline one staff member. You can still stop one person's access."
+
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Cannot see this site through any team."
+msgstr "Cannot see this site through any team."
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Stop {0}'s access?"
+msgstr "Stop {0}'s access?"
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "Stop {0}'s access"
+msgstr "Stop {0}'s access"
+
+#. 0: name
+#: src/lib/components/members/TeamStaffList.svelte
+msgid "{0} stops seeing this site's data through every team, now and later. Access they have through you directly does not change. You can undo this."
+msgstr "{0} stops seeing this site's data through every team, now and later. Access they have through you directly does not change. You can undo this."
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "Every staff member of {0} that you did not stop can see this site. You get no notices about them."
+msgstr "Every staff member of {0} that you did not stop can see this site. You get no notices about them."
+
+#: src/lib/components/members/TeamStaffRule.svelte
+msgid "This site trusts the whole team. Every staff member that the site did not stop can see this site."
+msgstr "This site trusts the whole team. Every staff member that the site did not stop can see this site."
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "The site trusts the whole team. Every staff member that the site did not stop can see this site."
+msgstr "The site trusts the whole team. Every staff member that the site did not stop can see this site."
+
+#: src/lib/components/teams/TeamStaffSection.svelte
+msgid "Stopped by # site."
+msgid_plural "Stopped by # sites."
+msgstr[0] "Stopped by # site."
+msgstr[1] "Stopped by # sites."
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "One site you would see through this team stopped your access."
+msgid_plural "# sites you would see through this team stopped your access."
+msgstr[0] "One site you would see through this team stopped your access."
+msgstr[1] "# sites you would see through this team stopped your access."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Send /connect to the Nocturne WhatsApp number to enable delivery."
+msgstr "Send /connect to the Nocturne WhatsApp number to enable delivery."
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Connect it in Connectors & apps to enable delivery."
+msgstr "Connect it in Connectors & apps to enable delivery."
+
+#. 0: platformLabel(o.platform!); 1: linkInstruction(o.platform!)
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "{0} not linked. {1}"
+msgstr "{0} not linked. {1}"
+
+#: src/lib/components/alerts/channelText.svelte.ts
+msgid "Sent to the WhatsApp account you linked."
+msgstr "Sent to the WhatsApp account you linked."
 
 #. 0: formatLongDate(zoom[0]); 1: formatLongDate(zoom[1])
 #: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte

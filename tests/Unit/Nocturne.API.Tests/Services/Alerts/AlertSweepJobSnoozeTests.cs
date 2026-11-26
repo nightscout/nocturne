@@ -26,9 +26,9 @@ namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
 /// Drives <see cref="AlertSweepJob"/>'s snooze pass end to end over mocked
-/// persistence and glucose, with the real engine evaluating snooze conditions. Every clear must
-/// hand the instance to <see cref="IAlertSnoozeService.ResumeAsync"/> and no extension may, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check
-/// that too.
+/// persistence and glucose, with the real engine evaluating snooze conditions. A snooze that is not
+/// extended is handed to <see cref="IAlertSnoozeService.ResumeAsync"/>, which ends it, and no
+/// extension may be, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check that too.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertSweepJobSnoozeTests
@@ -170,10 +170,8 @@ public class AlertSweepJobSnoozeTests
 
     private void ShouldBeCleared(SnoozedInstanceSnapshot instance)
     {
-        var update = UpdateFor(instance);
-        update.SnoozedUntil.Should().Be(DateTime.MinValue);
-        update.SnoozeCount.Should().BeNull();
-        _resumed.Should().ContainSingle(r => r.InstanceId == instance.InstanceId, "a cleared snooze re-notifies")
+        _updates.Should().NotContain(u => u.Id == instance.InstanceId, "the resume ends the snooze in its own write");
+        _resumed.Should().ContainSingle(r => r.InstanceId == instance.InstanceId, "a lapsed snooze is resumed")
             .Which.TenantId.Should().Be(instance.TenantId);
     }
 
@@ -528,7 +526,7 @@ public class AlertSweepJobSnoozeTests
 
         await SweepAsync(failing, next);
 
-        UpdateFor(failing).SnoozedUntil.Should().Be(DateTime.MinValue);
+        _updates.Should().NotContain(u => u.Id == failing.InstanceId, "a resume that fails leaves the snooze lapsed for the next run");
         ShouldBeCleared(next);
     }
 

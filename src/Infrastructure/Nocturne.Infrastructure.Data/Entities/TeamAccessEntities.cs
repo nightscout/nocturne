@@ -214,3 +214,41 @@ public class TeamSiteDeclineEntity : ISystemCreated
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; }
 }
+
+/// <summary>
+/// An owner's stop of one subject at a site, whatever team they reach it through: while it stands, no
+/// <see cref="TeamSiteStaffEntity"/> row of theirs at the site gives a team reason (<see cref="Services.TeamReasons.GivesReason"/>).
+/// Not <c>ITenantScoped</c>, like <see cref="TeamTenantAccessEntity"/>, since a team's managers count it
+/// across sites; its <c>tenant_pin</c> policy shows a context pinned to a tenant only that tenant's rows.
+/// </summary>
+/// <remarks>
+/// It names no team and no access, so it outlasts the subject leaving and rejoining a team, an access
+/// stopped and given again, and a change of the staff rule. It changes no staff row and no decline:
+/// removing it leaves what those rows and the rule give.
+/// </remarks>
+[Table("team_site_blocks")]
+public class TeamSiteBlockEntity : ISystemCreated
+{
+    [Key]
+    [Column("id")]
+    public Guid Id { get; set; }
+
+    [Column("tenant_id")]
+    public Guid TenantId { get; set; }
+
+    public TenantEntity? Tenant { get; set; }
+
+    [Column("subject_id")]
+    public Guid SubjectId { get; set; }
+
+    public SubjectEntity? Subject { get; set; }
+
+    /// <summary>The owner who set it; null once that subject is deleted.</summary>
+    [Column("created_by_subject_id")]
+    public Guid? CreatedBySubjectId { get; set; }
+
+    public SubjectEntity? CreatedBy { get; set; }
+
+    [Column("sys_created_at")]
+    public DateTime SysCreatedAt { get; set; }
+}

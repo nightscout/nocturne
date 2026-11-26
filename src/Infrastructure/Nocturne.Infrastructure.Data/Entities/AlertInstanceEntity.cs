@@ -72,6 +72,14 @@ public class AlertInstanceEntity : ITenantScoped
     public int SnoozeCount { get; set; }
 
     /// <summary>
+    /// When the instance's latest re-notification started, written with the end of the snooze that
+    /// lapsed. Null until the first. Owed delivery is judged by the rows written since
+    /// (<c>IAlertDeliveryService.DispatchAsync</c>).
+    /// </summary>
+    [Column("renotified_at")]
+    public DateTime? RenotifiedAt { get; set; }
+
+    /// <summary>
     /// Why delivery for this instance was suppressed at fire time, if applicable.
     /// One of: <c>dnd</c> (tenant Do Not Disturb mode active and the rule was not allowed
     /// through). Null when delivery proceeded normally. Used by Replay/History so the user

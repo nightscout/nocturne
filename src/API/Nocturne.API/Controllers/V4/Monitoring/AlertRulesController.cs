@@ -21,7 +21,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Authorization;
@@ -442,7 +441,11 @@ public class AlertRulesController : ControllerBase
         if (channel is null)
             return NotFound();
 
-        if (ChannelDestinations.ModeOf(channel.ChannelType) != ChannelDestinationMode.UserSupplied)
+        // Judged as the rule editor shows it: a typed WhatsApp number a member has since linked goes
+        // to that member, so its typed-in stamps decide nothing and there is nothing to keep.
+        var states = await AlertChannelStates.LoadAsync(
+            [channel], _tenantAccessor.TenantId, _time.GetUtcNow().UtcDateTime, _members, _contextFactory, ct);
+        if (!states.Of(channel).TypedIn)
             return Problem(detail: KeepMemberChannelDetail, statusCode: StatusCodes.Status400BadRequest);
 
         if (HttpContext?.GetSubjectId() is not { } subjectId)
@@ -649,7 +652,7 @@ public class AlertRulesController : ControllerBase
             .SelectMany(d => new[]
             {
                 d.Verdict.State == AlertChannelState.NoRecipient ? d.Verdict.MemberSubjectId : null,
-                d.Channel.AddedBySubjectId,
+                d.Verdict.TypedIn ? d.Channel.AddedBySubjectId : null,
             })
             .OfType<Guid>()
             .ToHashSet();
@@ -661,6 +664,8 @@ public class AlertRulesController : ControllerBase
             response.MemberName = verdict is { State: AlertChannelState.NoRecipient, MemberSubjectId: { } member }
                 ? names.GetValueOrDefault(member)
                 : null;
+            response.TypedIn = verdict.TypedIn;
+            if (!verdict.TypedIn) continue;
             response.AddedByName = channel.AddedBySubjectId is { } adder ? names.GetValueOrDefault(adder) : null;
             response.StopsAt = channel.StopsAt;
         }
@@ -701,7 +706,7 @@ public class AlertRulesController : ControllerBase
         AllowThroughDnd = record.Rule.AllowThroughDnd,
         ScopeClass = record.Rule.ScopeClass,
         ManagedBy = record.ManagedBy,
-        ReviewReason = AlertRuleMapper.ShownReviewReason(record),
+        ReviewReason = record.ShownReviewReason,
         ConditionIssues = [.. conditionIssues ?? []],
         AutoResolveEnabled = record.Rule.AutoResolveEnabled,
         AutoResolveParams = record.Rule.AutoResolveParams is null

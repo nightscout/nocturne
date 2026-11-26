@@ -253,6 +253,7 @@ public partial class TeamRepository
                 m.EndsAt,
                 Approved = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.GivesReason),
                 Pending = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.Waits),
+                Blocked = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.Blocked),
             })
             .ToListAsync(ct);
         return staff.Select(s => new TeamStaffMember(
@@ -261,7 +262,8 @@ public partial class TeamRepository
             new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
             MembershipLiveness.HasEnded(s.EndsAt, now),
             s.Approved,
-            s.Pending)).ToList();
+            s.Pending,
+            s.Blocked)).ToList();
     }
 
     private static async Task<IReadOnlyList<TeamStaffInviteSummary>> LiveStaffInvitesAsync(

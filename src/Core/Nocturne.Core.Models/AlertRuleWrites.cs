@@ -12,7 +12,8 @@ namespace Nocturne.Core.Models;
 /// </param>
 /// <param name="ReviewReason">
 /// One of <see cref="AlertRuleReviewReasons"/>, or null. The rule editor's save passes null, which
-/// clears it; a sync that is not the owner looking passes the stored value.
+/// clears it; a sync that is not the owner looking passes the stored value. What is stored is
+/// <see cref="ReviewReasonToStore"/>.
 /// </param>
 public sealed record AlertRuleWrite(
     string Name,
@@ -47,7 +48,40 @@ public sealed record AlertRuleWrite(
         record.Rule.ClientConfiguration,
         record.ReviewReason,
         record.Rule.OnUnknown,
-        record.Rule.GlucoseFreshnessMinutes);
+        record.Rule.GlucoseFreshnessMinutes)
+    {
+        CopiedStandIns = record.Unreadable == AlertRuleUnreadableValues.None
+            ? null
+            : new StandIns(record.Unreadable, record.Rule.ConditionType, record.Rule.Severity),
+    };
+
+    /// <summary>
+    /// <see cref="ReviewReason"/>, else the reason the owner is shown
+    /// (<see cref="AlertRuleRecord.StandInReviewReason"/>) for a stand-in <see cref="Of"/> copied
+    /// that this write still carries, so a sync that keeps a stand-in does not store it silently and
+    /// one that replaces it stores no reason. A sync cannot be told apart from one that sets the
+    /// stand-in's value on purpose (a tracker severity that maps to critical): that also stores the
+    /// reason, which the owner's next save clears.
+    /// </summary>
+    public string? ReviewReasonToStore => ReviewReason ?? (CopiedStandIns is { } copied
+        ? AlertRuleRecord.StandInReviewReason(copied.KeptBy(this))
+        : null);
+
+    /// <summary>The stand-ins <see cref="Of"/> copied; null for a write built from a request.</summary>
+    private StandIns? CopiedStandIns { get; init; }
+
+    /// <summary>The columns a record showed a stand-in for, and the stand-in values it showed.</summary>
+    private readonly record struct StandIns(
+        AlertRuleUnreadableValues Columns, AlertConditionType ConditionType, AlertRuleSeverity Severity)
+    {
+        public AlertRuleUnreadableValues KeptBy(AlertRuleWrite write) =>
+            (Columns.HasFlag(AlertRuleUnreadableValues.ConditionType) && write.ConditionType == ConditionType
+                ? AlertRuleUnreadableValues.ConditionType
+                : AlertRuleUnreadableValues.None)
+            | (Columns.HasFlag(AlertRuleUnreadableValues.Severity) && write.Severity == Severity
+                ? AlertRuleUnreadableValues.Severity
+                : AlertRuleUnreadableValues.None);
+    }
 }
 
 /// <summary>

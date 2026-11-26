@@ -31,7 +31,7 @@ public static partial class ChannelDestinations
         [ChannelType.SlackChannel] = ChannelDestinationMode.UserSupplied,
         [ChannelType.TelegramDm] = ChannelDestinationMode.LinkedIdentity,
         [ChannelType.TelegramGroup] = ChannelDestinationMode.UserSupplied,
-        [ChannelType.WhatsAppDm] = ChannelDestinationMode.UserSupplied,
+        [ChannelType.WhatsAppDm] = ChannelDestinationMode.LinkedIdentity,
         [ChannelType.ResendEmail] = ChannelDestinationMode.UserSupplied,
         [ChannelType.DeviceAction] = ChannelDestinationMode.DeviceKind,
     };
@@ -67,6 +67,14 @@ public static partial class ChannelDestinations
         [ChannelType.WebPush] = [ChannelType.InApp],
     };
 
+    /// <summary>
+    /// Linked-identity channel types whose platform also reaches a destination no link names:
+    /// WhatsApp delivers to any phone number. A channel of such a type saved with no linked member,
+    /// as every WhatsApp channel was before WhatsApp accounts could be linked, is judged as a typed
+    /// destination: it delivers until the access of the member who added it ends.
+    /// </summary>
+    private static readonly HashSet<ChannelType> ReachesUnlinked = [ChannelType.WhatsAppDm];
+
     private static readonly Dictionary<ChannelType, DestinationShape> Shapes = new()
     {
         [ChannelType.DiscordDm] = new(DiscordSnowflake(), "a Discord ID (17-20 digits)"),
@@ -77,7 +85,7 @@ public static partial class ChannelDestinations
         [ChannelType.TelegramGroup] = new(
             TelegramGroupId(), "a Telegram group chat ID (-100…) or an @username"),
         [ChannelType.WhatsAppDm] = new(
-            WhatsAppPhoneNumber(), "an E.164 phone number with a leading + (+15551234567)"),
+            WhatsAppUser(), "a WhatsApp phone number with its country code (+15551234567) or user ID"),
     };
 
     /// <summary>The channel types the rule editor offers, each classified by destination mode.</summary>
@@ -98,6 +106,21 @@ public static partial class ChannelDestinations
     /// <summary>Whether this channel type's destination is filled in from the caller's linked chat identity.</summary>
     public static bool ResolvesFromLinkedIdentity(ChannelType channelType) =>
         ModeOf(channelType) == ChannelDestinationMode.LinkedIdentity;
+
+    /// <summary>
+    /// Whether this channel is judged by its typed destination: a type whose destination is typed
+    /// in, or a <see cref="ReachesUnlinked"/> type saved with no linked member.
+    /// </summary>
+    public static bool IsTypedIn(ChannelType channelType, Guid? recipientSubjectId) =>
+        ModeOf(channelType) == ChannelDestinationMode.UserSupplied
+        || (ReachesUnlinked.Contains(channelType) && recipientSubjectId is null);
+
+    /// <summary>
+    /// The destination as the chat identity directory stores the platform user: a WhatsApp number
+    /// without its <c>+</c>, as Meta sends it.
+    /// </summary>
+    public static string LinkKey(ChannelType channelType, string destination) =>
+        channelType == ChannelType.WhatsAppDm ? destination.TrimStart('+') : destination;
 
     /// <summary>The chat platform this channel type is addressed through, or null when it is not bot-delivered.</summary>
     public static string? PlatformOf(ChannelType channelType) =>
@@ -140,9 +163,9 @@ public static partial class ChannelDestinations
     [GeneratedRegex(@"^(-\d+|@[A-Za-z][A-Za-z0-9_]{4,31})$")]
     private static partial Regex TelegramGroupId();
 
-    // The Cloud API prepends the business phone number's own country calling code to any `to`
-    // value that omits the leading +, so a destination stored without one is delivered to a
-    // different number entirely.
-    [GeneratedRegex(@"^\+[1-9]\d{6,14}$")]
-    private static partial Regex WhatsAppPhoneNumber();
+    // A phone number with its country code, with or without the + (a linked identity is the bare
+    // wa_id; the bot sends every number with a +), or the business-scoped user ID WhatsApp gives a
+    // user who hides their number.
+    [GeneratedRegex(@"^(\+?[1-9]\d{6,14}|[A-Z]{2}\.(ENT\.)?[A-Za-z0-9]{1,128})$")]
+    private static partial Regex WhatsAppUser();
 }

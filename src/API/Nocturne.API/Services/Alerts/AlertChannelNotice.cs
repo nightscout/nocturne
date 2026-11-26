@@ -151,7 +151,9 @@ internal sealed class AlertChannelNotice(
         var member = verdict.MemberSubjectId is { } m && existing.Contains(m) ? m : (Guid?)null;
         var adder = channel.AddedBySubjectId is { } a && existing.Contains(a) ? a : (Guid?)null;
         var goesToAMember = ChannelDestinations.ModeOf(channel.ChannelType)
-            is ChannelDestinationMode.Member or ChannelDestinationMode.LinkedIdentity;
+            is ChannelDestinationMode.Member or ChannelDestinationMode.LinkedIdentity
+            && !(ChannelDestinations.IsTypedIn(channel.ChannelType, channel.RecipientSubjectId)
+                 && verdict.MemberSubjectId is null);
         var namesTheGone = (member is null && (verdict.MemberSubjectId is not null || goesToAMember))
             || (adder is null && channel.AddedBySubjectId is not null);
         var metadata = new Dictionary<string, object>
