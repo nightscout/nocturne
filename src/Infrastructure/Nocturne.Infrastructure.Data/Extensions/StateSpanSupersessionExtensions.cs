@@ -331,9 +331,10 @@ internal static class StateSpanSupersessionExtensions
             var latest = category.Max(s => s.StartTimestamp);
             var name = category.Key;
             var spans = ctx.StateSpans.AsNoTracking()
-                .Where(s => s.Category == name
-                    && s.StartTimestamp < latest
-                    && (s.EndTimestamp == null || s.EndTimestamp > earliest));
+                .Where(s => s.Category == name)
+                .OverlapsWindow(
+                    s => s.StartTimestamp, s => s.EndTimestamp, earliest, latest,
+                    OverlapEdges.StartAtToExcluded | OverlapEdges.EndAtFromExcluded);
             await foreach (var span in spans.AsAsyncEnumerable().WithCancellation(ct))
             {
                 if (starts.TryGetValue(sameStateOnly ? span.State : string.Empty, out var lineStarts)

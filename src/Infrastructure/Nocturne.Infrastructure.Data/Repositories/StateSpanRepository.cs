@@ -210,11 +210,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (!string.IsNullOrEmpty(source))
             query = query.Where(s => s.Source == source);
 
-        if (from.HasValue)
-            query = query.Where(s => s.EndTimestamp == null || s.EndTimestamp >= from.Value);
-
-        if (to.HasValue)
-            query = query.Where(s => s.StartTimestamp <= to.Value);
+        query = query.OverlapsWindow(s => s.StartTimestamp, s => s.EndTimestamp, from, to);
 
         if (active.HasValue)
         {
@@ -395,7 +391,8 @@ public class StateSpanRepository : IStateSpanRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var spans = BuildFilteredQuery(db, category, null, null, null, null, null);
-        var query = spans.Where(s => s.EndTimestamp == null || (s.EndTimestamp >= from && s.StartTimestamp <= through));
+        var query = spans.OverlapsWindow(
+            s => s.StartTimestamp, s => s.EndTimestamp, from, through, open: OpenSpanRule.AlwaysRead);
         foreach (var source in followingSources.Select(s => string.IsNullOrEmpty(s) ? null : s).Distinct())
         {
             var after = spans.Where(s => s.StartTimestamp > through);
@@ -875,9 +872,8 @@ public class StateSpanRepository : IStateSpanRepository
         var categoryString = category.ToString();
         var entities = await db.StateSpans
             .AsNoTracking()
-            .Where(s => s.Category == categoryString
-                        && (to == null || s.StartTimestamp <= to)
-                        && (s.EndTimestamp == null || s.EndTimestamp >= from))
+            .Where(s => s.Category == categoryString)
+            .OverlapsWindow(s => s.StartTimestamp, s => s.EndTimestamp, from, to)
             .OrderBy(s => s.StartTimestamp)
             .ToListAsync(cancellationToken);
         return [.. entities.Select(StateSpanMapper.ToDomainModel)];
@@ -906,15 +902,14 @@ public class StateSpanRepository : IStateSpanRepository
             .Where(s => categoryStrings.Contains(s.Category))
             .ExcludeDuplicates();
 
-        if (to.HasValue)
-            query = query.Where(s => s.StartTimestamp <= to.Value);
+        query = query.InWindow(s => s.StartTimestamp, null, to);
 
         List<StateSpanEntity> entities;
         if (from.HasValue)
         {
             entities = await query
-                .Where(s => s.EndTimestamp >= from.Value
-                            || (s.EndTimestamp == null && s.StartTimestamp >= from.Value))
+                .OverlapsWindow(
+                    s => s.StartTimestamp, s => s.EndTimestamp, from, null, open: OpenSpanRule.OnlyWhenStartedInWindow)
                 .ToListAsync(cancellationToken);
 
             // A store with never-closed spans can hold any number of open spans from before
