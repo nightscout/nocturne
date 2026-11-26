@@ -558,7 +558,7 @@ internal sealed partial class ReportSpecValidator
                     + $"{string.Join(" or ", dataset.PanelKinds.Select(PanelKindWords))}.");
                 return null;
             }
-            fields = [.. dataset.FieldsFor(ReportPanelKind.Chart).Where(f => !f.Companion).Select(f => f.ResolveUnit(useMmol))];
+            fields = [.. dataset.FieldsFor(ReportPanelKind.Chart).Where(f => !f.Companion).Select(f => f.ResolveUnit(useMmol, a1cMmolMol))];
             marks = dataset.Marks;
             defaults = dataset.DefaultBindings;
             label = dataset.Label;
@@ -816,7 +816,7 @@ internal sealed partial class ReportSpecValidator
             }
             var sourceSpec = new ReportSourceSpec { Dataset = parameters, Field = field.Name, Series = series };
             reads.Add(new LayerRead(dataset, parameters, axis.Name, ReportSpecRunner.SourceShape(sourceSpec)));
-            var resolved = field.ResolveUnit(useMmol);
+            var resolved = field.ResolveUnit(useMmol, a1cMmolMol);
             return (sourceSpec,
                 new ReportSourceInfo(resolved, axis.AxisKind!.Value, resolved.Label));
         }

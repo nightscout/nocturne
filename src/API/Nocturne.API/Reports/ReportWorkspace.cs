@@ -383,6 +383,8 @@ internal static class ReportWorkspace
         Measured("breathingInSleep", SleepBiometricsParameters.Name, "breathingRate"),
         new(Timeline, "labHbA1c", LabHbA1cParameters.Name, null, "hba1c", [Points("day", "hba1c"), Line("day", "hba1c")], [], false),
         new(Daily, "labHbA1c", LabHbA1cParameters.Name, null, "hba1c", [Points("day", "hba1c"), Line("day", "hba1c")], [], false),
+        new(Timeline, "eHbA1c", EHbA1cParameters.Name, null, "ehba1c", [Points("day", "ehba1c"), Line("day", "ehba1c")], [], false),
+        new(Daily, "eHbA1c", EHbA1cParameters.Name, null, "ehba1c", [Points("day", "ehba1c"), Line("day", "ehba1c")], [], false),
         Measured("weight", BodyWeightParameters.Name, "weight") with { Smooth = [] },
         Measured("bodyFat", BodyWeightParameters.Name, "bodyFat") with { Smooth = [] },
         Measured("leanMass", BodyWeightParameters.Name, "leanMass") with { Smooth = [] },
@@ -425,6 +427,7 @@ internal static class ReportWorkspace
         new("target", "Glucose", "glucose-tight-range", "glucose", "sensor", ["targetRange", "bg"], [ReportDataSources.SensorGlucose]),
         new("glucoseWide", "Glucose", "glucose-in-range", "glucose", "sensor", ["percentile", "bg", "cgm"], [ReportDataSources.SensorGlucose]),
         new("mean", "Glucose", "glucose-in-range", "glucose", "statistics", ["average", "bg"], [ReportDataSources.SensorGlucose]),
+        new("eHbA1c", "Glucose", "chart-4", "glucose", "statistics", ["a1c"], [ReportDataSources.SensorGlucose, ReportDataSources.MeterGlucose]),
         new("timeInRange", "Glucose", "glucose-tight-range", "glucose", "ranges", ["tir", "range"], [ReportDataSources.SensorGlucose]),
         new("timeBelow", "Glucose", "glucose-low", "glucose", "ranges", ["tbr", "low", "range"], [ReportDataSources.SensorGlucose]),
         new("timeAbove", "Glucose", "glucose-high", "glucose", "ranges", ["tar", "high", "range"], [ReportDataSources.SensorGlucose]),
@@ -557,10 +560,10 @@ internal static class ReportWorkspace
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>The vocabulary for a caller holding <paramref name="granted"/>, resolved against <paramref name="registry"/>.</summary>
-    public static CustomReportWorkspace Build(IReportDatasetRegistry registry, IReadOnlySet<string> granted)
+    public static CustomReportWorkspace Build(IReportDatasetRegistry registry, IReadOnlySet<string> granted, bool a1cMmolMol = false)
     {
         bool Holds(IEnumerable<string> scopes) => scopes.All(s => Scope.Satisfies(granted, s));
-        var cells = Table.Select(c => Resolve(c, registry, Holds)).ToList();
+        var cells = Table.Select(c => Resolve(c, registry, Holds, a1cMmolMol)).ToList();
         var outcomesDataset = registry.Find(EventOutcomesParameters.Name)!;
         var occurrence = registry.Find(EventOccurrenceParameters.Name)!;
 
@@ -641,7 +644,7 @@ internal static class ReportWorkspace
     /// A cell with what the registry says of it: the scopes of its dataset, the fields it draws and the records it
     /// reads (<see cref="CellSpec.Scopes"/>: a kind of state span is withheld without its own), and its lead field's unit.
     /// </summary>
-    private static CustomReportWorkspaceCell Resolve(CellSpec c, IReportDatasetRegistry registry, Func<IEnumerable<string>, bool> holds)
+    private static CustomReportWorkspaceCell Resolve(CellSpec c, IReportDatasetRegistry registry, Func<IEnumerable<string>, bool> holds, bool a1cMmolMol)
     {
         var dataset = registry.Find(c.Dataset) ?? throw new InvalidOperationException($"The workspace names no dataset '{c.Dataset}'.");
         var fields = dataset.FieldsFor(ReportPanelKind.Chart);
@@ -651,7 +654,7 @@ internal static class ReportWorkspace
         var lead = c.Field ?? named.FirstOrDefault();
         var schema = ReportParametersSchema.For(dataset.ParametersType);
         bool Takes(string parameter) => schema.TryGetProperty("properties", out var taken) && taken.TryGetProperty(parameter, out _);
-        var unit = lead is null ? null : fields.FirstOrDefault(f => f.Name == lead)?.Unit;
+        var unit = lead is null ? null : ReportA1c.Shown(fields.FirstOrDefault(f => f.Name == lead)?.Unit, a1cMmolMol);
         return new CustomReportWorkspaceCell(
             c.Lens, c.Signal, c.Dataset,
             c.Parameters is null ? null : JsonSerializer.SerializeToElement(c.Parameters, Json),

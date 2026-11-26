@@ -42,7 +42,7 @@ internal sealed class CustomReportRunner(
             return await RefusedAsync(null, ReportSpec.TooLarge, request.Preview, cancellationToken);
 
         var validation = validator.Validate(
-            ReportSpecRewriter.Current.Rewrite(spec), await renderer.UsesMmolAsync(cancellationToken));
+            ReportSpecRewriter.Current.Rewrite(spec), await renderer.UsesMmolAsync(cancellationToken), await renderer.ReadsA1cInMmolMolAsync(cancellationToken));
         if (!validation.IsValid)
         {
             // An invalid spec read nothing: a 400 row with no categories.
@@ -73,7 +73,7 @@ internal sealed class CustomReportRunner(
             return new CustomReportValidateResponse(spec, [new CustomReportSpecError("spec", ReportSpec.TooLarge)]);
 
         var validation = validator.Validate(
-            ReportSpecRewriter.Current.Rewrite(spec), await renderer.UsesMmolAsync(cancellationToken));
+            ReportSpecRewriter.Current.Rewrite(spec), await renderer.UsesMmolAsync(cancellationToken), await renderer.ReadsA1cInMmolMolAsync(cancellationToken));
         return validation.IsValid
             ? new CustomReportValidateResponse(JsonSerializer.SerializeToElement(validation.Spec, Json), [])
             : new CustomReportValidateResponse(spec, [.. ReportSpecStore.Errors(validation)]);

@@ -145,7 +145,11 @@ export function drawnLayers(track: ReportTrack): ReportLayer[] {
 /** The chart's horizontal extent: the window over time, the day over a time of day, else the rows' extent. */
 export function xExtent(panel: Pick<ReportPanel, "tracks" | "window" | "xKind">): [number, number] {
   const kind = panel.xKind ?? "time";
-  if (kind === "time") return [panel.window.from, panel.window.to];
+  if (kind === "time") {
+    const days = panel.tracks.flatMap((track) => drawnLayers(track).filter((layer) => layer.xKind === "day")
+      .flatMap((layer) => layer.rows.map((row) => num(row, xFieldOf(layer))).filter((value): value is number => value !== null)));
+    return [Math.min(panel.window.from, ...days), panel.window.to];
+  }
   if (kind === "time_of_day") return [0, 1440];
   const xs: number[] = [];
   for (const track of panel.tracks)

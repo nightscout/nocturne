@@ -33,6 +33,7 @@ internal static class ReportServiceExtensions
         services.AddSingleton<IReportDataset, SleepNightsDataset>();
         services.AddSingleton<IReportDataset, SleepBiometricsDataset>();
         services.AddSingleton<IReportDataset, LabHbA1cDataset>();
+        services.AddSingleton<IReportDataset, EHbA1cDataset>();
         services.AddSingleton<IReportDataset, BodyWeightDataset>();
         services.AddSingleton<IReportDataset, AlertExcursionsDataset>();
         services.AddSingleton<IReportDataset, AlertInstancesDataset>();

@@ -17,7 +17,7 @@ public class ReportSpecValidatorTests
         new StateSpansDataset(), new EventOutcomesDataset(), new EventOutcomeSpreadDataset(), new EventOccurrenceDataset(),
         new HeartRateDataset(), new StepsDataset(), new SleepDataset(),
         new DeviceEventsDataset(), new SystemEventsDataset(), new TrackersDataset(), new SleepStagesDataset(), new SleepNightsDataset(),
-        new SleepBiometricsDataset(), new LabHbA1cDataset(), new BodyWeightDataset(), new AlertExcursionsDataset(),
+        new SleepBiometricsDataset(), new LabHbA1cDataset(), new EHbA1cDataset(), new BodyWeightDataset(), new AlertExcursionsDataset(),
         new AlertInstancesDataset(), new DndWindowsDataset(), new SensorDetailDataset(), new MeterGlucoseDataset(),
         new CompressionLowsDataset(), new GlucoseEpisodesDataset(),
     ]);

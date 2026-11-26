@@ -152,7 +152,8 @@ public class ReportSignalEdgeAgreementPostgresTests(ReportSignalEdgeAgreementPos
         var factory = context.AsFactory();
         var availability = new ReportSignalAvailability(
             ReportSpecValidatorTests.Registry, factory, ReportSignalAvailabilityPostgresTests.Repositories(factory),
-            new FakeTimeProvider(Now), ReportSignalAvailabilityPostgresTests.Clock(TimeZoneInfo.Utc));
+            new FakeTimeProvider(Now), ReportSignalAvailabilityPostgresTests.Clock(TimeZoneInfo.Utc),
+            Mock.Of<Nocturne.Core.Contracts.Analytics.IDataOverviewService>());
         var result = await availability.ForRangeAsync(Hours, new HashSet<string>(Everything), historyClamped: false, CancellationToken.None);
         return result.Signals.ToDictionary(s => s.Signal, s => s.State);
     }

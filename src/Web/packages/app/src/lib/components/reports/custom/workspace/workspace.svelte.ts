@@ -1042,10 +1042,26 @@ function build(state: WorkspaceState, ctx: BuildContext): Built {
   const panel = {
     id: "chart",
     kind: "chart",
-    ...(grid !== undefined ? { grid } : {}),
+    ...(grid !== undefined && !overDays(vocab.catalogue, tracks) ? { grid } : {}),
     tracks,
   };
   return finish([panel], tracks.length, layerCount);
+}
+
+/** Whether every layer of these tracks lies along days, which have one slot each and take no grid. */
+function overDays(catalogue: CustomReportCatalogue, tracks: Record<string, unknown>[]): boolean {
+  const at = (value: unknown, key: string): unknown => Reflect.get(Object(value), key);
+  return tracks.every((track) => {
+    const layers: unknown = track.layers;
+    return (
+      Array.isArray(layers) &&
+      layers.every((layer: unknown) => {
+        const x = at(at(layer, "bindings"), "x");
+        const name = at(at(layer, "dataset"), "name");
+        return catalogue.datasets.find((d) => d.name === name)?.fields.find((f) => f.name === x)?.kind === "day";
+      })
+    );
+  });
 }
 
 /** The marks a combination can be drawn as: the op's own. */

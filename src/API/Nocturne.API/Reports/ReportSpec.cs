@@ -438,6 +438,7 @@ internal static class ReportWire
 [JsonDerivedType(typeof(SleepNightsParameters), SleepNightsParameters.Name)]
 [JsonDerivedType(typeof(SleepBiometricsParameters), SleepBiometricsParameters.Name)]
 [JsonDerivedType(typeof(LabHbA1cParameters), LabHbA1cParameters.Name)]
+[JsonDerivedType(typeof(EHbA1cParameters), EHbA1cParameters.Name)]
 [JsonDerivedType(typeof(BodyWeightParameters), BodyWeightParameters.Name)]
 [JsonDerivedType(typeof(AlertExcursionsParameters), AlertExcursionsParameters.Name)]
 [JsonDerivedType(typeof(AlertInstancesParameters), AlertInstancesParameters.Name)]

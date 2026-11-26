@@ -38,7 +38,8 @@ internal sealed class ReportSpecStore(
     IReportSpecRepository repository,
     ReportSpecValidator validator,
     ITenantGlucoseUnits glucoseUnits,
-    IOptions<MvcJsonOptions> jsonOptions) : IReportSpecStore
+    IOptions<MvcJsonOptions> jsonOptions,
+    ReportRenderer? renderer = null) : IReportSpecStore
 {
     private JsonSerializerOptions Json => jsonOptions.Value.JsonSerializerOptions;
 
@@ -59,7 +60,7 @@ internal sealed class ReportSpecStore(
 
         using var document = JsonDocument.Parse(saved.SpecJson);
         var stored = document.RootElement.Clone();
-        var validation = validator.Validate(ReportSpecRewriter.Current.Rewrite(stored), await UsesMmolAsync(cancellationToken));
+        var validation = validator.Validate(ReportSpecRewriter.Current.Rewrite(stored), await UsesMmolAsync(cancellationToken), renderer is not null && await renderer.ReadsA1cInMmolMolAsync(cancellationToken));
         return validation.IsValid
             ? ToReport(saved, JsonSerializer.SerializeToElement(validation.Spec, Json), [], caller)
             : ToReport(saved, stored, Errors(validation), caller);
@@ -143,7 +144,7 @@ internal sealed class ReportSpecStore(
             return null;
         }
 
-        var validation = validator.Validate(spec, await UsesMmolAsync(cancellationToken));
+        var validation = validator.Validate(spec, await UsesMmolAsync(cancellationToken), renderer is not null && await renderer.ReadsA1cInMmolMolAsync(cancellationToken));
         if (!validation.IsValid)
         {
             errors.AddRange(Errors(validation));

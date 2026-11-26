@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
@@ -244,7 +245,8 @@ internal sealed class ReportSignalAvailability(
     INocturneDbContextFactory contexts,
     ReportSourceRepositories repositories,
     TimeProvider time,
-    TenantClockResolver tenantClock) : ICustomReportSignalAvailability
+    TenantClockResolver tenantClock,
+    IDataOverviewService overview) : ICustomReportSignalAvailability
 {
     public const string Data = "data";
     public const string None = "none";
@@ -275,7 +277,23 @@ internal sealed class ReportSignalAvailability(
                 found[source] = await ReportDataSources.All[source](db, repositories, from, to, zone, cancellationToken);
         }
 
+        var estimated = false;
+        if (!historyClamped && permitted.Contains("eHbA1c"))
+        {
+            var zone = (await tenantClock.ResolveAsync(cancellationToken)).Zone;
+            if (zone is not null)
+            {
+                var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(from, zone));
+                var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(to.AddTicks(-1), zone));
+                for (var year = first.Year; year <= last.Year; year++)
+                {
+                    var timeline = await overview.GetEHbA1cTimelineAsync(year, null, cancellationToken);
+                    estimated |= timeline?.Points.Any(p => DateOnly.TryParseExact(p.Date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var day) && day >= first && day <= last) == true;
+                }
+            }
+        }
         return new CustomReportSignalAvailability(hours, [.. ReportWorkspace.SignalTable.Select(s => new CustomReportSignalPresence(s.Id,
+            s.Id == "eHbA1c" && permitted.Contains(s.Id) ? estimated ? Data : None :
             asked[s.Id].Count == 0 ? NoAccess : asked[s.Id].Any(found.GetValueOrDefault) ? Data : None))]);
     }
 }

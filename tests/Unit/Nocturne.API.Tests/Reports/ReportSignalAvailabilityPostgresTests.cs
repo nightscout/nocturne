@@ -1,8 +1,10 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Reports;
+using Nocturne.API.Reports.Datasets;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -30,6 +32,60 @@ namespace Nocturne.API.Tests.Reports;
 public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostgresTests.Database database)
     : IClassFixture<ReportSignalAvailabilityPostgresTests.Database>
 {
+    [Theory]
+    [InlineData("UTC", 0)]
+    [InlineData("UTC", 1)]
+    [InlineData("Europe/Amsterdam", 0)]
+    [InlineData("Europe/Amsterdam", 1)]
+    [InlineData("America/New_York", 0)]
+    [InlineData("America/New_York", 1)]
+    public async Task Estimate_availability_and_dataset_agree_at_a_local_midnight(string zoneId, int minutesAfterMidnight)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+        var localEnd = new DateTime(2026, 1, 1, 0, minutesAfterMidnight, 0, DateTimeKind.Unspecified);
+        var end = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEnd, zone));
+        await using var context = new NocturneDbContext(database.Options) { TenantId = database.Other };
+        var factory = context.AsFactory();
+        var overview = new Mock<Nocturne.Core.Contracts.Analytics.IDataOverviewService>();
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(It.IsAny<int>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int year, string? _, CancellationToken _) => new Nocturne.Core.Models.Services.EHbA1cTimelineResponse
+            {
+                Points = year == 2026 ? [new Nocturne.Core.Models.Services.EHbA1cPoint { Date = "2026-01-01", EstimatedA1cPercent = 7 }] : [],
+            });
+        var granted = new HashSet<string> { Scope.GlucoseRead };
+        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, factory, Repositories(factory),
+            new RecordDatasetTests.FixedTime(end), Clock(zone), overview.Object);
+        var presence = await availability.ForRangeAsync(24, granted, false, CancellationToken.None);
+        using var provider = new ServiceCollection().AddSingleton(overview.Object).BuildServiceProvider();
+        var request = new ReportDatasetRequest(new EHbA1cParameters(), ReportPanelKind.Chart, end.AddHours(-24), end,
+            false, granted, provider, new ReportReadLog(), Zone: zone);
+        var dataset = await new EHbA1cDataset().RunAsync(request, CancellationToken.None);
+
+        presence.Signals.Single(s => s.Signal == "eHbA1c").State.Should().Be(
+            minutesAfterMidnight == 0 ? ReportSignalAvailability.None : ReportSignalAvailability.Data);
+        dataset.Rows.Should().HaveCount(minutesAfterMidnight == 0 ? 0 : 1);
+    }
+
+    [Fact]
+    public async Task A_lookback_estimate_is_available_without_recent_source_rows_but_not_with_clamped_history()
+    {
+        await using var context = new NocturneDbContext(database.Options) { TenantId = database.Tenant };
+        var factory = context.AsFactory();
+        var overview = new Mock<Nocturne.Core.Contracts.Analytics.IDataOverviewService>();
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(It.IsAny<int>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Nocturne.Core.Models.Services.EHbA1cTimelineResponse
+            {
+                Points = [new Nocturne.Core.Models.Services.EHbA1cPoint { Date = DateTime.UtcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), EstimatedA1cPercent = 7 }],
+            });
+        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc), overview.Object);
+        var granted = new HashSet<string> { Scope.GlucoseRead };
+        var open = await availability.ForRangeAsync(24, granted, false, CancellationToken.None);
+        open.Signals.Single(s => s.Signal == "eHbA1c").State.Should().Be(ReportSignalAvailability.Data);
+        var reads = overview.Invocations.Count;
+        var clamped = await availability.ForRangeAsync(24, granted, true, CancellationToken.None);
+        clamped.Signals.Single(s => s.Signal == "eHbA1c").State.Should().Be(ReportSignalAvailability.None);
+        overview.Invocations.Count.Should().Be(reads);
+    }
     private static readonly string[] Everything =
     [
         Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead, Scope.HeartRateRead, Scope.StepCountRead,
@@ -131,7 +187,7 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
     {
         var factory = context.AsFactory();
         var availability = new ReportSignalAvailability(
-            ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc));
+            ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc), Mock.Of<Nocturne.Core.Contracts.Analytics.IDataOverviewService>());
         return availability.ForRangeAsync(168, new HashSet<string>(scopes), historyClamped, CancellationToken.None);
     }
 

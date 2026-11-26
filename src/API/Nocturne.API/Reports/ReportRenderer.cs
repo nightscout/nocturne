@@ -38,7 +38,7 @@ internal sealed class ReportRenderer(
         var report = await runner.RunAsync(
             spec,
             new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped(), tenantZone, hour12,
-                string.IsNullOrWhiteSpace(regionFormat) ? null : regionFormat),
+                string.IsNullOrWhiteSpace(regionFormat) ? null : regionFormat, ReadsA1cInMmolMol(own)),
             cancellationToken);
 
         var origin = $"{http.Request.PublicScheme()}://{http.Request.Host}";
@@ -67,6 +67,13 @@ internal sealed class ReportRenderer(
         var subject = await subjects.GetAsync(subjectId, cancellationToken);
         return subject is null ? null : UserDisplayPreferences.Deserialize(subject.Preferences);
     }
+
+    /// <summary>Whether the caller reads HbA1c in mmol/mol: its own HbA1c unit, which has no tenant default.</summary>
+    internal static bool ReadsA1cInMmolMol(UserDisplayPreferences? own) => own?.A1cUnits == "mmol/mol";
+
+    /// <summary>Whether the caller reads HbA1c in mmol/mol.</summary>
+    public async Task<bool> ReadsA1cInMmolMolAsync(CancellationToken cancellationToken) =>
+        httpContextAccessor.HttpContext is { } http && ReadsA1cInMmolMol(await CallerPreferencesAsync(http, cancellationToken));
 
     /// <summary>Whether the tenant shows glucose in mmol/L.</summary>
     public Task<bool> UsesMmolAsync(CancellationToken cancellationToken) =>

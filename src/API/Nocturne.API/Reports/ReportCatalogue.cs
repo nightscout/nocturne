@@ -203,14 +203,16 @@ public interface ICustomReportCatalogue
 
 /// <summary>
 /// Builds the catalogue from the registered datasets, marks and ops. It reads no data: what it says
-/// is the same for every caller but whether the caller may read each dataset and field, and the glucose unit.
+/// is the same for every caller but whether the caller may read each dataset and field, the glucose unit and the
+/// caller's HbA1c unit.
 /// </summary>
 internal sealed class ReportCatalogue(
     IReportDatasetRegistry registry,
     ReportSpecValidator validator,
     IHttpContextAccessor httpContextAccessor,
     ITenantGlucoseUnits glucoseUnits,
-    IOptions<MvcJsonOptions> jsonOptions) : ICustomReportCatalogue
+    IOptions<MvcJsonOptions> jsonOptions,
+    ReportRenderer renderer) : ICustomReportCatalogue
 {
     private static readonly IReadOnlyList<CustomReportChoice> Orientations =
         [new CustomReportChoice("vertical", "Vertical"), new CustomReportChoice("horizontal", "Horizontal")];
@@ -218,7 +220,8 @@ internal sealed class ReportCatalogue(
     public async Task<CustomReportCatalogue> CatalogueAsync(CancellationToken cancellationToken) =>
         Build(
             httpContextAccessor.HttpContext?.GetGrantedScopes() ?? new HashSet<string>(),
-            await glucoseUnits.UsesMmolAsync(cancellationToken));
+            await glucoseUnits.UsesMmolAsync(cancellationToken),
+            await renderer.ReadsA1cInMmolMolAsync(cancellationToken));
 
     public async Task<IReadOnlyList<CustomReportTemplate>> TemplatesAsync(CancellationToken cancellationToken)
     {
@@ -230,7 +233,7 @@ internal sealed class ReportCatalogue(
             JsonSerializer.SerializeToElement(t.Spec, jsonOptions.Value.JsonSerializerOptions)))];
     }
 
-    internal CustomReportCatalogue Build(IReadOnlySet<string> grantedScopes, bool useMmol) => new(
+    internal CustomReportCatalogue Build(IReadOnlySet<string> grantedScopes, bool useMmol, bool a1cMmolMol = false) => new(
         ReportSpec.MaxPanels,
         ReportSpec.MaxTracks,
         ReportSpec.MaxLayers,
@@ -248,8 +251,8 @@ internal sealed class ReportCatalogue(
             [.. ReportMarks.XKinds(m).Select(ReportWire.Name)],
             [.. ReportMarks.Slots(m).Select(s => new CustomReportMarkSlot(s.Key, s.Label, s.Input, s.Accepts, s.Counts, s.Required))]))],
         [.. ReportDerivedOps.All.Select(Op)],
-        [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol))],
-        ReportWorkspace.Build(registry, grantedScopes));
+        [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol, a1cMmolMol))],
+        ReportWorkspace.Build(registry, grantedScopes, a1cMmolMol));
 
     internal static string PanelKindLabel(ReportPanelKind kind) => kind switch
     {
@@ -281,7 +284,7 @@ internal sealed class ReportCatalogue(
             [.. op.Marks(spec).Select(m => new CustomReportOpMark(ReportWire.Name(m), Wire(op.DefaultBindings(m, spec))))]);
     }
 
-    private CustomReportDataset Describe(IReportDataset dataset, IReadOnlySet<string> granted, bool useMmol)
+    private CustomReportDataset Describe(IReportDataset dataset, IReadOnlySet<string> granted, bool useMmol, bool a1cMmolMol)
     {
         var permitted = Scope.Satisfies(granted, dataset.RequiredScope);
         var chartFields = dataset.FieldsFor(ReportPanelKind.Chart).Where(f => !f.Companion).ToList();
@@ -292,7 +295,7 @@ internal sealed class ReportCatalogue(
             dataset.RequiredScope,
             permitted,
             ReportParametersSchema.For(dataset.ParametersType),
-            [.. dataset.Fields.Select(f => f.ResolveUnit(useMmol)).Select(f => new CustomReportField(
+            [.. dataset.Fields.Select(f => f.ResolveUnit(useMmol, a1cMmolMol)).Select(f => new CustomReportField(
                 f.Name, f.Label, ReportWire.Name(f.Kind), f.Unit, f.Description, f.Scope,
                 permitted && (f.Scope is null || Scope.Satisfies(granted, f.Scope)),
                 f.Aggregate is { } aggregate ? ReportWire.Name(aggregate) : null,
