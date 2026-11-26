@@ -128,15 +128,15 @@ public class EntriesController : BaseV3Controller<Entry>
     /// </summary>
     /// <param name="id">Entry ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Single entry in V3 format</returns>
+    /// <returns>The entry in V3 format, in the V3 envelope</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/entries/:id")]
-    [ProducesResponseType(typeof(Entry), 200)]
+    [ProducesResponseType(typeof(V3Envelope<EntryV3Response>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Entry>> GetEntry(
+    public async Task<ActionResult<V3Envelope<EntryV3Response>>> GetEntry(
         string id,
         CancellationToken cancellationToken = default
     )
@@ -158,7 +158,7 @@ public class EntriesController : BaseV3Controller<Entry>
         Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
         Response.Headers["Cache-Control"] = "private, max-age=60";
 
-        return Ok(entry.ToV3Response());
+        return CreateV3SuccessResponse(entry.ToV3Response());
     }
 
     /// <summary>
@@ -227,7 +227,7 @@ public class EntriesController : BaseV3Controller<Entry>
             }
 
             // Process the entry
-            var processedEntry = WithIdentifier(_documentProcessingService.ProcessEntry(entry));
+            var processedEntry = WithIdentifier(ProcessEntry(entry));
             var createdEntries = await _entryService.CreateEntriesAsync(
                 new[] { processedEntry },
                 cancellationToken: cancellationToken
@@ -304,7 +304,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Process all entries
             var processedEntries = entries
-                .Select(entry => WithIdentifier(_documentProcessingService.ProcessEntry(entry)))
+                .Select(entry => WithIdentifier(ProcessEntry(entry)))
                 .ToList();
 
             // Save to database
@@ -333,17 +333,17 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <param name="id">Entry ID</param>
     /// <param name="entry">Updated entry data</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated entry</returns>
+    /// <returns><c>{"status": 200, "lastModified": ...}</c> on success</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
-    [ProducesResponseType(typeof(Entry), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Entry>> UpdateEntry(
+    public async Task<ActionResult> UpdateEntry(
         string id,
         [FromBody] Entry entry,
         CancellationToken cancellationToken = default
@@ -369,7 +369,7 @@ public class EntriesController : BaseV3Controller<Entry>
             entry.Id = id;
 
             // Process the entry
-            var processedEntry = _documentProcessingService.ProcessEntry(entry);
+            var processedEntry = ProcessEntry(entry);
 
             // Update in database
             var updatedEntry = await _entryService.UpdateEntryAsync(
@@ -389,7 +389,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             _logger.LogDebug("Successfully updated V3 entry {Id}", id);
 
-            return Ok(updatedEntry.ToV3Response());
+            return V3Replaced();
         }
         catch (ArgumentException ex)
         {
@@ -408,12 +408,12 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <param name="id">Entry ID to patch</param>
     /// <param name="patchData">JSON merge-patch data to apply to the existing entry</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The patched entry</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpPatch("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
-    [ProducesResponseType(typeof(Entry), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
@@ -442,7 +442,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
         _logger.LogDebug("Successfully patched V3 entry {Id}", id);
 
-        return Ok(patchedEntry.ToV3Response());
+        return V3Patched();
     }
 
     /// <summary>
@@ -525,6 +525,16 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     #endregion
+
+    /// <summary>
+    /// Normalises a v3 write and stores the <c>created_at</c> it stamps (see <see cref="Entry.CreatedAtIsStored"/>).
+    /// </summary>
+    private Entry ProcessEntry(Entry entry)
+    {
+        var processed = _documentProcessingService.ProcessEntry(entry);
+        processed.CreatedAtIsStored = true;
+        return processed;
+    }
 
     /// <summary>
     /// Gives an entry uploaded without an identifier a fresh ObjectId, stored as its legacy id, so

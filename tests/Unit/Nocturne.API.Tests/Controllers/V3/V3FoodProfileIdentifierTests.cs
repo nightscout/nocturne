@@ -114,7 +114,7 @@ public class V3FoodProfileIdentifierTests
             .Setup(f => f.GetFoodByIdAsync(RowIdentifier, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Food(RowId.ToString()));
 
-        var document = Wire(await FoodController().GetFoodById(RowIdentifier));
+        var document = Wire(await FoodController().GetFoodById(RowIdentifier)).GetProperty("result");
 
         document.GetProperty("identifier").GetString().Should().Be(RowIdentifier);
         document.GetProperty("name").GetString().Should().Be("apple");
@@ -167,7 +167,7 @@ public class V3FoodProfileIdentifierTests
             .Setup(p => p.GetProfileByIdAsync(ObjectId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Profile(ObjectId));
 
-        var document = Wire(await ProfileController().GetProfileById(ObjectId));
+        var document = Wire(await ProfileController().GetProfileById(ObjectId)).GetProperty("result");
 
         document.GetProperty("identifier").GetString().Should().Be(ObjectId);
     }

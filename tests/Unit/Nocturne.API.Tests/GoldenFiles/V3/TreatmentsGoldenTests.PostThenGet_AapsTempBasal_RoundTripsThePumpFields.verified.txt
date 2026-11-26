@@ -1,0 +1,44 @@
+﻿{
+  Posted: {
+    StatusCode: 201,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 201,
+      identifier: {Scrubbed},
+      lastModified: {Scrubbed}
+    }
+  },
+  Fetched: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      result: {
+        _id: {Scrubbed},
+        identifier: {Scrubbed},
+        srvModified: {Scrubbed},
+        srvCreated: {Scrubbed},
+        eventType: Temp Basal,
+        carbs: null,
+        mills: 1768566512196,
+        created_at: 2026-01-16T12:28:32.196Z,
+        duration: 30,
+        absolute: 1.25,
+        enteredBy: null,
+        date: 1768566512196,
+        utcOffset: 120,
+        rate: 1.25,
+        relative: 1.25,
+        temp: absolute,
+        type: NORMAL,
+        pumpId: 3,
+        pumpSerial: 1,
+        pumpType: OMNIPOD_DASH,
+        isValid: true,
+        basalOrigin: Algorithm,
+        originEvidence: Uploader,
+        device: Pixel
+      }
+    }
+  }
+}

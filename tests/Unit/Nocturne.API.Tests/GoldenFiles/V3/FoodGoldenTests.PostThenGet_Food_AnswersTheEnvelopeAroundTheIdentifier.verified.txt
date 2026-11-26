@@ -1,0 +1,35 @@
+﻿{
+  Posted: {
+    StatusCode: 201,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 201,
+      identifier: {Scrubbed},
+      lastModified: {Scrubbed}
+    }
+  },
+  Fetched: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      result: {
+        _id: {Scrubbed},
+        type: food,
+        category: ,
+        subcategory: ,
+        name: Apple,
+        carbs: 10,
+        gi: 2,
+        unit: g,
+        hideafteruse: false,
+        hidden: false,
+        position: 99999,
+        created_at: DateTimeOffset_1,
+        srvModified: {Scrubbed},
+        srvCreated: {Scrubbed},
+        identifier: {Scrubbed}
+      }
+    }
+  }
+}

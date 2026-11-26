@@ -1316,8 +1316,9 @@ internal static class LegacyTreatmentTables
         return treatment;
     }
 
-    private static Treatment ProjectMealBolus(Bolus bolus, CarbIntake carb, List<TreatmentFood> foods) =>
-        new()
+    private static Treatment ProjectMealBolus(Bolus bolus, CarbIntake carb, List<TreatmentFood> foods)
+    {
+        var treatment = new Treatment
         {
             Id = bolus.Id.ToString(),
             LegacyId = bolus.LegacyId,
@@ -1343,9 +1344,13 @@ internal static class LegacyTreatmentTables
             UtcOffset = bolus.UtcOffset,
             Automatic = bolus.Automatic,
         };
+        BolusUploadedFields.Restore(treatment, bolus);
+        return treatment;
+    }
 
-    private static Treatment ProjectCorrectionBolus(Bolus bolus) =>
-        new()
+    private static Treatment ProjectCorrectionBolus(Bolus bolus)
+    {
+        var treatment = new Treatment
         {
             Id = bolus.Id.ToString(),
             LegacyId = bolus.LegacyId,
@@ -1367,6 +1372,9 @@ internal static class LegacyTreatmentTables
             // user-initiated bolus.
             Automatic = bolus.Automatic,
         };
+        BolusUploadedFields.Restore(treatment, bolus);
+        return treatment;
+    }
 
     private static Treatment ProjectCarbCorrection(CarbIntake carb, List<TreatmentFood> foods) =>
         new()

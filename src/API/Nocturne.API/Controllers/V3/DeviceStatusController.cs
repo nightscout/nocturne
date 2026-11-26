@@ -118,7 +118,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>Single device status record in V3 format</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(typeof(DeviceStatus), 200)]
+    [ProducesResponseType(typeof(V3Envelope<object>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
@@ -260,12 +260,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <param name="id">Device status ID to update</param>
     /// <param name="request">Updated device status data</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated device status record</returns>
+    /// <returns><c>{"status": 200, "lastModified": ...}</c> on success</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(typeof(Dictionary<string, object>), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ErrorEnvelope]
@@ -322,13 +322,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             return CreateV3ErrorResponse(404, "Device status not found");
         }
 
-        return Ok(
-            new Dictionary<string, object>
-            {
-                ["status"] = 200,
-                ["result"] = ToDocument(updated),
-            }
-        );
+        return V3Replaced();
     }
 
     /// <summary>

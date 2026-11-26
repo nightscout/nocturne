@@ -101,9 +101,9 @@ const v3History = (api: ApiClient) =>
   api.ok<V3Envelope<Treatment[]>>("GET", "/api/v3/treatments/history/0?limit=100").then((r) => r.result);
 
 async function v3Get(api: ApiClient, identifier: string): Promise<Treatment> {
-  const res = await api.get<V3Envelope<Treatment> | Treatment>(`/api/v3/treatments/${identifier}`);
+  const res = await api.get<V3Envelope<Treatment>>(`/api/v3/treatments/${identifier}`);
   expect(res.status, res.text).toBe(200);
-  return "result" in res.body ? res.body.result : res.body;
+  return res.body.result;
 }
 
 async function post(api: ApiClient, treatment: Record<string, unknown>): Promise<Treatment[]> {

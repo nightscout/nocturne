@@ -702,8 +702,10 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
 
     #region v3 identifier
 
-    private static JsonElement V3Result(JsonElement body) =>
-        body.ValueKind == JsonValueKind.Object && body.TryGetProperty("result", out var result) ? result : body;
+    private static JsonElement V3Result(JsonElement body) => body.GetProperty("result");
+
+    private static async Task<string> CreatedIdentifierAsync(HttpResponseMessage post) =>
+        (await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("identifier").GetString()!;
 
     private static bool CarriesIdentifier(JsonElement treatments, string identifier) =>
         treatments.EnumerateArray().Any(t => t.GetProperty("identifier").GetString() == identifier);
@@ -721,7 +723,7 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
             ["app"] = "AAPS",
         });
         post.StatusCode.Should().Be(HttpStatusCode.Created, await post.Content.ReadAsStringAsync());
-        var identifier = V3Result(await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("identifier").GetString()!;
+        var identifier = await CreatedIdentifierAsync(post);
 
         (await client.GetAsync($"/api/v3/treatments/{identifier}")).StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -743,13 +745,11 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
 
 
     /// <summary>
-    /// AAPS's temp basal lifecycle: POST at start, then PATCH by the identifier the create returned
-    /// when the pump cuts it short, then PATCH again by the identifier the first PATCH returned.
-    /// AAPS stores the identifier from every response, so a PATCH that answers with a different
-    /// identifier than the create re-keys the client to it for every later edit.
+    /// AAPS's temp basal lifecycle: POST at start, then PATCH twice by the identifier the create
+    /// returned when the pump cuts it short. The record keeps that identifier through both edits.
     /// </summary>
     [Fact]
-    public async Task AapsTempBasal_PatchByTheIdentifierTheFirstPatchReturned_UpdatesInPlace()
+    public async Task AapsTempBasal_PatchedTwiceByTheCreatedIdentifier_UpdatesInPlace()
     {
         var client = CreateAuthenticatedClient();
         var createdAt = DistinctTime();
@@ -786,16 +786,15 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
 
         var post = await client.PostAsJsonAsync("/api/v3/treatments", TempBasal(30 * 60_000));
         post.StatusCode.Should().Be(HttpStatusCode.Created, await post.Content.ReadAsStringAsync());
-        var created = V3Result(await post.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("identifier").GetString()!;
+        var created = await CreatedIdentifierAsync(post);
 
         var first = await client.PatchAsJsonAsync($"/api/v3/treatments/{created}", TempBasal(4_250, created));
         first.StatusCode.Should().Be(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
-        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
-        var firstIdentifier = firstBody.GetProperty("identifier").GetString()!;
-        firstIdentifier.Should().Be(created, "a PATCH answers with the identifier the record is served under");
-        V3Result(firstBody).GetProperty("identifier").GetString().Should().Be(created);
+        (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetInt32().Should().Be(200);
+        V3Result(await client.GetFromJsonAsync<JsonElement>($"/api/v3/treatments/{created}"))
+            .GetProperty("identifier").GetString().Should().Be(created, "the record is still served under the identifier the create returned");
 
-        var second = await client.PatchAsJsonAsync($"/api/v3/treatments/{firstIdentifier}", TempBasal(4_250, firstIdentifier));
+        var second = await client.PatchAsJsonAsync($"/api/v3/treatments/{created}", TempBasal(4_250, created));
         second.StatusCode.Should().Be(HttpStatusCode.OK, await second.Content.ReadAsStringAsync());
 
         // An AAPS that already holds the temp basal as a bolus (see Treatment.Insulin) edits it as one
@@ -832,14 +831,12 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
             ["type"] = "NORMAL",
         });
         post.StatusCode.Should().Be(HttpStatusCode.Created, await post.Content.ReadAsStringAsync());
-        var createdBody = V3Result(await post.Content.ReadFromJsonAsync<JsonElement>());
-        var identifier = createdBody.GetProperty("identifier").GetString()!;
+        var identifier = await CreatedIdentifierAsync(post);
 
         static void CarriesNoInsulin(JsonElement treatment, string read) =>
             (treatment.TryGetProperty("insulin", out var insulin) && insulin.ValueKind != JsonValueKind.Null)
                 .Should().BeFalse("{0} served insulin {1} on a temp basal", read, treatment);
 
-        CarriesNoInsulin(createdBody, "create");
         CarriesNoInsulin(V3Result(await client.GetFromJsonAsync<JsonElement>($"/api/v3/treatments/{identifier}")), "get");
 
         var search = V3Result(await client.GetFromJsonAsync<JsonElement>($"/api/v3/treatments?date$eq={mills}"));
@@ -884,8 +881,7 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
         var served = (await TreatmentsAtAsync(createdAt)).Should().ContainSingle().Which;
         served.Carbs.Should().Be(65);
         (served.Insulin ?? 0).Should().Be(0);
-        var answered = V3Result(await resend.Content.ReadFromJsonAsync<JsonElement>());
-        answered.GetProperty("carbs").GetDouble().Should().Be(65, "the PATCH answers with the record that survived");
+        (await resend.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("status").GetInt32().Should().Be(200);
     }
 
     #endregion

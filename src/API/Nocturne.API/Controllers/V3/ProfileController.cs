@@ -150,7 +150,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>Single profile in V3 format</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/profile/{id}")]
-    [ProducesResponseType(typeof(Profile), 200)]
+    [ProducesResponseType(typeof(V3Envelope<object>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
@@ -183,7 +183,7 @@ public class ProfileController : BaseV3Controller<Profile>
 
         _logger.LogDebug("Successfully returned profile with ID {Id}", id);
 
-        return Ok(result);
+        return CreateV3SuccessResponse(result!);
     }
 
     /// <summary>
@@ -256,12 +256,12 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <param name="id">Profile ID to update</param>
     /// <param name="profile">Updated profile data</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated profile</returns>
+    /// <returns><c>{"status": 200, "lastModified": ...}</c> on success</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile/{id}")]
-    [ProducesResponseType(typeof(Profile), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
@@ -311,7 +311,7 @@ public class ProfileController : BaseV3Controller<Profile>
 
             _logger.LogDebug("Successfully updated profile with ID {Id}", id);
 
-            return Ok(updatedProfile);
+            return V3Replaced();
         }
         catch (ArgumentException ex)
         {

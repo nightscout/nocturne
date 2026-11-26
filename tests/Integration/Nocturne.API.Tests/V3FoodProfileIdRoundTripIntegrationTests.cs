@@ -32,9 +32,7 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
     private static async Task<JsonElement> ResultAsync(HttpResponseMessage response)
     {
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return body.ValueKind == JsonValueKind.Object && body.TryGetProperty("result", out var result)
-            ? result
-            : body;
+        return body.GetProperty("result");
     }
 
     private static async Task<JsonElement[]> ListAsync(HttpClient client, string collection)
@@ -49,6 +47,16 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
         body.Should().Be("{\"status\":200}");
+    }
+
+    private static async Task AssertReplacedAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        var answer = JsonDocument.Parse(body).RootElement;
+        answer.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["status", "lastModified"]);
+        answer.GetProperty("status").GetInt32().Should().Be(200);
+        answer.GetProperty("lastModified").GetInt64().Should().BeGreaterThan(0);
     }
 
     private static string AddressOf(JsonElement listed, string storedId, Address address) =>
@@ -98,7 +106,7 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
 
         var put = await client.PutAsJsonAsync(
             $"/api/v3/food/{id}", new { date = Now, type = "food", name = "Apple", carbs = 25 });
-        put.StatusCode.Should().Be(HttpStatusCode.OK);
+        await AssertReplacedAsync(put);
         var replaced = (await ListAsync(client, "food")).Should().ContainSingle().Subject;
         replaced.GetProperty("identifier").GetString().Should().Be(identifier);
         replaced.GetProperty("carbs").GetDouble().Should().Be(25);
@@ -196,7 +204,7 @@ public class V3FoodProfileIdRoundTripIntegrationTests : ApiIntegrationTestBase
         (await ResultAsync(read)).GetProperty("identifier").GetString().Should().Be(identifier);
 
         var put = await client.PutAsJsonAsync($"/api/v3/profile/{id}", ProfileDocument(StoreName, 6));
-        put.StatusCode.Should().Be(HttpStatusCode.OK);
+        await AssertReplacedAsync(put);
         var replaced = (await ListAsync(client, "profile")).Should().ContainSingle().Subject;
         replaced.GetProperty("identifier").GetString().Should().Be(identifier);
         replaced.GetProperty("store").GetProperty(StoreName).GetProperty("dia").GetDouble().Should().Be(6);

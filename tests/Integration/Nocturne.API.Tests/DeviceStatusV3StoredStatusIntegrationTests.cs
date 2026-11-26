@@ -70,10 +70,7 @@ public class DeviceStatusV3StoredStatusIntegrationTests : ApiIntegrationTestBase
         });
 
         put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
-        var result = (await ReadJsonAsync(put))!["result"]!;
-        result["identifier"]!.GetValue<string>().Should().Be(identifier);
-        result["pump"]!["reservoir"]!.GetValue<double>().Should().Be(95.0);
-        result["uploader"].Should().BeNull();
+        (await ReadJsonAsync(put))!["status"]!.GetValue<int>().Should().Be(200);
 
         var pumps = await ListV4Async(client, "pump", device);
         pumps.Should().ContainSingle();
@@ -83,7 +80,8 @@ public class DeviceStatusV3StoredStatusIntegrationTests : ApiIntegrationTestBase
         (await ListV4Async(client, "uploader", device)).Should().BeEmpty();
 
         var fetched = await GetV3Async(client, identifier);
-        fetched!["pump"]!["reservoir"]!.GetValue<double>().Should().Be(95.0);
+        fetched!["identifier"]!.GetValue<string>().Should().Be(identifier);
+        fetched["pump"]!["reservoir"]!.GetValue<double>().Should().Be(95.0);
         fetched["uploader"].Should().BeNull();
     }
 

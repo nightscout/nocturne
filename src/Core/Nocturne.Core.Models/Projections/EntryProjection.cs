@@ -17,7 +17,7 @@ public static class EntryProjection
     /// </summary>
     public static Entry FromSensorGlucose(SensorGlucose sg)
     {
-        var entry = CreateBase(sg.Id, sg.LegacyId, sg.Timestamp, sg.CreatedAt, sg.ModifiedAt, sg.Device, sg.App, sg.DataSource, sg.UtcOffset);
+        var entry = CreateBase(sg.Id, sg.LegacyId, sg.Timestamp, sg.CreatedAt, sg.ModifiedAt, sg.Device, sg.App, sg.DataSource, sg.UtcOffset, sg.AdditionalProperties);
         entry.Type = "sgv";
         entry.Mgdl = sg.Mgdl;
         entry.Sgv = sg.Mgdl;
@@ -38,7 +38,7 @@ public static class EntryProjection
     /// </summary>
     public static Entry FromMeterGlucose(MeterGlucose mg)
     {
-        var entry = CreateBase(mg.Id, mg.LegacyId, mg.Timestamp, mg.CreatedAt, mg.ModifiedAt, mg.Device, mg.App, mg.DataSource, mg.UtcOffset);
+        var entry = CreateBase(mg.Id, mg.LegacyId, mg.Timestamp, mg.CreatedAt, mg.ModifiedAt, mg.Device, mg.App, mg.DataSource, mg.UtcOffset, mg.AdditionalProperties);
         entry.Type = "mbg";
         entry.Mgdl = mg.Mgdl;
         entry.Mbg = mg.Mgdl;
@@ -50,7 +50,7 @@ public static class EntryProjection
     /// </summary>
     public static Entry FromCalibration(Calibration cal)
     {
-        var entry = CreateBase(cal.Id, cal.LegacyId, cal.Timestamp, cal.CreatedAt, cal.ModifiedAt, cal.Device, cal.App, cal.DataSource, cal.UtcOffset);
+        var entry = CreateBase(cal.Id, cal.LegacyId, cal.Timestamp, cal.CreatedAt, cal.ModifiedAt, cal.Device, cal.App, cal.DataSource, cal.UtcOffset, cal.AdditionalProperties);
         entry.Type = "cal";
         entry.IsCalibration = true;
         entry.Slope = cal.Slope;
@@ -74,10 +74,11 @@ public static class EntryProjection
         string? device,
         string? app,
         string? dataSource,
-        int? utcOffset)
+        int? utcOffset,
+        IReadOnlyDictionary<string, object?>? uploaded)
     {
         var mills = timestamp.ToMills();
-        return new Entry
+        var entry = new Entry
         {
             Id = ServedId(id, legacyId),
             Mills = mills,
@@ -90,5 +91,7 @@ public static class EntryProjection
             SrvModified = modifiedAt.ToMills(),
             SrvCreated = createdAt.ToMills(),
         };
+        EntryUploadedFields.Restore(entry, uploaded);
+        return entry;
     }
 }
