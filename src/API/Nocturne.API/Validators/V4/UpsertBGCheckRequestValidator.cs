@@ -9,7 +9,7 @@ namespace Nocturne.API.Validators.V4;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>Timestamp must be a valid non-default <see cref="DateTimeOffset"/>.</description></item>
-/// <item><description>The header caps of <see cref="RecordColumnRules"/>.</description></item>
+/// <item><description>The header rules of <see cref="RecordColumnRules"/>: caps on DataSource, SyncIdentifier, Device and App, and DataSource required when SyncIdentifier is supplied.</description></item>
 /// <item><description>Glucose must be between 0 and 10,000 (mg/dL range guard).</description></item>
 /// </list>
 /// </remarks>
@@ -29,5 +29,6 @@ public class UpsertBGCheckRequestValidator : AbstractValidator<UpsertBGCheckRequ
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.Glucose).InclusiveBetween(0, 10000).WithMessage("Glucose must be between 0 and 10000");
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
+        RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
     }
 }

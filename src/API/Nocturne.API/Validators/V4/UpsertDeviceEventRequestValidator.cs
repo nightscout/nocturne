@@ -9,7 +9,7 @@ namespace Nocturne.API.Validators.V4;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>Timestamp must be a valid non-default <see cref="DateTimeOffset"/>.</description></item>
-/// <item><description>The header caps of <see cref="RecordColumnRules"/>.</description></item>
+/// <item><description>The header rules of <see cref="RecordColumnRules"/>: caps on DataSource, SyncIdentifier, Device and App, and DataSource required when SyncIdentifier is supplied.</description></item>
 /// <item><description>EventType must be a valid <see cref="Core.Models.DeviceEventType"/> enum value.</description></item>
 /// <item><description>Notes capped at 10,000 characters.</description></item>
 /// </list>
@@ -31,5 +31,6 @@ public class UpsertDeviceEventRequestValidator : AbstractValidator<UpsertDeviceE
         RuleFor(x => x.EventType).IsInEnum().WithMessage("EventType must be a valid device event type");
         RuleFor(x => x.Notes).MaximumLength(10000).When(x => x.Notes is not null);
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
+        RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
     }
 }

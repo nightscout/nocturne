@@ -1,9 +1,12 @@
 using FluentAssertions;
+using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -38,6 +41,11 @@ public class TestCreateRequest : IBulkUpsertRequest
     public string? App { get; set; }
     public string? DataSource { get; set; }
     public string? SyncIdentifier { get; set; }
+}
+
+public class TestCreateRequestValidator : AbstractValidator<TestCreateRequest>
+{
+    public TestCreateRequestValidator() => RuleFor(x => x.Timestamp).TimestampRequired();
 }
 
 public class TestUpdateRequest
@@ -281,7 +289,7 @@ public class V4CrudControllerBaseTests
             new TestCreateRequest { Timestamp = default },
         ]);
 
-        Detail(result.Result).Should().Be("Timestamp is required");
+        Detail(result.Result).Should().Be("Test record at index 1 is invalid: Timestamp: Timestamp is required");
         controller.BeforeCreateCalls.Should().Be(0);
     }
 
@@ -330,9 +338,12 @@ public class V4CrudControllerBaseTests
             Times.Never);
     }
 
+    private static readonly IServiceProvider RequestServices = RegisteredValidators.With(
+        services => services.AddSingleton<IValidator<TestCreateRequest>, TestCreateRequestValidator>());
+
     private RejectingCrudController Rejecting() => new(_repo.Object)
     {
-        ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { RequestServices = RequestServices } },
     };
 
     private static string? Detail(ActionResult? result)
@@ -382,22 +393,6 @@ public class V4CrudControllerBaseTests
         objectResult.StatusCode.Should().Be(400);
         objectResult.Value.Should().BeOfType<ProblemDetails>()
             .Which.Detail.Should().Be($"Bulk operations are limited to {V4BulkValidation.MaxItems} records per request");
-        _repo.Verify(
-            r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task CreateBulk_DefaultTimestampOnOneItem_RejectsTheWholeBatch()
-    {
-        var result = await _controller.CreateBulk(
-        [
-            new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow },
-            new TestCreateRequest { Timestamp = default },
-        ]);
-
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(400);
         _repo.Verify(
             r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);

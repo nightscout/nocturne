@@ -1,7 +1,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Models.Requests.V4;
-using Nocturne.API.Validators.V4;
 
 namespace Nocturne.API.Controllers.V4.Base;
 
@@ -51,17 +50,9 @@ public static class V4BulkValidation
     }
 
     /// <summary>
-    /// Rejects a payload that is empty, longer than <see cref="MaxItems"/>, carries an unset
-    /// timestamp, or supplies a <c>SyncIdentifier</c> with no <c>DataSource</c> — which would
-    /// leave the row outside the (DataSource, SyncIdentifier) key the upsert matches on, so a
-    /// re-upload of the same record would insert a duplicate instead of updating it. Then runs
-    /// the registered <see cref="IValidator{T}"/> over each item.
+    /// Rejects a payload that is empty or longer than <see cref="MaxItems"/>, then runs the registered
+    /// <see cref="IValidator{T}"/> over each item through <see cref="ValidateEachAsync{TRequest}"/>.
     /// </summary>
-    /// <remarks>
-    /// FluentValidation's auto-validation filter does not descend into a root-array body, so the
-    /// per-item rules only run for a bulk payload because this chokepoint invokes them. The
-    /// validator is optional: a request type with none registered is not newly rejected.
-    /// </remarks>
     /// <param name="controller">The controller answering the request.</param>
     /// <param name="requests">The payload as bound from the body.</param>
     /// <param name="subject">The payload's name, as it opens the empty-payload message ("Bolus").</param>
@@ -79,15 +70,7 @@ public static class V4BulkValidation
         if (controller.ValidateBulkSize(requests, subject, plural) is { } invalid)
             return invalid;
 
-        var items = requests!;
-
-        if (items.Any(r => TimestampRule.IsMissing(r.Timestamp)))
-            return controller.TimestampRequiredProblem();
-
-        if (items.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return controller.Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
-
-        return await controller.ValidateEachAsync(items, subject, ct);
+        return await controller.ValidateEachAsync(requests!, subject, ct);
     }
 
     /// <summary>
@@ -96,9 +79,10 @@ public static class V4BulkValidation
     /// rejected.
     /// </summary>
     /// <remarks>
-    /// For an endpoint whose request is not an <see cref="IBulkUpsertRequest"/>, which sizes the payload
-    /// with <see cref="ValidateBulkSize{TRequest}"/> itself. The auto-validation filter does not descend
-    /// into a root-array body, so this is what runs the per-item rules there.
+    /// FluentValidation's auto-validation filter does not descend into a root-array body, so the
+    /// per-item rules of a bulk payload run only where an action calls this. An endpoint whose request
+    /// is not an <see cref="IBulkUpsertRequest"/> sizes the payload with
+    /// <see cref="ValidateBulkSize{TRequest}"/> first.
     /// </remarks>
     /// <param name="controller">The controller answering the request.</param>
     /// <param name="items">The payload as bound from the body.</param>

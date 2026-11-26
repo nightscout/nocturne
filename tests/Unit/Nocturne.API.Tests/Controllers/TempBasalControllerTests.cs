@@ -1,12 +1,11 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Tests.Controllers.V4.Base;
 using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
@@ -41,17 +40,6 @@ public class TempBasalControllerTests
             .ReturnsAsync((TempBasal m, WriteOrigin _, CancellationToken _) => m);
         _repo.Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, TempBasal m, WriteOrigin _, CancellationToken _) => m);
-    }
-
-    private static readonly IServiceProvider Validators = BuildValidatorProvider();
-
-    private static IServiceProvider BuildValidatorProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddMvcCore();
-        services.AddValidatorsFromAssemblyContaining<CreateTempBasalRequestValidator>();
-        return services.BuildServiceProvider();
     }
 
     private static CreateTempBasalRequest Request(
@@ -209,10 +197,14 @@ public class TempBasalControllerTests
     {
         var request = Request();
         request.DataSource = null;
+        RegisteredValidators.On(_controller);
 
         var result = await _controller.CreateBulk([request], CancellationToken.None);
 
-        ((ObjectResult)result.Result!).StatusCode.Should().Be(400);
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>().Which.Detail
+            .Should().Be("Temp basal at index 0 is invalid: DataSource: DataSource is required when SyncIdentifier is supplied.");
         _repo.Verify(r => r.CreateAsync(It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -290,10 +282,7 @@ public class TempBasalControllerTests
     [InlineData(1.0, -5.0, "DurationMinutes: DurationMinutes must be >= 0")]
     public async Task CreateBulk_RejectsANegativeRateOrDurationWithoutWriting(double rate, double duration, string message)
     {
-        _controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext { RequestServices = Validators },
-        };
+        RegisteredValidators.On(_controller);
 
         var result = await _controller.CreateBulk([Request(rate: rate, durationMinutes: duration)], CancellationToken.None);
 
