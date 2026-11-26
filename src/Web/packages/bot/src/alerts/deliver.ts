@@ -10,33 +10,9 @@ import {
 } from "../whatsapp/window.js";
 import { alertTemplateMessage } from "../whatsapp/alert-template.js";
 import { NocturneWhatsAppAdapter } from "../adapters/nocturne-whatsapp.js";
+import { channelTarget } from "../platforms/registry.js";
 
 const logger = createLogger();
-
-const DIRECT_CHANNEL_TYPES = new Set([
-  "discord_dm",
-  "slack_dm",
-  "telegram_dm",
-  "whatsapp_dm",
-  "resend_email",
-]);
-
-/**
- * The adapter each channel type is addressed through. `chat.channel()` reads the adapter
- * name from the ID's prefix, and `chat.openDM()` guesses it from the user ID's format —
- * a guess that is ambiguous between Discord and Telegram for a numeric ID and has no
- * answer at all for an email address.
- */
-const ADAPTER_BY_CHANNEL_TYPE: Record<string, string> = {
-  discord_dm: "discord",
-  discord_channel: "discord",
-  slack_dm: "slack",
-  slack_channel: "slack",
-  telegram_dm: "telegram",
-  telegram_group: "telegram",
-  whatsapp_dm: "whatsapp",
-  resend_email: "resend",
-};
 
 export class AlertDeliveryHandler {
   constructor(
@@ -44,17 +20,15 @@ export class AlertDeliveryHandler {
     private api: BotApiClient,
   ) {}
 
-  private isDirect(channelType: string): boolean {
-    return DIRECT_CHANNEL_TYPES.has(channelType);
-  }
-
+  /** The thread or channel an alert goes to; see {@link channelTarget}. */
   private async target(channelType: string, destination: string) {
-    const adapterName = ADAPTER_BY_CHANNEL_TYPE[channelType];
-    if (!adapterName) {
+    const target = channelTarget(channelType);
+    if (!target) {
       throw new Error(`No chat adapter delivers '${channelType}'`);
     }
+    const adapterName = target.platform.name;
 
-    if (!this.isDirect(channelType)) {
+    if (target.kind === "channel") {
       return this.bot.channel(`${adapterName}:${destination}`);
     }
 

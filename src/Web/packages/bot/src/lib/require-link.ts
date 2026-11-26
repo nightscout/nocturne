@@ -2,7 +2,7 @@ import type { ActionEvent, SlashCommandEvent } from "chat";
 import { getUnscopedApi, runWithResolvedLink, type ResolvedLink } from "./request-context.js";
 import { decodeActionValue, encodeTenantKey } from "./action-value.js";
 import type { DirectoryCandidate } from "../types.js";
-import { defaultLinkSetting, platformName } from "./platform-name.js";
+import { defaultLinkSetting, platformName } from "../platforms/registry.js";
 
 interface LinkResolutionInput {
   platform: string;

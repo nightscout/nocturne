@@ -7,14 +7,6 @@ import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
 import type { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
 
-/**
- * The Resend adapter resolves `react` from its own install, which this package
- * does not hoist; it is not part of what is under test here.
- */
-vi.mock("@resend/chat-sdk-adapter", () => ({
-  createResendAdapter: () => ({ name: "resend" }),
-}));
-
 vi.mock("./lib/logger.js", () => ({
   createLogger: () => ({
     info: vi.fn(),

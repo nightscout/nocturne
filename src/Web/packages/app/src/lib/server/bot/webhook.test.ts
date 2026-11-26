@@ -7,13 +7,18 @@ const scoped = { name: "scoped" } as unknown as BotApiClient;
 const webhooks: Record<string, (request: Request) => Promise<Response>> = {};
 
 // The bot's entry point loads every adapter; the request context is the part under test, so it
-// comes from the bot's own source.
+// comes from the bot's own source, beside the webhook methods of two platforms.
 vi.mock("@nocturne/bot", async () => {
   const { createRequire } = await import("node:module");
   const { dirname, join } = await import("node:path");
   const { pathToFileURL } = await import("node:url");
   const root = dirname(createRequire(import.meta.url).resolve("@nocturne/bot/package.json"));
-  return import(pathToFileURL(join(root, "src/lib/request-context.ts")).href);
+  const context = await import(pathToFileURL(join(root, "src/lib/request-context.ts")).href);
+  const methods: Record<string, string[]> = { discord: ["POST"], whatsapp: ["GET", "POST"] };
+  return {
+    ...context,
+    platformModule: (name: string) => (methods[name] ? { name, webhookMethods: methods[name] } : undefined),
+  };
 });
 vi.mock("./index.js", () => ({ getBot: async () => ({ webhooks }) }));
 vi.mock("./api-client.js", () => ({
@@ -57,6 +62,40 @@ describe("handleBotWebhook", () => {
 
     expect(handled).toHaveBeenCalledWith(request);
     expect(await response.text()).toBe("42");
+  });
+
+  it("answers 404 for a platform the bot does not know", async () => {
+    webhooks.matrix = vi.fn(async () => new Response("ok"));
+
+    const response = await handleBotWebhook(
+      "matrix",
+      event(new Request("https://nocturne.test/api/v4/webhooks/matrix", { method: "POST" })),
+    );
+
+    expect(response.status).toBe(404);
+    expect(webhooks.matrix).not.toHaveBeenCalled();
+  });
+
+  it("answers 405 for a method the platform does not call its webhook with", async () => {
+    webhooks.discord = vi.fn(async () => new Response("ok"));
+
+    const response = await handleBotWebhook("discord", event(new Request("https://nocturne.test/api/v4/webhooks/discord")));
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+    expect(webhooks.discord).not.toHaveBeenCalled();
+  });
+
+  it("hands a HEAD to a platform that takes a GET", async () => {
+    webhooks.whatsapp = vi.fn(async () => new Response(null, { status: 401 }));
+
+    const response = await handleBotWebhook(
+      "whatsapp",
+      event(new Request("https://nocturne.test/api/v4/webhooks/whatsapp", { method: "HEAD" })),
+    );
+
+    expect(response.status).toBe(401);
+    expect(webhooks.whatsapp).toHaveBeenCalledOnce();
   });
 
   it("answers 404 for a platform whose bot is not enabled", async () => {

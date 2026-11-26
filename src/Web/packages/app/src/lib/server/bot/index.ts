@@ -1,17 +1,15 @@
 import {
 	createBot,
 	registerAllCommands,
+	resolvePlatforms,
 	AlertDeliveryHandler,
 	type BotOptions,
-	type PlatformCredentials,
 } from "@nocturne/bot";
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
-import { DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, RESEND_API_KEY, RESEND_FROM_ADDRESS } from "$app/env/private";
 import { createServerApiClient, getApiBaseUrl } from "#lib/server/api-client-factory.js";
 import { getHashedInstanceKey } from "#lib/server/instance-key.js";
 import { fetchDecryptedPlatformCredentials } from "./platform-credentials";
 import { botPostgresUrl } from "./state-url";
-import type { PlatformCredentials as ApiPlatformCredentials } from "#lib/api/index.js";
 
 type Bot = ReturnType<typeof createBot>;
 
@@ -29,99 +27,9 @@ export function getBot(): Promise<Bot> {
 	return botInitPromise;
 }
 
-async function fetchDbCredentials(): Promise<Map<string, ApiPlatformCredentials> | null> {
-	const all = await fetchDecryptedPlatformCredentials(fetch);
-	if (!all) return null;
-	return new Map(all.map((c) => [c.category!, c]));
-}
-
-type PlatformConfigBuilder = {
-	fromDb: (fields: Record<string, string>) => PlatformCredentials;
-	fromEnv: () => boolean;
-};
-
-const platformBuilders: Record<string, PlatformConfigBuilder> = {
-	discord: {
-		fromDb: (fields) => ({
-			enabled: true,
-			botToken: fields["botToken"],
-			publicKey: fields["publicKey"],
-			applicationId: fields["applicationId"],
-		}),
-		fromEnv: () => !!DISCORD_BOT_TOKEN,
-	},
-	slack: {
-		fromDb: (fields) => ({
-			enabled: true,
-			botToken: fields["botToken"],
-			signingSecret: fields["signingSecret"],
-		}),
-		fromEnv: () => !!(SLACK_BOT_TOKEN && SLACK_SIGNING_SECRET),
-	},
-	telegram: {
-		fromDb: (fields) => ({
-			enabled: true,
-			botToken: fields["botToken"],
-			webhookSecretToken: fields["webhookSecretToken"],
-		}),
-		fromEnv: () => !!TELEGRAM_BOT_TOKEN,
-	},
-	whatsapp: {
-		fromDb: (fields) => ({
-			enabled: true,
-			accessToken: fields["accessToken"],
-			appSecret: fields["appSecret"],
-			phoneNumberId: fields["phoneNumberId"],
-			verifyToken: fields["verifyToken"],
-			alertTemplateName: fields["alertTemplateName"],
-			alertTemplateLanguage: fields["alertTemplateLanguage"],
-		}),
-		fromEnv: () =>
-			!!(
-				WHATSAPP_ACCESS_TOKEN &&
-				WHATSAPP_APP_SECRET &&
-				WHATSAPP_PHONE_NUMBER_ID &&
-				WHATSAPP_VERIFY_TOKEN
-			),
-	},
-	resend: {
-		fromDb: (fields) => ({
-			enabled: true,
-			fromAddress: fields["fromAddress"],
-			fromName: fields["fromName"],
-			apiKey: fields["apiKey"],
-			webhookSecret: fields["webhookSecret"],
-		}),
-		fromEnv: () => !!(RESEND_API_KEY && RESEND_FROM_ADDRESS),
-	},
-};
-
-function buildPlatformConfig(
-	category: string,
-	dbCredentials: Map<string, ApiPlatformCredentials> | null,
-): PlatformCredentials | boolean {
-	const builder = platformBuilders[category];
-	if (!builder) return false;
-
-	const db = dbCredentials?.get(category);
-	if (db !== undefined) {
-		if (!db.enabled) return false;
-		return builder.fromDb(db.fields ?? {});
-	}
-	return builder.fromEnv();
-}
-
 async function initBot(): Promise<Bot> {
-	const dbCredentials = await fetchDbCredentials();
-
 	const options: BotOptions = {
-		platforms: {
-			discord: buildPlatformConfig("discord", dbCredentials),
-			slack: buildPlatformConfig("slack", dbCredentials),
-			telegram: buildPlatformConfig("telegram", dbCredentials),
-			whatsapp: buildPlatformConfig("whatsapp", dbCredentials),
-			resend: buildPlatformConfig("resend", dbCredentials),
-		},
+		platforms: resolvePlatforms(await fetchDecryptedPlatformCredentials(fetch)),
 		postgresUrl: botPostgresUrl(),
 	};
 

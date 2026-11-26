@@ -1,13 +1,7 @@
 import type { Chat } from "chat";
 import { DISCORD_COMMAND_MANIFEST } from "./manifest.js";
 import { settled } from "../lib/settled.js";
-
-/**
- * Platforms with no slash commands of their own: there a command arrives as a direct message
- * (`/connect myfamily`), and the router hands it to the handler `onSlashCommand` registered. Every
- * WhatsApp thread is a direct message, so a reply there reaches only the user.
- */
-const TYPED_COMMAND_PLATFORMS = new Set(["whatsapp"]);
+import { platformModule } from "../platforms/registry.js";
 
 const COMMANDS = new Set(DISCORD_COMMAND_MANIFEST.map((c) => `/${c.name}`));
 
@@ -56,8 +50,8 @@ export function typedCommandHelp(unknownCommand: string | null): string {
 }
 
 /**
- * Runs a command typed in a direct message on a platform without slash commands; see
- * {@link TYPED_COMMAND_PLATFORMS}.
+ * Runs a command typed in a direct message on a platform whose commands are typed
+ * (`/connect myfamily`): the router hands it to the handler `onSlashCommand` registered.
  *
  * A direct message handler takes every direct message on every platform: while one is registered,
  * the SDK sends no direct message to `onNewMention` or `onSubscribedMessage`. A handler for direct
@@ -66,7 +60,7 @@ export function typedCommandHelp(unknownCommand: string | null): string {
 export function registerTypedCommands(bot: Chat) {
   bot.onDirectMessage(
     settled("typed command", async (thread, message) => {
-      if (!TYPED_COMMAND_PLATFORMS.has(thread.adapter.name)) return;
+      if (platformModule(thread.adapter.name)?.commands !== "typed") return;
 
       const typed = parseTypedCommand(message.text);
       if (typed && HELP_COMMANDS.has(typed.command)) {
