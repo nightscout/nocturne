@@ -3306,6 +3306,7 @@ msgstr "Alerts"
 #: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/layout/BackupSignInPrompt.svelte
+#: src/lib/components/layout/NotificationItem.svelte
 #: src/lib/components/layout/RecoveryEmailPrompt.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealSuggestionRow.svelte
@@ -4887,8 +4888,10 @@ msgstr "Current"
 msgid "AID: {0}"
 msgstr "AID: {0}"
 
+#. 0: senderName
 #. 0: formatDate(device.startDate)
 #. 0: formatDate(insulin.startDate)
+#: src/lib/components/layout/NotificationItem.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 msgid "From {0}"
@@ -50714,3 +50717,12 @@ msgstr "Meta charges for each template message. If you do not set a template, th
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "Alerts outside the 24-hour window"
 msgstr "Alerts outside the 24-hour window"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Show you notices in your notifications. If you are an owner or an administrator, also show them to the owners or to all members"
+msgstr "Show you notices in your notifications. If you are an owner or an administrator, also show them to the owners or to all members"
+
+#. 0: senderName
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "From {0} · connected app"
+msgstr "From {0} · connected app"
