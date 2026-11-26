@@ -145,9 +145,13 @@ internal static class ReportDataSources
             [Carbs] = (db, r, from, to, _, ct) => db.CarbIntakes.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [BasalInjections] = (db, r, from, to, _, ct) => db.BasalInjections.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [TempBasals] = (db, r, from, to, _, ct) =>
-                db.TempBasals.AnyAsync(e => e.Timestamp < to && (e.EndTimestamp == null || e.EndTimestamp >= from), ct),
+                db.TempBasals
+                    .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.StartAtToExcluded)
+                    .AnyAsync(ct),
             [ProfileActivations] = (db, r, from, to, _, ct) =>
-                db.ProfileActivations.AnyAsync(e => e.Timestamp < to && (e.EndTimestamp == null || e.EndTimestamp >= from), ct),
+                db.ProfileActivations
+                    .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.StartAtToExcluded)
+                    .AnyAsync(ct),
             [ApsSnapshots] = (db, r, from, to, _, ct) => db.ApsSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [PumpSnapshots] = (db, r, from, to, _, ct) => db.PumpSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
             [UploaderSnapshots] = (db, r, from, to, _, ct) => db.UploaderSnapshots.AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, ct),
@@ -181,7 +185,9 @@ internal static class ReportDataSources
             [BodyFat] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.BodyFat, ct),
             [LeanMass] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.LeanMass, ct),
             [AlertExcursions] = (db, r, from, to, _, ct) =>
-                db.AlertExcursions.OfCondition().AnyAsync(e => e.StartedAt < to && (e.EndedAt == null || e.EndedAt >= from), ct),
+                db.AlertExcursions.OfCondition()
+                    .OverlapsWindow(e => e.StartedAt, e => e.EndedAt, from, to, OverlapEdges.StartAtToExcluded)
+                    .AnyAsync(ct),
             [AlertInstances] = (db, r, from, to, _, ct) =>
                 db.AlertInstances.OfCondition().AnyAsync(e => e.TriggeredAt >= from && e.TriggeredAt < to, ct),
             [Dnd] = (db, r, from, to, _, ct) => r.Dnd.AnyTouchingAsync(from, to, ct),
@@ -193,7 +199,9 @@ internal static class ReportDataSources
             [CompressionLows] = (db, r, from, to, _, ct) =>
             {
                 var (start, end) = (Mills(from), Mills(to));
-                return db.CompressionLowSuggestions.AnyAsync(e => e.StartMills < end && e.EndMills >= start, ct);
+                return db.CompressionLowSuggestions
+                    .OverlapsWindow(e => e.StartMills, e => e.EndMills, start, end, OverlapEdges.StartAtToExcluded)
+                    .AnyAsync(ct);
             },
         };
 
@@ -209,7 +217,10 @@ internal static class ReportDataSources
         db.DeviceEvents.AnyAsync(e => types.Contains(e.EventType) && e.Timestamp >= from && e.Timestamp < to, ct);
 
     private static Task<bool> SpansAsync(NocturneDbContext db, string[] categories, DateTime from, DateTime to, CancellationToken ct) =>
-        db.StateSpans.AnyAsync(e => categories.Contains(e.Category) && e.StartTimestamp < to && (e.EndTimestamp == null || e.EndTimestamp >= from), ct);
+        db.StateSpans
+            .Where(e => categories.Contains(e.Category))
+            .OverlapsWindow(e => e.StartTimestamp, e => e.EndTimestamp, from, to, OverlapEdges.StartAtToExcluded)
+            .AnyAsync(ct);
 }
 
 /// <summary>Whether each workspace signal has data in a range, for the request's caller.</summary>
