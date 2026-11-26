@@ -16,7 +16,7 @@ public class PageRouteIdsTests
     [Fact]
     public void Every_page_of_the_web_app_is_a_known_route_id_and_nothing_else_is()
     {
-        var root = Path.Combine(RepoSources.Root, Routes);
+        var root = Path.Join(RepoSources.Root, Routes);
         var pages = Directory
             .EnumerateFiles(root, "+page*.svelte", SearchOption.AllDirectories)
             .Where(f => Path.GetFileName(f) is var name && (name == "+page.svelte" || name.StartsWith("+page@", StringComparison.Ordinal)))

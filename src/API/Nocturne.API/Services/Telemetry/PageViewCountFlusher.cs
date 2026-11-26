@@ -44,6 +44,7 @@ internal sealed class PageViewCountFlusher(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+            logger.LogDebug("Page view count flusher stopping; StopAsync writes what is left");
         }
     }
 

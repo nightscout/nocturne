@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Telemetry;
 using Nocturne.Infrastructure.Data.Services;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -13,17 +15,27 @@ public class PageViewCountRepository(INocturneDbContextFactory contexts) : IPage
         if (increments.Count == 0)
             return;
 
-        var dates = increments.Select(i => i.Date).ToArray();
-        var routes = increments.Select(i => i.RouteId).ToArray();
-        var counts = increments.Select(i => i.Count).ToArray();
-
         await using var db = await contexts.CreatePlatformAsync(ct);
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
+        await db.Database.ExecuteSqlRawAsync(
+            """
             INSERT INTO page_view_counts (date, route_id, count)
-            SELECT * FROM unnest({dates}::date[], {routes}::text[], {counts}::bigint[])
+            SELECT * FROM unnest(@dates, @routes, @counts)
             ON CONFLICT (date, route_id) DO UPDATE SET count = page_view_counts.count + EXCLUDED.count
             """,
+            [
+                new NpgsqlParameter("dates", NpgsqlDbType.Array | NpgsqlDbType.Date)
+                {
+                    Value = increments.Select(i => i.Date).ToArray(),
+                },
+                new NpgsqlParameter("routes", NpgsqlDbType.Array | NpgsqlDbType.Text)
+                {
+                    Value = increments.Select(i => i.RouteId).ToArray(),
+                },
+                new NpgsqlParameter("counts", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
+                {
+                    Value = increments.Select(i => i.Count).ToArray(),
+                },
+            ],
             ct);
     }
 
