@@ -228,6 +228,21 @@
             has the procedures for a lost <code class={CODE}>.env</code> file and for
             troubleshooting. Run its commands in <code class={CODE}>/opt/nocturne</code>.
         </p>
+        <p class="text-muted-foreground mb-4">
+            The guide also has the procedure to move Nocturne to another server. Before you use it,
+            run <code class={CODE}>sudo systemctl disable nocturne</code> on the old server.
+            Without this, the old server starts the stack again when it restarts.
+        </p>
+        <p class="text-muted-foreground mb-4">
+            The install script made <code class={CODE}>/opt/nocturne</code> and its
+            <code class={CODE}>.env</code> file as root. Put <code class={CODE}>sudo</code> before each
+            <code class={CODE}>docker</code> command in the move procedure, and use
+            <code class={CODE}>sudo</code> to remove the archive. To copy <code class={CODE}>.env</code>, first make a copy that you can read:
+            <code class={CODE}>sudo install -m 600 -o "$(id -un)" .env ~/nocturne.env</code>. Send
+            <code class={CODE}>~/nocturne.env</code>, and on the new server, name it
+            <code class={CODE}>.env</code>. Then remove <code class={CODE}>~/nocturne.env</code> on
+            both servers.
+        </p>
     </details>
     <details class="mb-8">
         <summary class={SUMMARY}>When to use a different guide</summary>

@@ -24,7 +24,7 @@ and when it started.
 
 Use **Start Tracker** on the Active tab, **Start** on a row of the Definitions
 tab, or one of your [presets](/docs/trackers/setting-up#presets). The Start box
-asks for:
+has these fields:
 
 - **Start Time**: defaults to now. Set it earlier if you changed your sensor
   this morning and are only logging it now. The tracker counts from this time,
@@ -40,7 +40,7 @@ already past when you start the tracker does not send an alert for that run.
 The pill still shows the step. Each step that comes after it sends its alert at
 the usual time.
 
-An event tracker asks for **Scheduled For** instead: the date and time of the
+An event tracker has **Scheduled For** instead: the date and time of the
 appointment or refill it counts down to.
 
 Starting a duration tracker ends the one already running, so you never have
@@ -57,7 +57,7 @@ have several booked at once, such as two appointments.
 ## Completing a tracker
 
 Press **Complete** on the tracker's row, or **Complete Tracker** in the panel
-that opens when you tap its pill on the home screen.
+that opens when you select its pill on the home screen.
 
 <Screenshot id="tracker-complete-dialog" />
 
@@ -69,7 +69,7 @@ that opens when you tap its pill on the home screen.
   | Sensor, Cannula, Consumable | Fell Off, Replaced Early, plus the general ones |
   | Pod | Fell Off, Replaced Early, Empty, plus the general ones |
   | Reservoir | Empty, Refilled, plus the general ones |
-  | Appointment | Attended, Rescheduled, Cancelled, Missed, plus the general ones |
+  | Appointment | Attended, Rescheduled, Canceled, Missed, plus the general ones |
   | Battery, Reminder, Custom | The general ones: Completed, Failed, Expired, Other |
 
 - **Notes**: optional. For example, "sensor error on day 8".
@@ -126,17 +126,17 @@ only restarts when the event's notes contain that text, for example "left" or
 ## On the home screen
 
 Running trackers appear as a row of pills beside your current reading. Each
-one shows the tracker's name and how long it has been running. The thin line
-under it shows how much of its lifespan is used up. The age turns the colour of
+one shows the tracker's name and how long it is running. The thin line
+under it shows how much of its lifespan is used up. The age turns the color of
 the most urgent step reached, and gets a warning mark from Warning upwards. A
 step lights the pill at the same moment its alert fires, so a "24 hours before
-the end" step changes the colour a day before the end, not before.
+the end" step changes the color a day before the end, not before.
 [Dashboard visibility](/docs/trackers/setting-up#on-the-dashboard) decides
 which trackers appear here, and when.
 
 <Screenshot id="tracker-pill-bar" />
 
-Tap a pill for the details: running time, expected lifespan, time remaining,
+Select a pill for the details: running time, expected lifespan, time remaining,
 your start notes and when it started. **Complete Tracker** at the bottom opens
 the same Complete box as the trackers page.
 

@@ -9,7 +9,7 @@ title: Telegram Bot
 # Telegram Bot
 
 Connect a Telegram bot so people can run `/bg` and receive alerts in Telegram. This page
-covers the Telegram-specific steps; for account linking, alert delivery, and the Admin UI /
+covers the Telegram-specific steps. For account linking, alert delivery, and the Admin UI /
 environment-variable workflow that all platforms share, see [Chat Bots](/docs/bots).
 
 ## 1. Create a bot with BotFather
@@ -36,9 +36,9 @@ At **Platform > Administration > Integrations**, fill in the **Telegram** card:
 | Field | Value |
 |-------|-------|
 | **Bot Token** | The token from BotFather |
-| **Webhook Secret Token** | A random string you choose (1-256 letters, digits, `_` or `-`), e.g. from `openssl rand -hex 32` |
+| **Webhook Secret Token** | A random string you choose (1-256 letters, digits, `_` or `-`), for example, from `openssl rand -hex 32` |
 
-Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
+Turn **Enabled** on, select **Save**, and restart the Nocturne web service.
 
 ### Option B: Environment variables
 
@@ -74,7 +74,7 @@ curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
 
   Confirm it registered with
   <code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getWebhookInfo</code>. The
-  <code>url</code> should match your instance and <code>last_error_message</code> should be
+  <code>url</code> must match your instance. The <code>last_error_message</code> must be
   empty.
 
 </Callout>

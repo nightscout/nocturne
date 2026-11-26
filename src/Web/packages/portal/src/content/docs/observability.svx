@@ -22,21 +22,21 @@ there is nothing to disable on a default install.
 | **Web** | Server-side traces and logs, plus client-error spans | Node auto-instrumentation (server-side HTTP) and a browser error handler that reports unhandled errors |
 
 Telemetry is **push-based over OTLP**. Nocturne does **not** expose a Prometheus
-`/metrics` scrape endpoint; see **Using Prometheus and Grafana** below if that
+`/metrics` scrape endpoint. See **Using Prometheus and Grafana** below if that
 is your stack.
 
 <Callout type="info" title="You provide the backend">
 
   Nocturne does not bundle a collector or a metrics store. You point it at an
   OTLP endpoint you already run (an OpenTelemetry Collector, or a SaaS backend
-  such as Grafana Cloud, Honeycomb, Dash0, etc.).
+  such as Grafana Cloud, Honeycomb, or Dash0).
 
 </Callout>
 
 ## The single switch
 
 Both containers enable their exporters only when `OTEL_EXPORTER_OTLP_ENDPOINT`
-is set. Setting it on a container turns telemetry on; leaving it unset keeps it
+is set. Setting it on a container turns telemetry on. Leaving it unset keeps it
 off. With the endpoint set, the API sends its logs to the collector only and
 stops writing them to the container log, so `docker compose logs nocturne-api`
 shows little. Read them in your backend instead. The standard OpenTelemetry SDK
@@ -44,11 +44,11 @@ environment variables apply:
 
 | Variable | Description |
 |----------|-------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector URL. Turns the exporter on. e.g. `http://otel-collector:4317` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector URL. Turns the exporter on. For example, `http://otel-collector:4317` |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` (default, port 4317) or `http/protobuf` (port 4318) |
-| `OTEL_SERVICE_NAME` | Service name shown in your backend (e.g. `nocturne-api`, `nocturne-web`) |
-| `OTEL_RESOURCE_ATTRIBUTES` | Extra resource attributes, e.g. `deployment.environment=production` |
-| `OTEL_EXPORTER_OTLP_HEADERS` | Auth headers for SaaS collectors, e.g. `x-api-key=...` |
+| `OTEL_SERVICE_NAME` | Service name shown in your backend (for example, `nocturne-api`, `nocturne-web`) |
+| `OTEL_RESOURCE_ATTRIBUTES` | Extra resource attributes, for example, `deployment.environment=production` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Auth headers for SaaS collectors, for example, `x-api-key=...` |
 
 ## Docker Compose
 
@@ -64,7 +64,7 @@ OTEL_EXPORTER_OTLP_PROTOCOL=grpc   # grpc (4317) or http/protobuf (4318)
 ```
 
 `OTEL_EXPORTER_OTLP_PROTOCOL` defaults to `grpc` so the API and web containers
-agree; change it to `http/protobuf` if your collector expects HTTP (port 4318).
+agree. Change it to `http/protobuf` if your collector expects HTTP (port 4318).
 Run the collector as another service on the same Compose network (or point the
 endpoint at an external host), then recreate the containers:
 
@@ -130,7 +130,7 @@ can scrape or receive.
   identifiers, and traces may carry request metadata. Telemetry only leaves your
   instance once you set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code>. If you send it
   to a third-party backend, treat it as sensitive: prefer a collector you
-  control, and use the collector's processors (e.g. attribute/redaction
+  control, and use the collector's processors (for example, attribute/redaction
   processors) to scrub or drop anything you do not want to retain.
 
 </Callout>

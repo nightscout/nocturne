@@ -92,9 +92,30 @@
     // @wc-ignore
     const updateCommand = $derived(`${compose} pull\n${compose} up -d`);
     // @wc-ignore
-    const stopCommand = $derived(
-        `${composeOnVolume} stop\npostgres_container="$(${composeOnVolume} ps -aq nocturne-postgres-server)"\ntest -n "$postgres_container"`,
-    );
+    const POSTGRES_IMAGE = "postgres:17.6";
+    // @wc-ignore
+    const ARCHIVE_FILE = "nocturne-postgres-data.tar";
+    // The archive and restore commands read this container's mounts, whichever storage it uses.
+    const findPostgres = (command: string) =>
+        `postgres_container="$(${command} ps -aq nocturne-postgres-server)"\ntest -n "$postgres_container"`;
+    // @wc-ignore
+    const stopCommand = $derived(`${composeOnVolume} stop\n${findPostgres(composeOnVolume)}`);
+    // @wc-ignore
+    const moveStopCommand = $derived(`${compose} stop\n${findPostgres(compose)}`);
+    // @wc-ignore
+    const archiveCommand = `docker run --rm --user 0 -e HOST_OWNER="$(id -u):$(id -g)" --volumes-from "$postgres_container" -v "$PWD:/backup" ${POSTGRES_IMAGE} sh -c 'umask 077 && tar --numeric-owner -C /var/lib/postgresql -cpf /backup/${ARCHIVE_FILE} data && chown "$HOST_OWNER" /backup/${ARCHIVE_FILE}'\ntar -tf ${ARCHIVE_FILE} | head`;
+    // @wc-ignore
+    const imageCommand = "grep library/postgres docker-compose.yaml";
+    // @wc-ignore
+    const createCommand = $derived(`${compose} create nocturne-postgres-server\n${findPostgres(compose)}`);
+    // @wc-ignore
+    const emptyCheckCommand = `docker run --rm --volumes-from "$postgres_container" ${POSTGRES_IMAGE} ls -A /var/lib/postgresql/data`;
+    // @wc-ignore
+    const copyCommand = `scp ${ARCHIVE_FILE} .env <user>@<new-server>:<nocturne-folder>/`;
+    // @wc-ignore
+    const restoreCommand = `docker run --rm --user 0 --volumes-from "$postgres_container" -v "$PWD:/backup" ${POSTGRES_IMAGE} tar --numeric-owner -C /var/lib/postgresql -xpf /backup/${ARCHIVE_FILE}`;
+    // @wc-ignore
+    const copyToHostCommand = `sudo mkdir -p /srv/nocturne/postgres-data\ndocker run --rm --user 0 --volumes-from "$postgres_container" -v /srv/nocturne/postgres-data:/target ${POSTGRES_IMAGE} sh -c 'cp -a /var/lib/postgresql/data/. /target/ && chown --reference=/var/lib/postgresql/data /target && chmod --reference=/var/lib/postgresql/data /target'`;
     // @wc-ignore
     const rollbackCommand = $derived(`${compose} down\n${composeOnVolume} up -d`);
     // @wc-ignore
@@ -267,14 +288,14 @@
                         <CodeBlock code={stopCommand} class="mt-3" />
                     </li>
                     <li>
-                        Create and inspect a root-owned backup archive while the database is stopped:
-                        <CodeBlock code={'docker run --rm --user 0 --volumes-from "$postgres_container" -v "$PWD:/backup" postgres:17.6 tar --numeric-owner -C /var/lib/postgresql -cpf /backup/nocturne-postgres-data.tar data\ntar -tf nocturne-postgres-data.tar | head'} class="mt-3" />
+                        Create and inspect a backup archive that only you can read, while the database is stopped:
+                        <CodeBlock code={archiveCommand} class="mt-3" />
                         Keep this archive somewhere safe before continuing.
                     </li>
                     <li>
                         Create the host directory and copy the stopped data directory, preserving
                         its contents and ownership:
-                        <CodeBlock code={'sudo mkdir -p /srv/nocturne/postgres-data\ndocker run --rm --user 0 --volumes-from "$postgres_container" -v /srv/nocturne/postgres-data:/target postgres:17.6 sh -c \'cp -a /var/lib/postgresql/data/. /target/ && chown --reference=/var/lib/postgresql/data /target && chmod --reference=/var/lib/postgresql/data /target\''} class="mt-3" />
+                        <CodeBlock code={copyToHostCommand} class="mt-3" />
                     </li>
                     <li>
                         Set <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">POSTGRES_DATA_PATH=/srv/nocturne/postgres-data</code>
@@ -435,6 +456,164 @@
                 <CodeBlock code={removeLocalLogin} class="mt-2" />
             </li>
         </ol>
+    </details>
+    <details class="mb-3">
+        <summary class={SUMMARY}>Move Nocturne to another server</summary>
+        <p class="text-muted-foreground mt-2 mb-4">
+            Use these steps to move Nocturne to new hardware. You copy the stopped PostgreSQL data
+            to the new server and start the same stack there. Schedule downtime first. Nocturne is
+            off from the time you stop the old server until the new server runs.
+        </p>
+        <p class="text-muted-foreground mb-4">
+            This copies PostgreSQL's physical data directory. The new server must use the same
+            PostgreSQL major version and the same processor type, for example both x86_64 or both
+            ARM64. PostgreSQL does not support a copy of its files between processor types. These
+            commands assume that Docker runs on a Linux host and
+            that you are in the directory with the Compose files and <code class={CODE}>.env</code>.
+            On a server that the install script made, that directory is
+            <code class={CODE}>/opt/nocturne</code>.
+        </p>
+        <p class="text-muted-foreground mb-2">
+            <strong class="text-foreground">Keep the same domain.</strong> Do not change
+            <code class={CODE}>BASE_DOMAIN</code> in <code class={CODE}>.env</code>. Nocturne uses
+            the domain in many places. For example:
+        </p>
+        <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-4">
+            <li>
+                <strong class="text-foreground">Passkeys.</strong> The relying party ID of a passkey
+                is the host name in <code class={CODE}>BASE_DOMAIN</code>. A passkey works only on
+                that domain and its subdomains. A passkey from the old domain does not work on a new
+                domain.
+            </li>
+            <li>
+                <strong class="text-foreground">Sign-in providers.</strong> The callback URL of each
+                OpenID Connect provider is
+                <Domain prefix="https://" suffix="/api/auth/oidc/callback" />.
+                On a new domain, register the new URL with each provider.
+            </li>
+            <li>
+                <strong class="text-foreground">Share links.</strong> A public share link has the
+                form <Domain prefix="https://<token>.share." />. A link that you sent still names the
+                old domain.
+            </li>
+            <li>
+                <strong class="text-foreground">Tenants.</strong> Nocturne finds a tenant from the
+                first label of the host name. A tenant answers at
+                <Domain prefix="<slug>." />.
+            </li>
+        </ul>
+        <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-4">
+            <li>
+                On the old server, update Nocturne to the latest release, as in "Update Nocturne"
+                above. Check that Nocturne works. Then both servers use the same images.
+            </li>
+            <li>
+                On the new server, install Docker and do Step 1 to download the release bundle. Do
+                this before the downtime. Do not do Step 2: a new <code class={CODE}>.env</code> file
+                holds passwords that the restored database does not accept.
+            </li>
+            <li>
+                On the old server, stop the stack without removing its containers or volumes. Then
+                record the stopped PostgreSQL container. Do not use
+                <code class={CODE}>down -v</code>. It deletes the volumes.
+                <CodeBlock code={moveStopCommand} class="mt-3" />
+            </li>
+            <li>
+                On the old server, make an archive of the stopped PostgreSQL data, and list its first
+                files. The archive holds your whole database, so only you can read it. The command
+                keeps the numeric owner of each file.
+                {#if hostData}
+                    The PostgreSQL container has your host directory mounted, so the command archives
+                    that directory.
+                {/if}
+                <CodeBlock code={archiveCommand} class="mt-3" />
+                Look at the PostgreSQL image tag in <code class={CODE}>docker-compose.yaml</code> on
+                both servers. The two tags must be the same. An update replaces images, not
+                <code class={CODE}>docker-compose.yaml</code>, so an older install can name another
+                tag.
+                <CodeBlock code={imageCommand} class="mt-3" />
+            </li>
+            <li>
+                Copy these files to the <code class={CODE}>nocturne</code> folder on the new server.
+                Use an encrypted channel, for example <code class={CODE}>scp</code>. Replace the
+                values in angle brackets. Add the other files in this list to the command.
+                <CodeBlock code={copyCommand} class="mt-3" />
+                <ul class="list-disc list-inside space-y-1 mt-2">
+                    <li><code class={CODE}>{ARCHIVE_FILE}</code></li>
+                    <li>
+                        <code class={CODE}>.env</code>. It holds <code class={CODE}>INSTANCE_KEY</code>
+                        and the database passwords. The database does not hold them. For what you lose
+                        without it, see "If you lose the .env file" above.
+                    </li>
+                    <li>
+                        Any override files that you made, such as
+                        <code class={CODE}>docker-compose.override.yaml</code>.
+                    </li>
+                    <li>
+                        <code class={CODE}>docker-compose.yaml</code>, only if the image tags are not
+                        the same.
+                    </li>
+                </ul>
+            </li>
+            {#if hostData}
+                <li>
+                    On the new server, create the PostgreSQL data directory as in "Set the PostgreSQL
+                    data directory" above. The directory must be empty. If its path is not the same as
+                    on the old server, change <code class={CODE}>POSTGRES_DATA_PATH</code> in
+                    <code class={CODE}>.env</code>.
+                </li>
+            {/if}
+            <li>
+                At your DNS provider, change each record that points at the old server to the
+                address of the new server. Do this before you start the stack.
+                {#if ownProxy}
+                    Your own reverse proxy serves the domain. Point it at port 8080 of the new server,
+                    or move it to the new server and change the records to that server.
+                {:else}
+                    Change the <strong>A</strong> record for <Domain />. If you have a wildcard
+                    record for <Domain prefix="*." />, change it also. The bundled proxy uses the
+                    HTTP-01 challenge to get its certificates, so the records must point at the new
+                    server on the first start. The old certificates stay on the old server.
+                {/if}
+            </li>
+            <li>
+                On the new server, create the PostgreSQL container without starting it:
+                <CodeBlock code={createCommand} class="mt-3" />
+            </li>
+            <li>
+                On the new server, check that the PostgreSQL data location is empty. The command must
+                show nothing.
+                <CodeBlock code={emptyCheckCommand} class="mt-3" />
+                {#if hostData}
+                    If it shows files, stop. Make sure that this is the new server. Then run
+                    <code class={CODE}>{compose} down</code>, make a new empty directory, set
+                    <code class={CODE}>POSTGRES_DATA_PATH</code> to it, and do the create step again.
+                {:else}
+                    If it shows files, stop. Make sure that this is the new server, and that its
+                    database holds no data that you need. Then run
+                    <code class={CODE}>{compose} down -v</code> and do the create step again.
+                {/if}
+            </li>
+            <li>
+                {#if hostData}
+                    Restore the archive into the empty PostgreSQL data directory:
+                {:else}
+                    Restore the archive into the empty PostgreSQL volume:
+                {/if}
+                <CodeBlock code={restoreCommand} class="mt-3" />
+            </li>
+            <li>
+                Start the stack. Then do Step 4 to verify the installation, and check your existing
+                Nocturne data:
+                <CodeBlock code={upCommand} class="mt-3" />
+            </li>
+        </ol>
+        <p class="text-muted-foreground">
+            Keep the old server and its volume until the new server is verified. Do not start the
+            old stack again after the new server takes new data. Then the two databases are
+            different, and you cannot merge them. When the new server is verified, delete
+            <code class={CODE}>{ARCHIVE_FILE}</code> on both servers. It holds your whole database.
+        </p>
     </details>
     <details class="mb-8">
         <summary class={SUMMARY}>Troubleshooting</summary>

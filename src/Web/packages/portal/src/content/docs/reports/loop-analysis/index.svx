@@ -20,7 +20,7 @@ questions such as these:
 
 To open it, go to **Reports > Loop Analysis**. Anyone whose access includes
 reports can open it. This includes members, guest links and apps that you
-authorise. A public share link shows the pages, but it cannot show the figures,
+authorize. A public share link shows the pages, but it cannot show the figures,
 because the share does not get the time zone.
 
 <Callout type="warning" title="Observations, not advice">
@@ -87,7 +87,7 @@ your data to do this. If it cannot get the time zone, each page shows
 
 - **The profile settings do not have a time zone.** The owner of this data can
   set a time zone in the profile settings.
-- **This server does not recognise the time zone in the profile settings.** The
+- **This server does not recognize the time zone in the profile settings.** The
   owner of this data can correct the time zone in the profile settings.
 - **The time zone of this data did not load.** To try again, reload the report
   later.
@@ -115,8 +115,8 @@ what the loop does.
 Some insulin changes are not decisions of the algorithm. Net loop correction
 does not include them. The Daily profile can show them as separate lines:
 
-- temp basals that you set manually;
-- pump suspends;
+- temp basals that you set manually,
+- pump suspends,
 - delivery that the report calculated from the schedule (**Inferred**).
 
 ### Which temp basals the loop set
@@ -125,7 +125,7 @@ Trio, AAPS and OpenAPS do not record whether a temp basal came from the loop or
 from you. Nocturne compares each temp with the decisions that your loop uploaded
 near it:
 
-- If the loop asked for the same rate within 5 minutes, the temp is from the
+- If the loop requested the same rate within 5 minutes, the temp is from the
   algorithm.
 - If the loop asked only for different rates, the temp is manual.
 - If the loop uploaded no decisions near the temp, the temp keeps the origin
@@ -146,7 +146,7 @@ The report calculates delivered basal from the temp basal records of the pump.
   example a loop and a Tidepool copy of it. The records of the loop are used
   first. The records of the other source fill only the time that the loop did
   not record.
-- **A cancelled temp.** When a temp is cancelled, basal goes back to the
+- **A canceled temp.** When a temp is canceled, basal goes back to the
   schedule. The report uses the schedule for this time only when the rule for
   missing records applies.
 - **Missing records.** If there is no record of delivery, the basal for that
@@ -185,7 +185,7 @@ Your access can include only some types of data. Then some parts of the report
 show **Hidden: your access does not include this data**. Each part needs access
 to the type of data that it uses: glucose, treatments (insulin and carbs),
 devices (the records of the loop and the pump) or therapy settings (your
-profile). Filters that you cannot use are grey, and they show the access that
+profile). Filters that you cannot use are gray, and they show the access that
 they need.
 
 If you can see only the **last 24 hours**, the report shows only those 24 hours

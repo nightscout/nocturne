@@ -89,7 +89,7 @@ fails. The page shows how many it did not use for each reason.
 
 - The loop was open, or an override, temporary target, exercise or illness was
   active.
-- Carbs were logged in the 4 hours before the block or during it, or carbs were
+- Carbs were recorded in the 4 hours before the block or during it, or carbs were
   on board.
 - Glucose increased as it does after a meal, in the 4 hours before the block or
   during it.

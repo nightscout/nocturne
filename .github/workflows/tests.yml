@@ -551,7 +551,7 @@ jobs:
           curl -sSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"             | sudo tar -xz -C /usr/local/bin vale
           vale --version
       - name: Lint UI copy
-        run: pnpm run lint:copy --min=error
+        run: pnpm run lint:copy --min=error --gate-docs
 
   integration-db:
     needs: [changes, build]

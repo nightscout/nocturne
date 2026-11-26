@@ -5,7 +5,7 @@ title: Year Overview
 # Year Overview
 
 The Year Overview answers the question "how did my whole year go?". It shows
-every day of every year that has data as one calendar, with each day coloured
+every day of every year that has data as one calendar, with each day colored
 by a figure that you choose.
 
 ## What it shows
@@ -16,10 +16,10 @@ Each year has its own calendar. The newest year is at the top. Each square is
 one day, and each column is one week. Next to the year, the report shows how
 many days have data.
 
-The colour of a square shows the figure that you choose in the menu above the
+The color of a square shows the figure that you choose in the menu above the
 calendars:
 
-| Figure | What the colour shows |
+| Figure | What the color shows |
 |--------|-----------------------|
 | **Avg Glucose** | The average glucose of the day |
 | **Time in Range** | The part of the day from 70 to 180 mg/dL |
@@ -28,7 +28,7 @@ calendars:
 | **TDD** | The total daily dose of insulin |
 | **Carbs** | The carbs of the day |
 
-The colour scale next to the menu shows which colour goes with which value.
+The color scale next to the menu shows which color goes with which value.
 For **Avg Glucose**, a day below range or above range also has a hatch pattern.
 
 Move the pointer over a day to see its details: the average glucose, the
@@ -59,11 +59,11 @@ The app shows glucose values in mmol/L if you chose mmol/L.
 
 ## How to use it
 
-To change what the colours show:
+To change what the colors show:
 
 1. Open the menu above the calendars. It shows **Avg Glucose** first.
 2. Select a figure, for example **Time in Range**.
-3. Read the colour scale to see which colour means a high value.
+3. Read the color scale to see which color means a high value.
 
 To look closer at part of the year:
 
@@ -78,27 +78,27 @@ To filter the data:
   calendars load again.
 - Use **Types** to choose which record types the counts include.
 
-To change the colour scale:
+To change the color scale:
 
 - Move the two handles on the scale, or type a value above each handle, to set
-  the range of values that the colours cover. The days outside the range fade.
+  the range of values that the colors cover. The days outside the range fade.
   Type a value in **Dim outside** to set how much they fade.
 - Select **Color boundary** to add a point to the scale. Move the point to
-  change where the colours change.
+  change where the colors change.
 - Select the circle at an end of the scale, or next to a point, to choose a
-  different colour for it.
-- Select **Swap colors** to put the colours at the two ends in the opposite
+  different color for it.
+- Select **Swap colors** to put the colors at the two ends in the opposite
   order. For example, to make low values the brightest.
 - Select **Reset** to go back to the default scale.
 
 When you scroll down, the scale panel moves out of view. Scroll up a small
 distance to show it again at the top of the screen. To make the panel smaller,
 select the arrow at its right side. The smaller panel shows only the menu and
-the colour scale.
+the color scale.
 
 ## Good to know
 
 - The report loads one year at a time. Older years load when you scroll down to
   them.
 - A day with records but no value for the chosen figure shows in a plain muted
-  colour. A day with no records is almost blank.
+  color. A day with no records is almost blank.

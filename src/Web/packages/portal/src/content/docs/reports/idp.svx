@@ -75,7 +75,7 @@ The app shows glucose values in mmol/L if you chose mmol/L.
 
 ## How to use it
 
-Before a clinic visit, set the period that your care team asks for:
+Before a clinic visit, set the period that your care team requests:
 
 1. At the top of the report, select the date range.
 2. Select a period, for example **30 Days**.

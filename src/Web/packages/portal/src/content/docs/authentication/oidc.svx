@@ -9,11 +9,11 @@ title: Sign in with any OIDC provider
 
 # Sign in with any OIDC provider
 
-Nocturne's social login is a generic OpenID Connect client. Any provider that publishes a
+Nocturne's social sign-in is a generic OpenID Connect client. Any provider that publishes a
 standard discovery document works: Nocturne fetches
 `{issuer}/.well-known/openid-configuration` and wires up the authorization, token, and
 userinfo endpoints automatically. [Google](/docs/authentication/google) and
-[GitHub](/docs/authentication/github) have their own step-by-step guides; this page covers
+[GitHub](/docs/authentication/github) have their own step-by-step guides. This page covers
 everything else: Okta, Auth0, Keycloak, Authentik, Microsoft Entra ID, Zitadel, and so on.
 
 ## The callback URL
@@ -25,7 +25,7 @@ https://your-instance.com/api/auth/oidc/callback
 ```
 
 Replace `your-instance.com` with your actual Nocturne domain. This is the same URL for
-every provider; only the credentials differ.
+every provider. Only the credentials differ.
 
 ## Two ways to configure providers
 
@@ -54,15 +54,15 @@ Nocturne reads providers from one of two places:
    **client secret**.
 2. Sign in to your Nocturne instance as a platform admin.
 3. Go to **Platform > Administration** (`/settings/admin`), open the **Identity Providers**
-   tab, and click **Add Provider**.
+   tab, and select **Add Provider**.
 4. Fill in the fields (see the field reference below) and **Save**.
 
-The new sign-in button appears on your login page immediately.
+The new sign-in button appears on your sign-in page immediately.
 
 ### Option B: configuration
 
 Declare providers under the `Oidc:Providers` array. Keep the client **secret** out of
-`appsettings.json`; supply it through user-secrets or an environment variable.
+`appsettings.json`. Supply it through user-secrets or an environment variable.
 
 ```jsonc
 "Oidc": {
@@ -96,7 +96,7 @@ Oidc__Providers__0__ClientSecret=your-client-secret
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Name** | Yes | Display name on the login button (e.g. *Okta*). |
+| **Name** | Yes | Display name on the sign-in button (for example, *Okta*). |
 | **Issuer URL** | Yes | The provider's issuer. Nocturne appends `/.well-known/openid-configuration` to discover the rest. |
 | **Client ID** | Yes | OAuth2 client ID registered with the provider. |
 | **Client Secret** | Yes | OAuth2 client secret. Supply via secrets manager / env, never in `appsettings.json`. |
@@ -105,7 +105,7 @@ Oidc__Providers__0__ClientSecret=your-client-secret
 | **Icon** | No | One of the known slugs `google`, `apple`, `microsoft`, `github`, or a URL to a logo. Anything else falls back to a generic icon. |
 | **Button Color** | No | CSS color for the button background. |
 | **Display Order** | No | Lower numbers appear first. Defaults to `0`. |
-| **Enabled** | No | Whether the provider is offered for login. Defaults to `true`. |
+| **Enabled** | No | Whether the provider is offered for sign-in. Defaults to `true`. |
 
 ## Common issuer URLs
 

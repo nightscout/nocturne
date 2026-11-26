@@ -9,20 +9,20 @@ title: Google Health
 # Google Health
 
 Nocturne can import steps, heart rate, weight and sleep from Google Health. Each Nocturne
-server connects through one Google OAuth client that its operator sets up once; the people
-using the server only click **Connect**.
+server connects through one Google OAuth client that its operator sets up once. The people
+using the server only select **Connect**.
 
 ## Connecting your Google Health data
 
 1. In the Google Health app on your phone, make sure the data you want is there and linked to
    your Google account.
 2. In Nocturne, open **Site settings > Connectors & Apps** and choose **Google Health**.
-3. Click **Connect Google Health**, pick your Google account, and allow the data Nocturne asks
+3. Select **Connect Google Health**, pick your Google account, and allow the data Nocturne asks
    to read.
-4. Back in Nocturne, click **Refresh inventory** to see what Google has, choose the data types to
-   import, and click **Save selection and import**.
+4. Back in Nocturne, select **Refresh inventory** to see what Google has, choose the data types to
+   import, and select **Save selection and import**.
 
-Nocturne then syncs about every 15 minutes. It imports the last seven days first; set
+Nocturne then syncs about every 15 minutes. It imports the last seven days first. Set
 **Import data from** to an earlier date to bring in older history, which arrives a month at a
 time in the background.
 
@@ -30,7 +30,7 @@ Access is read-only: Nocturne never writes to Google Health.
 
 <Callout type="info" title="Google Health is not enabled on this server">
 
-  If Nocturne says your operator hasn't enabled Google Health, the server has no Google client
+  If Nocturne says your operator has not enabled Google Health, the server has no Google client
   yet. Whoever runs your Nocturne server needs to follow the steps below.
 
 </Callout>
@@ -39,9 +39,9 @@ Access is read-only: Nocturne never writes to Google Health.
 
 **Disconnect** stops syncing and revokes Nocturne's access in Google. If the same Google account
 is still connected in another tenant on this server, Nocturne keeps that access so the other
-tenant keeps syncing; it is revoked when the last tenant disconnects. Data already imported stays
+tenant keeps syncing. It is revoked when the last tenant disconnects. Data already imported stays
 in Nocturne. Once disconnected, **Delete imported Google Health data** removes everything that
-came from Google Health; your data in Google is not touched.
+came from Google Health. Your data in Google is not touched.
 
 ## Setting up Google Health on your server
 
@@ -61,7 +61,7 @@ This part is for the person who runs the Nocturne server. If you self-host Noctu
 https://nocturne.example.com/api/v4/google-health/oauth/callback
 ```
 
-Every tenant uses that same address; Nocturne sends each person back to their own subdomain
+Every tenant uses that same address. Nocturne sends each person back to their own subdomain
 afterwards.
 
 5. Copy the **Client ID** and **Client secret**.
@@ -119,7 +119,7 @@ requirements for your server.
 <Callout type="warning" title="Changing the client">
 
   A Google connection belongs to the client it was made with. If you replace the client ID,
-  everyone who had connected sees **Reconnect** and has to click **Connect Google Health** again.
+  everyone who had connected sees **Reconnect** and has to select **Connect Google Health** again.
   Their imported data is kept.
 
 </Callout>
