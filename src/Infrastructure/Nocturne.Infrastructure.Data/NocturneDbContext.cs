@@ -303,6 +303,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TeamSiteDeclineEntity> TeamSiteDeclines { get; set; } = null!;
 
+    public DbSet<TeamSiteBlockEntity> TeamSiteBlocks { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }

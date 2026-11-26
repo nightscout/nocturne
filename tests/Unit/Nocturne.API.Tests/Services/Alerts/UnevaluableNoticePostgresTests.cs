@@ -138,8 +138,8 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
 
         (await repository.GetStandingUnevaluableNoticesAsync(null, CancellationToken.None))
             .Should().BeEquivalentTo([
-                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, false),
-                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, false),
+                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, At, false),
+                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, At, false),
             ]);
         await repository.ResolveInstancesForExcursionAsync(first.ExcursionId, At, "manual", CancellationToken.None);
         (await repository.GetStandingUnevaluableNoticesAsync(rule, CancellationToken.None))

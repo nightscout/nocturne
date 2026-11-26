@@ -132,6 +132,7 @@
         {#each staff as member (member.subjectId)}
           {@const approved = member.sitesApproved ?? 0}
           {@const pending = member.sitesPending ?? 0}
+          {@const blocked = member.sitesBlocked ?? 0}
           <li class="space-y-3 py-3">
             <div class="flex flex-col gap-2 @md:flex-row @md:items-start @md:justify-between">
               <div class="min-w-0 space-y-1">
@@ -147,7 +148,10 @@
                     {#if pending > 0}
                       {plural(pending, ["Waits for approval at # site.", "Waits for approval at # sites."])}
                     {/if}
-                    {#if approved === 0 && pending === 0}
+                    {#if blocked > 0}
+                      {plural(blocked, ["Stopped by # site.", "Stopped by # sites."])}
+                    {/if}
+                    {#if approved === 0 && pending === 0 && blocked === 0}
                       Not approved at any site.
                     {/if}
                   </p>

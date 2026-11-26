@@ -87,6 +87,24 @@ public class AlertDeliveryEndpointTests
     }
 
     [Fact]
+    public async Task MarkFailed_with_a_platform_message_records_that_message_failed()
+    {
+        var deliveryId = Guid.NewGuid();
+        var request = new MarkFailedRequest { Error = "window closed", PlatformMessageId = "wamid.1" };
+        var controller = CreateController();
+
+        var result = await controller.MarkFailed(deliveryId, request, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        _deliveryServiceMock.Verify(
+            s => s.MarkSentMessageFailedAsync(deliveryId, "wamid.1", "window closed", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _deliveryServiceMock.Verify(
+            s => s.MarkFailedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GetPendingDeliveries_ReturnsMatchingDeliveries()
     {
         // This endpoint queries the DbContext directly, so a full test requires

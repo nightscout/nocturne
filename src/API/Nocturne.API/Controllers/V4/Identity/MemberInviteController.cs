@@ -423,6 +423,60 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <summary>
+    /// The people the current tenant stopped reaching it through any team, the latest first, with when and
+    /// who. A person no longer staff of any team is listed too, so the stop can always be removed.
+    /// </summary>
+    [HttpGet("team-staff-blocks")]
+    [RequireScope(Scope.MembersInvite, Scope.MembersManage, Scope.SharingManage)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<TenantTeamStaffBlock>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetTeamStaffBlocks([FromServices] ITeamRepository teams, CancellationToken ct) =>
+        Ok(await teams.ListStaffBlocksOfTenantAsync(_tenantAccessor.TenantId, ct));
+
+    /// <summary>
+    /// Stops a person reaching the current tenant through any team, now and later, under every staff rule.
+    /// Access they have directly does not change. The person must be staff of a team with access to the
+    /// tenant. A stop already set changes nothing. Only an owner may.
+    /// </summary>
+    [HttpPost("team-staff-blocks/{subjectId:guid}")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory", "GetTeamStaffBlocks"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> BlockTeamStaff(Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(await access.BlockStaffAsync(_tenantAccessor.TenantId, callerId, subjectId, ct));
+    }
+
+    /// <summary>
+    /// Lets a person reach the current tenant through teams again, with what their staff rows and each team's
+    /// staff rule give. Removing a stop that is not there changes nothing. Only an owner may.
+    /// </summary>
+    [HttpDelete("team-staff-blocks/{subjectId:guid}")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory", "GetTeamStaffBlocks"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UnblockTeamStaff(Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(await access.UnblockStaffAsync(_tenantAccessor.TenantId, callerId, subjectId, ct));
+    }
+
+    /// <summary>
     /// Sets what a team's access to the current tenant gives: its roles, the 24-hour limit and the end, sent
     /// whole. Bounded by the caller's own access and credential, as an approval is, and not by the link the
     /// access was made from. No staff member is sent back to waiting, and each staff decision and the switch

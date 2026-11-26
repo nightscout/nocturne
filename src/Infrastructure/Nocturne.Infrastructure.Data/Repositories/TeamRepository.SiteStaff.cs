@@ -8,8 +8,9 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// An owner of a site deciding which of a team's staff reach it: approving or declining one, and setting
-/// who decides (<see cref="TeamStaffRule"/>). Each is decided under the locks, by the owner check every
+/// An owner of a site deciding which of a team's staff reach it: approving or declining one, setting
+/// who decides (<see cref="TeamStaffRule"/>), and stopping one person through every team
+/// (<see cref="TeamSiteBlockEntity"/>). Each is decided under the locks, by the owner check every
 /// owner's decision about a team shares (<see cref="DirectOwnerAsync"/>), and returns the team reasons that
 /// bring the staff it changed into line with the rows (<see cref="TeamReasonChanges.SyncAsync"/>).
 /// </summary>
@@ -164,6 +165,77 @@ public partial class TeamRepository
         return (OwnerDecision.Decided, (await TeamReasonChanges.SyncAsync(
             unit, synced.Select(subjectId => (tenantId, subjectId)), now, ct))
             .WithStaffNotices(teamId, [tenantId]));
+    }
+
+    /// <summary>
+    /// Stops <paramref name="subjectId"/> reaching <paramref name="tenantId"/> through any team, when
+    /// <paramref name="blocked"/>, or removes the stop, as <paramref name="callerSubjectId"/>, on
+    /// <paramref name="unit"/>, pinned to the tenant, and saves it. A stop already set, or one not there to
+    /// remove, changes nothing. Setting one needs the subject to be staff of a team with access to the site,
+    /// so an owner cannot stop an arbitrary account; removing one needs only the stop.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Allowed under every staff rule: a stop holds through a team the site trusts as a whole
+    /// (<see cref="TeamReasons.GivesReason"/>). It changes no staff row, no decline and no rule, so removing it
+    /// gives back exactly what those give. A direct reason is not touched.
+    /// </para>
+    /// <para>
+    /// Takes the rows of the subject and the caller, whom the stop names, the site's owners lock and its team
+    /// access lock (<see cref="MembershipLock"/>). It and the subject joining another team that follows the
+    /// site are ordered by the site's team access lock, which each takes first, and again by the membership
+    /// lock their syncs take before they read; neither excludes the other at the subject's row
+    /// (<c>KEY SHARE</c>). So the join either commits first and its reason is removed here, or reads the stop
+    /// and gives none. The changes owe the owners a recount of every team the subject is staff of at the
+    /// site, and no notice of their own.
+    /// </para>
+    /// </remarks>
+    public static async Task<(OwnerDecision Decision, TeamReasonChanges? Changes)?> LockStaffBlockAsync(
+        DbUnitOfWork unit, Guid tenantId, Guid callerSubjectId, Guid subjectId, bool blocked, DateTime now,
+        CancellationToken ct)
+    {
+        var db = unit.Context;
+        await db.LockSubjectRowsSharedAsync([callerSubjectId, subjectId], ct);
+        await db.LockTenantOwnersAsync(tenantId, ct);
+        await db.LockTeamAccessAsync(tenantId, ct);
+
+        var (owner, _) = await DirectOwnerAsync(db, tenantId, callerSubjectId, now, ct);
+        if (owner != OwnerDecision.Decided)
+            return (owner, null);
+
+        var block = await db.TeamSiteBlocks.FirstOrDefaultAsync(b => b.TenantId == tenantId && b.SubjectId == subjectId, ct);
+        if ((block is not null) == blocked)
+            return (OwnerDecision.Decided, null);
+
+        var teams = await db.TeamSiteStaff.AsNoTracking()
+            .Where(s => s.TeamTenantAccess!.TenantId == tenantId
+                && s.TeamMember!.SubjectId == subjectId
+                && s.TeamMember.Kind == TeamMemberKind.Staff)
+            .Select(s => s.TeamTenantAccess!.TeamId)
+            .ToListAsync(ct);
+        if (blocked && teams.Count == 0)
+            return (OwnerDecision.NotFound, null);
+
+        if (blocked)
+        {
+            db.TeamSiteBlocks.Add(new TeamSiteBlockEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                SubjectId = subjectId,
+                CreatedBySubjectId = callerSubjectId,
+            });
+        }
+        else
+        {
+            db.TeamSiteBlocks.Remove(block!);
+        }
+
+        TeamAudit.StageStaffBlock(
+            db, blocked ? AuthAuditEventType.TeamStaffBlocked : AuthAuditEventType.TeamStaffUnblocked, tenantId, subjectId);
+        await db.SaveChangesAsync(ct);
+        return (OwnerDecision.Decided, (await TeamReasonChanges.SyncAsync(unit, [(tenantId, subjectId)], now, ct))
+            .WithRecounts(teams.Select(team => new TeamSiteKey(tenantId, team))));
     }
 
     private static Task<TeamTenantAccessEntity?> AccessOfSiteAsync(

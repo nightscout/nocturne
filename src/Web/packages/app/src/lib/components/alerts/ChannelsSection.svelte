@@ -166,7 +166,7 @@
       ruleId !== undefined &&
       ch.id !== undefined &&
       ch.state === AlertChannelState.Stopped &&
-      needsDestination(ch.channelType)
+      ch.typedIn === true
     );
   }
 
@@ -208,7 +208,15 @@
   }
 
   function platformLabel(platform: string): string {
+    if (platform === "whatsapp") return "WhatsApp";
     return platform.charAt(0).toUpperCase() + platform.slice(1);
+  }
+
+  /** WhatsApp has no account page: a member links it by sending a command to the bot. */
+  function linkInstruction(platform: string): string {
+    return platform === "whatsapp"
+      ? "Send /connect to the Nocturne WhatsApp number to enable delivery."
+      : "Connect it in Connectors & apps to enable delivery.";
   }
 </script>
 
@@ -461,7 +469,7 @@
           disabled={pending || unavailable}
           title={linked
             ? undefined
-            : `${platformLabel(o.platform!)} not linked. Connect it in Connectors & apps to enable delivery.`}
+            : `${platformLabel(o.platform!)} not linked. ${linkInstruction(o.platform!)}`}
           onSelect={() => addChannel(o)}
         >
           <span

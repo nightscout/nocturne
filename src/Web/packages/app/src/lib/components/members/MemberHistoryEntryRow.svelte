@@ -265,6 +265,10 @@
         {:else}
           {actor} declined {member} as staff of a team that was deleted.
         {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamStaffBlocked}
+        {actor} stopped {member} from seeing this site through any team.
+      {:else if entry.kind === MemberHistoryKind.TeamStaffUnblocked}
+        {actor} let {member} see this site through teams again.
       {:else if entry.kind === MemberHistoryKind.TeamStaffRuleChanged}
         {#if entry.team?.name && entry.staffRule === RULE_OWNER_APPROVES}
           {actor} set the team {entry.team.name} so that an owner approves each staff member.

@@ -24,7 +24,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// 24 hours when the access is; the site cannot change their access, only the team's; when an owner
 /// narrows the team's access their next request reads the narrower access; and when the site stops the
 /// access their next request is refused. Either way their hub connection closes on revalidation.
-/// Where the site decides its staff, an owner's approval and decline of one staff member do the same.
+/// Where the site decides its staff, an owner's approval and decline of one staff member do the same, and an
+/// owner's stop of one person through every team does under every rule.
 /// </summary>
 [Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
@@ -321,6 +322,77 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("accessEndsAt").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task A_stopped_staff_member_of_a_trusted_team_is_refused_at_once_and_closed_on_revalidation_and_reads_again_once_let_back_in()
+    {
+        var (manager, _) = await SeedSubjectAsync("Stopping Manager");
+        var (owner, ownerToken) = await SeedSubjectAsync("Stopping Owner", owner: true);
+        string managingToken;
+        await using (var conn = await OpenPostgresAsync())
+        {
+            (_, managingToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
+                conn, await AuthTestHelpers.GetTenantIdAsync(conn), "Stopping Member Manager", [Scope.MembersManage]);
+        }
+        var staff = await SeedBareSubjectAsync("Stopped Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
+        using var managingOnSite = AuthTestHelpers.CreateBearerClient(Fixture, managingToken);
+        var staffSession = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: TeamStaffRule.TeamTrusted);
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var closed = await SubscribedHubAsync(staffSession);
+
+        var refused = await managingOnSite.PostAsync($"/api/v4/member-invites/team-staff-blocks/{staff}", null);
+        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_staff_decision_not_owner");
+        (await ownerOnSite.PostAsync($"/api/v4/member-invites/team-staff-blocks/{await SeedBareSubjectAsync("Stranger")}", null))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        (await ownerOnSite.PostAsync($"/api/v4/member-invites/team-staff-blocks/{staff}", null)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("staff").EnumerateArray().Single()
+            .GetProperty("blocked").GetBoolean().Should().BeTrue();
+        var block = (await ownerOnSite.GetFromJsonAsync<JsonElement>("/api/v4/member-invites/team-staff-blocks"))
+            .EnumerateArray().Should().ContainSingle().Subject;
+        (block.GetProperty("subjectId").GetGuid(), block.GetProperty("displayName").GetString(), block.GetProperty("blockedBySubjectId").GetGuid())
+            .Should().Be((staff, "Stopped Nurse", owner));
+        await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, "the site stopped the staff member");
+
+        (await ownerOnSite.DeleteAsync($"/api/v4/member-invites/team-staff-blocks/{staff}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await ownerOnSite.DeleteAsync($"/api/v4/member-invites/team-staff-blocks/{staff}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ownerOnSite.GetFromJsonAsync<JsonElement>("/api/v4/member-invites/team-staff-blocks")).GetArrayLength().Should().Be(0);
+        await SubscribedHubAsync(staffSession);
+    }
+
+    [Fact]
+    public async Task A_stopped_staff_member_who_is_also_let_in_directly_reads_exactly_their_direct_access()
+    {
+        var (manager, _) = await SeedSubjectAsync("Direct Manager");
+        var (owner, ownerToken) = await SeedSubjectAsync("Direct Owner", owner: true);
+        var (staff, staffToken) = await SeedSubjectAsync("Direct Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffToken);
+        string Access(JsonElement member) => $"{member.GetProperty("roles").GetRawText()}|{member.GetProperty("reasons").GetRawText()}";
+        var direct = Access((await MembersAsync(ownerOnSite)).Single(m => m.GetProperty("subjectId").GetGuid() == staff));
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
+        Access((await MembersAsync(ownerOnSite)).Single(m => m.GetProperty("subjectId").GetGuid() == staff)).Should().NotBe(direct);
+
+        (await ownerOnSite.PostAsync($"/api/v4/member-invites/team-staff-blocks/{staff}", null)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        Access((await MembersAsync(ownerOnSite)).Single(m => m.GetProperty("subjectId").GetGuid() == staff)).Should().Be(direct);
+        (await staffOnSite.GetAsync("/api/v1/entries.json?count=1")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)

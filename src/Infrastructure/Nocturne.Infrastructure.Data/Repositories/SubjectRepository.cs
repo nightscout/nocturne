@@ -1211,6 +1211,7 @@ public class SubjectRepository : ISubjectRepository
         yield return db.AlertExcursionReceipts.IgnoreQueryFilters().Where(r => r.TenantId == tenantId && r.ActorKind == AlertReceiptActorKind.Member && r.ActorId == subjectId).Select(r => r.Id);
         yield return db.TeamTenantAccess.Where(a => a.TenantId == tenantId && a.ApprovedBySubjectId == subjectId).Select(a => a.Id);
         yield return db.TeamSiteDeclines.Where(d => d.TeamTenantAccess!.TenantId == tenantId && d.SubjectId == subjectId).Select(d => d.Id);
+        yield return db.TeamSiteBlocks.Where(b => b.TenantId == tenantId && (b.SubjectId == subjectId || b.CreatedBySubjectId == subjectId)).Select(b => b.Id);
     }
 
     /// <inheritdoc/>

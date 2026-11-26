@@ -40,6 +40,8 @@ public class AlertRulesControllerChannelDestinationTests
     private const string DiscordUserSnowflake = "9876543210987654321";
     private const string SlackMemberId = "U00FAKEUSER1";
     private const string TelegramUserId = "864203571";
+    private const string WhatsAppWaId = "61412345678";
+    private const string WhatsAppBusinessScopedId = "US.13491208655302741918";
 
     private static (AlertRulesController Controller, NocturneDbContext Db) CreateController(
         IAlertDeliveryService? deliveryService = null, string grantedScope = Scope.AlertsReadWrite)
@@ -175,6 +177,8 @@ public class AlertRulesControllerChannelDestinationTests
     [InlineData(ChannelType.DiscordDm, "discord", DiscordUserSnowflake)]
     [InlineData(ChannelType.SlackDm, "slack", SlackMemberId)]
     [InlineData(ChannelType.TelegramDm, "telegram", TelegramUserId)]
+    [InlineData(ChannelType.WhatsAppDm, "whatsapp", WhatsAppWaId)]
+    [InlineData(ChannelType.WhatsAppDm, "whatsapp", WhatsAppBusinessScopedId)]
     public async Task CreateRule_resolves_a_dm_destination_from_the_linked_identity(
         ChannelType channelType, string platform, string platformUserId)
     {
@@ -194,6 +198,7 @@ public class AlertRulesControllerChannelDestinationTests
     [Theory]
     [InlineData(ChannelType.SlackDm, "Slack")]
     [InlineData(ChannelType.TelegramDm, "Telegram")]
+    [InlineData(ChannelType.WhatsAppDm, "WhatsApp")]
     public async Task CreateRule_rejects_a_dm_channel_when_the_caller_has_no_link_on_that_platform(
         ChannelType channelType, string platform)
     {
@@ -257,7 +262,10 @@ public class AlertRulesControllerChannelDestinationTests
     [InlineData("+441632960001")]
     [InlineData("+1234567")]         // 7 digits — the E.164 minimum
     [InlineData("+123456789012345")] // 15 digits — the E.164 maximum
-    public async Task CreateRule_accepts_a_whatsapp_destination_in_e164(string destination)
+    [InlineData("15551234567")]      // a wa_id: the bot sends it with a +
+    [InlineData("US.13491208655302741918")]     // a business-scoped user ID
+    [InlineData("US.ENT.13491208655302741918")] // an enterprise one
+    public async Task CreateRule_accepts_a_whatsapp_destination_the_adapter_can_address(string destination)
     {
         var (controller, _) = CreateController();
 
@@ -274,13 +282,13 @@ public class AlertRulesControllerChannelDestinationTests
     [Theory]
     [InlineData(null)]
     [InlineData("  ")]
-    [InlineData("15551234567")]        // a webhook wa_id — no leading +
     [InlineData("+1 (555) 123-4567")]  // separators the Cloud API tolerates, we do not store
     [InlineData("+0155512345")]        // no country calling code starts with 0
     [InlineData("+123456")]            // 6 digits — one short
     [InlineData("+1234567890123456")]  // 16 digits — one past the E.164 maximum
     [InlineData("whatsapp:+15551234567")]
-    public async Task CreateRule_rejects_a_whatsapp_destination_outside_e164(string? destination)
+    [InlineData("us.13491208655302741918")]  // a business-scoped ID's country is upper case
+    public async Task CreateRule_rejects_a_whatsapp_destination_the_adapter_cannot_address(string? destination)
     {
         var (controller, _) = CreateController();
 
@@ -800,6 +808,92 @@ public class AlertRulesControllerChannelDestinationTests
 
         (await StoredChannelsAsync(db)).Should().ContainSingle().Which.Should().Match<AlertRuleChannelEntity>(
             c => c.AddedBySubjectId == Subject && c.StopsAt == ends);
+    }
+
+    [Fact]
+    public async Task A_whatsapp_number_no_link_names_is_stamped_like_a_typed_in_channel_and_a_linked_one_is_not()
+    {
+        var (controller, db) = CreateController();
+        await LinkIdentityAsync(db, "whatsapp", WhatsAppWaId);
+        var ends = DateTime.UtcNow.AddDays(3);
+        ActAs(controller, Subject, ends);
+
+        await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [Typed(ChannelType.WhatsAppDm, "+15551234567"), Typed(ChannelType.WhatsAppDm, "+" + WhatsAppWaId)],
+        }, CancellationToken.None);
+
+        var stored = await StoredChannelsAsync(db);
+        stored[0].Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == Subject && c.StopsAt == ends && c.RecipientSubjectId == null);
+        stored[1].Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == null && c.StopsAt == null && c.RecipientSubjectId == Subject);
+    }
+
+    [Fact]
+    public async Task A_typed_whatsapp_number_stays_typed_when_the_rule_is_saved_after_a_member_links_it()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var ends = DateTime.UtcNow.AddDays(3);
+        ActAs(controller, Subject, ends);
+        var number = Typed(ChannelType.WhatsAppDm, "+" + WhatsAppWaId);
+        var ruleId = await CreateWithAsync(controller, number);
+        await LinkIdentityAsync(db, "whatsapp", WhatsAppWaId);
+
+        var saved = OkRule(await controller.UpdateRule(ruleId, new UpdateAlertRuleRequest
+        {
+            Name = "Renamed",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [number],
+        }, CancellationToken.None));
+
+        (await StoredChannelsAsync(db)).Should().ContainSingle().Which.Should().Match<AlertRuleChannelEntity>(
+            c => c.RecipientSubjectId == null && c.AddedBySubjectId == Subject && c.StopsAt == ends,
+            "a later unlink must leave the number delivering as it was typed in, not stop it for good");
+        saved.Channels.Should().ContainSingle().Which.Should().Match<AlertRuleChannelResponse>(
+            c => c.State == AlertChannelState.Active && c.TypedIn == false && c.StopsAt == null && c.AddedByName == null,
+            "the link decides it while it lasts, so the typed-in stop date does not apply");
+    }
+
+    [Fact]
+    public async Task A_typed_whatsapp_number_a_member_has_linked_cannot_be_kept()
+    {
+        var (controller, db) = CreateController();
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var channel = await db.AlertRuleChannels.SingleAsync(c => c.ChannelType == ChannelType.DiscordChannel);
+        channel.ChannelType = ChannelType.WhatsAppDm;
+        channel.Destination = "+" + WhatsAppWaId;
+        await db.SaveChangesAsync();
+        await LinkIdentityAsync(db, "whatsapp", WhatsAppWaId);
+        db.ChangeTracker.Clear();
+        ActAs(controller, Subject);
+
+        var result = await controller.KeepChannel(rule.Id, channel.Id, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        (await db.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.Id == channel.Id)).AddedBySubjectId
+            .Should().NotBe(Subject, "the link decides the channel, so its typed-in stamps are not written again");
+    }
+
+    [Fact]
+    public async Task A_stopped_whatsapp_number_no_link_names_can_be_kept()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var channel = await db.AlertRuleChannels.SingleAsync(c => c.ChannelType == ChannelType.DiscordChannel);
+        channel.ChannelType = ChannelType.WhatsAppDm;
+        channel.Destination = "+15551234567";
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        ActAs(controller, Subject);
+
+        var kept = OkRule(await controller.KeepChannel(rule.Id, channel.Id, CancellationToken.None));
+
+        kept.Channels.Single(c => c.Id == channel.Id).State.Should().Be(AlertChannelState.Active);
     }
 
     [Fact]

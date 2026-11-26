@@ -393,7 +393,7 @@ public class AlertRuleRepository : IAlertRuleRepository
         entity.AutoResolveEnabled = rule.AutoResolveEnabled;
         entity.AutoResolveParams = rule.AutoResolveParams;
         entity.ClientConfiguration = rule.ClientConfiguration;
-        entity.ReviewReason = rule.ReviewReason;
+        entity.ReviewReason = rule.ReviewReasonToStore;
         entity.OnUnknown = rule.OnUnknown;
         entity.GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes;
     }
@@ -419,7 +419,9 @@ public class AlertRuleRepository : IAlertRuleRepository
             Secret = channel.KeepsStoredSecret ? retained.Secrets.GetValueOrDefault(key) : channel.Secret,
             AddedBySubjectId = stamps is null ? channel.AddedBySubjectId : stamps.AddedBySubjectId,
             StopsAt = stamps is null ? channel.StopsAt : stamps.StopsAt,
-            RecipientSubjectId = channel.RecipientSubjectId ?? stamps?.RecipientSubjectId,
+            RecipientSubjectId = stamps is not null && ChannelDestinations.IsTypedIn(channel.ChannelType, stamps.RecipientSubjectId)
+                ? null
+                : channel.RecipientSubjectId ?? stamps?.RecipientSubjectId,
             SortOrder = sortOrder,
             CreatedAt = now,
         };

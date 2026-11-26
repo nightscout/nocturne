@@ -46,14 +46,8 @@ internal sealed class AlertDeliveryService(
 
     /// <inheritdoc/>
     /// <remarks>
-    /// A call for an instance some earlier call already dispatched sends only what that call left
-    /// owed: a channel with no delivery row, or one whose row is still <c>pending</c> (written, and
-    /// the process died before its provider answered). A row <c>delivered</c>, <c>failed</c> (the
-    /// provider answered and refused, which is not retried) or <c>expired</c> is done. With nothing
-    /// owed it sends nothing, not even the broadcast; otherwise the broadcast and the alarm go out
-    /// again with the sends. A chat-bot row stays <c>pending</c> until the bot reports it, so such a
-    /// call can send a chat message twice: the safe way to fail. An instance already resolved, by a
-    /// close that ran while its opening was still owed, is not dispatched.
+    /// <inheritdoc/>
+    /// The start of the latest send is <see cref="AlertInstanceEntity.RenotifiedAt"/>.
     /// </remarks>
     public Task DispatchAsync(
         Guid alertInstanceId,
@@ -84,7 +78,7 @@ internal sealed class AlertDeliveryService(
         var instance = await db.AlertInstances
             .AsNoTracking()
             .Where(i => i.Id == alertInstanceId)
-            .Select(i => new { i.SnoozedUntil, i.ResolvedAt })
+            .Select(i => new { i.SnoozedUntil, i.ResolvedAt, i.RenotifiedAt })
             .FirstOrDefaultAsync(ct);
         if (owedOnly && instance?.ResolvedAt is not null)
         {
@@ -102,9 +96,11 @@ internal sealed class AlertDeliveryService(
             return;
         }
 
+        var latestSend = instance?.RenotifiedAt;
         var earlier = owedOnly
             ? await db.AlertDeliveries
-                .Where(d => d.AlertInstanceId == alertInstanceId && !d.IsTest)
+                .Where(d => d.AlertInstanceId == alertInstanceId && !d.IsTest
+                            && (latestSend == null || d.CreatedAt >= latestSend))
                 .ToListAsync(ct)
             : [];
 
@@ -235,7 +231,7 @@ internal sealed class AlertDeliveryService(
 
             return ChannelDestinations.ResolvesFromLinkedIdentity(channel.ChannelType)
                    && ChannelDestinations.PlatformOf(channel.ChannelType) is { } platform
-                   && ChatIdentities.Contains((platform, channel.Destination));
+                   && ChatIdentities.Contains((platform, ChannelDestinations.LinkKey(channel.ChannelType, channel.Destination)));
         }
     }
 
@@ -423,6 +419,9 @@ internal sealed class AlertDeliveryService(
         await using var db = await contextFactory.CreateAsync(ct);
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
+        // The platform's failure of this same message can land first; see MarkSentMessageFailedAsync.
+        if (delivery.Status == "failed" && platformMessageId is not null
+                                        && delivery.PlatformMessageId == platformMessageId) return;
 
         delivery.Status = "delivered";
         delivery.DeliveredAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -440,6 +439,19 @@ internal sealed class AlertDeliveryService(
         delivery.Status = "failed";
         delivery.RetryCount++;
         delivery.LastError = error;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkSentMessageFailedAsync(Guid deliveryId, string platformMessageId, string error, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateAsync(ct);
+        var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
+        if (delivery is null) return;
+
+        delivery.Status = "failed";
+        delivery.RetryCount++;
+        delivery.LastError = error;
+        delivery.PlatformMessageId = platformMessageId;
         await db.SaveChangesAsync(ct);
     }
 

@@ -29,6 +29,7 @@
     setMemberLimitTo24Hours,
     setMemberAccessEnd,
     getTeamAccess,
+    getTeamStaffBlocks,
     stopTeamAccess,
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
@@ -41,6 +42,7 @@
   import PendingRequestsList from "#lib/components/members/PendingRequestsList.svelte";
   import MemberCard, { type MemberChanges } from "#lib/components/members/MemberCard.svelte";
   import TeamAccessList from "#lib/components/members/TeamAccessList.svelte";
+  import TeamStaffBlocksSection from "#lib/components/members/TeamStaffBlocksSection.svelte";
   import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
   import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
@@ -85,12 +87,14 @@
   const invitesQuery = $derived(canInvite ? listInvites() : null);
   const rolesQuery = $derived(canListRoles ? getRoles() : null);
   const teamAccessQuery = $derived(canListMembers ? getTeamAccess() : null);
+  const staffBlocksQuery = $derived(canListMembers ? getTeamStaffBlocks() : null);
   const pendingRequestsQuery = $derived(canReviewRequests ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
   retainQuery(() => membersQuery);
   retainQuery(() => invitesQuery);
   retainQuery(() => rolesQuery);
   retainQuery(() => teamAccessQuery);
+  retainQuery(() => staffBlocksQuery);
   retainQuery(() => pendingRequestsQuery);
   retainQuery(() => shareQuery);
 
@@ -428,10 +432,19 @@
       onRetryRoles={() => void rolesQuery?.refresh()}
       limitForced={page.data.limitTo24Hours === true}
       callerAccessEndsAt={callerDirectEndsAt}
+      currentSubjectId={page.data.user?.subjectId}
       linkedTeamId={page.url.searchParams.get("team")}
       stoppingId={stoppingTeamId}
       onStop={handleStopTeamAccess}
       onStale={() => void teamAccessQuery?.refresh()}
+      onSuccess={(text) => {
+        successMessage = { text, wash: false };
+        clearMessages();
+      }}
+    />
+    <TeamStaffBlocksSection
+      blocks={staffBlocksQuery?.current ?? []}
+      canDecide={canEditMemberRoles && callerIsOwner}
       onSuccess={(text) => {
         successMessage = { text, wash: false };
         clearMessages();

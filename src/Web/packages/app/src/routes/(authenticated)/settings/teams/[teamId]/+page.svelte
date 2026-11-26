@@ -36,6 +36,7 @@
   import { MANAGER_KIND, STAFF_KIND } from "#lib/teams/member-kind.svelte.js";
   import { linkExpiryOptions } from "#lib/teams/link-expiry.svelte.js";
   import { teamProblemMessages } from "#lib/teams/problem-messages.svelte.js";
+  import { plural } from "#lib/utils/plural.js";
   import TeamsUnavailable from "#lib/components/teams/TeamsUnavailable.svelte";
   import AccessLinksSection from "#lib/components/teams/AccessLinksSection.svelte";
   import TeamSitesSection from "#lib/components/teams/TeamSitesSection.svelte";
@@ -407,6 +408,14 @@
               hasEnded={team.ownStaff?.hasEnded}
             />
           </p>
+          {#if (team.ownStaff?.sitesBlocked ?? 0) > 0}
+            <p class="text-sm text-muted-foreground">
+              {plural(team.ownStaff?.sitesBlocked ?? 0, [
+                "One site you would see through this team stopped your access.",
+                "# sites you would see through this team stopped your access.",
+              ])}
+            </p>
+          {/if}
           {#if staffLeaveError}
             <p class="text-sm text-destructive" role="alert">{staffLeaveError}</p>
           {/if}

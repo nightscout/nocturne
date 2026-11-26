@@ -32,18 +32,31 @@ internal static class TeamReasons
 
     /// <summary>
     /// Whether a staff member's row at a site gives them the team's reason there: when an owner approved
-    /// them, or whatever their row says when the site trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>).
+    /// them, or whatever their row says when the site trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>),
+    /// and never while the site has stopped them (<see cref="Blocked"/>), whatever the rule.
     /// </summary>
     /// <remarks>
-    /// This is the one test of it: what refuses a staff member the team's reason at a site whatever the
-    /// rule, such as a stop an owner sets on that one person, is added here and nowhere else.
+    /// This is the one test of it: the sync, the startup check and the counts every page reads all go by it.
     /// </remarks>
     internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> GivesReason = s =>
-        s.Status == TeamSiteStaffStatus.Approved || s.TeamTenantAccess!.StaffRule == TeamStaffRule.TeamTrusted;
+        (s.Status == TeamSiteStaffStatus.Approved || s.TeamTenantAccess!.StaffRule == TeamStaffRule.TeamTrusted)
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
 
-    /// <summary>Whether a staff member's row at a site waits for an owner's approval: pending, at a site that does not trust the whole team.</summary>
+    /// <summary>
+    /// Whether a staff member's row at a site waits for an owner's approval: pending, at a site that does not
+    /// trust the whole team and has not stopped them, so no owner is told a stopped person waits.
+    /// </summary>
     internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Waits = s =>
-        s.Status == TeamSiteStaffStatus.Pending && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted;
+        s.Status == TeamSiteStaffStatus.Pending
+        && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+
+    /// <summary>
+    /// Whether the site of a staff member's row has stopped them reaching it through any team
+    /// (<see cref="TeamSiteBlockEntity"/>): whatever the row and the rule say, it gives no reason.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Blocked = s =>
+        s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
 
     /// <summary>Whether a staff member's row at a site keeps them out by an owner's decline: declined, at a site that does not trust the whole team.</summary>
     internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> DeclineApplies = s =>

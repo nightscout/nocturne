@@ -7,12 +7,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
@@ -75,7 +77,8 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
     {
         public required Guid Id { get; init; }
         public required AlertRuleSnapshot Rule { get; init; }
-        public required AlertRuleChannelSnapshot Channel { get; init; }
+        public required IReadOnlyList<AlertRuleChannelSnapshot> Channels { get; init; }
+        public AlertRuleChannelSnapshot Channel => Channels[0];
         public required Func<NocturneDbContext> Context { get; init; }
         public int Sends;
         public Func<Task>? OnSend;
@@ -96,6 +99,15 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public IAlertAcknowledgementService RealAcknowledgements() => new AlertAcknowledgementService(
             new SuppliedContextFactory(Context), Mock.Of<ISignalRBroadcastService>(), Mock.Of<ITenantMemberService>(),
             Mock.Of<IEngineAlarmRelay>(), NullLogger<AlertAcknowledgementService>.Instance, Time);
+
+        /// <summary>Gives <paramref name="instance"/> a snooze that lapsed at <paramref name="until"/>, or now.</summary>
+        public async Task LapseSnoozeAsync(Guid instance, DateTime? until = null)
+        {
+            await using var db = Context();
+            var row = await db.AlertInstances.SingleAsync(i => i.Id == instance);
+            row.SnoozedUntil = until ?? Time.GetUtcNow().UtcDateTime;
+            await db.SaveChangesAsync();
+        }
 
         public async Task UnsettleOpeningAsync(Guid excursion)
         {
@@ -121,7 +133,8 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 });
             hub.Setup(h => h.Clients.Group(It.IsAny<string>())).Returns(proxy.Object);
             var connections = new HomeAssistantConnections();
-            connections.Add(Id, HomeAssistant, "connection");
+            foreach (var channel in Channels)
+                connections.Add(Id, channel.Destination, $"connection-{channel.Destination}");
 
             var tenantAccessor = Mock.Of<ITenantAccessor>(a => a.TenantId == Id);
             var canonical = new Mock<ICanonicalGlucoseService>();
@@ -145,6 +158,9 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton<IAlertDeliveryService, AlertDeliveryService>()
                 .AddSingleton<IExcursionOpenedHandler, ExcursionOpenedHandler>()
                 .AddSingleton<IExcursionResolutionHandler, ExcursionResolutionHandler>()
+                .AddSingleton<IExcursionTracker>(new ExcursionTracker(
+                    Tracker(), new AlertRuleEvaluationGate(), Time, NullLogger<ExcursionTracker>.Instance,
+                    new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), Time))))
                 .AddSingleton<IAlertSnoozeService, AlertSnoozeService>()
                 .AddSingleton(Mock.Of<IUnevaluableRuleNotice>())
                 .AddSingleton(NoHeldRules.Notice())
@@ -236,6 +252,8 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Func<Task>? AfterOweClose;
         public Func<Task>? AfterEndNotice;
         public Func<Task>? AfterResolveInstances;
+        public Func<Task>? BeforeEndLapsedSnooze;
+        public Func<Task>? AfterEndLapsedSnooze;
 
         public override async Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct)
         {
@@ -273,6 +291,17 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 await after();
         }
 
+        public override async Task<LapsedSnoozeEnd> EndLapsedSnoozeAsync(
+            Guid instanceId, DateTime lapsedUntil, DateTime? renotifyAt, CancellationToken ct)
+        {
+            if (BeforeEndLapsedSnooze is { } before)
+                await before();
+            var end = await base.EndLapsedSnoozeAsync(instanceId, lapsedUntil, renotifyAt, ct);
+            if (AfterEndLapsedSnooze is { } after)
+                await after();
+            return end;
+        }
+
         public override async Task ResolveInstancesForExcursionAsync(
             Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
         {
@@ -282,7 +311,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         }
     }
 
-    private async Task<Tenant> SeedAsync(AlertRuleSeverity severity = AlertRuleSeverity.Critical)
+    private async Task<Tenant> SeedAsync(AlertRuleSeverity severity = AlertRuleSeverity.Critical, int channels = 1)
     {
         var tenant = Guid.NewGuid();
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
@@ -299,7 +328,10 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         }
 
         var rule = Guid.CreateVersion7();
-        var channel = Guid.CreateVersion7();
+        var channelSnapshots = Enumerable.Range(0, channels)
+            .Select(n => new AlertRuleChannelSnapshot(
+                Guid.CreateVersion7(), rule, ChannelType.HomeAssistant, n == 0 ? HomeAssistant : $"{HomeAssistant}-{n}", null, n))
+            .ToList();
         await using (var seed = Context(tenant))
         {
             seed.AlertRules.Add(new AlertRuleEntity
@@ -315,31 +347,31 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 CreatedAt = Opened,
                 UpdatedAt = Opened,
             });
-            seed.AlertRuleChannels.Add(new AlertRuleChannelEntity
+            seed.AlertRuleChannels.AddRange(channelSnapshots.Select(c => new AlertRuleChannelEntity
             {
-                Id = channel,
+                Id = c.Id,
                 TenantId = tenant,
                 AlertRuleId = rule,
                 ChannelType = ChannelType.HomeAssistant,
-                Destination = HomeAssistant,
-            });
+                Destination = c.Destination,
+                SortOrder = c.SortOrder,
+            }));
             await seed.SaveChangesAsync();
         }
 
         var snapshot = new AlertRuleSnapshot(
             rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"direction":"below","value":55}""",
             severity, "{}", 0, false, null, ScopeClass: RuleScopeClass.Low);
-        var channelSnapshot = new AlertRuleChannelSnapshot(channel, rule, ChannelType.HomeAssistant, HomeAssistant, null, 0);
         var seeded = new Tenant
         {
             Id = tenant,
             Rule = snapshot,
-            Channel = channelSnapshot,
+            Channels = channelSnapshots,
             Context = () => Context(tenant),
         };
         seeded.Rules
             .Setup(r => r.GetChannelsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<AlertRuleChannelSnapshot>> { [rule] = [channelSnapshot] });
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<AlertRuleChannelSnapshot>> { [rule] = channelSnapshots });
         return seeded;
     }
 
@@ -885,6 +917,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var process = tenant.Process();
         await tenant.HandleOpenedAsync(process, excursion);
         var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance);
         CloseAtTheDispatch(tenant, process);
 
         (await ResumeAsync(process, instance)).Should().BeTrue();
@@ -904,6 +937,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var excursion = await tenant.OpenAsync();
         await tenant.HandleOpenedAsync(tenant.Process(), excursion);
         var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance);
         var dying = tenant.Hooked();
         dying.AfterOweClose = () => throw new NpgsqlException("the process dies once the close is owed again");
         var process = tenant.Process(dying);
@@ -928,6 +962,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var excursion = await tenant.OpenAsync();
         await tenant.HandleOpenedAsync(tenant.Process(), excursion);
         var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance);
         var dying = tenant.Hooked();
         dying.BeforeOweClose = () => throw new NpgsqlException("the process dies once the re-notification is sent");
         var process = tenant.Process(dying);
@@ -955,6 +990,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var process = tenant.Process();
         await tenant.HandleOpenedAsync(process, excursion);
         var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance);
         DateTime? owedDuringTheSend = null;
         tenant.OnSend = async () => owedDuringTheSend = (await tenant.OwedAsync(excursion)).Opened;
 
@@ -975,6 +1011,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var excursion = await tenant.OpenAsync();
         await tenant.HandleOpenedAsync(tenant.Process(), excursion);
         var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance);
         var dying = tenant.Hooked();
         dying.BeforeOweClose = () => throw new NpgsqlException("the process dies once the re-notification is sent");
 
@@ -1021,6 +1058,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var process = tenant.Process();
         await tenant.HandleOpenedAsync(process, excursion);
         var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance);
         await tenant.UnsettleOpeningAsync(excursion);
         tenant.Time.Advance(TimeSpan.FromMinutes(1));
 
@@ -1029,6 +1067,159 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         (await tenant.OwedAsync(excursion)).Opened.Should().Be(Opened, "the opening's own run owes its work, and holds its lease");
         await tenant.SweepAsync(tenant.Process(), AfterLease + TimeSpan.FromMinutes(1));
         tenant.Sends.Should().Be(2);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    private static readonly DateTime Lapse = Opened.AddMinutes(15);
+
+    /// <summary>
+    /// The opening was sent to every channel and settled, its snooze lapsed at <see cref="Lapse"/>,
+    /// and the clock reads a minute later, so a re-notification starts after the opening's rows.
+    /// </summary>
+    private async Task<(Tenant Tenant, Guid Excursion, Guid Instance)> OpenedAndLapsedAsync(int channels = 1)
+    {
+        var tenant = await SeedAsync(channels: channels);
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.LapseSnoozeAsync(instance, Lapse);
+        tenant.Time.SetUtcNow(Lapse.AddMinutes(1));
+        tenant.Sends.Should().Be(channels);
+        return (tenant, excursion, instance);
+    }
+
+    private static async Task ShouldHaveSentEachChannelAsync(Tenant tenant, Guid excursion, int times)
+    {
+        var deliveries = await tenant.DeliveriesAsync(excursion);
+        deliveries.Should().HaveCount(times * tenant.Channels.Count);
+        deliveries.Should().OnlyContain(d => d.Status == "delivered");
+        deliveries.GroupBy(d => d.AlertRuleChannelId).Should().OnlyContain(g => g.Count() == times,
+            "each channel has one row per send");
+    }
+
+    [Fact]
+    public async Task A_resume_that_dies_before_it_ends_the_snooze_is_resumed_by_the_next_sweep_and_sends_once()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync(channels: 2);
+        var dying = tenant.Hooked();
+        dying.BeforeEndLapsedSnooze = () => throw new NpgsqlException("the process dies before the snooze ends");
+
+        await tenant.Process(dying).Invoking(p => ResumeAsync(p, instance)).Should().ThrowAsync<NpgsqlException>();
+        (await tenant.InstancesAsync(excursion)).Single().SnoozedUntil.Should().Be(Lapse, "the lapse is left for the next sweep");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+
+        var process = tenant.Process();
+        await tenant.SweepAsync(process, tenant.Time.GetUtcNow());
+        await tenant.SweepAsync(process, tenant.Time.GetUtcNow() + AlertSweepJob.OwedTransitionLease + TimeSpan.FromMinutes(1));
+
+        tenant.Sends.Should().Be(4, "each channel had the opening, and has the re-notification once");
+        await ShouldHaveSentEachChannelAsync(tenant, excursion, times: 2);
+        (await tenant.InstancesAsync(excursion)).Single().SnoozedUntil.Should().BeNull();
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_resume_that_dies_after_it_ends_the_snooze_and_before_its_rows_is_sent_once_by_the_owed_pass()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync(channels: 2);
+        var dying = tenant.Hooked();
+        dying.AfterEndLapsedSnooze = () => throw new NpgsqlException("the process dies once the snooze has ended");
+
+        await tenant.Process(dying).Invoking(p => ResumeAsync(p, instance)).Should().ThrowAsync<NpgsqlException>();
+        (await tenant.InstancesAsync(excursion)).Single().SnoozedUntil.Should().BeNull();
+        (await tenant.OwedAsync(excursion)).Opened.Should().Be(Lapse.AddMinutes(1), "the re-notification holds its opening owed");
+        (await tenant.DeliveriesAsync(excursion)).Should().HaveCount(2, "only the opening's rows were written");
+
+        var process = tenant.Process();
+        var afterLease = tenant.Time.GetUtcNow() + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1);
+        await tenant.SweepAsync(process, afterLease);
+        await tenant.SweepAsync(process, afterLease + AlertSweepJob.OwedTransitionLease + TimeSpan.FromMinutes(1));
+
+        tenant.Sends.Should().Be(4, "the opening's answered rows do not stand for the re-notification the run lost");
+        await ShouldHaveSentEachChannelAsync(tenant, excursion, times: 2);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_resume_that_dies_after_every_channel_answered_sends_nothing_more()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync(channels: 2);
+        var dying = tenant.Hooked();
+        dying.BeforeOweClose = () => throw new NpgsqlException("the process dies once the re-notification is sent");
+
+        await tenant.Process(dying).Invoking(p => ResumeAsync(p, instance)).Should().ThrowAsync<NpgsqlException>();
+        tenant.Sends.Should().Be(4);
+
+        await tenant.SweepAsync(tenant.Process(), tenant.Time.GetUtcNow() + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1));
+
+        tenant.Sends.Should().Be(4);
+        await ShouldHaveSentEachChannelAsync(tenant, excursion, times: 2);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_resume_that_dies_after_its_row_and_before_the_send_has_the_pending_row_sent()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync();
+        using var dies = new CancellationTokenSource();
+        tenant.OnSend = () =>
+        {
+            tenant.OnSend = null;
+            dies.Cancel();
+            throw new OperationCanceledException(dies.Token);
+        };
+
+        var dying = tenant.Process().GetRequiredService<IAlertSnoozeService>().ResumeAsync(instance, dies.Token);
+        await dying.Invoking(async t => await t).Should().ThrowAsync<OperationCanceledException>();
+        (await tenant.DeliveriesAsync(excursion)).Should().ContainSingle(d => d.Status == "pending");
+
+        await tenant.SweepAsync(tenant.Process(), tenant.Time.GetUtcNow() + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1));
+
+        tenant.Sends.Should().Be(3, "the dying send never reached the instance, and the sweep's does");
+        await ShouldHaveSentEachChannelAsync(tenant, excursion, times: 2);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_second_re_notification_that_dies_before_its_rows_is_sent_although_the_first_was_answered()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync(channels: 2);
+        (await ResumeAsync(tenant.Process(), instance)).Should().BeTrue();
+        var first = (await tenant.InstancesAsync(excursion)).Single().RenotifiedAt;
+        var secondLapse = Lapse.AddMinutes(20);
+        await tenant.LapseSnoozeAsync(instance, secondLapse);
+        tenant.Time.SetUtcNow(secondLapse.AddMinutes(1));
+        var dying = tenant.Hooked();
+        dying.AfterEndLapsedSnooze = () => throw new NpgsqlException("the process dies once the second snooze has ended");
+
+        await tenant.Process(dying).Invoking(p => ResumeAsync(p, instance)).Should().ThrowAsync<NpgsqlException>();
+        (await tenant.InstancesAsync(excursion)).Single().RenotifiedAt
+            .Should().Be(secondLapse.AddMinutes(1)).And.NotBe(first, "each re-notification starts its own send");
+        tenant.Sends.Should().Be(4);
+
+        await tenant.SweepAsync(tenant.Process(), tenant.Time.GetUtcNow() + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1));
+
+        tenant.Sends.Should().Be(6, "the first re-notification's answered rows do not stand for the second");
+        await ShouldHaveSentEachChannelAsync(tenant, excursion, times: 3);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task Two_resumes_of_one_lapse_re_notify_once()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync();
+        var first = tenant.Hooked();
+        first.BeforeEndLapsedSnooze = async () =>
+        {
+            first.BeforeEndLapsedSnooze = null;
+            (await ResumeAsync(tenant.Process(), instance)).Should().BeTrue();
+        };
+
+        (await ResumeAsync(tenant.Process(first), instance))
+            .Should().BeFalse("the other resume ended the snooze this one read");
+
+        tenant.Sends.Should().Be(2);
+        await ShouldHaveSentEachChannelAsync(tenant, excursion, times: 2);
         (await tenant.OwedAsync(excursion)).Should().Be((null, null));
     }
 
@@ -1284,23 +1475,28 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         (await tenant.OwedAsync(excursion)).Should().Be((null, null));
     }
 
+    /// <summary>Stores a value no member has in the rule's <paramref name="column"/>, as another image could.</summary>
+    private async Task MakeUnreadableAsync(Tenant tenant, string column, string value)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT set_config('app.current_tenant_id', @tenant::text, false);
+            UPDATE alert_rules SET {column} = @value WHERE id = @rule;
+            """;
+        cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant.Id));
+        cmd.Parameters.Add(new NpgsqlParameter("@rule", tenant.Rule.Id));
+        cmd.Parameters.Add(new NpgsqlParameter("@value", value));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     [Fact]
     public async Task An_opening_whose_enabled_rule_cannot_be_read_stays_owed()
     {
         var tenant = await SeedAsync();
         var excursion = await tenant.OpenAsync();
-        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
-        {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant::text, false);
-                UPDATE alert_rules SET condition_type = 'no_such_condition' WHERE id = @rule;
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant.Id));
-            cmd.Parameters.Add(new NpgsqlParameter("@rule", tenant.Rule.Id));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await MakeUnreadableAsync(tenant, "condition_type", "no_such_condition");
 
         await tenant.SweepAsync(tenant.Process(), AfterLease);
 
@@ -1311,5 +1507,136 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         await tenant.SweepAsync(tenant.Process(), AfterLease.AddMinutes(10));
 
         (await tenant.OwedAsync(excursion)).Opened.Should().BeNull("a closed excursion ends what its opening owed");
+    }
+
+    /// <summary>
+    /// When the rule's notice that it cannot be read is recorded: an hour after its excursion opened,
+    /// so the hold is told apart from one counted from the excursion or its tracker state.
+    /// </summary>
+    private static readonly DateTime NoticeAt = Opened.AddHours(1);
+
+    /// <summary>Records the notice for the rule as it is now stored, which no member can read.</summary>
+    private static async Task<string> RecordUnreadableNoticeAsync(Tenant tenant, DateTime at)
+    {
+        var repository = tenant.Repository();
+        var rule = (await repository.ReadEnabledRulesAsync(CancellationToken.None)).Unreadable.Single();
+        var version = UnevaluableRuleNotice.VersionOf(rule);
+        (await repository.RecordUnreadableRuleNoticeAsync(rule, version, at, CancellationToken.None)).Should().NotBeNull();
+        return version;
+    }
+
+    /// <summary>
+    /// The rule's severity becomes one no member has while its excursion is open and dispatched, and
+    /// its notice that it cannot be read is recorded at <see cref="NoticeAt"/>.
+    /// </summary>
+    private async Task<(Guid Excursion, ConcurrentQueue<string> Events, string Version)> OpenThenMakeUnreadableAsync(Tenant tenant)
+    {
+        var events = await RecordAlarmsAndNotificationsAsync(tenant);
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        await MakeUnreadableAsync(tenant, "severity", "normal");
+        return (excursion, events, await RecordUnreadableNoticeAsync(tenant, NoticeAt));
+    }
+
+    private static async Task SweepAtAsync(Tenant tenant, DateTimeOffset at, AlertRepository? repository = null)
+    {
+        tenant.Time.SetUtcNow(at);
+        await tenant.SweepAsync(tenant.Process(repository), at);
+    }
+
+    private static async Task<DateTime?> EndedAtAsync(Tenant tenant, Guid excursion)
+    {
+        await using var db = tenant.Context();
+        return await db.AlertExcursions.AsNoTracking().Where(e => e.Id == excursion).Select(e => e.EndedAt).SingleAsync();
+    }
+
+    [NativeFact]
+    public async Task An_open_excursion_of_a_rule_that_cannot_be_read_closes_once_its_notice_has_stood_for_the_hold_bound()
+    {
+        var tenant = await SeedAsync();
+        var (excursion, events, version) = await OpenThenMakeUnreadableAsync(tenant);
+        var bound = RustAlertEngine.HoldBound();
+
+        await SweepAtAsync(tenant, Opened + bound);
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("the hold counts from the notice, not from the excursion");
+
+        await SweepAtAsync(tenant, NoticeAt + bound - TimeSpan.FromMinutes(1));
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("a rule fixed within the bound keeps its alarm");
+        (await tenant.AlarmingAsync()).Should().NotBeNull();
+        events.Last(e => e is "notified" or "archived").Should().Be("notified");
+
+        await SweepAtAsync(tenant, NoticeAt + bound);
+
+        (await EndedAtAsync(tenant, excursion)).Should().Be(NoticeAt + bound);
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.HoldBound.ToWireString());
+        (await tenant.AlarmingAsync()).Should().BeNull("a rule left unreadable stops alarming at the bound");
+        events.Last(e => e is "notified" or "archived").Should().Be("archived");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+        (await tenant.Repository().GetStandingUnevaluableNoticesAsync(tenant.Rule.Id, CancellationToken.None))
+            .Should().ContainSingle("the rule still cannot be read").Which.ConditionVersion.Should().Be(version);
+        var archived = events.Count(e => e == "archived");
+
+        await SweepAtAsync(tenant, NoticeAt + bound + TimeSpan.FromMinutes(5));
+
+        events.Count(e => e == "archived").Should().Be(archived, "the excursion closes once");
+        tenant.Broadcasts.Verify(b => b.BroadcastAlertResolvedAsync(
+            It.Is<AlertResolvedEvent>(r => r.ExcursionId == excursion && r.Reason == ExcursionCloseReason.HoldBound)), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_hold_bound_close_whose_run_dies_after_the_commit_is_finished_by_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var (excursion, events, _) = await OpenThenMakeUnreadableAsync(tenant);
+        var bound = RustAlertEngine.HoldBound();
+        var dying = tenant.Hooked();
+        dying.AfterResolveInstances = () => throw new NpgsqlException("the process dies once the instance is resolved");
+
+        await FluentActions.Invoking(() => SweepAtAsync(tenant, NoticeAt + bound, dying))
+            .Should().ThrowAsync<NpgsqlException>();
+
+        (await EndedAtAsync(tenant, excursion)).Should().NotBeNull();
+        (await tenant.OwedAsync(excursion)).Closed.Should().NotBeNull("the close is owed until its work is done");
+        events.Last(e => e is "notified" or "archived").Should().Be("notified");
+
+        await SweepAtAsync(tenant, NoticeAt + bound + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1));
+
+        events.Last(e => e is "notified" or "archived").Should().Be("archived");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.HoldBound.ToWireString());
+    }
+
+    [NativeFact]
+    public async Task A_notice_past_the_bound_for_a_value_the_rule_no_longer_holds_closes_nothing()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        await MakeUnreadableAsync(tenant, "severity", "normal");
+        await RecordUnreadableNoticeAsync(tenant, Opened);
+        await MakeUnreadableAsync(tenant, "severity", "moderate");
+        await RecordUnreadableNoticeAsync(tenant, NoticeAt);
+
+        await SweepAtAsync(tenant, Opened + RustAlertEngine.HoldBound());
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("the value the rule holds has been unreadable for an hour less than the bound");
+    }
+
+    [NativeFact]
+    public async Task A_readable_rules_notice_past_the_bound_that_its_body_cannot_be_evaluated_closes_nothing()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        (await tenant.Repository().RecordUnevaluableNoticeAsync(tenant.Rule, "body", Opened, CancellationToken.None))
+            .Should().NotBeNull();
+
+        await SweepAtAsync(tenant, Opened + RustAlertEngine.HoldBound() + TimeSpan.FromMinutes(1));
+
+        (await EndedAtAsync(tenant, excursion)).Should().BeNull("only a rule that cannot be read is closed at the bound");
     }
 }

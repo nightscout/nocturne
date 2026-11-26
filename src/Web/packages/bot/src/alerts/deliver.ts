@@ -3,6 +3,11 @@ import type { BotApiClient, AlertDispatchEvent } from "../types.js";
 import { AlertCard } from "../cards/alert.js";
 import { withAlertAccent } from "../lib/severity.js";
 import { createLogger } from "../lib/logger.js";
+import {
+  WINDOW_CLOSED_REASON,
+  WhatsAppWindow,
+  isWindowClosedError,
+} from "../whatsapp/window.js";
 
 const logger = createLogger();
 
@@ -60,14 +65,43 @@ export class AlertDeliveryHandler {
 
   async deliver(event: AlertDispatchEvent): Promise<void> {
     const { deliveryId, channelType, destination, payload } = event;
+    const window = channelType === "whatsapp_dm" ? new WhatsAppWindow(this.bot.getState()) : null;
+    let threadId: string | undefined;
 
     try {
       const target = await this.target(channelType, destination);
+      threadId = target.id;
 
+      if (window && (await this.knownClosed(window, threadId))) {
+        await this.fail(deliveryId, WINDOW_CLOSED_REASON);
+        return;
+      }
+
+      const sentAt = Date.now();
       const card = AlertCard({ payload });
       const sent = await withAlertAccent(payload.severity, () =>
         target.post(card),
       );
+
+      if (window && sent?.id) {
+        const sentAlert = { deliveryId, tenantSlug: event.tenantSlug, threadId, sentAt };
+        const early = await window
+          .rememberSent(sent.id, sentAlert)
+          .then(() => window.takeEarlyFailure(sent.id))
+          .catch((e: unknown) => {
+            logger.error("Failed to remember a sent WhatsApp alert:", e);
+            return null;
+          });
+        if (early) {
+          if (early.windowClosed) {
+            await window
+              .recordClosed(threadId, sentAt)
+              .catch((e: unknown) => logger.error("Failed to record a closed WhatsApp window:", e));
+          }
+          await this.fail(deliveryId, early.reason, sent.id);
+          return;
+        }
+      }
 
       await this.api.alerts.markDelivered(deliveryId, {
         platformMessageId: sent?.id,
@@ -76,9 +110,36 @@ export class AlertDeliveryHandler {
       logger.info(`Alert delivered via ${channelType} to ${destination}`);
     } catch (err) {
       logger.error(`Alert delivery failed for ${deliveryId}:`, err);
-      await this.api.alerts.markFailed(deliveryId, {
-        error: err instanceof Error ? err.message : String(err),
-      }).catch((e) => logger.error("Failed to report delivery failure:", e));
+      if (window && threadId && isWindowClosedError(err)) {
+        await window
+          .recordClosed(threadId, Date.now())
+          .catch((e: unknown) => logger.error("Failed to record a closed WhatsApp window:", e));
+        await this.fail(deliveryId, WINDOW_CLOSED_REASON);
+        return;
+      }
+      await this.fail(deliveryId, err instanceof Error ? err.message : String(err));
     }
+  }
+
+  /**
+   * Whether the window is known to be closed. A dispatch may be the first to read the bot's state,
+   * so it connects the state alone: initializing the bot would start the adapters, and Telegram's
+   * polling loop would keep this dispatch's request context for the life of the process. A state
+   * that cannot be read leaves the window unknown, and the alert is sent.
+   */
+  private async knownClosed(window: WhatsAppWindow, threadId: string): Promise<boolean> {
+    try {
+      await this.bot.getState().connect();
+      return await window.isClosed(threadId, Date.now());
+    } catch (err) {
+      logger.error("Could not read the WhatsApp window; sending the alert:", err);
+      return false;
+    }
+  }
+
+  private async fail(deliveryId: string, error: string, platformMessageId?: string): Promise<void> {
+    await this.api.alerts
+      .markFailed(deliveryId, { error, platformMessageId })
+      .catch((e: unknown) => logger.error("Failed to report delivery failure:", e));
   }
 }
