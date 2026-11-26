@@ -13,7 +13,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -113,7 +112,7 @@ public class AlertChannelNoticeTests
             new TestNocturneDbContextFactory(TestDbContextFactory.CreateInMemoryContext($"channel_notice_{Guid.NewGuid()}")),
             owners.Object,
             notifications.Object,
-            MockTenantAccessor.Create(Tenant).Object,
+            SettableTenantAccessor.Resolved(Tenant),
             _log,
             NullLogger<AlertChannelNotice>.Instance);
     }

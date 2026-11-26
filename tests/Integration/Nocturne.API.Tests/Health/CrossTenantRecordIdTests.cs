@@ -34,7 +34,7 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     public async Task InitializeAsync()
     {
         await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(fixture.Database.SuperuserConnectionString).Options);
+            .UseNpgsql(fixture.SuperuserConnectionString).Options);
         foreach (var tenant in new[] { tenantA, tenantB })
             db.Tenants.Add(new TenantEntity
             {
@@ -218,7 +218,7 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     private StepCountService StepCounts(Guid tenant) => new(
         new StepCountRepository(Tenant(tenant).AsFactory(), TimeProvider.System), Processing<StepCount>(), Mock.Of<ISignalRBroadcastService>());
 
-    private NocturneDbContext Tenant(Guid tenant) => TestContexts.Context(fixture.Database.AppConnectionString, tenant);
+    private NocturneDbContext Tenant(Guid tenant) => TestContexts.Context(fixture.AppConnectionString, tenant);
 
     private static IDocumentProcessingService Processing<T>() where T : class, IProcessableDocument
     {
@@ -228,12 +228,4 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     }
 }
 
-public sealed class CrossTenantRecordIdFixture : IAsyncLifetime
-{
-    public TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync() =>
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("cross_tenant_ids");
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class CrossTenantRecordIdFixture() : MigratedDatabase("cross_tenant_ids");

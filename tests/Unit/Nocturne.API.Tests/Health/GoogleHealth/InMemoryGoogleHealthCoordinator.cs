@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
@@ -27,20 +28,12 @@ internal static class InMemoryGoogleHealthCoordinator
     {
         var stored = new ConcurrentDictionary<Guid, GoogleHealthWork>();
         var services = new ServiceCollection();
-        services.AddScoped<ITenantAccessor, Accessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped<IGoogleHealthWorkStore>(provider =>
             new Work(provider.GetRequiredService<ITenantAccessor>(), stored, progressWritten));
         services.AddSingleton(tenants ?? Mock.Of<ITenantService>(service =>
             service.GetAllAsync(It.IsAny<CancellationToken>()) == Task.FromResult(new List<TenantDto>())));
         return new(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), clock ?? TimeProvider.System);
-    }
-
-    private sealed class Accessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
     }
 
     private sealed class Work(

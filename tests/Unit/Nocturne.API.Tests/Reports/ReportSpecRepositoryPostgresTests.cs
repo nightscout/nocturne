@@ -18,20 +18,8 @@ namespace Nocturne.API.Tests.Reports;
 public class ReportSpecRepositoryPostgresTests(ReportSpecRepositoryPostgresTests.Database database)
     : IClassFixture<ReportSpecRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_spec_concurrency")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_spec_concurrency");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-
         // Retrying, as the API's contexts are: that strategy refuses a transaction begun outside it.
         public DbContextOptions<NocturneDbContext> Options =>
             TestContexts.Options(AppConnectionString, npgsql: TestContexts.Retrying);

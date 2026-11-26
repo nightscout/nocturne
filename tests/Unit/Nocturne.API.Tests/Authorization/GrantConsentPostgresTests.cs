@@ -37,20 +37,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DeadlockDetection = TimeSpan.FromSeconds(3);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("grant_consent");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("grant_consent");
 
     /// <summary>Runs <paramref name="before"/> once, just before the first statement <paramref name="when"/> accepts.</summary>
     private sealed class BeforeStatement(Func<DbCommand, bool> when, Func<Task> before) : DbCommandInterceptor

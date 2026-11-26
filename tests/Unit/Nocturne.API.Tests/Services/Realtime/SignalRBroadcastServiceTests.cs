@@ -12,7 +12,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Unit.Services.Realtime;
@@ -98,7 +98,7 @@ public class SignalRBroadcastServiceTests
             _mockAlertHubContext.Object,
             _mockHomeAssistantHubContext.Object,
             _mockOverviewHubContext.Object,
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             Options.Create(new JsonHubProtocolOptions()),
             _mockLogger.Object
         );
@@ -640,7 +640,7 @@ public class SignalRBroadcastServiceTests
         );
     }
 
-    private static readonly string TenantPrefix = MockTenantAccessor.DefaultTenantId.ToString();
+    private static readonly string TenantPrefix = SettableTenantAccessor.DefaultTenantId.ToString();
 
     private sealed class SentEvents
     {
@@ -679,7 +679,7 @@ public class SignalRBroadcastServiceTests
             RecordingHub<AlertHub>(sent.Alert).Object,
             haHub.Object,
             _mockOverviewHubContext.Object,
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             Options.Create(new JsonHubProtocolOptions()),
             _mockLogger.Object
         );
@@ -693,7 +693,7 @@ public class SignalRBroadcastServiceTests
 
         await service.BroadcastAlertResolvedAsync(new AlertResolvedEvent
         {
-            TenantId = MockTenantAccessor.DefaultTenantId,
+            TenantId = SettableTenantAccessor.DefaultTenantId,
             ExcursionId = Guid.NewGuid(),
             AlertRuleId = Guid.NewGuid(),
             RuleName = "Low",
@@ -712,7 +712,7 @@ public class SignalRBroadcastServiceTests
 
         await service.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
         {
-            TenantId = MockTenantAccessor.DefaultTenantId,
+            TenantId = SettableTenantAccessor.DefaultTenantId,
             ExcursionIds = [Guid.NewGuid()],
             AcknowledgedBy = "someone",
             AcknowledgedAt = DateTime.UtcNow,
@@ -743,7 +743,7 @@ public class SignalRBroadcastServiceTests
     {
         var (service, haHub, sent) = RecordingService();
         var connections = new HomeAssistantConnections();
-        connections.Add(MockTenantAccessor.DefaultTenantId, "ha-instance", "connection-1");
+        connections.Add(SettableTenantAccessor.DefaultTenantId, "ha-instance", "connection-1");
         var provider = new HomeAssistantProvider(
             haHub.Object, connections, NullLogger<HomeAssistantProvider>.Instance);
         var payload = new AlertPayload
@@ -751,7 +751,7 @@ public class SignalRBroadcastServiceTests
             AlertType = AlertConditionType.Threshold,
             RuleName = "Low",
             Severity = AlertRuleSeverity.Warning,
-            TenantId = MockTenantAccessor.DefaultTenantId,
+            TenantId = SettableTenantAccessor.DefaultTenantId,
             GlucoseValue = 62,
             Trend = null,
             TrendRate = null,
@@ -763,7 +763,7 @@ public class SignalRBroadcastServiceTests
         };
 
         await service.BroadcastAlertEventAsync("alert_dispatch", payload);
-        await provider.SendAsync(MockTenantAccessor.DefaultTenantId, "ha-instance", payload, CancellationToken.None);
+        await provider.SendAsync(SettableTenantAccessor.DefaultTenantId, "ha-instance", payload, CancellationToken.None);
 
         sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha:ha-instance", "alert_dispatch"));
         sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", "alert_dispatch"));
@@ -840,7 +840,7 @@ public class SignalRBroadcastServiceTests
             Hub<AlertHub>(),
             Hub<HomeAssistantHub>(),
             Hub<OverviewHub>(),
-            failure == BroadcastFailure.NoTenant ? new Mock<ITenantAccessor>().Object : MockTenantAccessor.Create().Object,
+            failure == BroadcastFailure.NoTenant ? new Mock<ITenantAccessor>().Object : SettableTenantAccessor.Resolved(),
             Options.Create(new JsonHubProtocolOptions()),
             NullLogger<SignalRBroadcastService>.Instance);
         return (service, sends);

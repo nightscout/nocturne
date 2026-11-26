@@ -92,7 +92,7 @@ public sealed class ExternalNotificationServiceTests : IDisposable
 
         var services = new ServiceCollection();
         _database.AddToServices(services);
-        services.AddScoped<ITenantAccessor, StubTenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(_ => _notifications.Object);
         services.AddScoped(_ => repository.Object);
         _provider = services.BuildServiceProvider();
@@ -401,14 +401,5 @@ public sealed class ExternalNotificationServiceTests : IDisposable
         {
             Key = r.Key, Audience = r.Audience, Title = r.Title, Body = r.Body, Link = r.Link, ExpiresAt = r.ExpiresAt,
         };
-    }
-
-    private sealed class StubTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

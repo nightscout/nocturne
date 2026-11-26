@@ -50,27 +50,20 @@ public class ReportSignalEdgeAgreementPostgresTests(ReportSignalEdgeAgreementPos
 
     public static TheoryData<string> Signals => [.. SpanSignals];
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_signal_edges")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
         /// <summary>One span of each signal, each ending exactly at the start of the window.</summary>
         public Guid EndingAtTheStart { get; private set; }
 
         /// <summary>One span of each signal, each ending a second after the start of the window.</summary>
         public Guid EndingAfterTheStart { get; private set; }
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_signal_edges");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
+            await base.InitializeAsync();
             EndingAtTheStart = await SeedAsync(From.UtcDateTime);
             EndingAfterTheStart = await SeedAsync(From.UtcDateTime.AddSeconds(1));
         }
-
-        public Task DisposeAsync() => Task.CompletedTask;
 
         public DbContextOptions<NocturneDbContext> Options => TestContexts.Options(AppConnectionString);
 

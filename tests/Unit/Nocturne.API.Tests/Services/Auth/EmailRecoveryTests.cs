@@ -21,7 +21,6 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -396,7 +395,7 @@ public class EmailRecoveryTests : IDisposable
             new RecoverySession(contexts, _loginCodes, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object,
             new Mock<IAuthAuditService>().Object,
-            MockTenantAccessor.Create(tenant).Object,
+            SettableTenantAccessor.Resolved(tenant),
             new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -658,7 +657,7 @@ public class EmailRecoveryTests : IDisposable
             new Mock<IRecoveryCodeService>().Object,
             new RecoverySession(failing.Object, _loginCodes, Mock.Of<ITenantMemberService>(), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
-            MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
+            SettableTenantAccessor.Resolved(_tenantId), new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
             Options.Create(new OidcOptions()), NullLogger<PasskeyController>.Instance, TimeProvider.System)
@@ -687,7 +686,7 @@ public class EmailRecoveryTests : IDisposable
             recoveryCodes.Object,
             new RecoverySession(contexts, _loginCodes, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
-            MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
+            SettableTenantAccessor.Resolved(_tenantId), new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
             Options.Create(new OidcOptions()), NullLogger<PasskeyController>.Instance, TimeProvider.System)

@@ -29,20 +29,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     private const string ClientId = "app";
     private static readonly IReadOnlySet<string> FullAccess = new HashSet<string> { Scope.FullAccess };
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("oauth_device_code_decision");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("oauth_device_code_decision");
 
     /// <summary>Runs <paramref name="before"/> once, just before the first statement that writes a device code, however it is issued.</summary>
     private sealed class BeforeDecisionWrite(Func<Task> before) : DbCommandInterceptor

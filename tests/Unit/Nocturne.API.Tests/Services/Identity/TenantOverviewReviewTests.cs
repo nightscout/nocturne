@@ -308,7 +308,7 @@ public class TenantOverviewReviewTests
             var statistics = new StatisticsService(TimeProvider.System);
 
             var services = new ServiceCollection();
-            services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
+            services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
             services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
             services.AddScoped(sp => TestTenantCache.Create(
                 local, distributed, sp.GetRequiredService<ITenantAccessor>().TenantId));

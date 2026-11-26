@@ -14,7 +14,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.Entries;
 
@@ -48,7 +48,7 @@ public class PebbleControllerTests
         _appearance
             .Setup(a => a.GetTenantAppearanceAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences { GlucoseUnits = tenantUnits });
-        var tenantAccessor = MockTenantAccessor.Create(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
 
         _uploaders
             .Setup(u => u.GetAsync(null, null, null, null, It.IsAny<int>(), 0, true, It.IsAny<CancellationToken>()))
@@ -58,7 +58,7 @@ public class PebbleControllerTests
             _entryService.Object,
             _iobCob.Object,
             _uploaders.Object,
-            new TenantGlucoseUnits(tenantAccessor.Object, _appearance.Object, _tenants.Object),
+            new TenantGlucoseUnits(tenantAccessor, _appearance.Object, _tenants.Object),
             Mock.Of<ILogger<PebbleController>>()
         )
         {

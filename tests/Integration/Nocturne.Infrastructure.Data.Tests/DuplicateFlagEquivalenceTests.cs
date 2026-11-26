@@ -36,21 +36,21 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     // A write that must not wait on a held lock has this long to finish; it is part of the assertion, not a hang guard.
     private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("duplicate_flag_equivalence")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
         public ServiceProvider Provider { get; private set; } = null!;
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("duplicate_flag_equivalence");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
+            await base.InitializeAsync();
             Provider = TenantReaderData.BuildProvider(AppConnectionString);
         }
 
-        public async Task DisposeAsync() => await Provider.DisposeAsync();
+        public override async Task DisposeAsync()
+        {
+            await Provider.DisposeAsync();
+            await base.DisposeAsync();
+        }
     }
 
     private static readonly (string Table, RecordType Type)[] Tables =

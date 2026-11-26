@@ -10,7 +10,7 @@ using Nocturne.Connectors.Gluroo.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -28,7 +28,7 @@ public class NightscoutBackgroundSyncAuthTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(startupDefaults, "Nightscout"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher: null);
     }
 
@@ -44,7 +44,7 @@ public class NightscoutBackgroundSyncAuthTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<GlurooConnectorConfiguration>(startupDefaults, "Gluroo"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher: null);
     }
 

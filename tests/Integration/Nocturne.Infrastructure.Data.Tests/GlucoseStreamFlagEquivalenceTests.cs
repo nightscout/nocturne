@@ -37,21 +37,21 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
     // A writer that must stay blocked is watched this long; it is part of the assertion, not a hang guard.
     private static readonly TimeSpan StaysBlockedFor = TimeSpan.FromSeconds(1);
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("glucose_stream_flags")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
         public ServiceProvider Provider { get; private set; } = null!;
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("glucose_stream_flags");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
+            await base.InitializeAsync();
             Provider = TenantReaderData.BuildProvider(AppConnectionString);
         }
 
-        public async Task DisposeAsync() => await Provider.DisposeAsync();
+        public override async Task DisposeAsync()
+        {
+            await Provider.DisposeAsync();
+            await base.DisposeAsync();
+        }
     }
 
     private static readonly IAuditContext Audit = SystemAuditContext.ForService("test");

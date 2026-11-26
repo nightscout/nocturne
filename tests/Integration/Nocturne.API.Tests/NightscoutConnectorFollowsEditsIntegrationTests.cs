@@ -16,7 +16,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using Xunit.Abstractions;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Integration;
 
@@ -70,7 +70,7 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
             _lookups,
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher.Object);
         return await connector.SyncDataAsync(request, _config, CancellationToken.None);
     }

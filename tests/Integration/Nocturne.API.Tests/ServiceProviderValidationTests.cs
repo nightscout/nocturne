@@ -16,34 +16,25 @@ namespace Nocturne.API.Tests.Integration;
 /// environment rather than at the first request that reaches it.
 /// </summary>
 [Trait("Category", "Integration")]
-public class ServiceProviderValidationTests(ServiceProviderValidationTests.MigratedDatabase fixture)
-    : IClassFixture<ServiceProviderValidationTests.MigratedDatabase>
+public class ServiceProviderValidationTests(ServiceProviderValidationTests.Database fixture)
+    : IClassFixture<ServiceProviderValidationTests.Database>
 {
     /// <summary>The database the API starts against; its startup migrations and reconcilers need one.</summary>
-    public sealed class MigratedDatabase : IAsyncLifetime
-    {
-        public TestDatabase Database { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Database = await SharedPostgres.CreateMigratedDatabaseAsync("di_validation");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("di_validation");
 
     [Theory]
     [InlineData("Production")]
     [InlineData("Development")]
     public async Task TheApiServiceProvider_ValidatesOnBuild(string environment)
     {
-        var database = fixture.Database;
         Exception? validation = null;
         var validated = false;
 
         await using var factory = new ApiFactory().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", database.AppConnectionString);
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", database.MigratorConnectionString);
+            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", fixture.AppConnectionString);
+            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", fixture.MigratorConnectionString);
             builder.UseSetting("INSTANCE_KEY", "di-validation-instance-key-of-at-least-32-chars");
             builder.UseSetting("BASE_DOMAIN", "localhost");
             builder.UseSetting("DemoService:Enabled", "false");

@@ -10,7 +10,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Devices;
@@ -133,7 +133,7 @@ public class PatientDeviceLocalDateTests
     }
 
     private async Task<Guid?> ResolveAsync(DeviceDateClockResolver deviceDates, DateTime reading) =>
-        (await new DeviceService(Mock.Of<IDeviceRepository>(), _patientDevices.Object, MockTenantAccessor.Create().Object, deviceDates)
+        (await new DeviceService(Mock.Of<IDeviceRepository>(), _patientDevices.Object, SettableTenantAccessor.Resolved(), deviceDates)
             .GetPatientDeviceLinksAsync([_deviceId]))
             .Resolve(_deviceId, new DateTimeOffset(reading).ToUnixTimeMilliseconds());
 

@@ -18,7 +18,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -846,7 +845,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
         patientDevices
             .Setup(r => r.GetByDeviceIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        return new DeviceService(deviceRepo.Object, patientDevices.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc());
+        return new DeviceService(deviceRepo.Object, patientDevices.Object, SettableTenantAccessor.Resolved(), DeviceDateClockDoubles.Utc());
     }
 
     /// <summary>

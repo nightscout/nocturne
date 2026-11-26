@@ -23,20 +23,7 @@ namespace Nocturne.API.Tests.Services.BackgroundServices;
 public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Database database)
     : IClassFixture<SoftDeleteCleanupPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("soft_delete_cleanup");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("soft_delete_cleanup");
 
     /// <summary>Runs the job for <paramref name="tenant"/> in a scope resolved to it.</summary>
     private async Task RunForAsync(Guid tenant)

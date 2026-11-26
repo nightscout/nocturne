@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -237,7 +238,7 @@ public class GlookoCredentialVerifierTests
             new HttpClient(handler),
             new Mock<IConnectorTokenCache>(MockBehavior.Strict).Object,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            new UnresolvedTenantAccessor(),
+            new SettableTenantAccessor(),
             NullLogger<GlookoAuthTokenProvider>.Instance,
             retryDelay.Object);
 
@@ -258,14 +259,6 @@ public class GlookoCredentialVerifierTests
             new ConnectorRegistration<GlookoConnectorConfiguration>(
                 defaults ?? new GlookoConnectorConfiguration(), "Glooko"),
             configService.Object);
-    }
-
-    private sealed class UnresolvedTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
-    {
-        public bool IsResolved => false;
-        public Guid TenantId => Guid.Empty;
-        public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
-        public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
     }
 
     /// <summary>

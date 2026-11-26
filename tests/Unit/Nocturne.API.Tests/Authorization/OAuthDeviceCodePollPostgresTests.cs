@@ -32,20 +32,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
     private const string DeviceCodeHash = "device-code-hash";
     private const string ClientId = "app";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("oauth_device_code_poll");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("oauth_device_code_poll");
 
     /// <summary>Runs <paramref name="beforeStamp"/> once a poll has read its code and before it stamps the poll.</summary>
     private sealed class StageableRepository(INocturneDbContextFactory contexts, Func<Guid, Task> beforeStamp)

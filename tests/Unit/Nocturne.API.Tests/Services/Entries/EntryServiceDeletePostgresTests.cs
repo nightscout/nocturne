@@ -38,20 +38,7 @@ namespace Nocturne.API.Tests.Services.Entries;
 public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Database database)
     : IClassFixture<EntryServiceDeletePostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("entry_delete_served_id");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("entry_delete_served_id");
 
     private sealed record Setup(
         EntryService Service,

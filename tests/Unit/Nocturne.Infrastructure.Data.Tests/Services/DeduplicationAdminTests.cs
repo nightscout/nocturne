@@ -25,7 +25,7 @@ public class DeduplicationAdminTests : IDisposable
 
     private static readonly DateTime At = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
 
-    private static readonly DeduplicationModules.FixedTenantAccessor Tenant =
+    private static readonly SettableTenantAccessor Tenant =
         new(new TenantContext(TestTenantId, "test", "Test", true, false));
 
     private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
@@ -47,7 +47,7 @@ public class DeduplicationAdminTests : IDisposable
     [Fact]
     public async Task StartRunAsync_ThrowsWhenNoTenantIsResolved()
     {
-        var act = () => Admin(new DeduplicationModules.FixedTenantAccessor(null)).StartRunAsync();
+        var act = () => Admin(new SettableTenantAccessor(null)).StartRunAsync();
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*without a resolved tenant*");
     }

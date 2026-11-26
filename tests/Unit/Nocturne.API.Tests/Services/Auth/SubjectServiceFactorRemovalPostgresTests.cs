@@ -23,23 +23,13 @@ namespace Nocturne.API.Tests.Services.Auth;
 public class SubjectServiceFactorRemovalPostgresTests(SubjectServiceFactorRemovalPostgresTests.Database database)
     : IClassFixture<SubjectServiceFactorRemovalPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("subject_factor_removal")
     {
-        public string ConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            // Subjects, passkeys and OIDC identities are not tenant-scoped, so the migrator role
-            // reaches them without a tenant pinned.
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("subject_factor_removal");
-            ConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-
+        // Subjects, passkeys and OIDC identities are not tenant-scoped, so the migrator role
+        // reaches them without a tenant pinned.
         public NocturneDbContext CreateContext() =>
             new(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(ConnectionString, npgsql => npgsql.EnableRetryOnFailure(
+                .UseNpgsql(MigratorConnectionString, npgsql => npgsql.EnableRetryOnFailure(
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(1),
                     errorCodesToAdd: null))

@@ -28,20 +28,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
     // the assertion, not a hang guard.
     private static readonly TimeSpan SerialisedPassWaits = TimeSpan.FromMilliseconds(500);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("dedup_reconcile_lock");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("dedup_reconcile_lock");
 
     /// <summary>
     /// Holds each pass after its first read until the other pass has made its own, or a timeout

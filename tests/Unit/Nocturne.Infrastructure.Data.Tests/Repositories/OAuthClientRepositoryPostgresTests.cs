@@ -22,20 +22,7 @@ public class OAuthClientRepositoryPostgresTests(OAuthClientRepositoryPostgresTes
     private static readonly DateTime Now = new(2026, 10, 31, 9, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Old = Now.AddDays(-2);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("oauth_client_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("oauth_client_repo");
 
     private NocturneDbContext Context(Guid tenant) =>
         TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly);

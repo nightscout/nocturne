@@ -28,19 +28,11 @@ internal sealed class OuraImportHarness
     public Func<IEnumerable<HeartRate>, IEnumerable<HeartRate>> StoreHeartRates = batch => batch;
     public Func<SleepSession, Task> StoreSession = _ => Task.CompletedTask;
 
-    public sealed class Accessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     public (OuraImportJobService Jobs, ServiceProvider Root) Build()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped<ITenantAccessor, Accessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(sp =>
         {

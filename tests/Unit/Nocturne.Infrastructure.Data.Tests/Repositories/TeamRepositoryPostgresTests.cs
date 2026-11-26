@@ -22,15 +22,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database database)
     : IClassFixture<TeamRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync() =>
-            AppConnectionString = (await SharedPostgres.CreateMigratedDatabaseAsync("team_repo")).AppConnectionString;
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("team_repo");
 
     private static readonly DateTime Now = DateTime.UtcNow;
 

@@ -19,20 +19,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTests.Database database)
     : IClassFixture<SystemEventRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("system_event_repo");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("system_event_repo");
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
         TestContexts.Context(database.AppConnectionString, tenant, interceptors);

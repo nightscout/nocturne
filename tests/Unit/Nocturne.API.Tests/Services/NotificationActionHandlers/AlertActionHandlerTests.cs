@@ -8,7 +8,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.NotificationActionHandlers;
 
@@ -27,7 +27,7 @@ public class AlertActionHandlerTests
 
     private AlertActionHandler CreateHandler() => new(
         _acknowledgement.Object,
-        MockTenantAccessor.Create(Tenant).Object,
+        SettableTenantAccessor.Resolved(Tenant),
         _httpContextAccessor.Object,
         NullLogger<AlertActionHandler>.Instance);
 

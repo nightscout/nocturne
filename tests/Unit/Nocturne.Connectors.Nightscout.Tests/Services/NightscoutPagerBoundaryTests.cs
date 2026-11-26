@@ -14,7 +14,7 @@ using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -350,7 +350,7 @@ public class NightscoutPagerBoundaryTests
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
                 _lookups,
-                MockTenantAccessor.Create().Object,
+                SettableTenantAccessor.Resolved(),
                 publisher.Object);
         }
 

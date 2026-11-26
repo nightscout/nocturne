@@ -14,7 +14,7 @@ using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -86,7 +86,7 @@ public class NightscoutPerTypeCursorTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher.Object);
     }
 

@@ -24,7 +24,7 @@ public static class DeduplicationModules
     public static DeduplicationAdmin Admin(
         INocturneDbContextFactory contexts, Guid tenantId, IRecordChangePublisher? changes = null) =>
         new(contexts, Linker(contexts), Reconciler(contexts), NullLogger<DeduplicationAdmin>.Instance,
-            new FixedTenantAccessor(new TenantContext(tenantId, "test", "Test", true, false)),
+            new SettableTenantAccessor(new TenantContext(tenantId, "test", "Test", true, false)),
             new CategoryReadContext(), changes);
 
     /// <summary>
@@ -49,15 +49,4 @@ public static class DeduplicationModules
     public static async Task<DeduplicationResult> RunFullAsync(
         this DeduplicationAdmin admin, CancellationToken ct = default) =>
         (await admin.RunToEndAsync(ct)).Result!;
-
-    /// <summary>An accessor fixed on one tenant, standing in for a resolved request.</summary>
-    public sealed class FixedTenantAccessor(TenantContext? context) : ITenantAccessor
-    {
-        public TenantContext? Context { get; } = context;
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext tenantContext) =>
-            throw new NotSupportedException("The accessor is fixed in these tests.");
-    }
 }

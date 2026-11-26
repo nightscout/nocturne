@@ -44,20 +44,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     private const string ReorderedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":{"direction":"above","value":90}},{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}]}}""";
     private static readonly DateTimeOffset Now = new(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("stale_rule_decision");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("stale_rule_decision");
 
     /// <summary>Runs <paramref name="edit"/> once, before the first transition lock is taken.</summary>
     private sealed class EditBeforeLockRepository(NocturneDbContext context, Func<Task> edit)

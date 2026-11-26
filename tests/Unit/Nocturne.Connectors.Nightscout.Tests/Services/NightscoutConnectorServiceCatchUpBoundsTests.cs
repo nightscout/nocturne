@@ -11,7 +11,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -363,7 +363,7 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher.Object);
     }
 

@@ -30,20 +30,7 @@ public class DuplicateRewriteReconcileTests(DuplicateRewriteReconcileTests.Datab
     /// <summary><see cref="Wide"/> before the pump copy rather than after it.</summary>
     private const int WideBefore = -Wide;
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("duplicate_rewrite_reconcile");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("duplicate_rewrite_reconcile");
 
     public enum SharedKey { LegacyId, SyncIdentifier, UpstreamFingerprint }
 

@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -45,7 +46,7 @@ public class TeamRenameAnnouncerTests
     private TeamRenameAnnouncer Announcer(Exception? failure = null)
     {
         var services = new ServiceCollection();
-        services.AddScoped<ITenantAccessor, Accessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(provider =>
         {
             Guid? Tenant() => provider.GetRequiredService<ITenantAccessor>().Context?.TenantId;
@@ -174,16 +175,5 @@ public class TeamRenameAnnouncerTests
         var announce = () => RenameAsync(Announcer((Exception)Activator.CreateInstance(failure)!), "Old", "New");
 
         await announce.Should().NotThrowAsync();
-    }
-
-    private sealed class Accessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-
-        public bool IsResolved => Context is not null;
-
-        public TenantContext? Context { get; private set; }
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

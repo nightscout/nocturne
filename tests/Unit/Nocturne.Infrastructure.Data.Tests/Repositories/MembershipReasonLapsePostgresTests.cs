@@ -32,20 +32,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     private static readonly DateTime CampEnds = new(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime After = new(2026, 12, 2, 0, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("membership_lapse");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("membership_lapse");
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
         TestContexts.Context(connectionString, tenant);

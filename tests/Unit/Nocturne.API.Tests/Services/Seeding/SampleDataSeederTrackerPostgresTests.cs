@@ -41,20 +41,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
 {
     private static readonly DateTimeOffset Instant = new(2026, 3, 14, 20, 0, 0, TimeSpan.Zero);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("sample_data_trackers");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("sample_data_trackers");
 
     private NocturneDbContext Context(Guid tenant) =>
         TestContexts.Context(database.AppConnectionString, tenant);

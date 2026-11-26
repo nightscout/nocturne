@@ -231,7 +231,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     {
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
+        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
             .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
@@ -240,7 +240,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     }
 
     private NocturneDbContext SuperuserContext() => new(new DbContextOptionsBuilder<NocturneDbContext>()
-        .UseNpgsql(fixture.Database.SuperuserConnectionString).Options);
+        .UseNpgsql(fixture.SuperuserConnectionString).Options);
 
     private sealed class RevokeRecorder(List<string> revoked) : HttpMessageHandler
     {

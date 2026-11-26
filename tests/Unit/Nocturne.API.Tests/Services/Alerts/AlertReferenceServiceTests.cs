@@ -12,7 +12,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -43,11 +42,11 @@ public class AlertReferenceServiceTests
         }
         _factory = new TestDbContextFactory(_options) { TenantOverride = _tenantId };
 
-        var tenantAccessor = MockTenantAccessor.Create(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         _sut = new AlertReferenceService(
             new AlertRepository(_factory.AsNocturneFactory()),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<AlertReferenceService>.Instance);
     }
 

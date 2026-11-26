@@ -76,7 +76,7 @@ public sealed class ReleaseNoticeJobTests : IDisposable
 
         var services = new ServiceCollection();
         _database.AddToServices(services);
-        services.AddScoped<ITenantAccessor, StubTenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(_ => owners.Object);
         services.AddScoped(_ => _notifications.Object);
         services.AddScoped(_ => repository.Object);
@@ -275,14 +275,5 @@ public sealed class ReleaseNoticeJobTests : IDisposable
     {
         _provider.Dispose();
         _database.Dispose();
-    }
-
-    private sealed class StubTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

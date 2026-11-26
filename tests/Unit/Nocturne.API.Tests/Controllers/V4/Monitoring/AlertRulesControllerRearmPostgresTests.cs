@@ -18,7 +18,6 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -39,20 +38,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
     private const string Sustained = """{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}""";
     private const string Rising = """{"type":"threshold","threshold":{"direction":"above","value":120}}""";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("alert_rule_rearm");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("alert_rule_rearm");
 
     /// <summary>Fails the first statement writing <see cref="Table"/>, or the commit, once armed.</summary>
     private sealed class Failure : DbCommandInterceptor, IDbTransactionInterceptor
@@ -140,7 +126,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
             new SubjectRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
             new AlertRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
             new AlertRuleRepository(new SuppliedContextFactory(() => Context(tenant, failure)), TimeProvider.System),
-            MockTenantAccessor.Create(tenant).Object,
+            SettableTenantAccessor.Resolved(tenant),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

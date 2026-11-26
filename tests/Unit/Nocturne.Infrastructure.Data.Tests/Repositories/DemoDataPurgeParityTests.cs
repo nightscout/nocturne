@@ -71,7 +71,7 @@ public class DemoDataPurgeParityTests : IDisposable
     private DemoDataPurgeRepository PlatformAdminPurge()
     {
         var services = new ServiceCollection();
-        services.AddScoped<ITenantAccessor, ScopeTenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
         services.AddScoped<IRecordChangePublisher>(
             sp => new TenantRecordingChanges(sp.GetRequiredService<ITenantAccessor>(), _tenantReports));
@@ -503,17 +503,6 @@ public class DemoDataPurgeParityTests : IDisposable
         (await verify.CompressionLowSuggestions.Select(s => s.Id).ToListAsync())
             .Should().ContainSingle().Which.Should().Be(realSuggestion);
         (await verify.StateSpans.CountAsync()).Should().Be(0);
-    }
-
-    private sealed class ScopeTenantAccessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-
-        public bool IsResolved => Context is not null;
-
-        public TenantContext? Context { get; private set; }
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 
     private sealed class TenantRecordingChanges(

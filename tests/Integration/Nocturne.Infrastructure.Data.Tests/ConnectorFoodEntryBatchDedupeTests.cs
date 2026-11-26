@@ -17,20 +17,7 @@ public class ConnectorFoodEntryBatchDedupeTests(ConnectorFoodEntryBatchDedupeTes
 {
     private const string Source = "glooko-connector";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("connector_food_batch_dedupe");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("connector_food_batch_dedupe");
 
     private static ConnectorFoodEntryImport Import(string entryId, decimal carbs, string source = Source) => new()
     {

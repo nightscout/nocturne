@@ -10,7 +10,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Models;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -59,7 +59,7 @@ public class NightscoutUnboundedFetchTests
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher.Object,
             clock);
 

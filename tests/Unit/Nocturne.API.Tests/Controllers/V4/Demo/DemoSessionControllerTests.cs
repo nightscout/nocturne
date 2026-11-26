@@ -13,7 +13,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.API.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -229,7 +228,7 @@ public class DemoSessionControllerTests : IDisposable
 
         var controller = new DemoSessionController(
             demoTenantService,
-            MockTenantAccessor.Create(tenantId: tenantId, isDemo: isDemo).Object,
+            SettableTenantAccessor.Resolved(tenantId: tenantId, isDemo: isDemo),
             _sessionService.Object,
             Options.Create(new OidcOptions
             {

@@ -237,12 +237,12 @@ public class GlookoConnectorServiceStateIsolationTests
         public static Guid Id => Current.Value;
     }
 
-    private sealed class AmbientTenantAccessor : ITenantAccessor
+    private static ITenantAccessor AmbientTenantAccessor()
     {
-        public bool IsResolved => AmbientTenant.Id != Guid.Empty;
-        public Guid TenantId => AmbientTenant.Id;
-        public TenantContext? Context => null;
-        public void SetTenant(TenantContext context) { }
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.Setup(a => a.IsResolved).Returns(() => AmbientTenant.Id != Guid.Empty);
+        accessor.Setup(a => a.TenantId).Returns(() => AmbientTenant.Id);
+        return accessor.Object;
     }
 
     /// <summary>
@@ -256,7 +256,7 @@ public class GlookoConnectorServiceStateIsolationTests
                 new HttpClient(),
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-                new AmbientTenantAccessor(),
+                AmbientTenantAccessor(),
                 NullLogger<GlookoAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>())
         {

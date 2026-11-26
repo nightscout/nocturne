@@ -47,20 +47,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         RemoveStaff,
     }
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("team_access_end");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("team_access_end");
 
     private sealed record Site(Guid Tenant, Guid Owner, Guid ViewerRole, Guid CaretakerRole);
 

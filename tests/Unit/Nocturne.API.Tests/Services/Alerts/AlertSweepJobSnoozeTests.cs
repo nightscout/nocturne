@@ -20,6 +20,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -137,7 +138,7 @@ public class AlertSweepJobSnoozeTests
             })));
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<ExcursionTracker>();
-        services.AddScoped<ITenantAccessor, TenantAccessorStub>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped<IAlertSnoozeService>(sp =>
         {
             var snooze = new Mock<IAlertSnoozeService>();
@@ -552,13 +553,5 @@ public class AlertSweepJobSnoozeTests
 
         _updates.Should().NotContain(u => u.Id == failing.InstanceId, "a resume that fails leaves the snooze lapsed for the next run");
         ShouldBeCleared(next);
-    }
-
-    private sealed class TenantAccessorStub : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

@@ -9,16 +9,15 @@ namespace Nocturne.API.Tests.Integration;
 /// <summary>The service descriptors the real <c>Program</c> registers.</summary>
 internal static class RegisteredServices
 {
-    public static async Task<List<ServiceDescriptor>> CaptureAsync(ServiceProviderValidationTests.MigratedDatabase fixture)
+    public static async Task<List<ServiceDescriptor>> CaptureAsync(ServiceProviderValidationTests.Database fixture)
     {
-        var database = fixture.Database;
         List<ServiceDescriptor>? captured = null;
 
         await using var factory = new ApiFactory().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", database.AppConnectionString);
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", database.MigratorConnectionString);
+            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", fixture.AppConnectionString);
+            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", fixture.MigratorConnectionString);
             builder.UseSetting("INSTANCE_KEY", "di-validation-instance-key-of-at-least-32-chars");
             builder.UseSetting("BASE_DOMAIN", "localhost");
             builder.UseSetting("DemoService:Enabled", "false");
