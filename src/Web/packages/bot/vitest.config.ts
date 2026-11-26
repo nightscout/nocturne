@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    setupFiles: ["src/test-stubs/setup.ts"],
     // Off unless asked for (`--coverage`); CI collects it for the PR coverage report.
     coverage: {
       provider: "v8",

@@ -16,6 +16,15 @@ export {
 export type { BotRequestContext, ResolvedLink } from "./lib/request-context.js";
 export { requireLink, requireLinkForAction } from "./lib/require-link.js";
 export { platformHandle } from "./lib/platform-handle.js";
+export {
+  PLATFORMS,
+  platformModule,
+  resolvePlatforms,
+  type PlatformName,
+  type PlatformSettings,
+  type StoredPlatformSettings,
+} from "./platforms/registry.js";
+export type { PlatformModule, CommandStyle, ChannelKind } from "./platforms/platform.js";
 export { formatGlucose, trendArrow, TREND_ARROWS } from "./lib/format.js";
 export type {
   BotApiClient,
