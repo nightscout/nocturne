@@ -12983,9 +12983,8 @@ msgstr "<0/> Comunidad"
 #~ msgid "<0/> Get Support"
 #~ msgstr "<0/> Obtener soporte"
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
-msgid "Need help? Here's how to reach us"
-msgstr "¿Necesitas ayuda? Estas son las formas de contactar con nosotros"
+#~ msgid "Need help? Here's how to reach us"
+#~ msgstr "¿Necesitas ayuda? Estas son las formas de contactar con nosotros"
 
 #~ msgid "<0/> Get Help on Discord <1/>"
 #~ msgstr "<0/> Obtener ayuda en Discord <1/>"
@@ -32200,9 +32199,8 @@ msgstr "Ya utilizo Nightscout. Copiar mi historial sin modificar mi sitio de Nig
 msgid "{0} already has a Nightscout site. Copy {1}'s history across without changing that site."
 msgstr "{0} ya tiene un sitio de Nightscout. Copiar el historial de {1} sin modificar ese sitio."
 
-#: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
-msgid "There's already a Nightscout site. Copy its history across without changing that site."
-msgstr "Ya existe un sitio de Nightscout. Copiar su historial sin modificar ese sitio."
+#~ msgid "There's already a Nightscout site. Copy its history across without changing that site."
+#~ msgstr "Ya existe un sitio de Nightscout. Copiar su historial sin modificar ese sitio."
 
 #: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Point at the existing Nightscout address"
@@ -32329,9 +32327,8 @@ msgstr "¿Para <0>quién</0> es Nocturne?"
 msgid "We will use your answer to word the rest of setup, so it talks about the right person."
 msgstr "Usaremos tu respuesta para adaptar el texto del resto de la configuración a la persona adecuada."
 
-#: src/routes/(unauthenticated)/setup/steps/WhoFor.svelte
-msgid "What's their name?"
-msgstr "¿Cómo se llama?"
+#~ msgid "What's their name?"
+#~ msgstr "¿Cómo se llama?"
 
 #: src/routes/(unauthenticated)/setup/steps/WhoFor.svelte
 msgid "Setup will say things like “Sam's glucose”. It is saved as their preferred name, and you can change it later in Settings."
@@ -32674,23 +32671,18 @@ msgstr "{0}: normalmente se utiliza durante {1} horas"
 msgid "{0}: typically worn for {1} days and {2} hours"
 msgstr "{0}: normalmente se utiliza durante {1} días y {2} horas"
 
-#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
-msgid "Looking at what's connected..."
-msgstr "Comprobando qué está conectado..."
+#~ msgid "Looking at what's connected..."
+#~ msgstr "Comprobando qué está conectado..."
 
-#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
-msgid "We looked at what's connected and think you use these. Is that right?"
-msgstr "Hemos revisado lo que está conectado y creemos que utilizas estos dispositivos. ¿Es correcto?"
+#~ msgid "We looked at what's connected and think you use these. Is that right?"
+#~ msgstr "Hemos revisado lo que está conectado y creemos que utilizas estos dispositivos. ¿Es correcto?"
 
-#. 0: voice.name
-#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 #, python-brace-format
-msgid "We looked at what's connected and think {0} uses these. Is that right?"
-msgstr "Hemos revisado lo que está conectado y creemos que {0} utiliza estos dispositivos. ¿Es correcto?"
+#~ msgid "We looked at what's connected and think {0} uses these. Is that right?"
+#~ msgstr "Hemos revisado lo que está conectado y creemos que {0} utiliza estos dispositivos. ¿Es correcto?"
 
-#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
-msgid "We looked at what's connected and think these are in use. Is that right?"
-msgstr "Hemos revisado lo que está conectado y creemos que estos dispositivos están en uso. ¿Es correcto?"
+#~ msgid "We looked at what's connected and think these are in use. Is that right?"
+#~ msgstr "Hemos revisado lo que está conectado y creemos que estos dispositivos están en uso. ¿Es correcto?"
 
 #: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 msgid "Pick the sensor and pump you use."
@@ -32749,9 +32741,8 @@ msgstr "Ninguno (modo manual)"
 msgid "Automated insulin delivery (AID) app"
 msgstr "Aplicación de administración automatizada de insulina (AID)"
 
-#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
-msgid "That's right"
-msgstr "Así es"
+#~ msgid "That's right"
+#~ msgstr "Así es"
 
 #: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 msgid "Use this one"
@@ -39378,9 +39369,8 @@ msgstr "Se han guardado los cambios, pero no se ha completado el paso posterior.
 msgid "Too many attempts. Wait a few minutes and try again."
 msgstr "Demasiados intentos. Espera unos minutos y vuelve a intentarlo."
 
-#: src/lib/forms/submit-messages.svelte.ts
-msgid "That item no longer exists. Refresh the page to see what's there now."
-msgstr "Ese elemento ya no existe. Actualiza la página para ver lo que hay ahora."
+#~ msgid "That item no longer exists. Refresh the page to see what's there now."
+#~ msgstr "Ese elemento ya no existe. Actualiza la página para ver lo que hay ahora."
 
 #: src/lib/components/oauth/DeviceCodeApproval.svelte
 msgid "Device authorized successfully."
@@ -52156,4 +52146,41 @@ msgstr ""
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Keep the old server and its volume until the new server is verified. Do not start the old stack again after the new server takes new data. Then the two databases are different, and you cannot merge them. When the new server is verified, delete <0/> on both servers. It holds your whole database."
+msgstr ""
+
+#: src/lib/forms/submit-messages.svelte.ts
+msgid "That item no longer exists. Refresh the page to see what is there now."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/support/+page.svelte
+msgid "Need help? Here is how to reach us"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
+msgid "There is already a Nightscout site. Copy its history across without changing that site."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/WhoFor.svelte
+msgid "What is their name?"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
+msgid "Looking at what is connected..."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
+msgid "We looked at what is connected and think you use these. Is that right?"
+msgstr ""
+
+#. 0: voice.name
+#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
+msgid "We looked at what is connected and think {0} uses these. Is that right?"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
+msgid "We looked at what is connected and think these are in use. Is that right?"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
+msgid "Yes, this one"
 msgstr ""
