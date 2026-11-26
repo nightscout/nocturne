@@ -1664,7 +1664,13 @@ way, through the one rerun (`IExcursionResolutionHandler.CloseAgainIfEndedAsync`
 re-notification, once it is sent, and a notice's dispatch (§1.4, §6.4), whose resolution is its
 close. A re-notification owes its excursion's opening from before its send until that rerun is
 done, unless the opening is already owed, so the sweep finishes a run that dies as an owed opening.
-That sends only what the opening still owes: a re-notification the run lost is not sent again. A
+Its lapsed snooze ends in the same write that owes the opening and records the start of the
+re-notification, and only while the snooze is still the one that lapsed, so of two resumes of one
+lapse one sends. A run that dies before that write leaves the snooze lapsed for the next sweep, which
+decides it again (a smart snooze may then extend it). Owed delivery is judged per send: a rerun sends
+what the instance's latest send, the opening or the latest re-notification, left without an answer,
+counting only the delivery rows written since that send started. So a re-notification the run lost
+is sent again, and a channel that answered it is not. A
 notice counts as resolved once its instance is, the step that writes its reason, so the rerun never
 resolves it first and without one; a resolution that dies before that step leaves the notice
 standing, and its check resolves it again. Ending a notice owes its close, which the sweep finishes

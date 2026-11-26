@@ -98,18 +98,21 @@ internal sealed class AlertSnoozeService(
                 .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
         }
 
-        var excursion = instance?.AlertExcursion;
-        var ruleEntity = excursion?.AlertRule;
-        if (instance is null || excursion is null || ruleEntity is null) return false;
+        if (instance?.SnoozedUntil is not { } lapsed || AlertSnooze.IsSnoozed(lapsed, now))
+            return false;
 
-        if (instance.ResolvedAt is not null
+        var excursion = instance.AlertExcursion;
+        var ruleEntity = excursion?.AlertRule;
+        if (excursion is null
+            || ruleEntity is null
+            || instance.ResolvedAt is not null
             || excursion.EndedAt is not null
             || excursion.HysteresisStartedAt is not null
             || excursion.AcknowledgedAt is not null
             || !ruleEntity.IsEnabled
-            || !AlertRuleMapper.IsReadable(ruleEntity)
-            || AlertSnooze.IsSnoozed(instance.SnoozedUntil, now))
+            || !AlertRuleMapper.IsReadable(ruleEntity))
         {
+            await repository.EndLapsedSnoozeAsync(instance.Id, lapsed, renotifyAt: null, ct);
             return false;
         }
 
@@ -150,6 +153,7 @@ internal sealed class AlertSnoozeService(
             logger.LogInformation(
                 "Snooze on alert instance {InstanceId} lapsed while DND (scope {Scope}) covers rule {RuleName}; not re-notifying",
                 instanceId, scope, rule.Name);
+            await repository.EndLapsedSnoozeAsync(instance.Id, lapsed, renotifyAt: null, ct);
             return false;
         }
 
@@ -157,10 +161,18 @@ internal sealed class AlertSnoozeService(
         var payload = AlertPayloads.Build(
             rule, baseContext, tenantId, excursion.Id, instance.Id, inputs.Tenant, inputs.ActiveExcursionCount, now);
 
-        var owed = await repository.OweOpeningAsync(excursion.Id, now, ct);
+        var end = await repository.EndLapsedSnoozeAsync(instance.Id, lapsed, now, ct);
+        if (end == LapsedSnoozeEnd.Lost)
+        {
+            logger.LogInformation(
+                "The lapsed snooze on alert instance {InstanceId} was ended or replaced by another run or a new snooze; not re-notifying",
+                instanceId);
+            return false;
+        }
+
         await deliveryService.RenotifyAsync(instance.Id, inputs.Channels, payload, ct);
         await resolutionHandler.CloseAgainIfEndedAsync(excursion.Id, tenantId, ct);
-        if (owed)
+        if (end == LapsedSnoozeEnd.EndedHoldingOpening)
             await repository.SettleTransitionAsync(excursion.Id, ExcursionTransitionType.ExcursionOpened, ct);
 
         logger.LogInformation(

@@ -297,17 +297,37 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> OweOpeningAsync(Guid excursionId, DateTime now, CancellationToken ct)
+    public virtual async Task<LapsedSnoozeEnd> EndLapsedSnoozeAsync(
+        Guid instanceId, DateTime lapsedUntil, DateTime? renotifyAt, CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
+        var at = renotifyAt is { } value ? NocturneDbContext.AtStoredPrecision(value) : (DateTime?)null;
 
-        var excursion = await context.AlertExcursions.OfCondition(includeTest: true)
-            .FirstOrDefaultAsync(e => e.Id == excursionId && e.OpenedOwedAt == null, ct);
-        if (excursion is null)
-            return false;
-        excursion.OpenedOwedAt = now;
-        await context.SaveChangesAsync(ct);
-        return true;
+        return await context.ExecuteInTransactionAsync(async token =>
+        {
+            var instance = context.AlertInstances.OfCondition(includeTest: true)
+                .Where(i => i.Id == instanceId && i.SnoozedUntil == lapsedUntil);
+            var ended = at is null
+                ? await instance.ExecuteUpdateAsync(s => s.SetProperty(i => i.SnoozedUntil, (DateTime?)null), token)
+                : await instance.ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.SnoozedUntil, (DateTime?)null)
+                    .SetProperty(i => i.RenotifiedAt, at), token);
+            if (ended == 0)
+                return LapsedSnoozeEnd.Lost;
+            if (at is null)
+                return LapsedSnoozeEnd.Ended;
+
+            var held = await context.AlertExcursions.OfCondition(includeTest: true)
+                .Where(e => e.OpenedOwedAt == null
+                            && e.Instances.Any(i => i.Id == instanceId))
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OpenedOwedAt, at), token);
+            return held == 1 ? LapsedSnoozeEnd.EndedHoldingOpening : LapsedSnoozeEnd.Ended;
+        },
+        verifySucceeded: async (end, token) =>
+            end == LapsedSnoozeEnd.Lost
+            || await context.AlertInstances.OfCondition(includeTest: true).AnyAsync(
+                i => i.Id == instanceId && i.SnoozedUntil == null && (at == null || i.RenotifiedAt == at), token),
+        ct: ct);
     }
 
     /// <inheritdoc/>
@@ -374,9 +394,8 @@ public class AlertRepository : IAlertRepository
         if (request.Status is not null)
             entity.Status = request.Status;
 
-        if (request.SnoozedUntil.HasValue)
-            entity.SnoozedUntil = request.SnoozedUntil == DateTime.MinValue
-                ? null : request.SnoozedUntil.Value;
+        if (request.SnoozedUntil is { } snoozedUntil)
+            entity.SnoozedUntil = snoozedUntil;
 
         if (request.SnoozeCount.HasValue)
             entity.SnoozeCount = request.SnoozeCount.Value;

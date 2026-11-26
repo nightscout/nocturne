@@ -41,3 +41,16 @@ public enum SnoozeResult
 }
 
 public sealed record SnoozeOutcome(SnoozeResult Result, DateTime? SnoozedUntil = null);
+
+/// <summary>What ending a lapsed snooze did (<c>IAlertRepository.EndLapsedSnoozeAsync</c>).</summary>
+public enum LapsedSnoozeEnd
+{
+    /// <summary>Another caller ended or replaced the snooze first, and nothing was written.</summary>
+    Lost,
+
+    /// <summary>The snooze ended; when re-notifying, another run already holds the opening, so the caller does not settle it.</summary>
+    Ended,
+
+    /// <summary>The snooze ended and this call holds the excursion's opening owed, so it settles it.</summary>
+    EndedHoldingOpening,
+}
