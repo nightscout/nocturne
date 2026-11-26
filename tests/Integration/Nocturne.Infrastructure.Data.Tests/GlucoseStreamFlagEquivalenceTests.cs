@@ -260,7 +260,7 @@ public class GlucoseStreamFlagEquivalenceTests(GlucoseStreamFlagEquivalenceTests
 
         await using var scope = Scope(tenant);
         var dedup = scope.ServiceProvider.GetRequiredService<DuplicateReconciler>();
-        var merge = Task.Run(() => dedup.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, null, default));
+        var merge = Task.Run(() => dedup.MergeAllAsync(RecordType.SensorGlucose, default));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
 
         (await LinksFreeAsync(tenant, first.Id, second.Id)).Should().BeTrue("the merge has written no link yet");

@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Tests.Interceptors;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -335,5 +336,59 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
 
         await using var verify = CreateContext();
         (await verify.TestAuditables.IncludingDeleted().AnyAsync(e => e.Id == id)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AuditedSoftDeleteWithEntities_RecordsARedactedPropertyAsRedacted()
+    {
+        await using (var seed = CreateContext())
+        {
+            seed.TestAuditables.Add(new TestAuditableEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = _tenantId, Name = "SweepMe", SecretField = "top-secret",
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext();
+        await context.AuditedSoftDeleteWithEntitiesAsync(
+            context.TestAuditables.Where(e => e.Name == "SweepMe"), new UserAuditContext(), Scope);
+
+        await using var verify = CreateContext();
+        var snapshot = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+            (await verify.Set<MutationAuditLogEntity>().SingleAsync(l => l.Action == "delete")).ChangesJson!)!;
+        snapshot["SecretField"].GetString().Should().Be("[redacted]");
+        snapshot["Name"].GetString().Should().Be("SweepMe");
+        snapshot.Should().NotContainKey("SysCreatedAt");
+    }
+
+    [Fact]
+    public async Task AuditedExecuteDelete_RecordsAStoredValueItsConverterCouldNotReadAsUnreadable()
+    {
+        var ruleId = Guid.CreateVersion7();
+        await using (var seed = CreateContext())
+        {
+            seed.AlertRules.Add(new AlertRuleEntity
+            {
+                Id = ruleId,
+                TenantId = _tenantId,
+                Name = "Legacy",
+                ConditionType = AlertConditionType.Threshold,
+                ConditionParams = """{"direction":"below","value":70}""",
+                Severity = AlertRuleSeverity.Warning,
+            });
+            await seed.SaveChangesAsync();
+            await seed.Database.ExecuteSqlRawAsync("UPDATE alert_rules SET severity = 'normal'");
+        }
+
+        await using var context = CreateContext();
+        await context.AuditedExecuteDeleteAsync(
+            context.AlertRules.Where(r => r.Id == ruleId), new UserAuditContext());
+
+        await using var verify = CreateContext();
+        var snapshot = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+            (await verify.Set<MutationAuditLogEntity>().SingleAsync(l => l.Action == "delete")).ChangesJson!)!;
+        snapshot["Severity"].GetString().Should().Be("[unreadable]");
+        snapshot["Name"].GetString().Should().Be("Legacy");
     }
 }

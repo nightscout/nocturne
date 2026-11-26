@@ -1735,6 +1735,43 @@ public class StateSpanRepositoryTests : IDisposable
     }
 
     /// <summary>
+    /// Of <see cref="StateSpanSuccession.Candidates"/> + 1 later spans whose last two start together, the
+    /// read keeps the lower id and cuts the higher, whichever was stored first, and the cut span is still
+    /// read, so a span that follows is not missed for sharing a start.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FirstStoredAsync_ASpanSharingTheLastCandidatesStart_IsReadWhicheverIdItHas(bool followerIdIsLater)
+    {
+        var category = nameof(StateSpanCategory.TemporaryTarget);
+        StateSpanEntity Stored(Guid id, int hour, string legacyId) => new()
+        {
+            Id = id, TenantId = TestTenantId, Category = category, State = "Custom",
+            StartTimestamp = BatchDay.AddHours(hour), LegacyId = legacyId,
+        };
+        var passedOver = Enumerable.Range(0, StateSpanSuccession.Candidates - 1)
+            .Select(i => Stored(Guid.CreateVersion7(), 300 + i, $"tt-passed-{i}")).ToList();
+        var lower = new Guid("00000000-0000-0000-0000-000000000001");
+        var higher = new Guid("ffffffff-0000-0000-0000-000000000001");
+        var follower = Stored(followerIdIsLater ? higher : lower, 400, "tt-follower");
+        var tied = Stored(followerIdIsLater ? lower : higher, 400, "tt-tied");
+        var open = Stored(Guid.CreateVersion7(), 1, "tt-open");
+        StateSpanEntity[] tiedByStoredOrder = [.. new[] { follower, tied }.OrderByDescending(s => s.Id)];
+        _context.StateSpans.AddRange([open, .. passedOver, .. tiedByStoredOrder]);
+        await _context.SaveChangesAsync();
+        var key = StateSpanSuccession.Key(category, "Custom", open.StartTimestamp);
+
+        var candidates = (await StateSpanSuccession.LoadCandidatesAsync(_context, [key], CancellationToken.None))[key];
+        var successor = await StateSpanSuccession.FirstStoredAsync(
+            _context, open, null, candidates, s => s.LegacyId == "tt-follower", CancellationToken.None);
+
+        candidates.Should().HaveCount(StateSpanSuccession.Candidates);
+        candidates[^1].Id.Should().Be(lower);
+        successor.Should().NotBeNull().And.Match<StateSpanEntity>(s => s.LegacyId == "tt-follower");
+    }
+
+    /// <summary>
     /// When every candidate read is a copy of the same override, which does not end it, the successor
     /// is the first conflicting span beyond them.
     /// </summary>
