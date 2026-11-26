@@ -42,10 +42,12 @@ internal sealed class DeviceStatusDataset : IReportDataset
 
     private static readonly IReadOnlyList<ReportField> TileFields =
     [
-        new("reservoir", "Reservoir", ReportFieldKind.Number, "U", "The latest reservoir in the range."),
-        new("pumpBattery", "Pump battery", ReportFieldKind.Percent, "%", "The latest pump battery in the range."),
-        new("uploaderBattery", "Uploader battery", ReportFieldKind.Percent, "%", "The latest uploader battery in the range."),
-        new("sensorAgeHours", "Sensor age now", ReportFieldKind.Number, "h", "Hours since the latest sensor start or change, now."),
+        new("reservoir", "Reservoir", ReportFieldKind.Number, "U", "The latest reservoir in the range.") { FlagFact = ReportFlagFact.Live },
+        new("pumpBattery", "Pump battery", ReportFieldKind.Percent, "%", "The latest pump battery in the range.") { FlagFact = ReportFlagFact.Live },
+        new("uploaderBattery", "Uploader battery", ReportFieldKind.Percent, "%", "The latest uploader battery in the range.")
+            { FlagFact = ReportFlagFact.Live },
+        new("sensorAgeHours", "Sensor age now", ReportFieldKind.Number, "h", "Hours since the latest sensor start or change, now.")
+            { FlagFact = ReportFlagFact.Live },
     ];
 
     public IReadOnlyList<ReportField> Fields { get; } = [.. SeriesFields, TileFields[^1]];

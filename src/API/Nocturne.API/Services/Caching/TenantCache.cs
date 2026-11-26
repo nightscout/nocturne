@@ -41,6 +41,9 @@ public sealed class TenantCache(
             ? await flights.GetOrSetAsync(distributed, full, factory, ct)
             : (await factory()).Value;
 
+    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct) where T : class =>
+        KeyFor(key) is { } full ? distributed.SetAsync(full, value, ttl, ct) : Task.CompletedTask;
+
     public Task RemoveFamilyAsync(string family, CancellationToken ct = default) =>
         tenantAccessor.Context is { } tenant
             ? distributed.RemoveByPatternAsync($"{tenant.TenantId:D}:*:*:{family}:*", ct)

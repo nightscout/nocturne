@@ -434,6 +434,7 @@ internal static class ReportWire
 [JsonDerivedType(typeof(DeviceEventsParameters), DeviceEventsParameters.Name)]
 [JsonDerivedType(typeof(SystemEventsParameters), SystemEventsParameters.Name)]
 [JsonDerivedType(typeof(TrackersParameters), TrackersParameters.Name)]
+[JsonDerivedType(typeof(CurrentStatusParameters), CurrentStatusParameters.Name)]
 [JsonDerivedType(typeof(SleepStagesParameters), SleepStagesParameters.Name)]
 [JsonDerivedType(typeof(SleepNightsParameters), SleepNightsParameters.Name)]
 [JsonDerivedType(typeof(SleepBiometricsParameters), SleepBiometricsParameters.Name)]

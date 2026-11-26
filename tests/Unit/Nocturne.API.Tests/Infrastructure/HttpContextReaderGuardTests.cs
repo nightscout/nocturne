@@ -36,6 +36,7 @@ public class HttpContextReaderGuardTests
         "src/API/Nocturne.API/Services/Auth/AuthAuditService.cs: AuthAuditService",
         "src/API/Nocturne.API/Services/CoachMarks/CoachMarkService.cs: CoachMarkService",
         "src/API/Nocturne.API/Reports/CustomReportRunner.cs: CustomReportRunner",
+        "src/API/Nocturne.API/Reports/FlagFactEvaluator.cs: FlagFactEvaluator",
         "src/API/Nocturne.API/Reports/ReportCatalogue.cs: ReportCatalogue",
         "src/API/Nocturne.API/Reports/ReportRenderer.cs: ReportRenderer",
         "src/API/Nocturne.API/Services/NotificationActionHandlers/AlertActionHandler.cs: AlertActionHandler",

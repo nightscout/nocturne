@@ -56,6 +56,18 @@ internal sealed record TrackersParameters : ReportDatasetParameters
     public override string DatasetName => Name;
 }
 
+[Description(
+    "current_status: one row as it is now: hours since the last glucose reading, and with the alerts permission the hours "
+    + "left on the sensor and the site trackers. The range is not read. Needs the glucose permission.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record CurrentStatusParameters : ReportDatasetParameters
+{
+    public const string Name = "current_status";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+}
+
 [Description("sleep_stages: each sleep stage (awake, REM, light, deep) from its start to its end, a lane each. Needs the sleep permission.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record SleepStagesParameters : ReportDatasetParameters

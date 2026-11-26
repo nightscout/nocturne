@@ -12,7 +12,9 @@ namespace Nocturne.API.Services.Caching;
 /// Owners, members, guests and tokens all land in the same partition, whatever their scopes. A
 /// cached value must therefore be computed from data every reader of its partition may see, and
 /// any narrowing by the caller's scopes happens after the cache read, never inside the factory
-/// (see #2138).
+/// (see #2138), unless the key names the scopes the value was computed under, as
+/// <see cref="Nocturne.API.Reports.FlagFactEvaluator"/>'s keep of figures does: a reader is then
+/// served only a value computed under the scopes it asks for.
 /// <para>
 /// The distributed tier sits on <see cref="Nocturne.Infrastructure.Cache.Abstractions.ICacheService"/>
 /// and is what <see cref="RemoveFamilyAsync(string, CancellationToken)"/> clears. The local tier
@@ -50,6 +52,13 @@ public interface ITenantCache
     /// factory again.
     /// </summary>
     Task<T?> GetOrSetUnlessNullAsync<T>(string key, Func<Task<T?>> factory, TimeSpan ttl, CancellationToken ct = default)
+        where T : class;
+
+    /// <summary>
+    /// Writes <paramref name="value"/> to the distributed tier under <paramref name="key"/> for
+    /// <paramref name="ttl"/>, replacing what it held: for a value its reader judges stale by its own clock.
+    /// </summary>
+    Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct)
         where T : class;
 
     /// <summary>

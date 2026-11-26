@@ -195,15 +195,20 @@ public class TenantOverviewService : ITenantOverviewService
             previousIsReliable ? timeInRange.Delta : null);
     }
 
-    private AsyncServiceScope OpenTenantScope(TenantRecord tenant, bool historyClamped)
+    private AsyncServiceScope OpenTenantScope(TenantRecord tenant, bool historyClamped) =>
+        OpenTenantScope(_scope, tenant, historyClamped, AuditEndpoint);
+
+    /// <summary>
+    /// A scope that reads <paramref name="tenant"/> as the caller of <paramref name="scope"/>. The caller's request
+    /// never passed through MemberScopeMiddleware for this tenant, so its clamp here is the one the membership
+    /// decides, and every read goes through the scope.
+    /// </summary>
+    internal static AsyncServiceScope OpenTenantScope(IServiceProvider scope, TenantRecord tenant, bool historyClamped, string actor)
     {
-        // A scope per tenant: the caller's request never passed through MemberScopeMiddleware for
-        // this tenant, so its clamp here is the one this membership decides, and every read
-        // goes through the scope.
-        var reader = TenantReader.Of(_scope)
+        var reader = TenantReader.Of(scope)
             .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
             .ClampedToDay(historyClamped);
-        return TenantJobScope.OpenFor(_scope, reader, AuditEndpoint);
+        return TenantJobScope.OpenFor(scope, reader, actor);
     }
 
     /// <summary>

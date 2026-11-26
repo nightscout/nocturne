@@ -29,6 +29,7 @@ internal sealed class ReportRunCache
     private readonly Dictionary<(long From, long To), IReadOnlyList<SensorGlucose>> _glucose = [];
     private readonly Dictionary<(long From, long To), ExtendedGlucoseAnalytics> _analysis = [];
     private readonly Dictionary<(long From, long To), DashboardChartData> _chart = [];
+    private TenantClock? _clock;
 
     /// <summary>The dataset reads made so far, reads that share their costly part (<see cref="IReportDataset.SharedRead"/>) once.</summary>
     public int Reads => _counted.Count;
@@ -93,12 +94,16 @@ internal sealed class ReportRunCache
             return cached;
 
         var entries = await GlucoseAsync(request, cancellationToken);
-        var clock = await request.Services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
+        var clock = await ClockAsync(request, cancellationToken);
         var analysis = request.Services.GetRequiredService<IStatisticsService>().AnalyzeGlucoseDataExtended(
             entries, [], [], StatisticsService.WindowDays(request.From.UtcDateTime, request.To.UtcDateTime), Population, timeZone: clock.Zone);
         _analysis[key] = analysis;
         return analysis;
     }
+
+    /// <summary>The tenant's clock, resolved once per run.</summary>
+    public async Task<TenantClock> ClockAsync(ReportDatasetRequest request, CancellationToken cancellationToken) =>
+        _clock ??= await request.Services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
 
     /// <summary>
     /// The dashboard chart's payload over the request's range, without the health series, redacted

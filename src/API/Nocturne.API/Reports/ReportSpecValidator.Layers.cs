@@ -16,7 +16,7 @@ internal sealed partial class ReportSpecValidator
     private static readonly string[] ColumnKeys = ["columns"];
     private static readonly string[] LayerBindingKeys = ["x", "y", "edges", "series", "fit", "stacked", "orientation", "start", "end", "category"];
 
-    private static readonly JsonSerializerOptions KeyOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    internal static readonly JsonSerializerOptions KeyOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     /// <summary>
     /// The key one read is cached and counted under: the dataset query, the range as the spec gives it, the kind
@@ -266,7 +266,7 @@ internal sealed partial class ReportSpecValidator
         var columns = ReadColumns(panel, $"{at}.bindings", dataset, fields, error);
         if (parameters is null || columns is null)
             return null;
-        reads.TryAdd(CountKey(dataset, parameters, range, kind, null, ReportReadShape.Panel), dataset);
+        reads.TryAdd(CountKey(dataset, parameters, range, kind, null, dataset.PanelShape(columns)), dataset);
         return new ReportPanelSpec
         {
             Kind = kind,

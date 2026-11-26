@@ -34,6 +34,7 @@ export const CATALOGUE_MEMBERS = {
   ops: true,
   datasets: true,
   workspace: true,
+  flagFacts: true,
 } satisfies Record<keyof CustomReportCatalogue, boolean>;
 
 export const DATASET_MEMBERS = {

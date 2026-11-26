@@ -4,7 +4,7 @@ namespace Nocturne.API.Reports;
 
 internal static class ReportServiceExtensions
 {
-    /// <summary>The custom report engine: the datasets, the validator and runner, the store and the catalogue.</summary>
+    /// <summary>The custom report engine: the datasets, the validator and runner, the store, the catalogue and the flag fact evaluator.</summary>
     public static IServiceCollection AddCustomReports(this IServiceCollection services)
     {
         services.AddSingleton<IReportDataset, GlucoseSeriesDataset>();
@@ -29,6 +29,7 @@ internal static class ReportServiceExtensions
         services.AddSingleton<IReportDataset, DeviceEventsDataset>();
         services.AddSingleton<IReportDataset, SystemEventsDataset>();
         services.AddSingleton<IReportDataset, TrackersDataset>();
+        services.AddSingleton<IReportDataset, CurrentStatusDataset>();
         services.AddSingleton<IReportDataset, SleepStagesDataset>();
         services.AddSingleton<IReportDataset, SleepNightsDataset>();
         services.AddSingleton<IReportDataset, SleepBiometricsDataset>();
@@ -51,6 +52,7 @@ internal static class ReportServiceExtensions
         services.AddScoped<ReportRenderer>();
         services.AddScoped<IReportSpecStore, ReportSpecStore>();
         services.AddScoped<ICustomReportRunner, CustomReportRunner>();
+        services.AddScoped<FlagFactEvaluator>();
         return services;
     }
 }

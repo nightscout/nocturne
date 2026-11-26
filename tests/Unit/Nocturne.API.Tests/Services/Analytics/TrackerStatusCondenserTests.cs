@@ -82,6 +82,86 @@ public class TrackerStatusCondenserTests
         Condense(instance, Reference).Urgency.Should().Be(NotificationUrgency.Info);
     }
 
+    [Fact]
+    public void HoursLeft_IsTheHoursToTheExpectedEnd_AndNegativeOncePast()
+    {
+        var sensor = Run(TrackerMode.Duration, 240);
+        var appointment = Run(TrackerMode.Event, null);
+        var open = Run(TrackerMode.Duration, null);
+
+        HoursLeft(sensor, Reference.AddHours(100.5)).Should().Be(139.5);
+        HoursLeft(sensor, Reference.AddHours(250)).Should().Be(-10);
+        HoursLeft(appointment, Reference.AddHours(-3)).Should().Be(3);
+        HoursLeft(open, Reference.AddHours(5)).Should().BeNull();
+        HoursLeft(appointment with { ScheduledAt = null }, Reference).Should().BeNull();
+    }
+
+    [Fact]
+    public void HoursLeft_AgreesWithTheExpectedEnd_AtEveryMinute()
+    {
+        var sensor = Run(TrackerMode.Duration, 240);
+
+        foreach (var minutes in Enumerable.Range(0, 300).Select(m => m * 53))
+        {
+            var now = Reference.AddMinutes(minutes);
+            HoursLeft(sensor, now).Should().Be(Math.Round((sensor.ExpectedEndAt!.Value - now).TotalHours * 10) / 10);
+        }
+    }
+
+    [Fact]
+    public void All_KeepsATrackerTheDashboardHides()
+    {
+        var hidden = Run(TrackerMode.Duration, 240) with
+        {
+            Definition = TrackerDefinition.Restore(Guid.NewGuid(), "Sensor", lifespanHours: 240, dashboardVisibility: DashboardVisibility.Off),
+        };
+
+        TrackerStatusCondenser.Condense([hidden], Reference).Should().BeEmpty();
+        TrackerStatusCondenser.All([hidden], Reference).Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Condense_GivesTheOverviewTheSameStatusAsBefore()
+    {
+        var sensor = Run(TrackerMode.Duration, 240);
+        var appointment = Run(TrackerMode.Event, null);
+
+        var statuses = TrackerStatusCondenser.Condense([sensor, appointment], Reference.AddHours(100.5));
+
+        statuses.Should().BeEquivalentTo(new[]
+        {
+            new V4TrackerStatus
+            {
+                Id = sensor.Id,
+                DefinitionId = sensor.Definition.Id,
+                Name = "Sensor",
+                Icon = sensor.Definition.Icon,
+                Category = sensor.Definition.Category,
+                Mode = TrackerMode.Duration,
+                Urgency = NotificationUrgency.Info,
+                LifespanHours = 240,
+                AgeHours = 100.5,
+                PercentElapsed = 42,
+            },
+            new V4TrackerStatus
+            {
+                Id = appointment.Id,
+                DefinitionId = appointment.Definition.Id,
+                Name = "Sensor",
+                Icon = appointment.Definition.Icon,
+                Category = appointment.Definition.Category,
+                Mode = TrackerMode.Event,
+                Urgency = NotificationUrgency.Info,
+                HoursUntilEvent = -100.5,
+            },
+        }, o => o.WithStrictOrdering());
+        TrackerStatusCondenser.All([sensor, appointment], Reference.AddHours(100.5)).Select(s => s.Status)
+            .Should().BeEquivalentTo(statuses, o => o.WithStrictOrdering());
+    }
+
+    private static double? HoursLeft(TrackerInstance instance, DateTime now) =>
+        TrackerStatusCondenser.All([instance], now).Single().HoursLeft;
+
     private static IEnumerable<(int Offset, NotificationUrgency Expected)> Around(NotificationUrgency fired) =>
     [
         (-1, NotificationUrgency.Info),

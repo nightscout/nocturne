@@ -208,7 +208,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         }
         var (from, to, limited) = clamped;
 
-        var read = await ReadAsync(dataset, panel.Dataset, panel.Range!, from, to, panel.Kind, null, run);
+        var read = await ReadAsync(dataset, panel.Dataset, panel.Range!, from, to, panel.Kind, null, run, dataset.PanelShape(panel.Bindings!.Columns ?? []));
         if (read.Output is not { } output)
             return EmptyPanel(panel, dataset, from, to, read.Status, read.Note!);
 
