@@ -155,8 +155,8 @@ public sealed class TeamAccessService(
 
     /// <inheritdoc cref="TeamRepository.LockStaffRuleAsync"/>
     public Task<OwnerDecision> SetStaffRuleAsync(
-        Guid tenantId, Guid teamId, Guid callerSubjectId, bool teamManagesStaff, CancellationToken ct) =>
-        AnnouncedAsync(TeamReasonWrites.SetStaffRuleAsync(contexts, grantRevocation, tenantId, teamId, callerSubjectId, teamManagesStaff, Now, ct));
+        Guid tenantId, Guid teamId, Guid callerSubjectId, string staffRule, CancellationToken ct) =>
+        AnnouncedAsync(TeamReasonWrites.SetStaffRuleAsync(contexts, grantRevocation, tenantId, teamId, callerSubjectId, staffRule, Now, ct));
 
     private DateTime Now => time.GetUtcNow().UtcDateTime;
 

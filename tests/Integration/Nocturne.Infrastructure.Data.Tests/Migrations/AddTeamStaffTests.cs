@@ -158,7 +158,7 @@ public class AddTeamStaffTests(AddTeamStaffFixture fixture) : IClassFixture<AddT
     public async Task An_existing_access_is_kept_with_the_team_managing_its_staff_and_no_staff_rows()
     {
         (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"""
-            SELECT count(*) FROM team_tenant_access WHERE id = '{fixture.ExistingAccess}' AND team_manages_staff
+            SELECT count(*) FROM team_tenant_access WHERE id = '{fixture.ExistingAccess}' AND staff_rule = 'team_decides'
             """)).Should().Be(1);
         (await NpgsqlTestCommands.ScalarAsync<long>(
             fixture.Migrator, $"SELECT count(*) FROM team_site_staff WHERE team_tenant_access_id = '{fixture.ExistingAccess}'")).Should().Be(0);

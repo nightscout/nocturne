@@ -66,7 +66,7 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
         await ShouldRefuseWithAsync(CallerCode, await teamOnly.PostAsync(
             $"/api/v4/member-invites/team-access/{team}/staff/{staff}/decline", null));
         await ShouldRefuseWithAsync(CallerCode, await teamOnly.PutAsJsonAsync(
-            $"/api/v4/member-invites/team-access/{team}/staff-rule", new { teamManagesStaff = false }));
+            $"/api/v4/member-invites/team-access/{team}/staff-rule", new { staffRule = "owner_approves" }));
         await ShouldRefuseWithAsync(CallerCode, await teamOnly.PutAsJsonAsync(
             $"/api/v4/member-invites/team-access/{team}", new { roleIds = new[] { viewer }, limitTo24Hours = false, accessEndsAt = (DateTimeOffset?)null }));
 

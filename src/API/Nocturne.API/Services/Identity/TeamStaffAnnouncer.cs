@@ -21,6 +21,10 @@ namespace Nocturne.API.Services.Identity;
 /// and skipped.
 /// </para>
 /// <para>
+/// A site that trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>) is told nothing of its staff: no
+/// staff wait there, no joined notice is filed, and a recount takes back the joined notice with the waiting one.
+/// </para>
+/// <para>
 /// The waiting notice states a count read after the write has committed, under a lock on the team at the site
 /// (<see cref="ITeamRepository.WithStaffWaitingLockedAsync"/>) held until every owner's notice is filed, with the
 /// site's owners read under it too. So the last recount to take it reads every earlier commit and files the
@@ -116,7 +120,8 @@ public sealed partial class TeamStaffAnnouncer(
     /// with the staff who wait now: taken back at none, filed with the count when there is none, and replaced when
     /// the count differs, so an owner who read the old count is told of the new one. Takes back the waiting notice
     /// of <paramref name="ownerChanged"/> when they no longer own the site, and files the joined notice when
-    /// <paramref name="joined"/>.
+    /// <paramref name="joined"/>. While the site trusts the team, a recount takes back each owner's joined notice
+    /// and none is filed.
     /// </summary>
     private async Task FileAsync(Guid site, Guid team, TeamStaffWaiting? waiting, bool recount, bool joined, Guid? ownerChanged)
     {
@@ -132,7 +137,10 @@ public sealed partial class TeamStaffAnnouncer(
             {
                 if (recount)
                     await FileWaitingAsync(notifications, owner.ToString(), team, waiting?.TeamName, count);
-                if (joined && waiting is not null)
+                if (recount && waiting is { Trusted: true })
+                    await notifications.ArchiveBySourceAsync(
+                        owner.ToString(), JoinedType, SourceOf(team), NotificationArchiveReason.ConditionMet, CancellationToken.None);
+                if (joined && waiting is { Trusted: false })
                     await notifications.CreateNotificationUnlessActiveAsync(
                         owner.ToString(), JoinedType, JoinedTitleKey, SourceOf(team),
                         metadata: new Dictionary<string, object> { [TeamKey] = waiting.TeamName, [TeamIdKey] = team },

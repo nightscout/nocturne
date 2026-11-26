@@ -81,7 +81,7 @@ public class TeamAccessServiceTests
             .ReturnsAsync(RoleGrantValidation.Valid);
 
     private static TeamAccessGrant Grant(bool limit = false, DateTime? end = null) =>
-        new(SiteId, [Guid.CreateVersion7()], limit, end, true);
+        new(SiteId, [Guid.CreateVersion7()], limit, end, TeamStaffRule.TeamDecides);
 
     public static TheoryData<TeamAccessSuggestion, bool, DateTime?, TeamAccessGrant, TeamAccessRefusal?> Narrowings => new()
     {

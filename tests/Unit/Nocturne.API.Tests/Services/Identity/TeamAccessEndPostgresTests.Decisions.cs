@@ -24,8 +24,8 @@ public partial class TeamAccessEndPostgresTests
     private Task<OwnerDecision> DeclineStaffAsync(Site site, Team team, Guid caller, Guid staff) =>
         Service(site.Tenant, caller).DeclineStaffAsync(site.Tenant, team.Id, caller, staff, Ct);
 
-    private Task<OwnerDecision> SetStaffRuleAsync(Site site, Team team, bool teamManagesStaff) =>
-        Service(site.Tenant, site.Owner).SetStaffRuleAsync(site.Tenant, team.Id, site.Owner, teamManagesStaff, Ct);
+    private Task<OwnerDecision> SetStaffRuleAsync(Site site, Team team, string staffRule) =>
+        Service(site.Tenant, site.Owner).SetStaffRuleAsync(site.Tenant, team.Id, site.Owner, staffRule, Ct);
 
     private async Task<string?> StatusAsync(Guid access, Guid staff) =>
         (await ReadAsync($"""
@@ -39,7 +39,7 @@ public partial class TeamAccessEndPostgresTests
 
     private async Task<List<string>> RuleRowsAsync(Site site) =>
         await ReadAsync($"""
-            SELECT details ->> '{TeamAudit.TeamManagesStaffKey}' FROM auth_audit_log
+            SELECT details ->> '{TeamAudit.StaffRuleKey}' FROM auth_audit_log
              WHERE tenant_id = '{site.Tenant}' AND event_type = '{AuthAuditEventType.TeamStaffRuleChanged}' AND target_subject_id IS NULL
              ORDER BY created_at, id
             """);
@@ -61,11 +61,11 @@ public partial class TeamAccessEndPostgresTests
         (await JoinAsync(team, widened, new TeamStaffNarrowing(RoleSeeds.Viewer, false, null))).Refusal.Should().BeNull();
         await HoldsTeamReasonAsync(site, widened, access);
 
-        (await SetStaffRuleAsync(site, team, false)).Should().Be(OwnerDecision.Decided);
+        (await SetStaffRuleAsync(site, team, TeamStaffRule.OwnerApproves)).Should().Be(OwnerDecision.Decided);
 
         await HoldsTeamReasonAsync(site, kept, access);
         (await StatusAsync(access, kept)).Should().Be(TeamSiteStaffStatus.Approved);
-        (await RuleRowsAsync(site)).Should().Equal("false");
+        (await RuleRowsAsync(site)).Should().Equal(TeamStaffRule.OwnerApproves);
 
         var joiner = await JoinStaffAsync(team);
         (await StatusAsync(access, joiner)).Should().Be(TeamSiteStaffStatus.Pending);
@@ -83,7 +83,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("switch-on");
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var first = await JoinStaffAsync(team);
         var second = await JoinStaffAsync(team);
         var declined = await JoinStaffAsync(team);
@@ -93,7 +93,7 @@ public partial class TeamAccessEndPostgresTests
         {
             await using var held = await holder.Database.BeginTransactionAsync(Ct);
             await holder.LockMembershipAsync(site.Tenant, second, Ct);
-            var switchOn = SetStaffRuleAsync(site, team, true);
+            var switchOn = SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
             await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, switchOn);
 
             (await StatusAsync(access, first)).Should().Be(TeamSiteStaffStatus.Pending, "nothing of the switch is seen before its reasons are written");
@@ -115,7 +115,7 @@ public partial class TeamAccessEndPostgresTests
         (await StatusAsync(access, declined)).Should().Be(TeamSiteStaffStatus.Declined);
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, declined, Ct)).Should().BeNull();
         (await RowsAsync(site.Tenant, declined)).Should().NotContain(r => r.EventType == AuthAuditEventType.TeamStaffApproved);
-        (await RuleRowsAsync(site)).Should().Equal("true");
+        (await RuleRowsAsync(site)).Should().Equal(TeamStaffRule.TeamDecides);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public partial class TeamAccessEndPostgresTests
         var (site, team, _, _) = await StaffWithReasonAsync("switch-same");
         var audited = await AuditCountAsync(site);
 
-        (await SetStaffRuleAsync(site, team, true)).Should().Be(OwnerDecision.Decided);
+        (await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides)).Should().Be(OwnerDecision.Decided);
 
         (await AuditCountAsync(site)).Should().Be(audited);
     }
@@ -172,8 +172,8 @@ public partial class TeamAccessEndPostgresTests
         (await DeclinesAsync(access, staff)).Should().Be(1, "the decline outlasts the team membership");
         await JoinStaffAsync(team, staff);
         await StillDeclinedAsync("a removal and a new invite");
-        (await SetStaffRuleAsync(site, team, false)).Should().Be(OwnerDecision.Decided);
-        (await SetStaffRuleAsync(site, team, true)).Should().Be(OwnerDecision.Decided);
+        (await SetStaffRuleAsync(site, team, TeamStaffRule.OwnerApproves)).Should().Be(OwnerDecision.Decided);
+        (await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides)).Should().Be(OwnerDecision.Decided);
         await StillDeclinedAsync("the switch turned on");
 
         (await ApproveStaffAsync(site, team, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
@@ -189,7 +189,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("approve-waiting");
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await JoinStaffAsync(team);
 
         (await ApproveStaffAsync(site, team, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
@@ -244,12 +244,12 @@ public partial class TeamAccessEndPostgresTests
         (await DeclineStaffAsync(site, team, other, staff)).Should().Be(OwnerDecision.AccessFromTeam);
         (await DeclineStaffAsync(site, team, lapsedStaff, staff)).Should().Be(OwnerDecision.AccessFromTeam, "the owner's direct reason has ended and only the team keeps them");
         (await DeclineStaffAsync(site, team, lapsed, staff)).Should().Be(OwnerDecision.NotOwner, "the owner's direct reason has ended and nothing else keeps them a member");
-        (await Service(site.Tenant, viewer).SetStaffRuleAsync(site.Tenant, team.Id, viewer, false, Ct)).Should().Be(OwnerDecision.NotOwner);
-        (await Service(site.Tenant, other).SetStaffRuleAsync(site.Tenant, team.Id, other, false, Ct)).Should().Be(OwnerDecision.AccessFromTeam);
+        (await Service(site.Tenant, viewer).SetStaffRuleAsync(site.Tenant, team.Id, viewer, TeamStaffRule.OwnerApproves, Ct)).Should().Be(OwnerDecision.NotOwner);
+        (await Service(site.Tenant, other).SetStaffRuleAsync(site.Tenant, team.Id, other, TeamStaffRule.OwnerApproves, Ct)).Should().Be(OwnerDecision.AccessFromTeam);
         (await DeclineStaffAsync(site, new Team(Guid.NewGuid(), "Unknown", team.Manager), site.Owner, staff)).Should().Be(OwnerDecision.NotFound);
         (await DeclineStaffAsync(site, team, site.Owner, viewer)).Should().Be(OwnerDecision.NotFound);
         (await DeclineStaffAsync(site, team, site.Owner, team.Manager)).Should().Be(OwnerDecision.NotFound);
-        (await SetStaffRuleAsync(site, new Team(Guid.NewGuid(), "Unknown", team.Manager), false)).Should().Be(OwnerDecision.NotFound);
+        (await SetStaffRuleAsync(site, new Team(Guid.NewGuid(), "Unknown", team.Manager), TeamStaffRule.OwnerApproves)).Should().Be(OwnerDecision.NotFound);
 
         (await StatusAsync(access, staff)).Should().Be(TeamSiteStaffStatus.Approved);
         await HoldsTeamReasonAsync(site, staff, access);
@@ -260,7 +260,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("reads");
         var team = await TeamAsync("Clinic");
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var approved = await JoinStaffAsync(team);
         var declined = await JoinStaffAsync(team);
         var pending = await NewSubjectAsync("pending");
@@ -270,7 +270,7 @@ public partial class TeamAccessEndPostgresTests
         (await DeclineStaffAsync(site, team, site.Owner, declined)).Should().Be(OwnerDecision.Decided);
 
         var seen = (await Teams().ListAccessOfTenantAsync(site.Tenant, Now, Ct)).Should().ContainSingle().Subject;
-        seen.TeamManagesStaff.Should().BeFalse();
+        seen.StaffRule.Should().Be(TeamStaffRule.OwnerApproves);
         seen.Staff.Select(s => (s.SubjectId, s.Status)).Should().Equal(
             (pending, TeamSiteStaffStatus.Pending), (approved, TeamSiteStaffStatus.Approved), (declined, TeamSiteStaffStatus.Declined));
         seen.Staff[0].Narrowing.Should().Be(new TeamStaffNarrowing(RoleSeeds.Viewer, true, end));
@@ -279,7 +279,7 @@ public partial class TeamAccessEndPostgresTests
 
         var detail = (await Teams(team.Manager).GetAsync(team.Id, team.Manager, Now, Ct))!;
         var managed = detail.Sites.Should().ContainSingle().Subject;
-        (managed.TeamManagesStaff, managed.PendingStaffCount, managed.DeclinedStaffCount).Should().Be((false, 1, 1));
+        (managed.StaffRule, managed.PendingStaffCount, managed.DeclinedStaffCount).Should().Be((TeamStaffRule.OwnerApproves, 1, 1));
     }
 
     [Fact]
@@ -287,11 +287,11 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("history");
         var team = await TeamAsync("Clinic");
-        await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await JoinStaffAsync(team);
         (await DeclineStaffAsync(site, team, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
         (await ApproveStaffAsync(site, team, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
-        (await SetStaffRuleAsync(site, team, true)).Should().Be(OwnerDecision.Decided);
+        (await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides)).Should().Be(OwnerDecision.Decided);
         var history = new MemberHistoryReader(Contexts(site.Tenant));
 
         var own = await history.GetAsync(site.Tenant, staff, 25, 0, Now, Ct);
@@ -301,7 +301,7 @@ public partial class TeamAccessEndPostgresTests
 
         var rule = (await history.GetAsync(site.Tenant, null, 25, 0, Now, Ct)).Data
             .Should().ContainSingle(e => e.Kind == MemberHistoryKind.TeamStaffRuleChanged).Subject;
-        rule.TeamManagesStaff.Should().BeTrue();
+        rule.StaffRule.Should().Be(TeamStaffRule.TeamDecides);
         rule.Member.Should().BeNull();
         rule.Team!.Name.Should().Be(team.Name);
     }

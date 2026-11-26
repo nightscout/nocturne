@@ -2,6 +2,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import AccessEndField from "#lib/components/members/AccessEndField.svelte";
   import TeamAccessTermsFields from "#lib/components/members/TeamAccessTermsFields.svelte";
+  import TeamStaffRuleChoices from "#lib/components/teams/TeamStaffRuleChoices.svelte";
+  import { RULE_TEAM_DECIDES } from "#lib/teams/site-staff.svelte.js";
   import {
     latestAccessEndDay,
     accessEndInstant,
@@ -25,6 +27,7 @@
   let pickedRoleIds = $state<string[] | null>(null);
   let pickedLimit = $state(false);
   let endDay = $state("");
+  let staffRule = $state(RULE_TEAM_DECIDES);
 
   const roleIds = $derived(pickedRoleIds ?? (site.defaultRoleId ? [site.defaultRoleId] : []));
   const limited = $derived(site.limitForced === true || pickedLimit);
@@ -48,6 +51,7 @@
       roleIds,
       limitTo24Hours: limited,
       accessEndsAt: endDay === "" ? undefined : accessEndInstant(endDay),
+      staffRule,
     });
   }
 </script>
@@ -83,6 +87,8 @@
       required={endMustBeChosen}
       limitNote={endNote}
     />
+
+    <TeamStaffRuleChoices idPrefix="team-access-approve" value={staffRule} onChange={(next) => (staffRule = next)} />
 
     <Button type="submit" size="lg" class="w-full" disabled={!canApprove}>Give the team access</Button>
   {/if}

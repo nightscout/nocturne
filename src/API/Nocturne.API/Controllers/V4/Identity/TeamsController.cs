@@ -492,13 +492,16 @@ public class TeamsController(
 
         if (ApproverCredential() is not { } caller)
             return Unauthorized();
+        var staffRule = request.StaffRule ?? TeamStaffRule.TeamDecides;
+        if (!TeamStaffRule.IsKnown(staffRule))
+            return this.StaffRuleInvalidProblem();
 
         var grant = new TeamAccessGrant(
             request.TenantId,
             request.RoleIds,
             request.LimitTo24Hours,
             AccessEndRequest.Instant(request.AccessEndsAt),
-            request.TeamManagesStaff ?? true);
+            staffRule);
         var approval = await access.ApproveAsync(HashUtils.Sha256Hex(token), caller, grant, ct);
         return approval.Refusal is { } refusal
             ? this.TeamAccessProblem(refusal)
@@ -690,15 +693,15 @@ public sealed record TeamAccessLinkCreated(Guid Id, string Token, string LinkUrl
 /// <summary>
 /// An approval: <paramref name="TenantId"/> is a site the caller owns, <paramref name="RoleIds"/> are at
 /// least one of its roles, and <paramref name="AccessEndsAt"/> is when the access ends, null for no end.
-/// <paramref name="TeamManagesStaff"/> says the team's managers decide which of their staff reach the
-/// site; absent means true, and false makes each staff member wait for the site to approve them.
+/// <paramref name="StaffRule"/> is who decides which of the team's staff reach the site, a <see cref="TeamStaffRule"/>
+/// value; absent or null means <see cref="TeamStaffRule.TeamDecides"/>.
 /// </summary>
 public sealed record ApproveTeamAccessRequest(
     Guid TenantId,
     [property: Required] IReadOnlyList<Guid> RoleIds,
     bool LimitTo24Hours,
     DateTimeOffset? AccessEndsAt,
-    bool? TeamManagesStaff);
+    string? StaffRule);
 
 /// <summary>The access an approval made.</summary>
 public sealed record TeamAccessGiven(Guid AccessId, Guid TenantId);
@@ -764,6 +767,11 @@ public static class TeamAccessProblems
             TeamProblemCodes.AccessLinkEndPassed, "The latest end this link allows has passed.", StatusCodes.Status400BadRequest),
         _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, null),
     };
+
+    public static IActionResult StaffRuleInvalidProblem(this ControllerBase controller) => controller.ProblemWithCode(
+        TeamProblemCodes.StaffRuleInvalid,
+        $"The staff rule must be one of {string.Join(", ", TeamStaffRule.All)}.",
+        StatusCodes.Status400BadRequest);
 }
 
 /// <summary>The problem codes the team routes answer with, which the web app words itself.</summary>
@@ -798,6 +806,8 @@ public static class TeamProblemCodes
     public const string StaffEndInvalid = "team_staff_end_invalid";
     public const string StaffInviteEndPassed = "team_staff_invite_end_passed";
     public const string StaffDecisionNotOwner = "team_staff_decision_not_owner";
+    public const string StaffTeamTrusted = "team_staff_team_trusted";
+    public const string StaffRuleInvalid = "team_staff_rule_invalid";
 }
 
 public sealed record TeamInviteAccepted(Guid TeamId);
