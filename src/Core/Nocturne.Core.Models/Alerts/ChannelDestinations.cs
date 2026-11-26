@@ -31,7 +31,7 @@ public static partial class ChannelDestinations
         [ChannelType.SlackChannel] = ChannelDestinationMode.UserSupplied,
         [ChannelType.TelegramDm] = ChannelDestinationMode.LinkedIdentity,
         [ChannelType.TelegramGroup] = ChannelDestinationMode.UserSupplied,
-        [ChannelType.WhatsAppDm] = ChannelDestinationMode.UserSupplied,
+        [ChannelType.WhatsAppDm] = ChannelDestinationMode.LinkedIdentity,
         [ChannelType.ResendEmail] = ChannelDestinationMode.UserSupplied,
         [ChannelType.DeviceAction] = ChannelDestinationMode.DeviceKind,
     };
@@ -77,7 +77,7 @@ public static partial class ChannelDestinations
         [ChannelType.TelegramGroup] = new(
             TelegramGroupId(), "a Telegram group chat ID (-100…) or an @username"),
         [ChannelType.WhatsAppDm] = new(
-            WhatsAppPhoneNumber(), "an E.164 phone number with a leading + (+15551234567)"),
+            WhatsAppUser(), "a WhatsApp phone number with its country code (+15551234567) or user ID"),
     };
 
     /// <summary>The channel types the rule editor offers, each classified by destination mode.</summary>
@@ -140,9 +140,9 @@ public static partial class ChannelDestinations
     [GeneratedRegex(@"^(-\d+|@[A-Za-z][A-Za-z0-9_]{4,31})$")]
     private static partial Regex TelegramGroupId();
 
-    // The Cloud API prepends the business phone number's own country calling code to any `to`
-    // value that omits the leading +, so a destination stored without one is delivered to a
-    // different number entirely.
-    [GeneratedRegex(@"^\+[1-9]\d{6,14}$")]
-    private static partial Regex WhatsAppPhoneNumber();
+    // A phone number with its country code, with or without the + (a linked identity is the bare
+    // wa_id; the bot sends every number with a +), or the business-scoped user ID WhatsApp gives a
+    // user who hides their number.
+    [GeneratedRegex(@"^(\+?[1-9]\d{6,14}|[A-Z]{2}\.(ENT\.)?[A-Za-z0-9]{1,128})$")]
+    private static partial Regex WhatsAppUser();
 }

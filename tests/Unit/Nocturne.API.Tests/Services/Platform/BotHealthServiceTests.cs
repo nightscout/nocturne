@@ -75,10 +75,23 @@ public class BotHealthServiceTests
         slackDm.RequiresDestination.Should().BeFalse();
         slackDm.RequiresLink.Should().BeTrue();
 
+        var whatsAppDm = statuses.First(s => s.ChannelType == ChannelType.WhatsAppDm);
+        whatsAppDm.Offered.Should().BeTrue();
+        whatsAppDm.RequiresDestination.Should().BeFalse();
+        whatsAppDm.RequiresLink.Should().BeTrue();
+
         statuses.First(s => s.ChannelType == ChannelType.Telegram).Offered.Should().BeFalse();
         statuses.First(s => s.ChannelType == ChannelType.WhatsApp).Offered.Should().BeFalse();
         statuses.First(s => s.ChannelType == ChannelType.WebPush).Offered.Should().BeFalse();
         statuses.First(s => s.ChannelType == ChannelType.InApp).Offered.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GetChannelStatuses_AfterHeartbeat_TheWhatsAppDmIsAvailableWhenTheBotReportsWhatsApp()
+    {
+        _sut.Record(["whatsapp"]);
+        var statuses = _sut.GetChannelStatuses();
+        statuses.First(s => s.ChannelType == ChannelType.WhatsAppDm).Status.Should().Be(ChannelStatus.Available);
     }
 
     [Fact]

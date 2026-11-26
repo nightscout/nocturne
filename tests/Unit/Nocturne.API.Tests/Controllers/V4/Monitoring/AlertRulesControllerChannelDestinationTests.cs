@@ -40,6 +40,8 @@ public class AlertRulesControllerChannelDestinationTests
     private const string DiscordUserSnowflake = "9876543210987654321";
     private const string SlackMemberId = "U00FAKEUSER1";
     private const string TelegramUserId = "864203571";
+    private const string WhatsAppWaId = "61412345678";
+    private const string WhatsAppBusinessScopedId = "US.13491208655302741918";
 
     private static (AlertRulesController Controller, NocturneDbContext Db) CreateController(
         IAlertDeliveryService? deliveryService = null, string grantedScope = Scope.AlertsReadWrite)
@@ -175,6 +177,8 @@ public class AlertRulesControllerChannelDestinationTests
     [InlineData(ChannelType.DiscordDm, "discord", DiscordUserSnowflake)]
     [InlineData(ChannelType.SlackDm, "slack", SlackMemberId)]
     [InlineData(ChannelType.TelegramDm, "telegram", TelegramUserId)]
+    [InlineData(ChannelType.WhatsAppDm, "whatsapp", WhatsAppWaId)]
+    [InlineData(ChannelType.WhatsAppDm, "whatsapp", WhatsAppBusinessScopedId)]
     public async Task CreateRule_resolves_a_dm_destination_from_the_linked_identity(
         ChannelType channelType, string platform, string platformUserId)
     {
@@ -194,6 +198,7 @@ public class AlertRulesControllerChannelDestinationTests
     [Theory]
     [InlineData(ChannelType.SlackDm, "Slack")]
     [InlineData(ChannelType.TelegramDm, "Telegram")]
+    [InlineData(ChannelType.WhatsAppDm, "WhatsApp")]
     public async Task CreateRule_rejects_a_dm_channel_when_the_caller_has_no_link_on_that_platform(
         ChannelType channelType, string platform)
     {
@@ -257,7 +262,10 @@ public class AlertRulesControllerChannelDestinationTests
     [InlineData("+441632960001")]
     [InlineData("+1234567")]         // 7 digits — the E.164 minimum
     [InlineData("+123456789012345")] // 15 digits — the E.164 maximum
-    public async Task CreateRule_accepts_a_whatsapp_destination_in_e164(string destination)
+    [InlineData("15551234567")]      // a wa_id: the bot sends it with a +
+    [InlineData("US.13491208655302741918")]     // a business-scoped user ID
+    [InlineData("US.ENT.13491208655302741918")] // an enterprise one
+    public async Task CreateRule_accepts_a_whatsapp_destination_the_adapter_can_address(string destination)
     {
         var (controller, _) = CreateController();
 
@@ -274,13 +282,13 @@ public class AlertRulesControllerChannelDestinationTests
     [Theory]
     [InlineData(null)]
     [InlineData("  ")]
-    [InlineData("15551234567")]        // a webhook wa_id — no leading +
     [InlineData("+1 (555) 123-4567")]  // separators the Cloud API tolerates, we do not store
     [InlineData("+0155512345")]        // no country calling code starts with 0
     [InlineData("+123456")]            // 6 digits — one short
     [InlineData("+1234567890123456")]  // 16 digits — one past the E.164 maximum
     [InlineData("whatsapp:+15551234567")]
-    public async Task CreateRule_rejects_a_whatsapp_destination_outside_e164(string? destination)
+    [InlineData("us.13491208655302741918")]  // a business-scoped ID's country is upper case
+    public async Task CreateRule_rejects_a_whatsapp_destination_the_adapter_cannot_address(string? destination)
     {
         var (controller, _) = CreateController();
 

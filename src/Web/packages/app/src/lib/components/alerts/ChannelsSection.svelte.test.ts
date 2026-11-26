@@ -79,7 +79,6 @@ const REQUIRES_DESTINATION = new Set<ChannelType>([
 	ChannelType.DiscordChannel,
 	ChannelType.SlackChannel,
 	ChannelType.TelegramGroup,
-	ChannelType.WhatsAppDm,
 	ChannelType.ResendEmail,
 ]);
 

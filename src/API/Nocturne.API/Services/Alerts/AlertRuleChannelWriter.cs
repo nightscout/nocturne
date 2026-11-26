@@ -240,8 +240,11 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     public static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
 
     /// <summary>A chat platform's name as a person reads it.</summary>
-    internal static string PlatformDisplayName(string platform) =>
-        char.ToUpperInvariant(platform[0]) + platform[1..];
+    internal static string PlatformDisplayName(string platform) => platform switch
+    {
+        "whatsapp" => "WhatsApp",
+        _ => char.ToUpperInvariant(platform[0]) + platform[1..],
+    };
 
     /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
     private static string WireName(ChannelType channelType) =>
