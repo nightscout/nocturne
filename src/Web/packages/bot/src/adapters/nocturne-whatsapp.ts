@@ -7,6 +7,7 @@ import {
   WINDOW_CLOSED_ERROR_CODE,
   WINDOW_CLOSED_REASON,
   WhatsAppWindow,
+  isRefusedUnsent,
   type SentAlert,
 } from "../whatsapp/window.js";
 
@@ -268,8 +269,13 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
       sentId = (await this.sendTemplate(card.threadId, message)).id;
     } catch (error) {
       this.logger.error("The WhatsApp alert template failed", { deliveryId: card.deliveryId, error });
-      // Nothing went out, so a retry that the report below may need is free to send it.
-      await window.releaseFallback(cardId);
+      // After a refusal nothing went out, so a retry that the report below may need is free to
+      // send it. Any other error can follow a template that went out: the claim is kept.
+      if (isRefusedUnsent(error)) {
+        await window
+          .releaseFallback(cardId)
+          .catch((e: unknown) => this.logger.warn("Failed to release a WhatsApp template claim", { cardId, error: e }));
+      }
       await alerts.markFailed(card.deliveryId, {
         error: error instanceof Error ? error.message : String(error),
         platformMessageId: cardId,

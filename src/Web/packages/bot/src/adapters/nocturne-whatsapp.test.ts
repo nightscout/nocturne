@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { WhatsAppApiError } from "@chat-adapter/whatsapp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatInstance } from "chat";
 import { NocturneWhatsAppAdapter } from "./nocturne-whatsapp.js";
@@ -321,7 +322,11 @@ describe("NocturneWhatsAppAdapter", () => {
   });
 
   it("tries the template again when Meta refused it and the failure could not be recorded", async () => {
-    const refused = Object.assign(new Error("Template name does not exist in the translation"), { status: 400 });
+    const refused = new WhatsAppApiError(
+      "Template name does not exist in the translation",
+      400,
+      JSON.stringify({ error: { code: 132001, message: "Template name does not exist in the translation" } }),
+    );
     const sendTemplate = vi.fn().mockRejectedValue(refused);
     bits.adapter.sendTemplate = sendTemplate as never;
     bits.markFailed.mockRejectedValueOnce(new Error("API restarting"));
@@ -333,9 +338,21 @@ describe("NocturneWhatsAppAdapter", () => {
     expect([first.status, again.status]).toEqual([500, 200]);
     expect(sendTemplate).toHaveBeenCalledTimes(2);
     expect(bits.markFailed).toHaveBeenLastCalledWith("delivery-1", {
-      error: "Template name does not exist in the translation",
+      error: expect.stringContaining("Template name does not exist in the translation"),
       platformMessageId: "wamid.alert",
     });
+  });
+
+  it("does not try the template again after an error that can follow a sent message", async () => {
+    const sendTemplate = vi.fn().mockRejectedValue(new Error("fetch failed: socket hang up"));
+    bits.adapter.sendTemplate = sendTemplate as never;
+    bits.markFailed.mockRejectedValueOnce(new Error("API restarting"));
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
+
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(sendTemplate).toHaveBeenCalledOnce();
   });
 
   it("does not send the template twice when recording it as sent fails", async () => {

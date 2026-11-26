@@ -151,3 +151,11 @@ export class WhatsAppWindow {
 export function isWindowClosedError(err: unknown): boolean {
   return err instanceof WhatsAppApiError && err.errorCode === WINDOW_CLOSED_ERROR_CODE;
 }
+
+/**
+ * Whether Meta certainly sent nothing: it answered the request with a 4xx refusal. A network
+ * error, a 5xx or an answer that could not be read can follow a message that went out.
+ */
+export function isRefusedUnsent(err: unknown): boolean {
+  return err instanceof WhatsAppApiError && err.status >= 400 && err.status < 500;
+}
