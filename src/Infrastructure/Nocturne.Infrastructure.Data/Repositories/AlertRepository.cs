@@ -297,6 +297,20 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<bool> OweOpeningAsync(Guid excursionId, DateTime now, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        var excursion = await context.AlertExcursions.OfCondition(includeTest: true)
+            .FirstOrDefaultAsync(e => e.Id == excursionId && e.OpenedOwedAt == null, ct);
+        if (excursion is null)
+            return false;
+        excursion.OpenedOwedAt = now;
+        await context.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(
         Guid excursionId, CancellationToken ct)
     {
@@ -522,6 +536,8 @@ public class AlertRepository : IAlertRepository
         // second source (e.g. a future quiet-hours bypass code path) shouldn't clobber
         // the original. First writer wins.
         if (instance.SuppressionReason is not null) return;
+
+        if (await context.AlertDeliveries.AnyAsync(d => d.AlertInstanceId == instanceId, ct)) return;
 
         instance.SuppressionReason = reason;
         // Suppression closes the active dispatch path. Keep the row around with

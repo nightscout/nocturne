@@ -11,9 +11,12 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// Safe to run again for an opening a run that died left unsettled, which is how
-/// <see cref="AlertSweepJob"/> re-dispatches it: the instance is the one the first run raised
-/// (<see cref="IAlertRepository.EnsureInstanceAsync"/>), an instance that run silenced stays silent
-/// and is not dispatched, the dispatch sends only the channels still owed
+/// <see cref="AlertSweepJob"/> re-dispatches it, and for a snooze's re-notification that died,
+/// which holds the opening owed (<see cref="IAlertSnoozeService.ResumeAsync"/>): the instance is
+/// the one the first run raised (<see cref="IAlertRepository.EnsureInstanceAsync"/>), an instance
+/// that run silenced stays silent and is not dispatched, one that reached a channel is not silenced
+/// by a scope begun since (<see cref="IAlertRepository.MarkInstanceSuppressedAsync"/>), the
+/// dispatch sends only the channels still owed
 /// (<see cref="IAlertDeliveryService.DispatchAsync"/>), and acknowledging an acknowledged excursion
 /// changes nothing. So a re-run of an opening whose dispatch and info acknowledgement both finished
 /// sends nothing, acknowledges nothing new, and settles. The payload is built from the context as

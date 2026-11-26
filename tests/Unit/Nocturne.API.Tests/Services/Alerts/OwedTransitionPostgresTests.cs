@@ -11,6 +11,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
@@ -85,6 +86,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public readonly Mock<IEngineAlarmRelay> Alarms = new();
         public readonly Mock<IInAppNotificationService> Notifications = new();
         public readonly FakeTimeProvider Time = new(Opened);
+        public IReadOnlySet<DndScope> Dnd = new HashSet<DndScope>();
 
         public AlertRepository Repository() => new(new SuppliedContextFactory(Context));
 
@@ -153,14 +155,23 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .BuildServiceProvider();
         }
 
-        private static ISensorContextEnricher EnricherOf()
+        /// <summary>The enricher, which gives the Do Not Disturb scopes in <see cref="Dnd"/> as they are at the call.</summary>
+        private ISensorContextEnricher EnricherOf()
         {
             var enricher = new Mock<ISensorContextEnricher>();
             enricher
                 .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => c);
+                .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => c with { ActiveDndScopes = Dnd });
             return enricher.Object;
         }
+
+        /// <summary>The alarm the tenant's alerting instances keep sounding, or null.</summary>
+        public Task<EngineAlarm?> AlarmingAsync() =>
+            new EngineAlarmRelay(
+                    new SuppliedContextFactory(Context), Mock.Of<ITenantAccessor>(a => a.TenantId == Id),
+                    Mock.Of<ITenantGlucoseUnits>(), Mock.Of<ICanonicalGlucoseService>(), Mock.Of<ISignalRBroadcastService>(),
+                    Time, NullLogger<EngineAlarmRelay>.Instance)
+                .HighestAlarmingAsync(CancellationToken.None);
 
         /// <summary>The evaluation's commit of an opening: excursion, tracker state and owed work.</summary>
         public async Task<Guid> OpenAsync()
@@ -299,6 +310,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 ConditionType = AlertConditionType.Threshold,
                 ConditionParams = """{"direction":"below","value":55}""",
                 Severity = severity,
+                ScopeClass = RuleScopeClass.Low,
                 IsEnabled = true,
                 CreatedAt = Opened,
                 UpdatedAt = Opened,
@@ -316,7 +328,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
         var snapshot = new AlertRuleSnapshot(
             rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"direction":"below","value":55}""",
-            severity, "{}", 0, false, null);
+            severity, "{}", 0, false, null, ScopeClass: RuleScopeClass.Low);
         var channelSnapshot = new AlertRuleChannelSnapshot(channel, rule, ChannelType.HomeAssistant, HomeAssistant, null, 0);
         var seeded = new Tenant
         {
@@ -908,6 +920,147 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         (await tenant.OwedAsync(excursion)).Should().Be((null, null));
     }
 
+    [Fact]
+    public async Task A_death_after_a_snooze_re_notified_through_a_close_and_before_its_close_is_owed_is_finished_by_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var events = await RecordAlarmsAndNotificationsAsync(tenant);
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        var dying = tenant.Hooked();
+        dying.BeforeOweClose = () => throw new NpgsqlException("the process dies once the re-notification is sent");
+        var process = tenant.Process(dying);
+        CloseAtTheDispatch(tenant, process);
+
+        await process.Invoking(p => ResumeAsync(p, instance)).Should().ThrowAsync<NpgsqlException>();
+        events.Last(e => e is "raised" or "cleared").Should().Be("raised", "the run died with its alarm standing");
+        events.Last(e => e is "notified" or "archived").Should().Be("notified", "the run died with its notification standing");
+
+        await tenant.SweepAsync(tenant.Process(), AfterLease);
+
+        events.Last(e => e is "raised" or "cleared").Should().Be("cleared");
+        events.Last(e => e is "notified" or "archived").Should().Be("archived");
+        events.Count(e => e == "notified").Should().Be(2, "the sweep sends nothing the run already sent");
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("resolved");
+        (await tenant.DeliveriesAsync(excursion)).Should().NotContain(d => d.Status == "pending");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_snooze_re_notification_holds_its_opening_owed_while_it_sends_and_settles_it_once_done()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        var process = tenant.Process();
+        await tenant.HandleOpenedAsync(process, excursion);
+        var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        DateTime? owedDuringTheSend = null;
+        tenant.OnSend = async () => owedDuringTheSend = (await tenant.OwedAsync(excursion)).Opened;
+
+        (await ResumeAsync(process, instance)).Should().BeTrue();
+
+        owedDuringTheSend.Should().NotBeNull("a run that dies during the send leaves its opening for the sweep");
+        tenant.Sends.Should().Be(2);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    /// <summary>
+    /// A re-notification dies once it is sent, with its excursion still open, and the sweep re-runs
+    /// the opening it holds owed.
+    /// </summary>
+    private static async Task<(Guid Excursion, ConcurrentQueue<string> Events)> ResumeThatDiesWhileOpenAsync(Tenant tenant)
+    {
+        var events = await RecordAlarmsAndNotificationsAsync(tenant);
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        var dying = tenant.Hooked();
+        dying.BeforeOweClose = () => throw new NpgsqlException("the process dies once the re-notification is sent");
+
+        await tenant.Process(dying).Invoking(p => ResumeAsync(p, instance)).Should().ThrowAsync<NpgsqlException>();
+        (await tenant.OwedAsync(excursion)).Opened.Should().NotBeNull();
+        return (excursion, events);
+    }
+
+    [Fact]
+    public async Task A_dead_re_notification_finished_under_a_scope_begun_since_is_not_recorded_as_silenced()
+    {
+        var tenant = await SeedAsync(AlertRuleSeverity.Warning);
+        var (excursion, _) = await ResumeThatDiesWhileOpenAsync(tenant);
+        tenant.Dnd = new HashSet<DndScope> { DndScope.Lows };
+
+        await tenant.SweepAsync(tenant.Process(), AfterLease);
+
+        (await tenant.InstancesAsync(excursion)).Should().ContainSingle()
+            .Which.SuppressionReason.Should().BeNull("the instance reached its channels before the scope began");
+        (await tenant.AlarmingAsync()).Should().NotBeNull("the alarm the member received still sounds");
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_dead_re_notification_on_an_open_excursion_is_settled_by_the_sweep_without_a_send()
+    {
+        var tenant = await SeedAsync(AlertRuleSeverity.Warning);
+        var (excursion, events) = await ResumeThatDiesWhileOpenAsync(tenant);
+        var raised = events.Count(e => e == "raised");
+
+        await tenant.SweepAsync(tenant.Process(), AfterLease);
+
+        tenant.Sends.Should().Be(2, "the opening and the re-notification each reached the channel once");
+        events.Count(e => e == "raised").Should().Be(raised);
+        (await tenant.AlarmingAsync()).Should().NotBeNull();
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task A_re_notification_leaves_an_opening_already_owed_with_its_stamp_for_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        var process = tenant.Process();
+        await tenant.HandleOpenedAsync(process, excursion);
+        var instance = (await tenant.InstancesAsync(excursion)).Single().Id;
+        await tenant.UnsettleOpeningAsync(excursion);
+        tenant.Time.Advance(TimeSpan.FromMinutes(1));
+
+        (await ResumeAsync(process, instance)).Should().BeTrue();
+
+        (await tenant.OwedAsync(excursion)).Opened.Should().Be(Opened, "the opening's own run owes its work, and holds its lease");
+        await tenant.SweepAsync(tenant.Process(), AfterLease + TimeSpan.FromMinutes(1));
+        tenant.Sends.Should().Be(2);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    /// <summary>
+    /// The notice was sent and its dispatch settled; its retirement dies after it resolves the
+    /// instance, with the reason, and before it archives the notification.
+    /// </summary>
+    [Fact]
+    public async Task A_notice_whose_retirement_dies_after_its_resolve_is_archived_by_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var events = await RecordAlarmsAndNotificationsAsync(tenant, InAppProvider.UnevaluableNotificationType);
+        await UnevaluableNotice(tenant, tenant.Process())
+            .CheckAsync(new EnabledAlertRules([tenant.Rule], []), CancellationToken.None);
+        var notice = await NoticeOfAsync(tenant);
+        (await tenant.OwedAsync(notice)).Should().Be((null, null));
+        var dying = tenant.Hooked();
+        dying.AfterResolveInstances = () => throw new NpgsqlException("the retiring process dies once the instance is resolved");
+
+        await UnevaluableNotice(tenant, tenant.Process(dying))
+            .Invoking(n => n.ResolveAsync(tenant.Rule.Id, ExcursionCloseReason.RuleDisabled, CancellationToken.None))
+            .Should().ThrowAsync<NpgsqlException>();
+        events.Last(e => e is "notified" or "archived").Should().Be("notified", "the run died with its notification standing");
+
+        await tenant.SweepAsync(tenant.Process(), AfterLease);
+
+        events.Last(e => e is "notified" or "archived").Should().Be("archived", "no notification stays up for a resolved notice");
+        (await tenant.InstancesAsync(notice)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.RuleDisabled.ToWireString());
+        (await tenant.OwedAsync(notice)).Should().Be((null, null));
+    }
+
     private static UnevaluableRuleNotice UnevaluableNotice(Tenant tenant, IServiceProvider process)
     {
         var validator = new Mock<IAlertRuleConditionValidator>();
@@ -1158,34 +1311,5 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         await tenant.SweepAsync(tenant.Process(), AfterLease.AddMinutes(10));
 
         (await tenant.OwedAsync(excursion)).Opened.Should().BeNull("a closed excursion ends what its opening owed");
-    }
-
-    /// <summary>
-    /// The notice was sent and its dispatch settled; its retirement dies after it resolves the
-    /// instance, with the reason, and before it archives the notification.
-    /// </summary>
-    [Fact]
-    public async Task A_notice_whose_retirement_dies_after_its_resolve_is_archived_by_the_sweep()
-    {
-        var tenant = await SeedAsync();
-        var events = await RecordAlarmsAndNotificationsAsync(tenant, InAppProvider.UnevaluableNotificationType);
-        await UnevaluableNotice(tenant, tenant.Process())
-            .CheckAsync(new EnabledAlertRules([tenant.Rule], []), CancellationToken.None);
-        var notice = await NoticeOfAsync(tenant);
-        (await tenant.OwedAsync(notice)).Should().Be((null, null));
-        var dying = tenant.Hooked();
-        dying.AfterResolveInstances = () => throw new NpgsqlException("the retiring process dies once the instance is resolved");
-
-        await UnevaluableNotice(tenant, tenant.Process(dying))
-            .Invoking(n => n.ResolveAsync(tenant.Rule.Id, ExcursionCloseReason.RuleDisabled, CancellationToken.None))
-            .Should().ThrowAsync<NpgsqlException>();
-        events.Last(e => e is "notified" or "archived").Should().Be("notified", "the run died with its notification standing");
-
-        await tenant.SweepAsync(tenant.Process(), AfterLease);
-
-        events.Last(e => e is "notified" or "archived").Should().Be("archived", "no notification stays up for a resolved notice");
-        (await tenant.InstancesAsync(notice)).Should().ContainSingle()
-            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.RuleDisabled.ToWireString());
-        (await tenant.OwedAsync(notice)).Should().Be((null, null));
     }
 }
