@@ -29,7 +29,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <c>kind</c> = <c>team_access</c> and no target, so it never appears in a page narrowed to a member.
 /// It names the team by its name now, or the name the row recorded once the team is gone. An owner's
 /// approval or decline of a staff member is a <c>team_access</c> row that targets the staff member, so it
-/// appears in their page too; a change of the switch has no target.
+/// appears in their page too; a change of the switch has no target. An owner's stop of one person through
+/// any team, set or removed, is a <c>team_access</c> row with no team that targets that person.
 /// </para>
 /// <para>
 /// A change an invite made is <see cref="MemberHistoryEntry.InRecordedJoin"/> when a
@@ -54,6 +55,8 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         AuthAuditEventType.TeamStaffApproved,
         AuthAuditEventType.TeamStaffDeclined,
         AuthAuditEventType.TeamStaffRuleChanged,
+        AuthAuditEventType.TeamStaffBlocked,
+        AuthAuditEventType.TeamStaffUnblocked,
     ];
 
     private const string MemberChangeRows =
@@ -175,6 +178,8 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             AuthAuditEventType.TeamStaffApproved => MemberHistoryKind.TeamStaffApproved,
             AuthAuditEventType.TeamStaffDeclined => MemberHistoryKind.TeamStaffDeclined,
             AuthAuditEventType.TeamStaffRuleChanged => MemberHistoryKind.TeamStaffRuleChanged,
+            AuthAuditEventType.TeamStaffBlocked => MemberHistoryKind.TeamStaffBlocked,
+            AuthAuditEventType.TeamStaffUnblocked => MemberHistoryKind.TeamStaffUnblocked,
             AuthAuditEventType.AccessEndChanged => details switch
             {
                 { AccessEndRecorded: false } => MemberHistoryKind.AccessEndChanged,

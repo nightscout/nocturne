@@ -7,6 +7,8 @@ import { SetTeamStaffRuleRequestSchema } from "@nocturne/api-client/schemas";
 const mocks = vi.hoisted(() => ({
   approveTeamStaff: vi.fn(),
   declineTeamStaff: vi.fn(),
+  blockTeamStaff: vi.fn(),
+  unblockTeamStaff: vi.fn(),
   setTeamStaffRule: vi.fn(),
   editTeamAccess: vi.fn(),
 }));
@@ -68,6 +70,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.approveTeamStaff.mockResolvedValue(undefined);
   mocks.declineTeamStaff.mockResolvedValue(undefined);
+  mocks.blockTeamStaff.mockResolvedValue(undefined);
+  mocks.unblockTeamStaff.mockResolvedValue(undefined);
   mocks.setTeamStaffRule.mockResolvedValue(undefined);
   mocks.editTeamAccess.mockResolvedValue(undefined);
 });
@@ -147,7 +151,7 @@ describe("TeamAccessCard commands", () => {
     await expect
       .element(
         page.getByText(
-          "You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again.",
+          "You trust the whole team, so you do not approve or decline one staff member. You can still stop one person's access.",
         ),
       )
       .toBeVisible();
@@ -297,6 +301,75 @@ describe("TeamAccessCard refusals of an edit", () => {
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect.element(page.getByRole("alert")).toHaveTextContent("This team no longer has access.");
+    expect(onStale).toHaveBeenCalled();
+  });
+});
+
+describe("TeamAccessCard stopping a staff member", () => {
+  it("stops a staff member with their subject, even while the site trusts the whole team", async () => {
+    const { onSuccess } = show(true, { roles: [viewer] }, { ...team, staffRule: "team_trusted" });
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await vi.waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("This person no longer sees this site through any team."),
+    );
+    expect(mocks.blockTeamStaff).toHaveBeenCalledWith(approved.subjectId);
+  });
+
+  it("lets a stopped staff member back in with their subject", async () => {
+    const { onSuccess } = show(true, { roles: [viewer] }, { ...team, staff: [{ ...approved, blocked: true }] });
+
+    await page.getByRole("button", { name: "Let Ari back in" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Let back in" }).click();
+
+    await vi.waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("This person can see this site through teams again."),
+    );
+    expect(mocks.unblockTeamStaff).toHaveBeenCalledWith(approved.subjectId);
+  });
+
+  it.each([
+    [403, "team_staff_decision_not_owner", "Only an owner of this site can stop a person's access through teams or let them back in."],
+    [
+      409,
+      "caller_access_from_team",
+      "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in.",
+    ],
+  ])("words a %i %s of a stop on the card", async (status, code, sentence) => {
+    mocks.blockTeamStaff.mockRejectedValue(refusal(status, code));
+    show();
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent(sentence);
+    expect(page.getByText("English detail").elements()).toHaveLength(0);
+  });
+
+  it("words a refusal of letting a staff member back in on the card", async () => {
+    mocks.unblockTeamStaff.mockRejectedValue(refusal(403, "team_staff_decision_not_owner"));
+    show(true, { roles: [viewer] }, { ...team, staff: [{ ...approved, blocked: true }] });
+
+    await page.getByRole("button", { name: "Let Ari back in" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Let back in" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Only an owner of this site can stop a person's access through teams or let them back in.");
+  });
+
+  it("says the person is no longer staff here, and reads the list again, on a 404", async () => {
+    mocks.blockTeamStaff.mockRejectedValue({ status: 404, body: { message: "Not found" } });
+    const { onStale } = show();
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("This person is no longer on the staff of a team that has access to this site.");
     expect(onStale).toHaveBeenCalled();
   });
 });

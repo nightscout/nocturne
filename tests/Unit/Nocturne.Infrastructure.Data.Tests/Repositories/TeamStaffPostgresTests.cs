@@ -864,7 +864,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var current = (await Teams().GetAsync(team, manager, Now, default))!.Staff.Should().ContainSingle().Subject;
         var ended = (await Teams().GetAsync(team, manager, Now.AddHours(2), default))!.Staff.Should().ContainSingle().Subject;
 
-        current.Should().Be(new TeamStaffMember(staff, current.DisplayName, new TeamStaffNarrowing(RoleSeeds.Viewer, true, end), false, 1, 2));
+        current.Should().Be(new TeamStaffMember(staff, current.DisplayName, new TeamStaffNarrowing(RoleSeeds.Viewer, true, end), false, 1, 2, 0));
         current.DisplayName.Should().StartWith("staff-");
         ended.HasEnded.Should().BeTrue();
     }
@@ -889,7 +889,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
 
         detail!.Name.Should().Be("Camp");
         detail.CallerKind.Should().Be(TeamMemberKind.Staff);
-        detail.OwnStaff.Should().Be(new TeamStaffSelf(new TeamStaffNarrowing(RoleSeeds.Viewer, true, end), false));
+        detail.OwnStaff.Should().Be(new TeamStaffSelf(new TeamStaffNarrowing(RoleSeeds.Viewer, true, end), false, 0));
         detail.ManagerNames.Should().HaveCount(2).And.OnlyContain(n => n.StartsWith("manager-") || n.StartsWith("second-"));
         detail.Managers.Should().BeEmpty();
         detail.Invites.Should().BeEmpty();

@@ -18,6 +18,8 @@
     limitForced: boolean;
     /** When the caller's direct access ends, which bounds the end they set. */
     callerAccessEndsAt?: string;
+    /** The caller, whose own staff line offers no stop. */
+    currentSubjectId?: string;
     /** The team the page was opened for, from a notice. Its row is scrolled to and focused. */
     linkedTeamId?: string | null;
     stoppingId?: string | null;
@@ -35,6 +37,7 @@
     onRetryRoles,
     limitForced,
     callerAccessEndsAt,
+    currentSubjectId,
     linkedTeamId = null,
     stoppingId = null,
     onStop,
@@ -78,6 +81,7 @@
         {onRetryRoles}
         {limitForced}
         {callerAccessEndsAt}
+        {currentSubjectId}
         stoppingId={stoppingId ?? null}
         {onStop}
         {onStale}

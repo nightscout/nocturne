@@ -63,7 +63,14 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
                 t.Name,
                 Caller = t.Members
                     .Where(m => m.SubjectId == callerSubjectId)
-                    .Select(m => new { m.Kind, m.RoleCeilingSlug, m.LimitTo24Hours, m.EndsAt })
+                    .Select(m => new
+                    {
+                        m.Kind,
+                        m.RoleCeilingSlug,
+                        m.LimitTo24Hours,
+                        m.EndsAt,
+                        SitesBlocked = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.Blocked),
+                    })
                     .First(),
                 Managers = t.Members
                     .Where(m => m.Kind == TeamMemberKind.Manager)
@@ -102,7 +109,8 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             team.Caller.Kind == TeamMemberKind.Staff
                 ? new TeamStaffSelf(
                     new TeamStaffNarrowing(team.Caller.RoleCeilingSlug, team.Caller.LimitTo24Hours, Utc(team.Caller.EndsAt)),
-                    MembershipLiveness.HasEnded(team.Caller.EndsAt, now))
+                    MembershipLiveness.HasEnded(team.Caller.EndsAt, now),
+                    team.Caller.SitesBlocked)
                 : null);
     }
 

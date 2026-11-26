@@ -4,10 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { TenantTeamAccess, TenantTeamStaff } from "@nocturne/api-client";
 import TeamStaffRule from "./TeamStaffRule.svelte";
 
-const staffMember = (n: number, status: string): TenantTeamStaff => ({
+const staffMember = (n: number, status: string, blocked = false): TenantTeamStaff => ({
   subjectId: `0000000${n}-0000-0000-0000-000000000000`,
   displayName: `Staff ${n}`,
   status,
+  blocked,
 });
 
 function teamWith(staffRule: string, staff: TenantTeamStaff[] = []): TenantTeamAccess {
@@ -79,10 +80,32 @@ describe("TeamStaffRule", () => {
     await expect.element(dialog).toHaveTextContent("Every staff member of Clinic can see this site. You get no notices about them.");
     await expect.element(dialog).toHaveTextContent("1 waiting staff member gets access while you trust the whole team.");
     await expect.element(dialog).toHaveTextContent("2 declined staff members get access while you trust the whole team.");
+    await expect.element(dialog).not.toHaveTextContent("that you did not stop");
 
     await dialog.getByRole("button", { name: "Change setting" }).click();
 
     expect(onChange).toHaveBeenCalledWith("team_trusted");
+  });
+
+  it("neither counts nor promises access to a stopped staff member when it asks to trust the whole team", async () => {
+    show(teamWith("owner_approves", [staffMember(1, "pending", true), staffMember(2, "pending"), staffMember(3, "declined", true)]));
+
+    await choose(teamTrusted);
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent(
+      "Every staff member of Clinic that you did not stop can see this site. You get no notices about them.",
+    );
+    await expect.element(dialog).toHaveTextContent("1 waiting staff member gets access while you trust the whole team.");
+    await expect.element(dialog).not.toHaveTextContent("declined");
+  });
+
+  it("names no stopped staff member among those who lose access when it stops trusting the whole team", async () => {
+    show(teamWith("team_trusted", [staffMember(1, "pending", true), staffMember(2, "declined", true), staffMember(3, "approved")]));
+
+    await choose(ownerApproves);
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Approve each staff member yourself?");
+    await expect.element(dialog).not.toHaveTextContent("lose");
   });
 
   it("asks first, naming the waiting and the declined who lose access, before it stops trusting the whole team", async () => {
@@ -199,5 +222,13 @@ describe("TeamStaffRule", () => {
 
     await expect.element(page.getByText(sentence)).toBeVisible();
     expect(page.getByRole("radio").elements()).toHaveLength(0);
+  });
+
+  it("leaves stopped staff out when it tells a reader who is not an owner that the site trusts the whole team", async () => {
+    show(teamWith("team_trusted", [staffMember(1, "pending", true), staffMember(2, "approved")]), false);
+
+    await expect
+      .element(page.getByText("This site trusts the whole team. Every staff member that the site did not stop can see this site."))
+      .toBeVisible();
   });
 });

@@ -68,6 +68,7 @@ function staffMember(overrides: Partial<TeamStaffMember> = {}): TeamStaffMember 
     hasEnded: false,
     sitesApproved: 0,
     sitesPending: 0,
+    sitesBlocked: 0,
     ...overrides,
   };
 }
@@ -128,6 +129,32 @@ describe("team page staff sections", () => {
       for (const text of shown) await expect.element(staffRow().getByText(text, { exact: false })).toBeVisible();
       for (const text of absent) expect(staffRow().getByText(text, { exact: false }).elements(), text).toHaveLength(0);
     });
+
+    it.each([
+      ["stopped by one", 0, 0, 1, ["Stopped by 1 site."], [/Approved at \d/, "Waits for approval", "Not approved at any site."]],
+      ["stopped by two", 0, 0, 2, ["Stopped by 2 sites."], [/Approved at \d/, "Waits for approval", "Not approved at any site."]],
+      [
+        "all three",
+        1,
+        1,
+        1,
+        ["Approved at 1 site.", "Waits for approval at 1 site.", "Stopped by 1 site."],
+        ["Not approved at any site."],
+      ],
+    ])(
+      "states the sites that stopped a staff member, and never which one or who: %s",
+      async (_case, approved, pending, blocked, shown, absent) => {
+        mocks.team = {
+          ...manager,
+          staff: [staffMember({ sitesApproved: approved, sitesPending: pending, sitesBlocked: blocked })],
+        };
+        render(TeamPage);
+
+        for (const text of shown) await expect.element(staffRow().getByText(text, { exact: false })).toBeVisible();
+        for (const text of absent) expect(staffRow().getByText(text, { exact: false }).elements(), String(text)).toHaveLength(0);
+        expect(staffRow().getByText("Sam's site", { exact: false }).elements()).toHaveLength(0);
+      },
+    );
 
     it.each([
       ["approved at one", 1, 0, ["Approved at 1 site."], ["Waits for approval", "Not approved at any site."]],
@@ -504,7 +531,7 @@ describe("team page staff sections", () => {
     const sentences = {
       owner_approves: "An owner of the site must approve each staff member.",
       team_decides: "The team decides which of its staff can see this site.",
-      team_trusted: "The site trusts the whole team. Every staff member can see this site.",
+      team_trusted: "The site trusts the whole team. Every staff member that the site did not stop can see this site.",
     };
 
     it.each(Object.entries(sentences))("states the rule %s in one sentence", async (staffRule, shown) => {

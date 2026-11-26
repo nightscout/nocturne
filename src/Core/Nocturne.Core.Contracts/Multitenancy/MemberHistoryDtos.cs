@@ -61,6 +61,12 @@ public enum MemberHistoryKind
     /// <see cref="MemberHistoryEntry.StaffRule"/> is the new rule, null when the row no longer says.
     /// </summary>
     TeamStaffRuleChanged,
+
+    /// <summary>An owner stopped the member reaching the site through any team.</summary>
+    TeamStaffBlocked,
+
+    /// <summary>An owner let the member reach the site through teams again.</summary>
+    TeamStaffUnblocked,
 }
 
 /// <summary>The history limit a member reads under after the change.</summary>

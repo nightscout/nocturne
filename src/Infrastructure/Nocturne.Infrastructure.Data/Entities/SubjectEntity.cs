@@ -201,4 +201,7 @@ public class SubjectEntity : IEntityTimestamped
     /// OIDC provider identities linked to this subject
     /// </summary>
     public ICollection<SubjectOidcIdentityEntity> OidcIdentities { get; set; } = new List<SubjectOidcIdentityEntity>();
+
+    /// <summary>The sites that stopped this subject reaching them through any team.</summary>
+    public ICollection<TeamSiteBlockEntity> TeamSiteBlocks { get; set; } = new List<TeamSiteBlockEntity>();
 }

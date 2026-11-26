@@ -359,6 +359,13 @@ public partial class TeamRepository
                     .ToList(),
             })
             .ToListAsync(ct);
+        var blocked = (await db.TeamSiteStaff.AsNoTracking()
+                .Where(s => s.TeamTenantAccess!.TenantId == tenantId)
+                .Where(TeamReasons.Blocked)
+                .Select(s => s.TeamMember!.SubjectId)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet();
         return rows.Select(r => new TenantTeamAccess(
             r.TeamId,
             r.TeamName,
@@ -376,7 +383,29 @@ public partial class TeamRepository
                 s.Status,
                 new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
                 MembershipLiveness.HasEnded(s.EndsAt, now),
-                TeamSuggestableRoles.NameOf(s.RoleCeilingSlug))).ToList())).ToList();
+                TeamSuggestableRoles.NameOf(s.RoleCeilingSlug),
+                blocked.Contains(s.SubjectId))).ToList())).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<TenantTeamStaffBlock>> ListStaffBlocksOfTenantAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
+        var blocks = await db.TeamSiteBlocks.AsNoTracking()
+            .Where(b => b.TenantId == tenantId)
+            .OrderByDescending(b => b.SysCreatedAt)
+            .ThenBy(b => b.SubjectId)
+            .Select(b => new
+            {
+                b.SubjectId,
+                b.Subject!.Name,
+                b.SysCreatedAt,
+                b.CreatedBySubjectId,
+                CreatedByName = b.CreatedBy == null ? null : b.CreatedBy.Name,
+            })
+            .ToListAsync(ct);
+        return blocks.Select(b => new TenantTeamStaffBlock(
+            b.SubjectId, b.Name, DateTime.SpecifyKind(b.SysCreatedAt, DateTimeKind.Utc), b.CreatedBySubjectId, b.CreatedByName)).ToList();
     }
 
     /// <inheritdoc/>

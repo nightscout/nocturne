@@ -8,6 +8,7 @@
   import UserMinus from "@lucide/svelte/icons/user-minus";
   import { FormError } from "#lib/forms/index.js";
   import { describeRemoteError, errorStatus, type ProblemCodeMessages } from "#lib/forms/submit-error.js";
+  import { missingItemError } from "#lib/forms/submit-messages.svelte.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import TeamStaffList from "#lib/components/members/TeamStaffList.svelte";
   import TeamStaffRule from "#lib/components/members/TeamStaffRule.svelte";
@@ -16,13 +17,16 @@
   import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     teamAccessEditProblemMessages,
+    teamStaffBlockProblemMessages,
     teamStaffDecisionProblemMessages,
   } from "#lib/teams/problem-messages.svelte.js";
   import {
     approveTeamStaff,
+    blockTeamStaff,
     declineTeamStaff,
     editTeamAccess,
     setTeamStaffRule,
+    unblockTeamStaff,
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import type { TenantRoleDto, TenantTeamAccess } from "@nocturne/api-client";
 
@@ -41,6 +45,8 @@
     limitForced: boolean;
     /** When the caller's direct access ends, which bounds the end they set. */
     callerAccessEndsAt?: string;
+    /** The caller, whose own staff line offers no stop. */
+    currentSubjectId?: string;
     stoppingId: string | null;
     onStop: (teamId: string) => void | Promise<void>;
     /** A command found the team or a staff member gone, so the list is out of date. */
@@ -57,6 +63,7 @@
     onRetryRoles,
     limitForced,
     callerAccessEndsAt,
+    currentSubjectId,
     stoppingId,
     onStop,
     onStale,
@@ -119,6 +126,28 @@
       "Could not decline the staff member. Try again.",
       staffGone,
       teamStaffDecisionProblemMessages(),
+    );
+  }
+
+  function block(subjectId: string) {
+    void run(
+      `block:${subjectId}`,
+      () => blockTeamStaff(subjectId),
+      "This person no longer sees this site through any team.",
+      "Could not stop the access of this person. Try again.",
+      "This person is no longer on the staff of a team that has access to this site.",
+      teamStaffBlockProblemMessages(),
+    );
+  }
+
+  function unblock(subjectId: string) {
+    void run(
+      `unblock:${subjectId}`,
+      () => unblockTeamStaff(subjectId),
+      "This person can see this site through teams again.",
+      "Could not let this person back in. Try again.",
+      missingItemError(),
+      teamStaffBlockProblemMessages(),
     );
   }
 
@@ -253,7 +282,16 @@
 
       <Separator />
       <TeamStaffRule {team} {canDecide} {busy} onChange={setRule} />
-      <TeamStaffList {team} {canDecide} {busy} onApprove={approve} onDecline={decline} />
+      <TeamStaffList
+        {team}
+        {canDecide}
+        {currentSubjectId}
+        {busy}
+        onApprove={approve}
+        onDecline={decline}
+        onBlock={block}
+        onUnblock={unblock}
+      />
 
       <FormError issues={error} focusOnShow />
     </Card.Content>

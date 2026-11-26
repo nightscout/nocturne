@@ -26,8 +26,10 @@
   let { team, canDecide, busy, onChange }: Props = $props();
 
   const current = $derived(team.staffRule ?? RULE_TEAM_DECIDES);
-  const waiting = $derived((team.staff ?? []).filter((s) => s.status === STAFF_PENDING).length);
-  const declined = $derived((team.staff ?? []).filter((s) => s.status === STAFF_DECLINED).length);
+  const reachable = $derived((team.staff ?? []).filter((s) => !s.blocked));
+  const waiting = $derived(reachable.filter((s) => s.status === STAFF_PENDING).length);
+  const declined = $derived(reachable.filter((s) => s.status === STAFF_DECLINED).length);
+  const anyStopped = $derived(reachable.length < (team.staff ?? []).length);
   const leavesTrust = $derived(current === RULE_TEAM_TRUSTED);
 
   // A radio takes the choice when it takes focus, and a closing dialog gives focus back to what opened it,
@@ -89,7 +91,12 @@
                 </span>
               {:else if target === RULE_TEAM_TRUSTED}
                 <span class="block">
-                  Every staff member of {team.teamName} can see this site. You get no notices about them.
+                  {#if anyStopped}
+                    Every staff member of {team.teamName} that you did not stop can see this site. You get no notices
+                    about them.
+                  {:else}
+                    Every staff member of {team.teamName} can see this site. You get no notices about them.
+                  {/if}
                 </span>
                 {#if waiting > 0}
                   <span class="block">
@@ -140,6 +147,10 @@
       </div>
     {/if}
   </div>
+{:else if current === RULE_TEAM_TRUSTED && anyStopped}
+  <p class="text-sm text-muted-foreground">
+    This site trusts the whole team. Every staff member that the site did not stop can see this site.
+  </p>
 {:else if current === RULE_TEAM_TRUSTED}
   <p class="text-sm text-muted-foreground">This site trusts the whole team. Every staff member can see this site.</p>
 {:else if current === RULE_TEAM_DECIDES}
