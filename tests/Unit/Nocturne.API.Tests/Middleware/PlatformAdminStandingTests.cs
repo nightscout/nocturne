@@ -26,7 +26,7 @@ namespace Nocturne.API.Tests.Middleware;
 /// <summary>
 /// Pins which credential types present their subject's platform-admin standing, through
 /// <see cref="AuthenticationMiddleware"/> for a subject who is a platform admin and a member of the
-/// resolved tenant.
+/// resolved tenant. A caller who is not a member of the resolved tenant presents none.
 /// </summary>
 /// <remarks>
 /// Platform admin reaches every tenant on the instance and its controllers require the role claim
@@ -76,6 +76,21 @@ public class PlatformAdminStandingTests
         context.User.Claims
             .Any(c => c.Type == ClaimTypes.Role && c.Value == "platform_admin")
             .Should().Be(CarriesStanding.GetValueOrDefault(authType));
+    }
+
+    /// <summary>
+    /// A platform admin who is not a member of the resolved tenant presents no standing at all:
+    /// the membership check reduces the request to anonymous, so no claim is built.
+    /// </summary>
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.LegacyJwt)]
+    public async Task ANonMember_PresentsNoPlatformAdminStanding(AuthType authType)
+    {
+        var context = await RunAsync(authType, seedMembership: false);
+
+        context.User.Identity?.IsAuthenticated.Should().BeFalse();
+        IsPlatformAdmin(context).Should().BeFalse();
     }
 
     /// <summary>
@@ -153,9 +168,9 @@ public class PlatformAdminStandingTests
         IsHandedOff = handedOff,
     };
 
-    private static Task<DefaultHttpContext> RunAsync(AuthType authType) => RunAsync(HandlerFor(authType));
+    private static Task<DefaultHttpContext> RunAsync(AuthType authType, bool seedMembership = true) => RunAsync(HandlerFor(authType), seedMembership);
 
-    private static async Task<DefaultHttpContext> RunAsync(IAuthHandler handler)
+    private static async Task<DefaultHttpContext> RunAsync(IAuthHandler handler, bool seedMembership = true)
     {
         var dbName = $"platform_admin_standing_{Guid.NewGuid()}";
         var services = new ServiceCollection();
@@ -178,10 +193,13 @@ public class PlatformAdminStandingTests
                 IsPlatformAdmin = true,
                 ApprovalStatus = "Approved",
             });
-            db.TenantMembers.Add(new TenantMemberEntity
+            if (seedMembership)
             {
-                Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = SubjectId,
-            });
+                db.TenantMembers.Add(new TenantMemberEntity
+                {
+                    Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = SubjectId,
+                });
+            }
             await db.SaveChangesAsync();
         }
 
@@ -201,3 +219,4 @@ public class PlatformAdminStandingTests
         return context;
     }
 }
+

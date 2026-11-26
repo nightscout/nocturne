@@ -204,6 +204,7 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     public async Task SessionRedeemedFromALoginCode_IsNotTheMembersOwnSignIn(LoginCodeIssuer issuer)
     {
         await using var conn = await OpenPostgresAsync();
+        Guid? grantId = null;
         if (issuer == LoginCodeIssuer.PlatformAdminOwner)
             await MakePlatformAdminOwnerAsync(conn, _ownerId);
 
@@ -221,11 +222,20 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
             using var signedIn = AuthTestHelpers.CreateBearerClient(
                 Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _memberId));
             (await signedIn.GetAsync("/api/auth/direct-grants")).StatusCode.Should().Be(HttpStatusCode.OK);
-            (await signedIn.PostAsJsonAsync("/api/auth/direct-grants", new { label = "another", scopes = new[] { "*" } }))
-                .StatusCode.Should().Be(HttpStatusCode.OK);
+            var created = await signedIn.PostAsJsonAsync("/api/auth/direct-grants", new { label = "another", scopes = new[] { "*" } });
+            created.StatusCode.Should().Be(HttpStatusCode.OK);
+            grantId = JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync()).GetProperty("id").GetGuid();
         }
         finally
         {
+            // The grant minted to prove the member's own sign-in manages credentials is removed
+            // again: the fixture tenant is shared, and a "*" grant left behind would outlive the test.
+            if (grantId is { } id)
+            {
+                using var cleanup = AuthTestHelpers.CreateBearerClient(Fixture, _memberSession);
+                (await cleanup.DeleteAsync($"/api/auth/direct-grants/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+            }
+
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "UPDATE subjects SET is_platform_admin = false WHERE id = @id;";
             cmd.Parameters.AddWithValue("id", _ownerId);
@@ -557,3 +567,4 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     private static string Sha1(string value) =>
         Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(value)));
 }
+
