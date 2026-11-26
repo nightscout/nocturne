@@ -3,12 +3,12 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.Treatments;
 

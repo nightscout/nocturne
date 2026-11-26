@@ -158,6 +158,10 @@ public class HostPersistenceGuardTests
             ["TrackerDefinitionEntity", "TrackerInstanceEntity", "TrackerPresetEntity", "TrackerNotificationThresholdEntity"],
             ["TrackerDefinitions", "TrackerInstances", "TrackerPresets", "TrackerNotificationThresholds"],
             []),
+        new("in-app notifications (#3680)",
+            ["InAppNotificationEntity"],
+            ["InAppNotifications"],
+            []),
     ];
 
     private const string Host = "src/API/Nocturne.API";

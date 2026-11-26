@@ -93,6 +93,7 @@ public class SampleDataSeeder
     private readonly IStateSpanRepository _stateSpans;
     private readonly IProfileActivationRepository _profileActivations;
     private readonly ITempBasalRepository _tempBasals;
+    private readonly IInAppNotificationRepository _notifications;
     private readonly TimeProvider _time;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SampleDataSeeder> _logger;
@@ -108,6 +109,8 @@ public class SampleDataSeeder
 
     /// <summary>Most recent alarm episodes to mirror as in-app notifications.</summary>
     private const int MaxAlarmNotifications = 6;
+
+    private const string SeededNotificationSource = "sample-seed";
 
     /// <summary>
     /// Default source for dev seeding. The generator stamps records with
@@ -138,6 +141,7 @@ public class SampleDataSeeder
         IStateSpanRepository stateSpans,
         IProfileActivationRepository profileActivations,
         ITempBasalRepository tempBasals,
+        IInAppNotificationRepository notifications,
         TimeProvider time,
         ILoggerFactory loggerFactory,
         ILogger<SampleDataSeeder> logger)
@@ -162,6 +166,7 @@ public class SampleDataSeeder
         _stateSpans = stateSpans;
         _profileActivations = profileActivations;
         _tempBasals = tempBasals;
+        _notifications = notifications;
         _time = time;
         _loggerFactory = loggerFactory;
         _logger = logger;
@@ -387,9 +392,7 @@ public class SampleDataSeeder
         await SeedTimezoneTimelineAsync(db, clock, days, ct);
         await SeedDndWindowAsync(db, clock, ct);
         var clockFaces = await SeedClockFacesAsync(db, ownerSubjectId, ct);
-        var notificationCount = await SeedNotificationsAsync(
-            db,
-            ownerSubjectId, tenant.TenantId, episodeTracker.Episodes, ct);
+        var notificationCount = await SeedNotificationsAsync(ownerSubjectId, episodeTracker.Episodes, ct);
         await SeedLabHbA1cAsync(db, clock, dataSource, ct);
 
         // Last, so the live feed never continues a seed still being written. The demo tenant's own
@@ -1198,9 +1201,7 @@ public class SampleDataSeeder
     /// same story as /alerts/history. Rebuilt per seed via the data source tag.
     /// </summary>
     private async Task<int> SeedNotificationsAsync(
-        NocturneDbContext db,
         Guid? ownerSubjectId,
-        Guid tenantId,
         IReadOnlyList<DemoAlertSeeds.GlucoseEpisode> episodes,
         CancellationToken ct)
     {
@@ -1208,18 +1209,15 @@ public class SampleDataSeeder
             return 0;
 
         var userId = owner.ToString();
-        await db.InAppNotifications.PurgeAsync(n => n.UserId == userId && n.Source == "sample-seed", ct);
-
-        var created = 0;
+        var seeded = new List<InAppNotification>();
         foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmNotifications))
         {
             var rng = DayScenarios.RngFor(episode.StartUtc.Date, $"ack:{episode.RuleName}");
             var acknowledged = rng.NextDouble() < 0.7;
 
-            db.InAppNotifications.Add(new InAppNotificationEntity
+            seeded.Add(new InAppNotification
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
                 UserId = userId,
                 Type = InAppProvider.NotificationType,
                 Category = NotificationCategory.Alert,
@@ -1227,16 +1225,15 @@ public class SampleDataSeeder
                     ? NotificationUrgency.Urgent
                     : NotificationUrgency.Warn,
                 Icon = "bell",
-                Source = "sample-seed",
+                Source = SeededNotificationSource,
                 Title = episode.RuleName,
                 Subtitle = $"Resolved after {(episode.EndUtc - episode.StartUtc).TotalMinutes:0} minutes",
                 CreatedAt = episode.StartUtc,
                 ReadAt = acknowledged ? episode.StartUtc.AddMinutes(rng.Next(2, 12)) : null,
             });
-            created++;
         }
 
-        await db.SaveChangesAsync(ct);
-        return created;
+        await _notifications.ReplaceBySourceAsync(userId, SeededNotificationSource, seeded, ct);
+        return seeded.Count;
     }
 }

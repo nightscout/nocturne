@@ -1,8 +1,7 @@
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Jobs;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services.Notifications;
 
@@ -50,8 +49,7 @@ internal sealed class NotificationResolutionJob(ILogger<NotificationResolutionJo
         {
             try
             {
-                var conditions = InAppNotificationRepository.DeserializeConditions(notification.ResolutionConditionsJson);
-                if (conditions?.ExpiresAt is not { } expiresAt || expiresAt > now)
+                if (notification.ResolutionConditions?.ExpiresAt is not { } expiresAt || expiresAt > now)
                     continue;
 
                 logger.LogInformation(
@@ -63,7 +61,7 @@ internal sealed class NotificationResolutionJob(ILogger<NotificationResolutionJo
                     continue;
 
                 await broadcastService.BroadcastNotificationArchivedAsync(
-                    archived.UserId, InAppNotificationRepository.ToDto(archived), NotificationArchiveReason.Expired);
+                    archived.UserId, archived.ToDto(), NotificationArchiveReason.Expired);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

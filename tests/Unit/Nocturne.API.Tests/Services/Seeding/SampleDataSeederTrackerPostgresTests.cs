@@ -125,6 +125,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
             new ProfileActivationRepository(contexts, audit, NullLogger<ProfileActivationRepository>.Instance),
             new TempBasalRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance),
+            new InAppNotificationRepository(contexts),
             time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

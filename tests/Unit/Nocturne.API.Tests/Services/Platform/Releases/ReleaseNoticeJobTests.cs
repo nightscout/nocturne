@@ -10,8 +10,8 @@ using Nocturne.API.Services.Platform.Releases;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -32,7 +32,7 @@ public sealed class ReleaseNoticeJobTests : IDisposable
     private readonly Mock<IReleaseSource> _releases = new();
     private readonly Mock<IAutoUpdateProbe> _probe = new();
     private readonly Mock<IInAppNotificationService> _notifications = new();
-    private readonly List<InAppNotificationEntity> _active = [];
+    private readonly List<InAppNotification> _active = [];
     private readonly List<(string UserId, string Type, string Version, Dictionary<string, object> Metadata)> _sent = [];
     private readonly Dictionary<Guid, string[]> _owners = [];
     private readonly HashSet<string> _failingOwners = [];
@@ -239,9 +239,9 @@ public sealed class ReleaseNoticeJobTests : IDisposable
 
     private OwnerNoticeLedger Ledger() => new(_provider.GetRequiredService<INocturneDbContextFactory>());
 
-    private InAppNotificationEntity Active(string userId, string type, string? version = null)
+    private InAppNotification Active(string userId, string type, string? version = null)
     {
-        var entity = new InAppNotificationEntity
+        var entity = new InAppNotification
         {
             Id = Guid.NewGuid(), UserId = userId, Type = type, Source = ReleaseNoticeJob.Source, SourceId = version,
         };
