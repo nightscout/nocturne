@@ -1,5 +1,9 @@
+using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.GoldenFiles.V3;
 
@@ -33,6 +37,70 @@ public class EntriesGoldenTests : GoldenFileTestBase
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
         };
+    }
+
+    #endregion
+
+    #region GET /api/v3/entries/history (canonical successor)
+
+    [Fact]
+    public async Task GetHistory_CanonicalSuccessorOfADeletedReading_ServesItsKeptFieldsAsTheByIdReadDoes()
+    {
+        var bucketStart = DateTimeOffset.FromUnixTimeMilliseconds(1768563300000L).UtcDateTime;
+        var successorId = Guid.Parse("5f0a1b2c-3d4e-5f60-8172-93a4b5c6d7e8");
+        var deletedId = Guid.Parse("6a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9");
+        var successorStamped = bucketStart.AddMinutes(10);
+        var deletedStamped = successorStamped.AddMinutes(1);
+        await SeedSensorGlucose(
+            new SensorGlucoseEntity
+            {
+                Id = deletedId,
+                TenantId = GoldenTenantId,
+                Mgdl = 100,
+                Timestamp = bucketStart,
+                Device = "xDrip-DexcomG6",
+                SysCreatedAt = bucketStart,
+                SysUpdatedAt = deletedStamped,
+                DeletedAt = deletedStamped,
+            },
+            new SensorGlucoseEntity
+            {
+                Id = successorId,
+                TenantId = GoldenTenantId,
+                Mgdl = 110,
+                Timestamp = bucketStart.AddMinutes(1),
+                Device = "xDrip-DexcomG6",
+                AdditionalPropertiesJson = """{"units":"mg/dl","isReadOnly":false}""",
+                SysCreatedAt = bucketStart,
+                SysUpdatedAt = successorStamped,
+            });
+        await StampModified((deletedId, deletedStamped), (successorId, successorStamped));
+
+        var cursor = new DateTimeOffset(successorStamped.AddSeconds(30)).ToUnixTimeMilliseconds();
+        var history = await Client.GetAsync($"/api/v3/entries/history/{cursor}");
+
+        var resent = JsonNode.Parse(await history.Content.ReadAsStringAsync())!["result"]!.AsArray()
+            .Single(e => e!["sgv"]!.GetValue<int>() == 110)!;
+        var byId = await Client.GetAsync($"/api/v3/entries/{resent["identifier"]!.GetValue<string>()}");
+        var expected = JsonNode.Parse(await byId.Content.ReadAsStringAsync())!["result"]!;
+        expected["units"]!.GetValue<string>().Should().Be("mg/dl");
+
+        resent.AsObject().Remove("srvModified");
+        expected.AsObject().Remove("srvModified");
+        JsonNode.DeepEquals(resent, expected).Should().BeTrue();
+    }
+
+    // A save stamps sys_updated_at itself, so the history cursor needs the stamp set afterwards.
+    private async Task StampModified(params (Guid Id, DateTime At)[] stamps)
+    {
+        using var scope = Factory.Services.CreateScope();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(GoldenTenantId);
+        foreach (var (id, at) in stamps)
+        {
+            await db.SensorGlucose.IgnoreQueryFilters().Where(e => e.Id == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.SysUpdatedAt, at));
+        }
     }
 
     #endregion

@@ -117,30 +117,42 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         GlucoseStreams streams, bool orderByValue, bool includeDeleted, CancellationToken ct)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
+        var rows = await BuildReadQuery(ctx, from, to, device, source, limit, offset,
                 descending, afterTimestamp, afterId, patientDeviceId, streams, orderByValue, includeDeleted)
-            .Select(e => new HistoryRecord<SensorGlucose>(new SensorGlucose
+            .Select(e => new
             {
-                Id = e.Id,
-                LegacyId = e.LegacyId,
-                Timestamp = e.Timestamp,
-                CreatedAt = e.SysCreatedAt,
-                ModifiedAt = e.SysUpdatedAt,
-                Device = e.Device,
-                App = e.App,
-                DataSource = e.DataSource,
-                UtcOffset = e.UtcOffset,
-                PatientDeviceId = e.PatientDeviceId,
-                Mgdl = e.Mgdl,
-                Direction = SensorGlucoseMapper.ParseDirection(e.Direction),
-                TrendRate = e.TrendRate,
-                Noise = e.Noise,
-                Filtered = e.Filtered,
-                Unfiltered = e.Unfiltered,
-                Delta = e.Delta,
-                Rssi = e.Rssi,
-            }, e.DeletedAt != null))
+                Record = new SensorGlucose
+                {
+                    Id = e.Id,
+                    LegacyId = e.LegacyId,
+                    Timestamp = e.Timestamp,
+                    CreatedAt = e.SysCreatedAt,
+                    ModifiedAt = e.SysUpdatedAt,
+                    Device = e.Device,
+                    App = e.App,
+                    DataSource = e.DataSource,
+                    UtcOffset = e.UtcOffset,
+                    PatientDeviceId = e.PatientDeviceId,
+                    Mgdl = e.Mgdl,
+                    Direction = SensorGlucoseMapper.ParseDirection(e.Direction),
+                    TrendRate = e.TrendRate,
+                    Noise = e.Noise,
+                    Filtered = e.Filtered,
+                    Unfiltered = e.Unfiltered,
+                    Delta = e.Delta,
+                    Rssi = e.Rssi,
+                },
+                e.AdditionalPropertiesJson,
+                Deleted = e.DeletedAt != null,
+            })
             .ToListAsync(ct);
+        return rows
+            .Select(r =>
+            {
+                r.Record.AdditionalProperties = V4RecordHeaderMapper.ReadAdditionalProperties(r.AdditionalPropertiesJson);
+                return new HistoryRecord<SensorGlucose>(r.Record, r.Deleted);
+            })
+            .ToList();
     }
 
     /// <inheritdoc />

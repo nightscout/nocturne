@@ -1,0 +1,72 @@
+﻿{
+  Put: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      lastModified: {Scrubbed}
+    }
+  },
+  Fetched: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      result: {
+        _id: {Scrubbed},
+        defaultProfile: Default,
+        startDate: 2026-01-16T00:00:00.000Z,
+        mills: 1768521600000,
+        srvModified: {Scrubbed},
+        srvCreated: {Scrubbed},
+        created_at: {Scrubbed},
+        units: mg/dl,
+        store: {
+          Default: {
+            dia: 5,
+            carbs_hr: 20,
+            delay: 20,
+            timezone: UTC,
+            units: mg/dl,
+            basal: [
+              {
+                time: 00:00,
+                value: 1.5,
+                timeAsSeconds: 0
+              }
+            ],
+            carbratio: [
+              {
+                time: 00:00,
+                value: 10,
+                timeAsSeconds: 0
+              }
+            ],
+            sens: [
+              {
+                time: 00:00,
+                value: 50,
+                timeAsSeconds: 0
+              }
+            ],
+            target_low: [
+              {
+                time: 00:00,
+                value: 100,
+                timeAsSeconds: 0
+              }
+            ],
+            target_high: [
+              {
+                time: 00:00,
+                value: 120,
+                timeAsSeconds: 0
+              }
+            ]
+          }
+        },
+        identifier: {Scrubbed}
+      }
+    }
+  }
+}

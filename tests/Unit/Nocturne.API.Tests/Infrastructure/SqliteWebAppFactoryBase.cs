@@ -78,9 +78,10 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
             RemoveDbContextRegistrations(services);
             RemoveService<ICacheService>(services);
 
-            var options = new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite(connectionString)
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            var options = SqliteNpgsqlCompat.Apply(
+                    new DbContextOptionsBuilder<NocturneDbContext>()
+                        .UseSqlite(connectionString)
+                        .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)))
                 .Options;
             var mockFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
             mockFactory.Setup(f => f.CreateDbContext()).Returns(() => new NocturneDbContext(options));

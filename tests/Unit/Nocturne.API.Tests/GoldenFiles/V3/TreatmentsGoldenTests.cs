@@ -7,7 +7,6 @@ namespace Nocturne.API.Tests.GoldenFiles.V3;
 
 public class TreatmentsGoldenTests : GoldenFileTestBase
 {
-    private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly string[] ServerStamped = ["_id", "identifier", "lastModified", "srvModified", "srvCreated"];
 
     public TreatmentsGoldenTests(GoldenFileWebAppFactory factory) : base(factory) { }
@@ -106,11 +105,11 @@ public class TreatmentsGoldenTests : GoldenFileTestBase
         using (var scope = Factory.Services.CreateScope())
         {
             await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
-                .CreateForTenantAsync(TestTenantId);
+                .CreateForTenantAsync(GoldenTenantId);
             db.Boluses.Add(new BolusEntity
             {
                 Id = id,
-                TenantId = TestTenantId,
+                TenantId = GoldenTenantId,
                 Timestamp = at,
                 Insulin = 2.0,
                 PumpRecordId = "123",
@@ -127,6 +126,34 @@ public class TreatmentsGoldenTests : GoldenFileTestBase
         var captured = new { V3 = await CaptureResponse(v3), V1 = await CaptureResponse(v1) };
         await Verify(captured)
             .ScrubMembers("_id", "identifier", "srvModified", "srvCreated", "mills", "date", "created_at", "sysTime", "dateString");
+    }
+
+    [Fact]
+    public async Task Get_BolusStoredAsAV4Record_ServesItByItsGuid()
+    {
+        var id = Guid.Parse("5f0a1b2c-3d4e-5f60-8172-93a4b5c6d7e8");
+        var at = DateTimeOffset.FromUnixTimeMilliseconds(1768566512196L).UtcDateTime;
+        using (var scope = Factory.Services.CreateScope())
+        {
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+                .CreateForTenantAsync(GoldenTenantId);
+            db.Boluses.Add(new BolusEntity
+            {
+                Id = id,
+                TenantId = GoldenTenantId,
+                Timestamp = at,
+                Insulin = 2.0,
+                DataSource = "tandem-connector",
+                SysCreatedAt = at,
+                SysUpdatedAt = at,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/v3/treatments/{id}");
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        await Verify(await CaptureResponse(response)).DontScrubDateTimes().ScrubMembers("srvModified", "srvCreated");
     }
 
     [Fact]

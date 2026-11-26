@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -75,14 +74,14 @@ public sealed class SqliteTestDatabase : IDisposable
 
         Connection = new SqliteConnection("DataSource=:memory:");
         Connection.Open();
-        Connection.CreateFunction<string?, string?, int?>(ArrayPositionFunction, ArrayPosition, isDeterministic: true);
+        SqliteNpgsqlCompat.Define(Connection);
 
         var builder = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .AddInterceptors(interceptors)
             .EnableSensitiveDataLogging();
-        SqliteNpgsqlJson.Translate(builder);
+        SqliteNpgsqlCompat.Apply(builder);
         configure?.Invoke(builder);
         Options = builder.Options;
 
@@ -105,29 +104,6 @@ public sealed class SqliteTestDatabase : IDisposable
 
         seed.Tenants.Add(new TenantEntity { Id = TenantId, Slug = tenantSlug });
         seed.SaveChanges();
-    }
-
-    /// <summary>
-    /// PostgreSQL's <c>array_position</c> over the JSON array a parameter array is bound as here: the
-    /// one-based position of the first element equal to the value, or null. Elements are compared as text.
-    /// </summary>
-    public const string ArrayPositionFunction = "array_position";
-
-    private static int? ArrayPosition(string? array, string? value)
-    {
-        if (array is null || value is null)
-            return null;
-
-        using var json = JsonDocument.Parse(array);
-        var position = 1;
-        foreach (var element in json.RootElement.EnumerateArray())
-        {
-            if ((element.ValueKind == JsonValueKind.String ? element.GetString() : element.GetRawText()) == value)
-                return position;
-            position++;
-        }
-
-        return null;
     }
 
     public SqliteConnection Connection { get; }

@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -14,6 +15,9 @@ namespace Nocturne.API.Tests.GoldenFiles.Infrastructure;
 /// </summary>
 public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory>, IAsyncLifetime
 {
+    /// <summary>The tenant the factory seeds and every golden request runs as.</summary>
+    protected static readonly Guid GoldenTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+
     protected readonly GoldenFileWebAppFactory Factory;
     protected readonly HttpClient Client;
 
@@ -74,7 +78,7 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     {
         using var scope = Factory.Services.CreateScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
-            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+            .CreateForTenantAsync(GoldenTenantId);
         db.SensorGlucose.AddRange(entities);
         await db.SaveChangesAsync();
     }
@@ -86,7 +90,7 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     {
         using var scope = Factory.Services.CreateScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
-            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+            .CreateForTenantAsync(GoldenTenantId);
         db.MeterGlucose.AddRange(entities);
         await db.SaveChangesAsync();
     }
@@ -99,7 +103,7 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     {
         using var scope = Factory.Services.CreateScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
-            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+            .CreateForTenantAsync(GoldenTenantId);
         db.Foods.AddRange(foods);
         await db.SaveChangesAsync();
     }
@@ -186,13 +190,47 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
         return await Client.PutAsync(url, content);
     }
 
-    private Task CleanupDatabase()
+    private static readonly Type[] NonRecordTables = [typeof(FoodEntity), typeof(DeviceStatusExtrasEntity)];
+
+    /// <summary>
+    /// Empties every V4 record table and the other tables the goldens write, so a golden that writes
+    /// a new record type needs no edit here. Raw SQL on the factory's connection to the same database
+    /// bypasses EF query filters and change tracking.
+    /// </summary>
+    private async Task CleanupDatabase()
     {
-        // Raw SQL on the factory's connection to the same database bypasses EF query filters and
-        // change tracking.
+        using var scope = Factory.Services.CreateScope();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(GoldenTenantId);
+
+        var tables = ChildrenFirst(
+            db.Model,
+            [.. V4RecordTables.All.Select(t => t.Entity), .. NonRecordTables]);
+
         using var cmd = Factory.Connection.CreateCommand();
-        cmd.CommandText = "DELETE FROM aps_snapshots; DELETE FROM pump_snapshots; DELETE FROM uploader_snapshots; DELETE FROM device_status_extras; DELETE FROM sensor_state_reports; DELETE FROM foods; DELETE FROM boluses; DELETE FROM carb_intakes; DELETE FROM temp_basals; DELETE FROM profile_activations; DELETE FROM sensor_glucose; DELETE FROM meter_glucose; DELETE FROM calibrations;";
+        cmd.CommandText = string.Concat(tables.Select(t => $"DELETE FROM \"{t}\";"));
         cmd.ExecuteNonQuery();
-        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The tables of <paramref name="entities"/>, each ahead of every table its rows depend on.
+    /// </summary>
+    private static List<string> ChildrenFirst(IModel model, IReadOnlyCollection<Type> entities)
+    {
+        var types = entities.Select(e => model.FindEntityType(e)!).ToList();
+        var ordered = new List<IEntityType>();
+        var visiting = new HashSet<IEntityType>();
+
+        void Visit(IEntityType type)
+        {
+            if (ordered.Contains(type) || !visiting.Add(type))
+                return;
+            foreach (var dependent in types.Where(t => t.GetForeignKeys().Any(f => f.PrincipalEntityType == type && t != type)))
+                Visit(dependent);
+            ordered.Add(type);
+        }
+
+        types.ForEach(Visit);
+        return [.. ordered.Select(t => t.GetTableName()!)];
     }
 }
