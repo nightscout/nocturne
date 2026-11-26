@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
@@ -25,6 +26,7 @@ public class DevicePublisherTests
     private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepository;
     private readonly Mock<IUploaderSnapshotRepository> _mockUploaderSnapshotRepository;
     private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
+    private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
     private readonly DevicePublisher _publisher;
 
     public DevicePublisherTests()
@@ -35,6 +37,7 @@ public class DevicePublisherTests
         _mockPumpSnapshotRepository = new Mock<IPumpSnapshotRepository>();
         _mockUploaderSnapshotRepository = new Mock<IUploaderSnapshotRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
+        _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
         _mockDeviceStatuses
             .Setup(d => d.CreateDeviceStatusesAsync(
                 It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -49,7 +52,7 @@ public class DevicePublisherTests
             _mockPatientDeviceStamper.Object,
             Mock.Of<IAuditContext>(),
             _mockApsSnapshotRepository.Object,
-            Mock.Of<IPatientDeviceRepository>(),
+            _mockPatientDeviceRepository.Object,
             _mockPumpSnapshotRepository.Object,
             _mockUploaderSnapshotRepository.Object,
             new PublishSkipTally(),
@@ -73,17 +76,60 @@ public class DevicePublisherTests
         );
     }
 
-    [Fact]
-    public async Task PublishDeviceStatusAsync_ReturnsFalse_OnException()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishDeviceStatusAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
     {
         _mockDeviceStatuses
             .Setup(s => s.CreateDeviceStatusesAsync(
                 It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("test error"));
+            .ThrowsAsync(failure);
 
         var result = await _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishDeviceStatusAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockDeviceStatuses
+            .Setup(s => s.CreateDeviceStatusesAsync(
+                It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishPatientDevicesAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
+    {
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var result = await _publisher.PublishPatientDevicesAsync(
+            [new PatientDevice { Id = Guid.NewGuid() }], "test-source", WriteOrigin.Live);
+
+        result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishPatientDevicesAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishPatientDevicesAsync(
+            [new PatientDevice { Id = Guid.NewGuid() }], "test-source", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
     [Fact]

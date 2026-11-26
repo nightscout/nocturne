@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -10,6 +8,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.API.Services.V4;
@@ -106,15 +105,14 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             RecordRefused(written.Rejected.Count);
             return true;
         }
-        catch (TreatmentBatchFailedException failed) when (!cancellationToken.IsCancellationRequested)
+        catch (TreatmentBatchFailedException failed)
         {
             RecordSkippedDeleted(failed.Written.SkippedDeleted);
             RecordRefused(failed.Written.Rejected.Count);
             Logger.LogError(failed, "Failed to publish treatments for {Source}", source);
             return false;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to publish treatments for {Source}", source);
             return false;
@@ -326,8 +324,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             using (PushSystemAudit())
                 selected = await _treatmentService.SelectForRepublishAsync(source, treatments.ToList(), cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to compare recent treatments with what is stored for {Source}", source);
             return null;
@@ -360,7 +357,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 await _treatmentService.RepublishSpansAsync(source, treatments, origin, cancellationToken);
             return true;
         }
-        catch (Exception ex) when (ex is DbException or DbUpdateException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to write the changed overrides and temporary targets of {Source}", source);
             return false;

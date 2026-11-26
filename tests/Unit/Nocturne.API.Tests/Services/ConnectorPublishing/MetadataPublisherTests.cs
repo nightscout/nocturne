@@ -220,17 +220,32 @@ public class MetadataPublisherTests
         );
     }
 
-    [Fact]
-    public async Task PublishStateSpansAsync_ReturnsFalse_OnException()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishStateSpansAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
     {
         _mockStateSpanService
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("test error"));
+            .ThrowsAsync(failure);
         var publisher = CreatePublisher();
 
         var result = await publisher.PublishStateSpansAsync(new List<StateSpan> { new() }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishStateSpansAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockStateSpanService
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        var publisher = CreatePublisher();
+
+        var act = () => publisher.PublishStateSpansAsync(new List<StateSpan> { new() }, "test-source", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
 }

@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -84,17 +85,32 @@ public class GlucosePublisherTests
         );
     }
 
-    [Fact]
-    public async Task PublishEntriesAsync_ReturnsFalse_OnException()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishEntriesAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
     {
         _mockEntryService
             .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("test error"));
+            .ThrowsAsync(failure);
 
         var result = await _publisher.PublishEntriesAsync(
             new List<Entry> { new() { Id = "1", Sgv = 120 } }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishEntriesAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishEntriesAsync(
+            new List<Entry> { new() { Id = "1", Sgv = 120 } }, "test-source", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
     [Fact]
@@ -135,6 +151,34 @@ public class GlucosePublisherTests
                 It.IsAny<WriteOrigin>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishSensorGlucoseAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
+    {
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var result = await _publisher.PublishSensorGlucoseAsync(
+            [new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow }], DataSources.DexcomConnector, WriteOrigin.Live);
+
+        result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishSensorGlucoseAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishSensorGlucoseAsync(
+            [new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow }], DataSources.DexcomConnector, WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
     [Fact]

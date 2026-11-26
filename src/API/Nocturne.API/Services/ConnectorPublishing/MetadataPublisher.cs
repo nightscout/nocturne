@@ -119,8 +119,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             await _profileWriteService.CreateProfilesAsync(profileList, cancellationToken);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, profileList, source);
             return false;
@@ -138,8 +137,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             await _foodService.CreateFoodAsync(foodList, FoodWriteMode.Native, cancellationToken);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, foodList, source);
             return false;
@@ -160,8 +158,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
                 return await _connectorFoodEntryService.ImportAsync(subject, entryList, cancellationToken);
             }
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, entryList, source);
             return null;
@@ -184,8 +181,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
                     subject, source, from, to, presentExternalEntryIds, cancellationToken);
             }
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to reconcile connector food entries for {Source}", source);
             return null;
@@ -215,8 +211,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             var written = await _activityService.CreateActivitiesAsync(activityList, cancellationToken);
             return written.Count();
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, activityList, source);
             return null;
@@ -270,8 +265,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             }
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, spans, source);
             return false;
@@ -331,8 +325,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             await _systemEventRepository.BulkUpsertAsync(systemEventList, cancellationToken);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, systemEventList, source);
             return false;
@@ -360,8 +353,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             Logger.LogDebug("Published {Count} BodyWeight records for {Source}", list.Count, source);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, list, source);
             return false;
@@ -383,8 +375,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             Logger.LogDebug("Published {Count} StepCount records for {Source}", list.Count, source);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, list, source);
             return false;
@@ -406,8 +397,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             Logger.LogDebug("Published {Count} HeartRate records for {Source}", list.Count, source);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, list, source);
             return false;
