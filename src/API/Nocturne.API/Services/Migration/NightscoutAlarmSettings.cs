@@ -42,15 +42,15 @@ public record NightscoutAlarmSettings(
 
         var thresholds = settings.TryGetProperty("thresholds", out var found) ? found : default;
         return new NightscoutAlarmSettings(
-            NumberOf(thresholds, "bgLow"),
-            NumberOf(thresholds, "bgTargetBottom"),
-            NumberOf(thresholds, "bgTargetTop"),
-            NumberOf(thresholds, "bgHigh"),
-            FlagOf(settings, "alarmUrgentLow"),
-            FlagOf(settings, "alarmLow"),
-            FlagOf(settings, "alarmHigh"),
-            FlagOf(settings, "alarmUrgentHigh"),
-            FlagOf(settings, "alarmTimeagoWarn"));
+            NightscoutFields.Of<decimal?>(thresholds, "bgLow"),
+            NightscoutFields.Of<decimal?>(thresholds, "bgTargetBottom"),
+            NightscoutFields.Of<decimal?>(thresholds, "bgTargetTop"),
+            NightscoutFields.Of<decimal?>(thresholds, "bgHigh"),
+            NightscoutFields.Of<bool?>(settings, "alarmUrgentLow"),
+            NightscoutFields.Of<bool?>(settings, "alarmLow"),
+            NightscoutFields.Of<bool?>(settings, "alarmHigh"),
+            NightscoutFields.Of<bool?>(settings, "alarmUrgentHigh"),
+            NightscoutFields.Of<bool?>(settings, "alarmTimeagoWarn"));
     }
 
     /// <summary>The one shape <see cref="Nocturne.Infrastructure.Data.Entities.MigrationRunEntity.SourceAlarmSettings"/> is written and read in.</summary>
@@ -68,18 +68,4 @@ public record NightscoutAlarmSettings(
             return null;
         }
     }
-
-    private static decimal? NumberOf(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-        && element.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.Number
-        && value.TryGetDecimal(out var number)
-            ? number
-            : null;
-
-    private static bool? FlagOf(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value)
-        && value.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? value.GetBoolean()
-            : null;
 }

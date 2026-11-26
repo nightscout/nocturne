@@ -82,6 +82,18 @@ public class NightscoutDisplaySettingsTests
     }
 
     [Fact]
+    public void RanksAProfileWhoseMillsIsAString()
+    {
+        const string profiles = """
+            [{"defaultProfile":"Old","startDate":"2026-01-01T00:00:00.000Z","store":{"Old":{"units":"mg/dl","timezone":"Asia/Tokyo"}}},
+             {"defaultProfile":"New","mills":"1780272000000","store":{"New":{"units":"mmol","timezone":"Europe/Oslo"}}}]
+            """;
+
+        NightscoutDisplaySettings.Parse(MmolStatus, profiles)
+            .Should().Be(new NightscoutDisplaySettings("mmol", "mmol", "Europe/Oslo"));
+    }
+
+    [Fact]
     public void ReadsAProfileWhoseMillsIsNotANumber()
     {
         const string profiles = """

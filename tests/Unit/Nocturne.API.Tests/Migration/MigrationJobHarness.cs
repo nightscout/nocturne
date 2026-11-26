@@ -39,6 +39,24 @@ internal static class MigrationJobHarness
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 
+    /// <summary>Answers each request from <paramref name="respond"/>, keyed on the path alone.</summary>
+    internal sealed class RoutedNightscout(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(respond(request.RequestUri!.AbsolutePath));
+    }
+
+    internal static HttpResponseMessage Json(System.Net.HttpStatusCode status, string body = "[]") =>
+        new(status) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+
+    /// <summary>A Nightscout that answers each path in <paramref name="bodies"/> with its body and every other path with a 404.</summary>
+    public static HttpMessageHandler Serving(IReadOnlyDictionary<string, string> bodies) => new RoutedNightscout(path =>
+        bodies.TryGetValue(path, out var body) ? Json(System.Net.HttpStatusCode.OK, body) : Json(System.Net.HttpStatusCode.NotFound));
+
+    public static HttpMessageHandler Serving(string path, string body) =>
+        Serving(new Dictionary<string, string> { [path] = body });
+
     private sealed class FixedTenantAccessor : ITenantAccessor
     {
         public TenantContext? Context { get; private set; }

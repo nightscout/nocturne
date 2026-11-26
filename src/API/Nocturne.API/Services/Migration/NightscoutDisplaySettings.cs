@@ -73,10 +73,8 @@ public record NightscoutDisplaySettings(string? DisplayUnits, string? ProfileUni
         if (UploaderTimestamp.TryParse(StringOf(document, "startDate"), out var start))
             return start;
 
-        return document.TryGetProperty("mills", out var mills)
-            && mills.ValueKind == JsonValueKind.Number
-            && mills.TryGetInt64(out var ms)
-            ? DateTimeOffset.FromUnixTimeMilliseconds(ms)
+        return NightscoutFields.Of<long?>(document, "mills") is { } mills
+            ? DateTimeOffset.FromUnixTimeMilliseconds(mills)
             : DateTimeOffset.MinValue;
     }
 

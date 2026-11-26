@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data;
@@ -238,6 +240,34 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
         var toast = food.GetProperty("foods").EnumerateArray().Single();
         toast.GetProperty("portion").GetDouble().Should().Be(100);
         toast.GetProperty("portions").GetDouble().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task MigrateDeviceStatus_FromMongo_KeepsTheIdAndAReadCreatedAtDate()
+    {
+        var databaseName = $"nightscout_devicestatus_{Guid.NewGuid():N}";
+        var id = ObjectId.GenerateNewId();
+        var createdAt = new DateTime(2026, 2, 2, 2, 40, 5, 123, DateTimeKind.Utc);
+        await new MongoClient(_migration.MongoConnectionString).GetDatabase(databaseName)
+            .GetCollection<BsonDocument>("devicestatus").InsertOneAsync(new BsonDocument
+            {
+                ["_id"] = id,
+                ["device"] = "openaps://phone",
+                ["created_at"] = new BsonDateTime(createdAt),
+                ["uploaderBattery"] = "81",
+            });
+
+        var status = await RunMigrationToCompletionAsync(
+            MigrationMode.MongoDb, collections: ["devicestatus"], databaseName: databaseName);
+
+        status.CollectionProgress["devicestatus"].DocumentsFailed.Should().Be(0);
+        var response = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=10");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stored = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync(), JsonOptions)
+            .EnumerateArray().Should().ContainSingle().Subject;
+        stored.GetProperty("_id").GetString().Should().Be(id.ToString());
+        stored.GetProperty("created_at").GetString().Should().Be("2026-02-02T02:40:05.123Z");
+        stored.GetProperty("uploaderBattery").GetInt32().Should().Be(81);
     }
 
     #region Helpers

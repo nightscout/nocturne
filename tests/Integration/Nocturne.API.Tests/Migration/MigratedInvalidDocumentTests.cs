@@ -3,14 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.API.Services.Migration;
@@ -36,6 +31,7 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
     private const string FoodId = "65f0000000000000000000f1";
     private const string ProfileId = "65f0000000000000000000a1";
     private const string StartDate = "2026-06-01T00:00:00.000Z";
+    private const long Mills = 1780272000000;
     private static readonly string[] Collections = ["food", "profile"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -48,11 +44,11 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
         _migration = migration;
     }
 
-    private static JsonObject Store() => new()
+    private static JsonObject Store(bool nullDia = false) => new()
     {
         ["Default"] = new JsonObject
         {
-            ["dia"] = 3,
+            ["dia"] = nullDia ? null : 3,
             ["carbratio"] = Schedule(10),
             ["sens"] = Schedule(50),
             ["basal"] = Schedule(1),
@@ -66,8 +62,11 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
     private static JsonArray Schedule(double value) =>
         [new JsonObject { ["time"] = "00:00", ["value"] = value, ["timeAsSeconds"] = 0 }];
 
-    [Fact]
-    public async Task A_mongo_migration_imports_them_deleted_and_a_rerun_writes_nothing_new()
+    [Theory]
+    [InlineData(false, 12, false)]
+    [InlineData("false", "12", true)]
+    public async Task A_mongo_migration_imports_them_deleted_and_a_rerun_writes_nothing_new(
+        object isValid, object carbs, bool oddlyTyped)
     {
         var databaseName = $"nightscout_invalid_{Guid.NewGuid():N}";
         var database = new MongoClient(_migration.MongoConnectionString).GetDatabase(databaseName);
@@ -76,17 +75,19 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
             ["_id"] = ObjectId.Parse(FoodId),
             ["type"] = "food",
             ["name"] = "Apple",
-            ["carbs"] = 12,
-            ["isValid"] = false,
+            ["carbs"] = BsonValue.Create(carbs),
+            ["fat"] = oddlyTyped ? BsonNull.Value : 0,
+            ["isValid"] = BsonValue.Create(isValid),
         });
         await database.GetCollection<BsonDocument>("profile").InsertOneAsync(new BsonDocument
         {
             ["_id"] = ObjectId.Parse(ProfileId),
             ["defaultProfile"] = "Default",
-            ["startDate"] = StartDate,
+            ["startDate"] = oddlyTyped ? BsonNull.Value : StartDate,
+            ["mills"] = BsonValue.Create(oddlyTyped ? Mills.ToString() : Mills),
             ["units"] = "mg/dl",
-            ["store"] = BsonDocument.Parse(Store().ToJsonString()),
-            ["isValid"] = false,
+            ["store"] = BsonDocument.Parse(Store(nullDia: oddlyTyped).ToJsonString()),
+            ["isValid"] = BsonValue.Create(isValid),
         });
         var request = new StartMigrationRequest
         {
@@ -97,24 +98,28 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
         };
 
         await RunToCompletionAsync(request);
-        await ShouldHoldThemDeletedAsync();
+        await ShouldHoldThemDeletedAsync(oddlyTyped);
 
         await RunToCompletionAsync(request);
-        await ShouldHoldThemDeletedAsync();
+        await ShouldHoldThemDeletedAsync(oddlyTyped);
     }
 
-    [Fact]
-    public async Task An_api_migration_imports_them_deleted_and_a_rerun_writes_nothing_new()
+    [Theory]
+    [InlineData(false, 12, false)]
+    [InlineData("false", "12", true)]
+    public async Task An_api_migration_imports_them_deleted_and_a_rerun_writes_nothing_new(
+        object isValid, object carbs, bool oddlyTyped)
     {
         var food = new JsonArray(new JsonObject
         {
             ["_id"] = FoodId,
             ["type"] = "food",
             ["name"] = "Apple",
-            ["carbs"] = 12,
-            ["isValid"] = false,
+            ["carbs"] = JsonSerializer.SerializeToNode(carbs),
+            ["fat"] = oddlyTyped ? null : 0,
+            ["isValid"] = JsonSerializer.SerializeToNode(isValid),
         });
-        var profile = new JsonArray(ProfileDocument(isValid: false));
+        var profile = new JsonArray(ProfileDocument(isValid, oddlyTyped));
         await using var source = await NightscoutServingAsync(() => food, () => profile);
         var request = new StartMigrationRequest
         {
@@ -124,10 +129,10 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
         };
 
         await RunToCompletionAsync(request);
-        await ShouldHoldThemDeletedAsync();
+        await ShouldHoldThemDeletedAsync(oddlyTyped);
 
         await RunToCompletionAsync(request);
-        await ShouldHoldThemDeletedAsync();
+        await ShouldHoldThemDeletedAsync(oddlyTyped);
     }
 
     /// <summary>
@@ -171,22 +176,23 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
     private async Task<string[]> LiveProfileIdsAsync() =>
         [.. (await GetAsync("/api/v1/profile?count=100")).AsArray().Select(p => p!["_id"]!.GetValue<string>())];
 
-    private static JsonObject ProfileDocument(bool? isValid)
+    private static JsonObject ProfileDocument(object? isValid, bool oddlyTyped = false)
     {
         var profile = new JsonObject
         {
             ["_id"] = ProfileId,
             ["defaultProfile"] = "Default",
-            ["startDate"] = StartDate,
+            ["startDate"] = oddlyTyped ? null : StartDate,
+            ["mills"] = oddlyTyped ? JsonValue.Create(Mills.ToString()) : JsonValue.Create(Mills),
             ["units"] = "mg/dl",
-            ["store"] = Store(),
+            ["store"] = Store(nullDia: oddlyTyped),
         };
-        if (isValid is { } valid)
-            profile["isValid"] = valid;
+        if (isValid is not null)
+            profile["isValid"] = JsonSerializer.SerializeToNode(isValid);
         return profile;
     }
 
-    private async Task ShouldHoldThemDeletedAsync()
+    private async Task ShouldHoldThemDeletedAsync(bool oddlyTyped)
     {
         foreach (var (collection, id) in new[] { ("food", FoodId), ("profile", ProfileId) })
         {
@@ -201,8 +207,12 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
         }
 
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
-        (await db.Foods.IncludingDeleted().CountAsync()).Should().Be(1);
-        (await db.TherapySettings.IncludingDeleted().CountAsync()).Should().Be(1);
+        var food = await db.Foods.IncludingDeleted().SingleAsync();
+        food.Carbs.Should().Be(12);
+        food.Fat.Should().Be(0);
+        var therapy = await db.TherapySettings.IncludingDeleted().SingleAsync();
+        therapy.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Mills).UtcDateTime);
+        therapy.Dia.Should().Be(oddlyTyped ? 0 : 3);
     }
 
     private async Task<JsonNode> GetAsync(string url)
@@ -235,26 +245,10 @@ public class MigratedInvalidDocumentTests : ApiIntegrationTestBase, IClassFixtur
     }
 
     /// <summary>A Nightscout that serves what <paramref name="food"/> and <paramref name="profile"/> hold at each request over v1.</summary>
-    private static async Task<NightscoutSource> NightscoutServingAsync(Func<JsonArray> food, Func<JsonArray> profile)
-    {
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Logging.SetMinimumLevel(LogLevel.Warning);
-        var app = builder.Build();
-        app.MapGet("/api/v1/status", () => Results.Json(new { status = "ok", name = "Nightscout", version = "15.0.0", apiEnabled = true }));
-        app.MapGet("/api/v1/food.json", () => Results.Content(food().ToJsonString(), "application/json"));
-        app.MapGet("/api/v1/profile.json", () => Results.Content(profile().ToJsonString(), "application/json"));
-        await app.StartAsync();
-        var url = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
-        return new NightscoutSource(app, url);
-    }
-
-    private sealed record NightscoutSource(WebApplication App, string Url) : IAsyncDisposable
-    {
-        public async ValueTask DisposeAsync()
+    private static Task<FakeNightscout> NightscoutServingAsync(Func<JsonArray> food, Func<JsonArray> profile) =>
+        FakeNightscout.StartAsync(new Dictionary<string, Func<HttpContext, Task<string>>>
         {
-            await App.StopAsync();
-            await App.DisposeAsync();
-        }
-    }
+            ["/api/v1/food.json"] = FakeNightscout.Body(() => food().ToJsonString()),
+            ["/api/v1/profile.json"] = FakeNightscout.Body(() => profile().ToJsonString()),
+        });
 }
