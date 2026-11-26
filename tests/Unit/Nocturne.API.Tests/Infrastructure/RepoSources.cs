@@ -78,7 +78,7 @@ internal static class RepoSources
 internal sealed class SourceFile(string path, string text)
 {
     private readonly Lazy<SyntaxTree> _tree =
-        new(() => CSharpSyntaxTree.ParseText(text), LazyThreadSafetyMode.ExecutionAndPublication);
+        new(() => CSharpSyntaxTree.ParseText(text, path: path), LazyThreadSafetyMode.ExecutionAndPublication);
 
     public string Path { get; } = path;
 
