@@ -68,7 +68,7 @@ internal static class StateSpanSupersessionExtensions
                 if (superseded.Count == 0)
                     return (IReadOnlyDictionary<Guid, WrittenEnd>)new Dictionary<Guid, WrittenEnd>();
 
-                var touchedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+                var touchedAt = ctx.NowAtStoredPrecision();
                 var kept = superseded
                     .Where(r => r.Span.DeletedAt == null && r.Span.EndTimestamp != r.SupersederStart)
                     .Select(r => r.Span)
@@ -155,7 +155,7 @@ internal static class StateSpanSupersessionExtensions
                     .Where(s => s.EndTimestamp == null || SupersededEnd(s, superseders) is not null)
                     .ToList();
                 return await EndAtSuccessorsAsync(
-                    ctx, movable, _ => true, writeUnchanged: false, NocturneDbContext.UtcNowAtStoredPrecision(), token);
+                    ctx, movable, _ => true, writeUnchanged: false, ctx.NowAtStoredPrecision(), token);
             },
             ct);
     }

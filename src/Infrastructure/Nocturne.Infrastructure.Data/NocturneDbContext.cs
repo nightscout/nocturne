@@ -54,10 +54,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public const int SystemTimestampGroupSize = 1000;
 
     /// <summary>
-    /// The current UTC time truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores, so
-    /// that a stamp held in memory equals the one read back from its row.
+    /// The context's clock, <see cref="TimeProvider.System"/> unless <see cref="INocturneDbContextFactory"/>
+    /// set the scope's, so a stamp and a service that compares it read one clock.
     /// </summary>
-    public static DateTime UtcNowAtStoredPrecision() => AtStoredPrecision(DateTime.UtcNow);
+    internal TimeProvider Clock { get; set; } = TimeProvider.System;
+
+    /// <summary>
+    /// The context clock's UTC time truncated to the microsecond a PostgreSQL <c>timestamptz</c>
+    /// stores, so that a stamp held in memory equals the one read back from its row.
+    /// </summary>
+    public DateTime NowAtStoredPrecision() => AtStoredPrecision(Clock.GetUtcNow().UtcDateTime);
 
     /// <summary><paramref name="value"/> truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores.</summary>
     public static DateTime AtStoredPrecision(DateTime value) =>
@@ -984,7 +990,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     private void UpdateTimestamps()
     {
-        var utcNow = UtcNowAtStoredPrecision();
+        var utcNow = NowAtStoredPrecision();
         // Column types are a relational concept: asking the InMemory provider for one throws.
         var isRelational = Database.IsRelational();
         var stampedUpdated = new Dictionary<Type, int>();

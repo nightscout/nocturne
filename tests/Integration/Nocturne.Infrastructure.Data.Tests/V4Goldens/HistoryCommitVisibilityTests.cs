@@ -299,7 +299,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         public override Task ConnectionOpenedAsync(
             DbConnection connection, ConnectionEndEventData eventData, CancellationToken ct = default)
         {
-            OpenedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+            OpenedAt = NocturneDbContext.AtStoredPrecision(DateTime.UtcNow);
             return Task.CompletedTask;
         }
     }

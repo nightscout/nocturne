@@ -134,10 +134,10 @@ public static class HistoryHorizon
     /// A stamp for the rows <paramref name="context"/>'s open transaction writes: the database clock,
     /// read once the transaction holds an id, so no horizon read before then is above it.
     /// </summary>
-    public static async Task<DateTime> StampAsync(DbContext context, CancellationToken ct)
+    public static async Task<DateTime> StampAsync(NocturneDbContext context, CancellationToken ct)
     {
         if (!context.Database.IsNpgsql())
-            return NocturneDbContext.UtcNowAtStoredPrecision();
+            return context.NowAtStoredPrecision();
         if (context.Database.CurrentTransaction is null)
             throw new InvalidOperationException("A history stamp is taken inside a transaction");
 

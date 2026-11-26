@@ -457,7 +457,7 @@ public static class AuditedBulkDeleteExtensions
             null,
             action,
             JsonSerializer.Serialize(new BulkSummary(count, scope), MutationAuditInterceptor.JsonOptions),
-            DateTime.UtcNow));
+            context.NowAtStoredPrecision()));
 
         await context.SaveChangesAsync(ct);
     }
@@ -478,7 +478,7 @@ public static class AuditedBulkDeleteExtensions
         if (auditContext.IsSystemMutation())
             return [];
 
-        var now = DateTime.UtcNow;
+        var now = context.NowAtStoredPrecision();
         var entityTypeName = MutationAuditInterceptor.EntityName(typeof(T));
 
         return affectedRecords.Select(record =>
