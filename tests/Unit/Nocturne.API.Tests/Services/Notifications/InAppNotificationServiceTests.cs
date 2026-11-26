@@ -6,11 +6,10 @@ using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Tests.Services.Notifications;
 
@@ -40,7 +39,7 @@ public class InAppNotificationServiceTests
 
     private const string Source = "meal_matching";
 
-    private static InAppNotificationEntity Notification(
+    private static InAppNotification Notification(
         string userId,
         DateTime? readAt = null,
         string? source = null,
@@ -62,7 +61,7 @@ public class InAppNotificationServiceTests
     /// Gives <see cref="Source"/> the requested number of active notifications, oldest first, and
     /// has create and archive echo back the row they were handed.
     /// </summary>
-    private List<InAppNotificationEntity> SeedActiveSource(int activeCount)
+    private List<InAppNotification> SeedActiveSource(int activeCount)
     {
         var active = Enumerable
             .Range(0, activeCount)
@@ -85,8 +84,8 @@ public class InAppNotificationServiceTests
                 active.First(n => n.Id == id));
         _repository
             .Setup(r => r.CreateAsync(
-                It.IsAny<InAppNotificationEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((InAppNotificationEntity entity, CancellationToken _) => entity);
+                It.IsAny<InAppNotification>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InAppNotification entity, CancellationToken _) => entity);
 
         return active;
     }
@@ -113,7 +112,7 @@ public class InAppNotificationServiceTests
         Assert.Equal("eleventh", created.Title);
         _repository.Verify(
             r => r.CreateAsync(
-                It.Is<InAppNotificationEntity>(e => e.Title == "eleventh" && e.Source == Source),
+                It.Is<InAppNotification>(e => e.Title == "eleventh" && e.Source == Source),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         _repository.Verify(
@@ -172,7 +171,7 @@ public class InAppNotificationServiceTests
     {
         _repository
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((InAppNotificationEntity?)null);
+            .ReturnsAsync((InAppNotification?)null);
 
         var result = await _service.MarkAsReadAsync(Guid.NewGuid(), "user-1");
 
@@ -245,7 +244,7 @@ public class InAppNotificationServiceTests
     [Fact]
     public async Task MarkAllAsReadAsync_BroadcastsEachUpdatedNotificationAndReturnsCount()
     {
-        var updated = new List<InAppNotificationEntity>
+        var updated = new List<InAppNotification>
         {
             Notification("user-1", readAt: DateTime.UtcNow),
             Notification("user-1", readAt: DateTime.UtcNow),
@@ -267,7 +266,7 @@ public class InAppNotificationServiceTests
     {
         _repository
             .Setup(r => r.MarkAllAsReadAsync("user-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<InAppNotificationEntity>());
+            .ReturnsAsync(new List<InAppNotification>());
 
         var count = await _service.MarkAllAsReadAsync("user-1");
 
@@ -311,7 +310,7 @@ public class InAppNotificationServiceTests
     {
         _repository
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((InAppNotificationEntity?)null);
+            .ReturnsAsync((InAppNotification?)null);
 
         var result = await _service.ArchiveNotificationAsync(
             Guid.NewGuid(), NotificationArchiveReason.Dismissed, "user-1");
@@ -358,7 +357,7 @@ public class InAppNotificationServiceTests
     {
         _repository
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((InAppNotificationEntity?)null);
+            .ReturnsAsync((InAppNotification?)null);
 
         Assert.Null(await _service.GetNotificationTypeAsync(Guid.NewGuid(), "user-1"));
     }
@@ -411,10 +410,9 @@ public class InAppNotificationServiceTests
         return handler;
     }
 
-    private InAppNotificationEntity Owned(string type)
+    private InAppNotification Owned(string type, string? sourceId = null)
     {
-        var entity = Notification("user-1");
-        entity.Type = type;
+        var entity = Notification("user-1") with { Type = type, SourceId = sourceId };
         _repository
             .Setup(r => r.GetByIdAsync(entity.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(entity);
@@ -473,8 +471,7 @@ public class InAppNotificationServiceTests
     [Fact]
     public async Task ExecuteActionAsync_DismissingAMealMatchWithoutTheFoodWriteScope_ArchivesAndLeavesTheEntryPending()
     {
-        var entity = Owned("meal_matching.suggested_match");
-        entity.SourceId = Guid.NewGuid().ToString();
+        var entity = Owned("meal_matching.suggested_match", Guid.NewGuid().ToString());
         var foodEntries = new Mock<IConnectorFoodEntryRepository>();
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.SetupGet(a => a.HttpContext).Returns(new DefaultHttpContext());
@@ -493,8 +490,7 @@ public class InAppNotificationServiceTests
     [Fact]
     public async Task ExecuteActionAsync_AcceptingAMealMatchWithoutTheTreatmentsWriteScope_IsRefusedForItLinksNothingAndKeepsTheNotification()
     {
-        var entity = Owned("meal_matching.suggested_match");
-        entity.SourceId = Guid.NewGuid().ToString();
+        var entity = Owned("meal_matching.suggested_match", Guid.NewGuid().ToString());
         var linker = new Mock<IMealMatchLinker>();
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.SetupGet(a => a.HttpContext).Returns(new DefaultHttpContext());

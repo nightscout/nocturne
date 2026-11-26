@@ -684,7 +684,7 @@ public class SubjectRepository : ISubjectRepository
                     return held;
                 },
                 ct);
-            removed.AddRange(othersHeld.Select(n => new RemovedNotice(tenantId, n.UserId, InAppNotificationRepository.ToDto(n))));
+            removed.AddRange(othersHeld.Select(n => new RemovedNotice(tenantId, n.UserId, InAppNotificationMapper.ToDomain(n).ToDto())));
             await requests.ExecuteDeleteAsync(ct);
         }
 

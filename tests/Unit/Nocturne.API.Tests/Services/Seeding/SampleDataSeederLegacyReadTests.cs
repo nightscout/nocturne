@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Seeding;
 using Nocturne.API.Tests.TestDoubles;
@@ -14,6 +13,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -106,6 +106,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
                 contexts, audit, NullLogger<ProfileActivationRepository>.Instance, changes: _written.AsRecordChanges()),
             new TempBasalRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, changes: _written.AsRecordChanges()),
+            new InAppNotificationRepository(contexts),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

@@ -1,5 +1,5 @@
 using Nocturne.Core.Contracts.Jobs;
-using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.BackgroundServices;
 

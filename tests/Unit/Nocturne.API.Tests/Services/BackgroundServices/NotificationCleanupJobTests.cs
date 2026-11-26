@@ -5,7 +5,7 @@ using Moq;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.Services.Jobs;
 using Nocturne.Core.Contracts.Jobs;
-using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Core.Contracts.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;

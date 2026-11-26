@@ -6,11 +6,11 @@ using Moq;
 using Nocturne.API.Services.Notifications.External;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Core.Models.Identity;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -88,7 +88,7 @@ public sealed class ExternalNotificationServiceTests : IDisposable
         repository
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) =>
-                _stored.ContainsKey(id) ? new InAppNotificationEntity { Id = id } : null);
+                _stored.ContainsKey(id) ? new InAppNotification { Id = id } : null);
 
         var services = new ServiceCollection();
         _database.AddToServices(services);

@@ -50,7 +50,7 @@ public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationC
         }
     }
 
-    private static InAppNotificationEntity Notice() => new()
+    private static InAppNotification Notice() => new()
     {
         UserId = "owner",
         Type = "alerts.deviceClockAhead",
@@ -81,7 +81,7 @@ public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationC
         var created = await repository.CreateUnlessActiveAsync(Notice());
 
         (await repository.ReplaceMetadataBySourceAsync("owner", "alerts.deviceClockAhead", "last_reading_at",
-            """{"aheadUntil":"2026-06-10T12:11:00.0000000Z"}""")).Should().BeTrue();
+            new Dictionary<string, object> { ["aheadUntil"] = "2026-06-10T12:11:00.0000000Z" })).Should().BeTrue();
 
         var rows = await reader.InAppNotifications.Where(n => n.SourceId == "last_reading_at").ToListAsync();
         rows.Should().ContainSingle().Which.Id.Should().Be(created!.Id);
