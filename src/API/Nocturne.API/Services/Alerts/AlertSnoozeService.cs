@@ -153,14 +153,11 @@ internal sealed class AlertSnoozeService(
             return false;
         }
 
-        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
-        var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
-
+        var inputs = await RuleSendInputs.ReadAsync(rule.Id, tenantId, repository, ruleRepository, ct);
         var payload = AlertPayloads.Build(
-            rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
+            rule, baseContext, tenantId, excursion.Id, instance.Id, inputs.Tenant, inputs.ActiveExcursionCount, now);
 
-        await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
+        await deliveryService.RenotifyAsync(instance.Id, inputs.Channels, payload, ct);
         await resolutionHandler.CloseAgainIfEndedAsync(excursion.Id, tenantId, ct);
 
         logger.LogInformation(

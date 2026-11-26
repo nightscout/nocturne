@@ -73,16 +73,12 @@ internal sealed class ExcursionOpenedHandler(
         }
         else
         {
-            // An empty channel list is allowed: the user chose no delivery channels, and the
-            // alert is still tracked.
-            var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
-            var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
-            var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
+            var inputs = await RuleSendInputs.ReadAsync(rule.Id, tenantId, repository, ruleRepository, ct);
             var payload = AlertPayloads.Build(
-                rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now, metBy);
+                rule, context, tenantId, excursionId, instance.Id, inputs.Tenant, inputs.ActiveExcursionCount, now, metBy);
 
             var suppressingScope = await DndGatedDispatch.DispatchAsync(
-                rule, context.ActiveDndScopes, instance.Id, channels, payload, repository, deliveryService, logger, ct);
+                rule, context.ActiveDndScopes, instance.Id, inputs.Channels, payload, repository, deliveryService, logger, ct);
 
             logger.LogInformation(
                 "Alert instance {InstanceId} dispatched for excursion {ExcursionId}, rule {RuleName}",
