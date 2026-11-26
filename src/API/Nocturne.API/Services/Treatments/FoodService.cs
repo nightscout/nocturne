@@ -123,7 +123,7 @@ public class FoodService : IFoodService
         if (!processed.Any(f => f.IsValid == false))
             return [.. await PersistCreatedAsync(processed, cancellationToken)];
 
-        return await CreateWithInvalidAsync(processed, cancellationToken);
+        return await CreateWithInvalidAsync(processed, announce: true, cancellationToken);
 
         IEnumerable<Food> ProcessFoodDocuments(IEnumerable<Food> documents)
         {
@@ -233,13 +233,24 @@ public class FoodService : IFoodService
         return created.First();
     }
 
+    /// <inheritdoc />
+    public async Task ImportFoodAsync(IReadOnlyList<Food> foods, CancellationToken cancellationToken = default)
+    {
+        if (foods.Count == 0)
+            return;
+
+        await CreateWithInvalidAsync([.. foods], announce: false, cancellationToken);
+    }
+
     /// <summary>
     /// Creates <paramref name="processed"/>, settling the foods sent with <c>isValid: false</c> by
     /// <see cref="InvalidUploads{TUpload}"/>: one whose id a live food holds deletes it, and one whose id
     /// no food holds is stored already deleted. A food is named only by its id.
     /// </summary>
+    /// <param name="announce">Whether the writes and deletes are broadcast and told to <see cref="IDataEventSink{T}"/>.</param>
     /// <returns>Each food as stored, or as given where it wrote nothing.</returns>
-    private async Task<BulkWrite<Food>> CreateWithInvalidAsync(List<Food> processed, CancellationToken cancellationToken)
+    private async Task<BulkWrite<Food>> CreateWithInvalidAsync(
+        List<Food> processed, bool announce, CancellationToken cancellationToken)
     {
         var ids = processed.Where(f => f.IsValid == false && !string.IsNullOrEmpty(f.Id)).Select(f => f.Id!).ToList();
         var stored = await _food.GetStoredIdsAsync(ids, cancellationToken);
@@ -261,7 +272,10 @@ public class FoodService : IFoodService
         {
             foreach (var (food, _) in sorted.Invalidating.DistinctBy(f => f.Food.Id, StringComparer.Ordinal))
             {
-                if (await DeleteFoodAsync(food.Id!, cancellationToken))
+                var deleted = announce
+                    ? await DeleteFoodAsync(food.Id!, cancellationToken)
+                    : await _food.DeleteFoodAsync(food.Id!, cancellationToken);
+                if (deleted)
                     invalidated.Add(food);
             }
 
@@ -276,7 +290,10 @@ public class FoodService : IFoodService
         var writing = sorted.Writing.Select(f => f.Food).ToList();
         if (writing.Count > 0)
         {
-            foreach (var (food, row) in writing.Zip(await PersistCreatedAsync(writing, cancellationToken)))
+            var rows = announce
+                ? await PersistCreatedAsync(writing, cancellationToken)
+                : await _food.CreateFoodAsync(writing, cancellationToken);
+            foreach (var (food, row) in writing.Zip(rows))
                 served[food] = row;
         }
 

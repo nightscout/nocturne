@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -356,6 +357,7 @@ public class RawMmolProfileDetectorTests : IClassFixture<RawMmolProfileStoresFix
             new TargetRangeScheduleRepository(contexts, audit, NullLogger<TargetRangeScheduleRepository>.Instance),
             Mock.Of<ITempBasalRateReresolver>(),
             Mock.Of<ILoopClosedLoopStamper>(),
+            Mock.Of<IProfileProjectionService>(),
             audit,
             NullLogger<ProfileDecomposer>.Instance);
     }

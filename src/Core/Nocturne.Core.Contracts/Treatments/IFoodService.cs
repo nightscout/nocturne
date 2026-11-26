@@ -41,6 +41,13 @@ public interface IFoodService
     );
 
     /// <summary>
+    /// Writes foods read from a Nightscout migration as the source stored them, under the
+    /// <see cref="FoodWriteMode.Legacy"/> rules, with no broadcast and no write-back. A food sent with
+    /// <c>isValid: false</c> is settled as <see cref="CreateFoodAsync"/> settles it.
+    /// </summary>
+    Task ImportFoodAsync(IReadOnlyList<Food> foods, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Create one food record under the <see cref="FoodWriteMode.Native"/> rules.
     /// </summary>
     /// <exception cref="FoodNameRequiredException">The name sanitizes to empty.</exception>

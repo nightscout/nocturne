@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -31,6 +32,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
     private readonly ITempBasalRateReresolver _tempBasalRates;
     private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly IProfileProjectionService _projection;
     private readonly IAuditContext _auditContext;
 
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
@@ -40,6 +42,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
     /// <param name="closedLoop">Restamps the Loop snapshots written Loop settings govern.</param>
+    /// <param name="projection">Resolves the document an id sent with <c>isValid: false</c> names.</param>
     /// <param name="auditContext">Mutation audit context used for reconciliation deletes.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
@@ -50,6 +53,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
         ITempBasalRateReresolver tempBasalRates,
         ILoopClosedLoopStamper closedLoop,
+        IProfileProjectionService projection,
         IAuditContext auditContext,
         ILogger<ProfileDecomposer> logger)
         : base(logger)
@@ -61,13 +65,89 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
         _tempBasalRates = tempBasalRates;
         _closedLoop = closedLoop;
+        _projection = projection;
         _auditContext = auditContext;
     }
 
     /// <inheritdoc />
-    public Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+    public async Task<V4Models.InvalidatingDecomposition<Profile>> DecomposeBatchAsync(
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
-        => DecomposeBatchAsync(profiles, origin, into: null, ct);
+    {
+        var result = new V4Models.InvalidatingDecomposition<Profile>();
+        if (!profiles.Any(p => p.IsValid == false))
+        {
+            await DecomposeBatchAsync(profiles, origin, result, into: null, ct);
+            return result;
+        }
+
+        var writing = await SettleInvalidAsync(profiles, origin, result, ct);
+        if (writing.Count > 0)
+            await DecomposeBatchAsync(writing, origin, result, into: null, ct);
+        return result;
+    }
+
+    /// <summary>
+    /// Settles the documents of <paramref name="profiles"/> sent with <c>isValid: false</c> by
+    /// <see cref="InvalidUploads{TUpload}"/>: one whose id holds live stores deletes them, and one whose
+    /// id holds none is stored deleted. A document is named only by its id, resolved first as PUT and
+    /// DELETE resolve it, and a deleted one is found by the stores it carries.
+    /// </summary>
+    /// <returns>The documents that write as usual.</returns>
+    private async Task<List<Profile>> SettleInvalidAsync(
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, V4Models.InvalidatingDecomposition<Profile> result, CancellationToken ct)
+    {
+        foreach (var versions in profiles
+                     .Where(p => p.Id is not null)
+                     .GroupBy(p => p.Id!, StringComparer.Ordinal)
+                     .Where(v => v.Last().IsValid == false))
+        {
+            if (await _projection.ResolveDocumentIdAsync(versions.Key, ct) is { } documentId)
+            {
+                foreach (var version in versions)
+                    version.Id = documentId;
+            }
+        }
+
+        var ids = profiles
+            .Where(p => p.IsValid == false && p.Id is not null)
+            .Select(p => p.Id!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var live = await _therapySettingsRepo.GetDocumentRowsAsync(ids, ct);
+        var indexed = profiles.Select((profile, index) => (Profile: profile, Index: index)).ToList();
+
+        var sorted = await InvalidUploads<(Profile Profile, int Index)>.SortAsync(indexed, indexed, new(
+            p => p.Profile.Id,
+            p => p.Index,
+            p => p.Profile.IsValid,
+            (p, valid) => p.Profile.IsValid = valid,
+            p => live.ContainsKey(p.Profile.Id!),
+            _ => true,
+            async (unstored, token) =>
+            {
+                var stores = profiles
+                    .Where(p => p.Id is not null && unstored.Contains(p.Id))
+                    .SelectMany(p => p.Store.Keys.Select(store => (LegacyId: $"{p.Id}:{store}", DocumentId: p.Id!)))
+                    .DistinctBy(s => s.LegacyId, StringComparer.Ordinal)
+                    .ToDictionary(s => s.LegacyId, s => s.DocumentId, StringComparer.Ordinal);
+                var deleted = await _therapySettingsRepo.GetDeletedLegacyIdsAsync(stores.Keys, token);
+                return deleted.Select(legacyId => stores[legacyId]).ToHashSet(StringComparer.Ordinal);
+            }), ct);
+
+        using (SystemAttributedBatchWrites(_auditContext))
+        {
+            foreach (var (profile, _) in sorted.Invalidating.DistinctBy(p => p.Profile.Id, StringComparer.Ordinal))
+            {
+                if (await DeleteDocumentAsync(profile.Id!, origin, ct) > 0)
+                    result.AddInvalidated(profile);
+            }
+        }
+
+        if (sorted.StoredDeleted.Count > 0)
+            await StoreDeletedAsync([.. sorted.StoredDeleted.Select(p => p.Profile)], ct);
+
+        return [.. sorted.Writing.Select(p => p.Profile)];
+    }
 
     /// <summary>
     /// The versions a decomposition created, moved or removed, which the schedule-derived temp basal
@@ -108,15 +188,14 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
     /// id they would fork off the settings row they belong to rather than join it.
     /// </para>
     /// </remarks>
-    private async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Profile> profiles, WriteOrigin origin, ScheduleChanges? into, CancellationToken ct)
+    private async Task DecomposeBatchAsync(
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, V4Models.DecompositionResult result,
+        ScheduleChanges? into, CancellationToken ct)
     {
         var changes = into ?? new ScheduleChanges();
-        var result = new V4Models.DecompositionResult();
         await WriteStoresAsync(profiles, origin, result, changes, ct);
         if (into is null)
             await FollowAsync(changes, ct);
-        return result;
     }
 
     /// <summary>
@@ -129,7 +208,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 
     private static readonly Regex ProfileSwitchStoreName = new("@@@@@[0-9]+$", RegexOptions.Compiled);
 
-    /// <summary>The write phases of <see cref="DecomposeBatchAsync(IReadOnlyList{Profile}, WriteOrigin, ScheduleChanges?, CancellationToken)"/>.</summary>
+    /// <summary>The write phases of <see cref="DecomposeBatchAsync(IReadOnlyList{Profile}, WriteOrigin, V4Models.DecompositionResult, ScheduleChanges?, CancellationToken)"/>.</summary>
     private async Task WriteStoresAsync(
         IReadOnlyList<Profile> profiles,
         WriteOrigin origin,
@@ -233,12 +312,15 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         return entries;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stores every named profile of <paramref name="profiles"/> as V4 records already deleted, so only
+    /// v3 history serves each document, with <c>isValid: false</c>.
+    /// </summary>
     /// <remarks>
     /// The delete is the system's (<see cref="InvalidUploads{TUpload}"/>). A document stored deleted is
     /// in force nowhere, so it claims no default and no schedule-derived rate or Loop snapshot follows it.
     /// </remarks>
-    public async Task StoreDeletedAsync(IReadOnlyList<Profile> profiles, CancellationToken ct = default)
+    private async Task StoreDeletedAsync(IReadOnlyList<Profile> profiles, CancellationToken ct)
     {
         var entries = StoreEntries(profiles, Guid.CreateVersion7());
         if (entries.Count == 0)
@@ -669,7 +751,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
 
         var changes = new ScheduleChanges();
         changes.LoopSettings.AddRange(stored.Select(row => row.Start));
-        var result = await DecomposeBatchAsync([profile], origin, changes, ct);
+        var result = new V4Models.DecompositionResult();
+        await DecomposeBatchAsync([profile], origin, result, changes, ct);
         var kept = result.StoredRecords.OfType<V4Models.TherapySettings>().Count();
         if (kept < stores.Count)
         {

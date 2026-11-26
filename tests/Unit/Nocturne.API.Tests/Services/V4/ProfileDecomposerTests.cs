@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
@@ -500,6 +501,7 @@ public class ProfileDecomposerTests
                 Mock<ITargetRangeScheduleRepository, TargetRangeSchedule>(null, [], onUpsert),
                 TempBasalRates.Object,
                 ClosedLoop.Object,
+                Moq.Mock.Of<IProfileProjectionService>(),
                 new AuditContext(),
                 NullLogger<ProfileDecomposer>.Instance);
         }
