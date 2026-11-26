@@ -422,7 +422,9 @@ internal sealed class AlertDeliveryService(
     {
         await using var db = await contextFactory.CreateAsync(ct);
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
-        if (delivery is null) return;
+        // A platform that accepts a message and fails it moments later (WhatsApp's status webhook)
+        // can report the failure before the sender's own report of the send lands; the failure wins.
+        if (delivery is null || delivery.Status == "failed") return;
 
         delivery.Status = "delivered";
         delivery.DeliveredAt = timeProvider.GetUtcNow().UtcDateTime;

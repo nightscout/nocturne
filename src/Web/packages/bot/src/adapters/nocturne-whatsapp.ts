@@ -12,9 +12,10 @@ interface StatusError {
   title?: string;
 }
 
-/** A failed `statuses` entry of Meta's `messages` webhook. The adapter's own type leaves out `errors`. */
-interface FailedStatus {
+/** A `statuses` entry of Meta's `messages` webhook. The adapter's own type leaves out `errors`. */
+interface StatusUpdate {
   id: string;
+  status: string;
   errors: StatusError[];
 }
 
@@ -49,7 +50,7 @@ const WINDOW_OPENING_TYPES = new Set([
   "button",
 ]);
 
-function failedStatuses(body: string): FailedStatus[] {
+function statusUpdates(body: string): StatusUpdate[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -62,8 +63,9 @@ function failedStatuses(body: string): FailedStatus[] {
     .flatMap((change) => list(field(field(change, "value"), "statuses")))
     .flatMap((status) => {
       const id = field(status, "id");
-      return field(status, "status") === "failed" && typeof id === "string"
-        ? [{ id, errors: list(field(status, "errors")).map(statusError) }]
+      const state = field(status, "status");
+      return typeof id === "string" && typeof state === "string"
+        ? [{ id, status: state, errors: list(field(status, "errors")).map(statusError) }]
         : [];
     });
 }
@@ -81,14 +83,18 @@ function failureReason(errors: StatusError[]): string {
  * Every message a user sends is recorded in {@link WhatsAppWindow}, so delivery can tell an open
  * window from a closed one before sending. Meta accepts a send outside the window and fails it
  * afterwards in a `failed` status, which the stock adapter drops: here a failed status for an
- * alert message marks that alert's delivery failed, which `markDelivered` had already set.
+ * alert message marks that alert's delivery failed. The API keeps the failure if the bot's own
+ * report of the send lands after it.
  */
 export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
   override async handleWebhook(request: Request, options?: WebhookOptions): Promise<Response> {
     const body = request.method === "POST" ? await request.clone().text() : null;
     const response = await super.handleWebhook(request, options);
-    // Only a 2xx response means the signature was verified; anything else may be forged.
-    if (body !== null && response.ok) await this.reportFailedAlerts(body);
+    // Only a 2xx response means the signature was verified; anything else may be forged. A failure
+    // left unreported answers 500, so Meta delivers the statuses again (messages are deduplicated).
+    if (body !== null && response.ok && !(await this.reportStatuses(body))) {
+      return new Response("A failed alert could not be reported", { status: 500 });
+    }
     return response;
   }
 
@@ -108,27 +114,57 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
     return identity;
   }
 
+  /**
+   * A thread names the user as their identity reads on an incoming message: a phone number as a
+   * bare `wa_id`. A destination typed in E.164 drops its `+` here, so both reach the same thread.
+   */
+  override async openDM(userId: string): Promise<string> {
+    return super.openDM(userId.replace(/^\+/, ""));
+  }
+
+  /**
+   * Meta prepends the business number's country code to a `to` without a leading `+`, so a bare
+   * `wa_id` from another country reaches a different number. Every phone number goes out with one.
+   */
+  protected override async recipient(
+    ...args: Parameters<WhatsAppAdapter["recipient"]>
+  ): ReturnType<WhatsAppAdapter["recipient"]> {
+    const recipient = await super.recipient(...args);
+    return recipient.to && /^\d+$/.test(recipient.to) ? { ...recipient, to: `+${recipient.to}` } : recipient;
+  }
+
   private window(): WhatsAppWindow | null {
     return this.chat ? new WhatsAppWindow(this.chat.getState()) : null;
   }
 
-  private async reportFailedAlerts(body: string): Promise<void> {
+  /** False when a failed alert could not be reported and should be delivered again. */
+  private async reportStatuses(body: string): Promise<boolean> {
     const window = this.window();
-    if (!window) return;
+    if (!window) return true;
 
-    for (const status of failedStatuses(body)) {
+    let reported = true;
+    for (const status of statusUpdates(body)) {
       try {
-        const alert = await window.takeSent(status.id);
+        if (status.status === "delivered" || status.status === "read") {
+          await window.forgetSent(status.id);
+          continue;
+        }
+        if (status.status !== "failed") continue;
+
+        const alert = await window.sentAlert(status.id);
         if (!alert) continue;
         if (status.errors.some((e) => e.code === WINDOW_CLOSED_ERROR_CODE)) {
-          await window.recordClosed(alert.threadId);
+          await window.recordClosed(alert.threadId, alert.sentAt);
         }
         await getScopedApiFactory()(alert.tenantSlug).alerts.markFailed(alert.deliveryId, {
           error: failureReason(status.errors),
         });
+        await window.forgetSent(status.id);
       } catch (error) {
-        this.logger.error("Failed to report a failed WhatsApp alert", { messageId: status.id, error });
+        this.logger.error("Failed to report a WhatsApp alert's status", { messageId: status.id, error });
+        if (status.status === "failed") reported = false;
       }
     }
+    return reported;
   }
 }

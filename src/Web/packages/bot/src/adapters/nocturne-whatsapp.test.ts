@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatInstance } from "chat";
 import { NocturneWhatsAppAdapter } from "./nocturne-whatsapp.js";
 import { runWithContext } from "../lib/request-context.js";
@@ -12,6 +12,7 @@ const PHONE_NUMBER_ID = "1000";
 const WA_ID = "61400000000";
 const THREAD = `whatsapp:${PHONE_NUMBER_ID}:${WA_ID}`;
 const HOUR = 60 * 60 * 1000;
+const SENT = { deliveryId: "delivery-1", tenantSlug: "acme", threadId: THREAD, sentAt: Date.now() - 60_000 };
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
 
@@ -85,6 +86,9 @@ const textFrom = (waId: string, sentAt: Date) =>
     ],
   });
 
+const status = (messageId: string, state: string) =>
+  change({ statuses: [{ id: messageId, status: state, timestamp: "1700000000", recipient_id: WA_ID }] });
+
 const failedStatus = (messageId: string, code: number, title: string) =>
   change({
     statuses: [
@@ -124,7 +128,7 @@ describe("NocturneWhatsAppAdapter", () => {
   });
 
   it("marks an alert failed when Meta later fails it for the closed window", async () => {
-    await bits.window.rememberSent("wamid.alert", { deliveryId: "delivery-1", tenantSlug: "acme", threadId: THREAD });
+    await bits.window.rememberSent("wamid.alert", SENT);
 
     await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
 
@@ -134,7 +138,7 @@ describe("NocturneWhatsAppAdapter", () => {
   });
 
   it("marks an alert failed with Meta's reason for any other failure, without closing the window", async () => {
-    await bits.window.rememberSent("wamid.alert", { deliveryId: "delivery-1", tenantSlug: "acme", threadId: THREAD });
+    await bits.window.rememberSent("wamid.alert", SENT);
 
     await bits.post(failedStatus("wamid.alert", 131026, "Message undeliverable"));
 
@@ -145,7 +149,7 @@ describe("NocturneWhatsAppAdapter", () => {
   });
 
   it("reports a failed alert once, however often Meta repeats the status", async () => {
-    await bits.window.rememberSent("wamid.alert", { deliveryId: "delivery-1", tenantSlug: "acme", threadId: THREAD });
+    await bits.window.rememberSent("wamid.alert", SENT);
 
     await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
     await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
@@ -153,9 +157,79 @@ describe("NocturneWhatsAppAdapter", () => {
     expect(bits.markFailed).toHaveBeenCalledOnce();
   });
 
+  it("keeps a window the user reopened after the failed send", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    await bits.window.recordInbound(THREAD, SENT.sentAt + 5_000);
+
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(bits.markFailed).toHaveBeenCalledOnce();
+    await expect(bits.window.isClosed(THREAD, Date.now())).resolves.toBe(false);
+  });
+
+  it("answers 500 and keeps the alert when its failure cannot be reported, so Meta sends the status again", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    bits.markFailed.mockRejectedValueOnce(new Error("API restarting"));
+
+    const first = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+    const again = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(first.status).toBe(500);
+    expect(again.status).toBe(200);
+    expect(bits.markFailed).toHaveBeenCalledTimes(2);
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
+  });
+
+  it.each(["delivered", "read"])("forgets an alert Meta reports %s", async (state) => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+
+    await bits.post(status("wamid.alert", state));
+
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
+    expect(bits.markFailed).not.toHaveBeenCalled();
+  });
+
   it("ignores failed statuses for messages that were not alerts", async () => {
     await bits.post(failedStatus("wamid.reply", 131047, "Re-engagement message"));
 
     expect(bits.markFailed).not.toHaveBeenCalled();
+  });
+
+  describe("addressing", () => {
+    let sent: Array<Record<string, unknown>>;
+
+    beforeEach(() => {
+      sent = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          sent.push(JSON.parse(String(init.body)));
+          return new Response(JSON.stringify({ messages: [{ id: "wamid.out" }] }));
+        }),
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("opens the same thread for a typed E.164 number as for the user's wa_id", async () => {
+      await expect(bits.adapter.openDM(`+${WA_ID}`)).resolves.toBe(THREAD);
+      await expect(bits.adapter.openDM(WA_ID)).resolves.toBe(THREAD);
+    });
+
+    it("sends to a phone number with its +, so Meta does not prepend its own country code", async () => {
+      await bits.adapter.postMessage(await bits.adapter.openDM(WA_ID), "Hello");
+
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ to: `+${WA_ID}` });
+    });
+
+    it("sends to a user who hides their number by their business-scoped user ID", async () => {
+      await bits.adapter.postMessage(await bits.adapter.openDM("US.13491208655302741918"), "Hello");
+
+      expect(sent[0]).toMatchObject({ recipient: "US.13491208655302741918" });
+      expect(sent[0]).not.toHaveProperty("to");
+    });
   });
 });

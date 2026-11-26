@@ -52,6 +52,15 @@ function telegramWebhookSecretToken(configured: string | undefined): string {
   return randomBytes(32).toString("hex");
 }
 
+/** A WhatsApp setting from the stored platform settings, else the environment. Refuses to start without one. */
+function whatsappSetting(name: string, stored: string | undefined, envVar: string): string {
+  const value = stored || process.env[envVar];
+  if (!value) {
+    throw new Error(`WhatsApp ${name} is required. Set it in the WhatsApp settings or ${envVar}.`);
+  }
+  return value;
+}
+
 export function createBot(options: BotOptions): Chat {
   const adapters: Record<string, Adapter> = {};
   const platforms = options.platforms ?? {};
@@ -100,10 +109,11 @@ export function createBot(options: BotOptions): Chat {
     logger.info("Enabling WhatsApp adapter");
     const configured = typeof whatsapp === "object" ? whatsapp : undefined;
     adapters.whatsapp = new NocturneWhatsAppAdapter({
-      accessToken: configured ? configured.accessToken! : process.env.WHATSAPP_ACCESS_TOKEN!,
-      appSecret: configured ? configured.appSecret! : process.env.WHATSAPP_APP_SECRET!,
-      phoneNumberId: configured ? configured.phoneNumberId! : process.env.WHATSAPP_PHONE_NUMBER_ID!,
-      verifyToken: configured ? configured.verifyToken! : process.env.WHATSAPP_VERIFY_TOKEN!,
+      accessToken: whatsappSetting("accessToken", configured?.accessToken, "WHATSAPP_ACCESS_TOKEN"),
+      appSecret: whatsappSetting("appSecret", configured?.appSecret, "WHATSAPP_APP_SECRET"),
+      phoneNumberId: whatsappSetting("phoneNumberId", configured?.phoneNumberId, "WHATSAPP_PHONE_NUMBER_ID"),
+      verifyToken: whatsappSetting("verifyToken", configured?.verifyToken, "WHATSAPP_VERIFY_TOKEN"),
+      apiUrl: process.env.WHATSAPP_API_URL,
       userName: "nocturne",
       logger,
     });

@@ -430,4 +430,30 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
 
         fired.NotSent.Should().Equal(dryRun).And.ContainSingle();
     }
+
+    [Theory]
+    [InlineData("pending", "delivered")]
+    [InlineData("failed", "failed")]
+    public async Task A_report_of_the_send_never_overwrites_a_failure_reported_first(string before, string after)
+    {
+        var instanceId = await SeedInstanceAsync();
+        var deliveryId = Guid.CreateVersion7();
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            db.AlertDeliveries.Add(new AlertDeliveryEntity
+            {
+                Id = deliveryId, TenantId = Tenant, AlertInstanceId = instanceId,
+                ChannelType = ChannelType.WhatsAppDm, Destination = "61400000000", Payload = "{}",
+                Status = before, LastError = before == "failed" ? "the window is closed" : null,
+                CreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await CreateService().MarkDeliveredAsync(deliveryId, "wamid.1", null, CancellationToken.None);
+
+        await using var read = await _factory.CreateDbContextAsync();
+        var row = await read.AlertDeliveries.SingleAsync(d => d.Id == deliveryId);
+        row.Status.Should().Be(after);
+    }
 }

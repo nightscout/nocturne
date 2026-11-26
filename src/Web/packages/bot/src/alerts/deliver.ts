@@ -72,11 +72,12 @@ export class AlertDeliveryHandler {
       const target = await this.target(channelType, destination);
       threadId = target.id;
 
-      if (window && (await window.isClosed(threadId, Date.now()))) {
+      if (window && (await this.knownClosed(window, threadId))) {
         await this.fail(deliveryId, WINDOW_CLOSED_REASON);
         return;
       }
 
+      const sentAt = Date.now();
       const card = AlertCard({ payload });
       const sent = await withAlertAccent(payload.severity, () =>
         target.post(card),
@@ -84,7 +85,7 @@ export class AlertDeliveryHandler {
 
       if (window && sent?.id) {
         await window
-          .rememberSent(sent.id, { deliveryId, tenantSlug: event.tenantSlug, threadId })
+          .rememberSent(sent.id, { deliveryId, tenantSlug: event.tenantSlug, threadId, sentAt })
           .catch((e: unknown) => logger.error("Failed to remember a sent WhatsApp alert:", e));
       }
 
@@ -97,12 +98,27 @@ export class AlertDeliveryHandler {
       logger.error(`Alert delivery failed for ${deliveryId}:`, err);
       if (window && threadId && isWindowClosedError(err)) {
         await window
-          .recordClosed(threadId)
+          .recordClosed(threadId, Date.now())
           .catch((e: unknown) => logger.error("Failed to record a closed WhatsApp window:", e));
         await this.fail(deliveryId, WINDOW_CLOSED_REASON);
         return;
       }
       await this.fail(deliveryId, err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
+   * Whether the window is known to be closed. The bot's state connects when the bot initializes,
+   * which a dispatch may be the first to ask for; a state that cannot be read leaves the window
+   * unknown, and the alert is sent.
+   */
+  private async knownClosed(window: WhatsAppWindow, threadId: string): Promise<boolean> {
+    try {
+      await this.bot.initialize();
+      return await window.isClosed(threadId, Date.now());
+    } catch (err) {
+      logger.error("Could not read the WhatsApp window; sending the alert:", err);
+      return false;
     }
   }
 

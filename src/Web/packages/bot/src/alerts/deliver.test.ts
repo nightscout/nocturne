@@ -45,8 +45,9 @@ function createBot(options: { adaptersWithDm?: string[] } = {}) {
     withDm.includes(name) ? { name, openDM } : undefined,
   );
 
-  const bot = { channel, thread, getAdapter, getState: () => state } as unknown as Chat;
-  return { bot, channel, thread, getAdapter, openDM, post };
+  const initialize = vi.fn().mockResolvedValue(undefined);
+  const bot = { channel, thread, getAdapter, initialize, getState: () => state } as unknown as Chat;
+  return { bot, channel, thread, getAdapter, openDM, post, initialize };
 }
 
 function createApi() {
@@ -374,7 +375,7 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
     handler = new AlertDeliveryHandler(bits.bot, apiBits.api);
   });
 
-  it("opens the DM through the WhatsApp adapter, which addresses it without a network call", async () => {
+  it("opens the DM through the WhatsApp adapter, on the thread the user's own messages arrive in", async () => {
     const adapter = new NocturneWhatsAppAdapter({
       accessToken: "not-a-token",
       appSecret: "not-a-secret",
@@ -385,7 +386,7 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
     });
     bits.getAdapter.mockReturnValue(adapter as never);
 
-    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+    await handler.deliver(createEvent("whatsapp_dm", `+${WA_ID}`));
 
     expect(bits.thread).toHaveBeenCalledExactlyOnceWith(`whatsapp:1000:${WA_ID}`);
     expect(bits.post).toHaveBeenCalledOnce();
@@ -398,10 +399,11 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
 
     expect(bits.post).toHaveBeenCalledOnce();
     expect(apiBits.markDelivered).toHaveBeenCalledOnce();
-    await expect(window.takeSent("platform-message-1")).resolves.toEqual({
+    await expect(window.sentAlert("platform-message-1")).resolves.toEqual({
       deliveryId: "delivery-1",
       tenantSlug: "acme",
       threadId: THREAD,
+      sentAt: expect.any(Number),
     });
   });
 
@@ -422,6 +424,24 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
     expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
       error: WINDOW_CLOSED_REASON,
     });
+  });
+
+  it("sends up to the last minute of the window, which Meta checks itself", async () => {
+    await window.recordInbound(THREAD, Date.now() - 24 * HOUR + 60_000);
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).toHaveBeenCalledOnce();
+  });
+
+  it("sends the card when the bot's state cannot be read, rather than withhold the alert", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    bits.initialize.mockRejectedValueOnce(new Error("PostgresStateAdapter is not connected"));
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).toHaveBeenCalledOnce();
+    expect(apiBits.markDelivered).toHaveBeenCalledOnce();
   });
 
   it("names the window when Meta refuses the send outright, and skips the next doomed send", async () => {
@@ -458,6 +478,6 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
     await handler.deliver(createEvent("telegram_dm", "123456789"));
 
     expect(apiBits.markDelivered).toHaveBeenCalledOnce();
-    await expect(window.takeSent("platform-message-1")).resolves.toBeNull();
+    await expect(window.sentAlert("platform-message-1")).resolves.toBeNull();
   });
 });

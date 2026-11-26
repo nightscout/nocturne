@@ -7,16 +7,17 @@ import { WhatsAppApiError } from "@chat-adapter/whatsapp";
  */
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Sends this close to the window's end are treated as outside it, to absorb clock skew and send latency. */
-const WINDOW_MARGIN_MS = 10 * 60 * 1000;
-
 /** Meta's error code for a free-form message sent outside the customer service window ("Re-engagement message"). */
 export const WINDOW_CLOSED_ERROR_CODE = 131047;
 
 /** Long enough to tell "closed" from "never seen" for a user who writes less than daily. */
 const INBOUND_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** Meta reports a send's failure minutes after accepting it; a day covers a delayed status. */
+/**
+ * Meta reports a send's failure minutes after accepting it; a day covers a delayed status. A sent
+ * alert is also forgotten when Meta reports it delivered or read, since the Postgres state store
+ * removes an expired row only when that key is read again.
+ */
 const SENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Recorded on a delivery the window stopped, in place of Meta's error text. */
@@ -29,6 +30,8 @@ export interface SentAlert {
   deliveryId: string;
   tenantSlug: string;
   threadId: string;
+  /** Epoch milliseconds, taken before the send. */
+  sentAt: number;
 }
 
 const inboundKey = (threadId: string) => `nocturne:whatsapp:last-inbound:${threadId}`;
@@ -49,26 +52,37 @@ export class WhatsAppWindow {
     await this.state.set(inboundKey(threadId), at, INBOUND_TTL_MS);
   }
 
-  /** Records that Meta refused a send because the window is closed, so later alerts skip the doomed send. */
-  async recordClosed(threadId: string): Promise<void> {
+  /**
+   * Records that Meta refused a send made at `sentAt` because the window was closed, so later
+   * alerts skip the doomed send. A message the user wrote since then has reopened it, and stands.
+   */
+  async recordClosed(threadId: string, sentAt: number): Promise<void> {
+    const lastInbound = await this.state.get<number>(inboundKey(threadId));
+    if (lastInbound !== null && lastInbound >= sentAt) return;
     await this.state.set(inboundKey(threadId), 0, INBOUND_TTL_MS);
   }
 
-  /** True only when the window is known to be closed; a thread never seen is not. */
+  /**
+   * True only when the window is known to be closed; a thread never seen is not. There is no
+   * margin before the end: Meta checks the window when it sends, and a late failure still comes
+   * back as a failed status.
+   */
   async isClosed(threadId: string, now: number): Promise<boolean> {
     const lastInbound = await this.state.get<number>(inboundKey(threadId));
-    return lastInbound !== null && now - lastInbound >= WINDOW_MS - WINDOW_MARGIN_MS;
+    return lastInbound !== null && now - lastInbound >= WINDOW_MS;
   }
 
   async rememberSent(messageId: string, alert: SentAlert): Promise<void> {
     await this.state.set(sentKey(messageId), alert, SENT_TTL_MS);
   }
 
-  /** The alert a message carried, once: a second failed status for the same message finds nothing. */
-  async takeSent(messageId: string): Promise<SentAlert | null> {
-    const alert = await this.state.get<SentAlert>(sentKey(messageId));
-    if (alert) await this.state.delete(sentKey(messageId));
-    return alert;
+  async sentAlert(messageId: string): Promise<SentAlert | null> {
+    return await this.state.get<SentAlert>(sentKey(messageId));
+  }
+
+  /** Forgets a sent alert once its outcome is reported, so a repeated status finds nothing. */
+  async forgetSent(messageId: string): Promise<void> {
+    await this.state.delete(sentKey(messageId));
   }
 }
 
