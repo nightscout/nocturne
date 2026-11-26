@@ -540,9 +540,7 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_WithNoTenant_ReportsTheNightscoutLevelAndTheNocturneRelease()
     {
-        var unresolved = new Mock<ITenantAccessor>();
-        unresolved.Setup(x => x.IsResolved).Returns(false);
-        var service = CreateStatusService(_configuration, tenantAccessor: unresolved.Object);
+        var service = CreateStatusService(_configuration, tenantAccessor: new SettableTenantAccessor());
 
         var result = await service.GetSystemStatusAsync();
 

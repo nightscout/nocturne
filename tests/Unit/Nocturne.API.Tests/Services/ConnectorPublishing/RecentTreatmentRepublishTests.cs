@@ -1,5 +1,4 @@
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.Core.Contracts.Multitenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.ConnectorPublishing;
@@ -476,6 +475,6 @@ public class RecentTreatmentRepublishTests : IDisposable
             bolus, carbs, bgChecks, calculations, Mock.Of<ITempBasalRepository>(),
             Mock.Of<IBasalInjectionRepository>(), notes, deviceEvents,
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
-            Mock.Of<IPatientDeviceStamper>(), audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance);
+            Mock.Of<IPatientDeviceStamper>(), audit, _tally, new SettableTenantAccessor(), NullLogger<TreatmentPublisher>.Instance);
     }
 }

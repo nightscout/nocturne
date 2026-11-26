@@ -589,6 +589,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
     private static GoogleHealthReadingWriter Writer(NocturneDbContext db)
     {
+        // A mock because the answer is read from the context on each call, and the test repins the context.
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(a => a.TenantId).Returns(() => db.TenantId);
         return new(

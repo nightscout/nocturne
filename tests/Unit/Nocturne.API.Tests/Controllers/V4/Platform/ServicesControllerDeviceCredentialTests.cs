@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Platform;
@@ -60,7 +61,7 @@ public class ServicesControllerDeviceCredentialTests
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             Options.Create(new BaseDomainOptions()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

@@ -11,10 +11,10 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -67,7 +67,7 @@ public class CanonicalAlertEvaluatorTests
         new(_canonical.Object,
             _orchestrator.Object,
             _rules.Object,
-            Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId),
+            SettableTenantAccessor.Resolved(tenantId),
             _watermark,
             decisions ?? _decisions,
             _evaluated.Object,

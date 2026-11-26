@@ -10,9 +10,9 @@ using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -298,8 +298,7 @@ public class AlertOrchestratorConditionIssueTests
                     It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new AlertEngineEvaluation());
 
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.SetupGet(t => t.TenantId).Returns(Tenant);
+            var tenant = SettableTenantAccessor.Resolved(Tenant);
 
             var enricher = new Mock<ISensorContextEnricher>();
             enricher
@@ -309,7 +308,7 @@ public class AlertOrchestratorConditionIssueTests
             var notice = new UnevaluableRuleNotice(
                 NoticeRows.Object,
                 Mock.Of<IAlertRuleRepository>(),
-                tenant.Object,
+                tenant,
                 Delivery.Object,
                 enricher.Object,
                 Mock.Of<IExcursionResolutionHandler>(),
@@ -322,7 +321,7 @@ public class AlertOrchestratorConditionIssueTests
                 Engine.Object,
                 new AlertRuleEvaluationGate(),
                 new AlertRuleDecisions(TimeProvider.System),
-                tenant.Object,
+                tenant,
                 enricher.Object,
                 Mock.Of<IExcursionOpenedHandler>(),
                 Mock.Of<IExcursionResolutionHandler>(),

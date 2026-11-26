@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Services.Entries;
@@ -136,7 +135,7 @@ public class PublishSkippedDeletedTests : IDisposable
             Mock.Of<IBasalInjectionRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
             Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), _tally,
-            Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance);
+            new SettableTenantAccessor(), NullLogger<TreatmentPublisher>.Instance);
     }
 
     [Fact]
@@ -152,7 +151,7 @@ public class PublishSkippedDeletedTests : IDisposable
             deviceStatuses.Object, Mock.Of<IDeviceEventRepository>(), Mock.Of<IPatientDeviceStamper>(),
             Mock.Of<IAuditContext>(), Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPatientDeviceRepository>(),
             Mock.Of<IPumpSnapshotRepository>(), Mock.Of<IUploaderSnapshotRepository>(), _tally,
-            Mock.Of<ITenantAccessor>(), NullLogger<DevicePublisher>.Instance);
+            new SettableTenantAccessor(), NullLogger<DevicePublisher>.Instance);
 
         var published = await publisher.PublishDeviceStatusAsync(
             [new DeviceStatus { Id = "ds-1" }, new DeviceStatus { Id = "ds-2" }], "nightscout", WriteOrigin.Backfill);
@@ -174,6 +173,6 @@ public class PublishSkippedDeletedTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
+            audit, _tally, new SettableTenantAccessor(), NullLogger<GlucosePublisher>.Instance);
     }
 }

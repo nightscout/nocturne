@@ -5,7 +5,6 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -97,7 +96,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
         var enricher = new Mock<ISensorContextEnricher>();
         enricher.Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SensorContext { LatestValue = null, LatestTimestamp = null, TrendRate = null, LastReadingAt = null });
-        var tenantAccessor = Mock.Of<ITenantAccessor>(a => a.TenantId == tenant);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenant);
         return new Sent(delivery, new HeldRuleNotice(
             repository ?? Instance(tenant), rules.Object, tenantAccessor, delivery.Object, enricher.Object,
             Mock.Of<IExcursionResolutionHandler>(), TimeProvider.System, NullLogger<HeldRuleNotice>.Instance));

@@ -2,9 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using Moq;
 using Nocturne.API.Services.Timezones;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -25,12 +23,10 @@ public class TimezoneTimelineServiceTests : IDisposable
         _db = TestDbContextFactory.CreateInMemoryContext();
         _db.TenantId = tenantId;
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(tenantId, "test", "Test", IsActive: true, IsDemo: false));
+        var accessor = SettableTenantAccessor.Resolved(tenantId, "test", "Test");
 
         _service = new TimezoneTimelineService(
-            _db.AsFactory(), accessor.Object, _clock, NullLogger<TimezoneTimelineService>.Instance);
+            _db.AsFactory(), accessor, _clock, NullLogger<TimezoneTimelineService>.Instance);
     }
 
     public void Dispose() => _db.Dispose();

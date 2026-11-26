@@ -50,9 +50,7 @@ public class TenantGlucoseUnitsTests
     [Fact]
     public async Task WithNoResolvedTenant_FallsBackToMgDlWithoutReadingASetupDefault()
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(Guid.Empty);
-        _accessor = accessor.Object;
+        _accessor = new SettableTenantAccessor();
         _appearance
             .Setup(a => a.GetTenantAppearanceAsync(Guid.Empty, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences());

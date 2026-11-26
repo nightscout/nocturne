@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 [Trait("Category", "Unit")]
 public class LinkedPlatformsEndpointTests : IDisposable
 {
-    private readonly Mock<ITenantAccessor> _tenantAccessorMock = new();
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly Mock<ILogger<ChatIdentityDirectoryService>> _loggerMock = new();
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly DbContextOptions<NocturneDbContext> _dbOptions;
@@ -29,7 +29,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
 
-        _tenantAccessorMock.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
     }
 
     public void Dispose()
@@ -49,7 +49,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
     private LinkedPlatformsController CreateController(
         ChatIdentityDirectoryService directory)
     {
-        var controller = new LinkedPlatformsController(directory, _tenantAccessorMock.Object);
+        var controller = new LinkedPlatformsController(directory, _tenantAccessor);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

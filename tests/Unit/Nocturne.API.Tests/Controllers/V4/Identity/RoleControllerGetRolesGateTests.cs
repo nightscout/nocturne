@@ -7,6 +7,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -28,13 +29,12 @@ public sealed class RoleControllerGetRolesGateTests
 
     private RoleController BuildController(params string[] grantedScopes)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
-        return new RoleController(_roles.Object, tenantAccessor.Object)
+        return new RoleController(_roles.Object, tenantAccessor)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

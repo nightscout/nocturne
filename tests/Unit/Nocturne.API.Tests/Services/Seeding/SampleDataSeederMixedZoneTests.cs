@@ -54,8 +54,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
 
     private SampleDataSeeder CreateSeeder()
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(TenantId);
+        var tenant = SettableTenantAccessor.Resolved(TenantId);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -95,7 +94,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             });
 
         return new SampleDataSeeder(
-            tenant.Object,
+            tenant,
             _db.ContextFactory.AsNocturneFactory(),
             new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             entries.Object,

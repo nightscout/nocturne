@@ -12,10 +12,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// commands, in two tenants, rewritten by <see cref="ApsSnapshotCurvesRewriter"/> as the background
 /// backfill runs it, on a real PostgreSQL.
 /// </summary>
-public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
+public class ApsSnapshotCurvesRewriterFixture() : MigratedDatabase("aps_curves_rewriter")
 {
-    private string _migratorConnectionString = string.Empty;
-
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111111111");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222222");
 
@@ -38,10 +36,9 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
 
     internal sealed record Row(string? Suggested, string? Enacted, string? Loop);
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("aps_curves_rewriter");
-        _migratorConnectionString = database.MigratorConnectionString;
+        await base.InitializeAsync();
 
         await SeedAsync();
         CrossTenantChanged = await RewriteAsync(pinnedTo: TenantA, tenant: TenantB, pageSize: 500);
@@ -50,10 +47,8 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
         RerunChanged = await RewriteAllAsync(pageSize: 500);
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
-
     private DbContextOptions<NocturneDbContext> Options() =>
-        TestContexts.Options(_migratorConnectionString);
+        TestContexts.Options(MigratorConnectionString);
 
     /// <summary>
     /// Both tenants, as the job runs them: a page of one walks every row's own page, and each page is
@@ -82,7 +77,7 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
 
     private async Task ReadAsync(Dictionary<Guid, Row> rows)
     {
-        await using var conn = new NpgsqlConnection(_migratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
@@ -106,7 +101,7 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
         const string curves = """{"IOB": [120, 115, 110], "ZT": [120, 118], "COB": null, "UAM": [120, 130]}""";
         const string olderCurves = """{"IOB": [125, 121, 117], "ZT": null, "COB": null, "UAM": null}""";
 
-        await using var conn = new NpgsqlConnection(_migratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
         await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");

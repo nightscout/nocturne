@@ -26,14 +26,14 @@ public class AuditControllerTests : IDisposable
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     private readonly SqliteTestDatabase _db;
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly Mock<ITenantAuditConfigCache> _configCache = new();
 
     public AuditControllerTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
 
-        _tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
     }
 
     public void Dispose()
@@ -60,7 +60,7 @@ public class AuditControllerTests : IDisposable
         var controller = new AuditController(
             new AuditLogReader(contexts),
             new AuditConfigRepository(contexts),
-            _tenantAccessor.Object,
+            _tenantAccessor,
             _configCache.Object,
             configuration);
 

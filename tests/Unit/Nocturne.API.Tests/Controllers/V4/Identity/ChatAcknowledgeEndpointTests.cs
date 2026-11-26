@@ -29,7 +29,7 @@ public class ChatAcknowledgeEndpointTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly Mock<IAlertAcknowledgementService> _ackService = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly Guid _tenantId;
     private readonly Guid _subjectId;
 
@@ -39,8 +39,7 @@ public class ChatAcknowledgeEndpointTests : IDisposable
         _tenantId = NewTenant();
         _subjectId = NewSubject();
 
-        _tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         _ackService
             .Setup(s => s.AcknowledgeExcursionAsync(
@@ -68,7 +67,7 @@ public class ChatAcknowledgeEndpointTests : IDisposable
                 _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             tenantFactory.Object,
             new TenantRepository(tenantFactory.Object),
-            _tenantAccessor.Object,
+            _tenantAccessor,
             _ackService.Object);
     }
 

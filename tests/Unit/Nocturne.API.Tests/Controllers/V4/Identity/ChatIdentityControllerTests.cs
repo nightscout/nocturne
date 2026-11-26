@@ -7,7 +7,6 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Middleware;
 using Nocturne.API.Services.Chat;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -137,8 +136,7 @@ public class ChatIdentityControllerTests : IDisposable
 
     private ChatIdentityController CreateController(bool withSubject = true, Guid? tenantId = null)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(tenantId ?? _tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId ?? _tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
@@ -148,7 +146,7 @@ public class ChatIdentityControllerTests : IDisposable
             TenantId = _tenantId,
         };
 
-        return new ChatIdentityController(_service, tenantAccessor.Object)
+        return new ChatIdentityController(_service, tenantAccessor)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

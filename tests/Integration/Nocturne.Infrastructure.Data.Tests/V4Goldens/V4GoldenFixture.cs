@@ -21,21 +21,14 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// the duplicate linker against real Postgres, not mocks. These goldens capture current
 /// behaviour and are held identical across the V4RepositoryBase refactor.
 /// </summary>
-public class V4GoldenFixture : IAsyncLifetime
+public class V4GoldenFixture() : MigratedDatabase("v4_goldens")
 {
     private ServiceProvider? _provider;
     private readonly SettableTenantAccessor _accessor = new();
 
-    public string MigratorConnectionString { get; private set; } = string.Empty;
-
-    /// <summary>The runtime role's connection string, which the repositories under test use.</summary>
-    public string AppConnectionString { get; private set; } = string.Empty;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("v4_goldens");
-        MigratorConnectionString = database.MigratorConnectionString;
-        AppConnectionString = database.AppConnectionString;
+        await base.InitializeAsync();
 
         _provider = TestContexts.BuildProvider(
             AppConnectionString,
@@ -108,12 +101,14 @@ public class V4GoldenFixture : IAsyncLifetime
         services.AddScoped<ITargetRangeScheduleRepository, TargetRangeScheduleRepository>();
     }
 
-    public async Task DisposeAsync()
+    public override async Task DisposeAsync()
     {
         if (_provider is not null)
         {
             await _provider.DisposeAsync();
         }
+
+        await base.DisposeAsync();
     }
 
     /// <summary>

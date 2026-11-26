@@ -5,7 +5,6 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Timezones;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
@@ -33,18 +32,16 @@ public class DeviceClockServiceTests : IDisposable
         _db = TestDbContextFactory.CreateInMemoryContext();
         _db.TenantId = _tenantId;
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(_tenantId, "test", "Test", IsActive: true, IsDemo: false));
+        var accessor = SettableTenantAccessor.Resolved(_tenantId, "test", "Test");
 
         var owners = new Mock<ITenantOwnerResolver>();
         owners.Setup(o => o.GetOwnerSubjectIdAsync(_tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(OwnerId);
 
         _timeline = new TimezoneTimelineService(
-            _db.AsFactory(), accessor.Object, _clock, NullLogger<TimezoneTimelineService>.Instance);
+            _db.AsFactory(), accessor, _clock, NullLogger<TimezoneTimelineService>.Instance);
         _service = new DeviceClockService(
-            _db.AsFactory(), accessor.Object, _timeline, owners.Object, _notifications.Object,
+            _db.AsFactory(), accessor, _timeline, owners.Object, _notifications.Object,
             _clock,
             NullLogger<DeviceClockService>.Instance);
     }

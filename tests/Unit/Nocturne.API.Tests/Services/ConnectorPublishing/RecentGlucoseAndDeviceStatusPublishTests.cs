@@ -3,7 +3,6 @@ using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Tests.Services.DeviceStatuses;
 using Nocturne.API.Tests.Services.Entries;
@@ -232,7 +231,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         IUploaderSnapshotRepository uploader) =>
         new(deviceStatuses, Mock.Of<IDeviceEventRepository>(), Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(),
             aps, Mock.Of<IPatientDeviceRepository>(), pump, uploader, new PublishSkipTally(),
-            Mock.Of<ITenantAccessor>(), NullLogger<DevicePublisher>.Instance);
+            new SettableTenantAccessor(), NullLogger<DevicePublisher>.Instance);
 
     private GlucosePublisher RealGlucosePublisher()
     {
@@ -247,6 +246,6 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
+            audit, new PublishSkipTally(), new SettableTenantAccessor(), NullLogger<GlucosePublisher>.Instance);
     }
 }

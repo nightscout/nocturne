@@ -8,9 +8,9 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -35,8 +35,7 @@ public sealed class TenantAppearanceControllerTests
 
     private TenantAppearanceController BuildController(bool onShareHost = false, AuthContext? auth = null)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = SettableTenantAccessor.Resolved(Guid.NewGuid());
 
         var httpContext = new DefaultHttpContext();
         if (onShareHost)
@@ -44,7 +43,7 @@ public sealed class TenantAppearanceControllerTests
         if (auth is not null)
             httpContext.SetAuthContext(auth);
 
-        return new TenantAppearanceController(_service.Object, tenantAccessor.Object)
+        return new TenantAppearanceController(_service.Object, tenantAccessor)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

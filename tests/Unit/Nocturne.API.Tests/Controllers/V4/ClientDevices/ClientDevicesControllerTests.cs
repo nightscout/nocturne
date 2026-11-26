@@ -7,9 +7,9 @@ using Nocturne.API.Controllers.V4.ClientDevices;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.ClientDevices;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.ClientDevices;
@@ -25,12 +25,11 @@ public class ClientDevicesControllerTests
 
     public ClientDevicesControllerTests()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
         _controller = new ClientDevicesController(
             _service.Object,
             _acknowledgement.Object,
-            tenantAccessor.Object,
+            tenantAccessor,
             new Mock<ILogger<ClientDevicesController>>().Object);
 
         var context = new DefaultHttpContext();

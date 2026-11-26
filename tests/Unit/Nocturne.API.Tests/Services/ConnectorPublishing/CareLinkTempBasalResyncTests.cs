@@ -7,7 +7,6 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -59,7 +58,7 @@ public class CareLinkTempBasalResyncTests : IDisposable
             Mock.Of<IPatientDeviceStamper>(),
             audit,
             new PublishSkipTally(),
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             NullLogger<TreatmentPublisher>.Instance);
     }
 

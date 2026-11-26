@@ -82,14 +82,12 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
     /// A database of its own whose glucose and link tables are never analysed: autovacuum is off on
     /// them, and nothing else in the run writes to it.
     /// </summary>
-    public sealed class NeverAnalysedDatabase : IAsyncLifetime
+    public sealed class NeverAnalysedDatabase() : MigratedDatabase("source_delete_plan")
     {
-        private TestDatabase _database = null!;
-
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            _database = await SharedPostgres.CreateMigratedDatabaseAsync("source_delete_plan");
-            await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+            await base.InitializeAsync();
+            await using var conn = new NpgsqlConnection(MigratorConnectionString);
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
@@ -99,31 +97,26 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public Task DisposeAsync() => Task.CompletedTask;
-
         /// <summary>
         /// Sends the runtime role's connections to this database, from the next one opened, the plan
         /// of every statement they run as a notice, prepared statements' generic plans included.
         /// </summary>
         public async Task SendPlansAsNoticesAsync()
         {
-            await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
+            await using var conn = new NpgsqlConnection(SuperuserConnectionString);
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                ALTER ROLE nocturne_app IN DATABASE "{_database.Name}" SET session_preload_libraries = 'auto_explain';
-                ALTER ROLE nocturne_app IN DATABASE "{_database.Name}" SET auto_explain.log_min_duration = 0;
-                ALTER ROLE nocturne_app IN DATABASE "{_database.Name}" SET auto_explain.log_level = 'notice';
+                ALTER ROLE nocturne_app IN DATABASE "{Name}" SET session_preload_libraries = 'auto_explain';
+                ALTER ROLE nocturne_app IN DATABASE "{Name}" SET auto_explain.log_min_duration = 0;
+                ALTER ROLE nocturne_app IN DATABASE "{Name}" SET auto_explain.log_level = 'notice';
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
 
-        /// <summary>The runtime role's connection string, for a pool built as the API builds its own.</summary>
-        public string AppConnectionString => _database.AppConnectionString;
-
         public async Task<NpgsqlConnection> OpenAppConnectionAsync(Guid tenant)
         {
-            var conn = new NpgsqlConnection(_database.AppConnectionString);
+            var conn = new NpgsqlConnection(AppConnectionString);
             await conn.OpenAsync();
             await conn.PinTenantAsync(tenant);
             return conn;
@@ -135,7 +128,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         /// </summary>
         public async Task SeedAsync(Guid tenant, int groups, RecordType linkedType = RecordType.SensorGlucose)
         {
-            await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+            await using var conn = new NpgsqlConnection(MigratorConnectionString);
             await conn.OpenAsync();
             await conn.SeedTenantAsync(tenant, $"srcplan-{tenant:N}", "source-delete-plan-test");
             await conn.PinTenantAsync(tenant);

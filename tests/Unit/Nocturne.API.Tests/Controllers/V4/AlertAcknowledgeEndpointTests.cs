@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -26,7 +27,7 @@ public class AlertAcknowledgeEndpointTests
     private readonly Mock<INocturneDbContextFactory> _contextFactoryMock = new();
     private readonly Mock<IAlertAcknowledgementService> _acknowledgementServiceMock = new();
     private readonly Mock<IAlertDeliveryService> _deliveryServiceMock = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessorMock = new();
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly Mock<ILogger<AlertsController>> _loggerMock = new();
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -42,8 +43,7 @@ public class AlertAcknowledgeEndpointTests
             db.Database.EnsureCreated();
         }
 
-        _tenantAccessorMock.Setup(t => t.IsResolved).Returns(true);
-        _tenantAccessorMock.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         // The controller disposes the context (await using), so hand out a fresh
         // tenant-scoped context per call against the shared in-memory store.
@@ -66,7 +66,7 @@ public class AlertAcknowledgeEndpointTests
             _acknowledgementServiceMock.Object,
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
-            _tenantAccessorMock.Object,
+            _tenantAccessor,
             _loggerMock.Object);
 
         var httpContext = new DefaultHttpContext();

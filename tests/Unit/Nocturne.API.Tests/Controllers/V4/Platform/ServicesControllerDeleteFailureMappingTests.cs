@@ -11,8 +11,8 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Platform;
@@ -39,7 +39,7 @@ public class ServicesControllerDeleteFailureMappingTests
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             Options.Create(new BaseDomainOptions()))
         {
             ProblemDetailsFactory = new EchoingProblemDetailsFactory(),

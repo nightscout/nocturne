@@ -35,12 +35,8 @@ public class ConnectorSyncServiceTests
         return new ConnectorSyncService(serviceProvider, ta, logger, progressReporter, new TenantRunGuard(), timeProvider ?? TimeProvider.System);
     }
 
-    private static ITenantAccessor CreateTenantAccessor(TenantContext? context = null)
-    {
-        var mock = new Mock<ITenantAccessor>();
-        mock.Setup(x => x.Context).Returns(context);
-        return mock.Object;
-    }
+    private static ITenantAccessor CreateTenantAccessor(TenantContext? context = null) =>
+        new SettableTenantAccessor(context);
 
     private static IServiceProvider BuildProvider(
         params IConnectorSyncExecutor[] executors)
@@ -48,11 +44,7 @@ public class ConnectorSyncServiceTests
         var services = new ServiceCollection();
 
         // Register a scoped ITenantAccessor so the service can resolve it in the child scope
-        services.AddScoped<ITenantAccessor>(_ =>
-        {
-            var mock = new Mock<ITenantAccessor>();
-            return mock.Object;
-        });
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
 
         // Mirrors the production registration (Program.cs) — the sync scope resolves
         // the mutable scoped AuditContext to mark it system for the sync's duration.

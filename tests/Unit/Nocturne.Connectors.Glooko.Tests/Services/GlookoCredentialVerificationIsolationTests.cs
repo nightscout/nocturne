@@ -10,6 +10,7 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -59,7 +60,7 @@ public class GlookoCredentialVerificationIsolationTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(new Mock<IRetryDelayStrategy>().Object);
-        services.AddSingleton(new Mock<ITenantAccessor>().Object);
+        services.AddSingleton<ITenantAccessor>(new SettableTenantAccessor());
         services.AddSingleton(new Mock<IConnectorConfigurationService>(MockBehavior.Strict).Object);
 
         new GlookoConnectorInstaller().Install(

@@ -13,6 +13,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -29,7 +30,7 @@ public class TotpControllerLoginGateTests
     private readonly Mock<ISessionService> _sessionService = new();
     private readonly Mock<ISubjectService> _subjectService = new();
     private readonly Mock<IAuthAuditService> _auditService = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private ITenantAccessor _tenantAccessor = new SettableTenantAccessor();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
 
     private const string Apex = "nocturne.example.com";
@@ -47,7 +48,7 @@ public class TotpControllerLoginGateTests
                 _subjectService.Object, _auditService.Object),
             _subjectService.Object,
             _auditService.Object,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = Apex }),
             NullLogger<TotpController>.Instance)
@@ -91,8 +92,7 @@ public class TotpControllerLoginGateTests
     private void OnHost(Guid? tenantId, string host = TenantHost)
     {
         _host = host;
-        _tenantAccessor.Setup(a => a.IsResolved).Returns(tenantId.HasValue);
-        _tenantAccessor.Setup(a => a.TenantId).Returns(tenantId ?? Guid.Empty);
+        _tenantAccessor = tenantId.HasValue ? SettableTenantAccessor.Resolved(tenantId.Value) : new SettableTenantAccessor();
     }
 
     private void TokenBoundTo(Guid subjectId, Guid? tenantId, bool admittedByInvite = false) =>

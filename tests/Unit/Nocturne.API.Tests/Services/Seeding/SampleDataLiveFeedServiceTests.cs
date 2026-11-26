@@ -54,7 +54,7 @@ public class SampleDataLiveFeedServiceTests
             });
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
         services.AddSingleton(tenants.Object);
         services.AddScoped(sp => new SampleDataLiveFeed(

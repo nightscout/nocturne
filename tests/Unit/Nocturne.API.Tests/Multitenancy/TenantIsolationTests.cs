@@ -157,8 +157,9 @@ public class TenantIsolationTests
     public async Task TenantHubFilter_InvokeMethodAsync_SetsTenantOnAccessor()
     {
         var filter = new TenantHubFilter();
-        var mockAccessor = new Mock<ITenantAccessor>();
-        var (invocationContext, _) = CreateHubInvocationContext(TenantA, mockAccessor.Object);
+        var pinned = new List<TenantContext>();
+        var accessor = new SettableTenantAccessor(onSet: pinned.Add);
+        var (invocationContext, _) = CreateHubInvocationContext(TenantA, accessor);
         var nextCalled = false;
 
         await filter.InvokeMethodAsync(invocationContext, ctx =>
@@ -168,53 +169,53 @@ public class TenantIsolationTests
         });
 
         nextCalled.Should().BeTrue();
-        mockAccessor.Verify(a => a.SetTenant(TenantA), Times.Once);
+        pinned.Should().Equal(TenantA);
     }
 
     [Fact]
     public async Task TenantHubFilter_InvokeMethodAsync_WithoutTenantContext_DoesNotSetAccessor()
     {
         var filter = new TenantHubFilter();
-        var mockAccessor = new Mock<ITenantAccessor>();
-        var (invocationContext, _) = CreateHubInvocationContext(null, mockAccessor.Object);
+        var pinned = new List<TenantContext>();
+        var accessor = new SettableTenantAccessor(onSet: pinned.Add);
+        var (invocationContext, _) = CreateHubInvocationContext(null, accessor);
 
         await filter.InvokeMethodAsync(invocationContext, ctx =>
             ValueTask.FromResult<object?>(null));
 
-        mockAccessor.Verify(a => a.SetTenant(It.IsAny<TenantContext>()), Times.Never);
+        pinned.Should().BeEmpty();
     }
 
     [Fact]
     public async Task TenantHubFilter_OnConnectedAsync_SetsTenantOnAccessor()
     {
         var filter = new TenantHubFilter();
-        var mockAccessor = new Mock<ITenantAccessor>();
-        var lifetimeContext = CreateHubLifetimeContext(TenantA, mockAccessor.Object);
+        var pinned = new List<TenantContext>();
+        var accessor = new SettableTenantAccessor(onSet: pinned.Add);
+        var lifetimeContext = CreateHubLifetimeContext(TenantA, accessor);
 
         await filter.OnConnectedAsync(lifetimeContext, _ => Task.CompletedTask);
 
-        mockAccessor.Verify(a => a.SetTenant(TenantA), Times.Once);
+        pinned.Should().Equal(TenantA);
     }
 
     [Fact]
     public async Task TenantHubFilter_SequentialInvocations_SetCorrectTenantEachTime()
     {
         var filter = new TenantHubFilter();
-        var mockAccessorA = new Mock<ITenantAccessor>();
-        var mockAccessorB = new Mock<ITenantAccessor>();
+        var pinnedA = new List<TenantContext>();
+        var pinnedB = new List<TenantContext>();
 
-        var (contextA, _) = CreateHubInvocationContext(TenantA, mockAccessorA.Object);
-        var (contextB, _) = CreateHubInvocationContext(TenantB, mockAccessorB.Object);
+        var (contextA, _) = CreateHubInvocationContext(TenantA, new SettableTenantAccessor(onSet: pinnedA.Add));
+        var (contextB, _) = CreateHubInvocationContext(TenantB, new SettableTenantAccessor(onSet: pinnedB.Add));
 
         await filter.InvokeMethodAsync(contextA, ctx =>
             ValueTask.FromResult<object?>(null));
         await filter.InvokeMethodAsync(contextB, ctx =>
             ValueTask.FromResult<object?>(null));
 
-        mockAccessorA.Verify(a => a.SetTenant(TenantA), Times.Once);
-        mockAccessorA.Verify(a => a.SetTenant(TenantB), Times.Never);
-        mockAccessorB.Verify(a => a.SetTenant(TenantB), Times.Once);
-        mockAccessorB.Verify(a => a.SetTenant(TenantA), Times.Never);
+        pinnedA.Should().Equal(TenantA);
+        pinnedB.Should().Equal(TenantB);
     }
 
     /// <summary>The upgrade request's scope: a non-share with no clamp, recorded as the middleware records it.</summary>
@@ -300,18 +301,7 @@ public class TenantIsolationTests
         alarmClients.Setup(x => x.Group(It.IsAny<string>())).Returns(alarmProxy.Object);
         configClients.Setup(x => x.Group(It.IsAny<string>())).Returns(configProxy.Object);
 
-        var mockAccessor = new Mock<ITenantAccessor>();
-        if (tenantContext != null)
-        {
-            mockAccessor.Setup(x => x.Context).Returns(tenantContext);
-            mockAccessor.Setup(x => x.IsResolved).Returns(true);
-            mockAccessor.Setup(x => x.TenantId).Returns(tenantContext.TenantId);
-        }
-        else
-        {
-            mockAccessor.Setup(x => x.Context).Returns((TenantContext?)null);
-            mockAccessor.Setup(x => x.IsResolved).Returns(false);
-        }
+        var accessor = new SettableTenantAccessor(tenantContext);
 
         var mockAlertHub = new Mock<IHubContext<AlertHub>>();
         var alertClients = new Mock<IHubClients>();
@@ -333,7 +323,7 @@ public class TenantIsolationTests
 
         var service = new SignalRBroadcastService(
             mockDataHub.Object, mockAlarmHub.Object, mockConfigHub.Object, mockAlertHub.Object,
-            mockHaHub.Object, mockOverviewHub.Object, mockAccessor.Object,
+            mockHaHub.Object, mockOverviewHub.Object, accessor,
             Options.Create(new JsonHubProtocolOptions()), mockLogger.Object);
 
         return (service, dataClients, alarmClients, configClients, dataProxy, alarmProxy, configProxy);
@@ -845,15 +835,8 @@ public class TenantIsolationTests
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString(hostname);
 
-        var mockAccessor = new Mock<ITenantAccessor>();
-        TenantContext? capturedContext = null;
-        mockAccessor.Setup(a => a.SetTenant(It.IsAny<TenantContext>()))
-            .Callback<TenantContext>(tc => capturedContext = tc);
-        mockAccessor.Setup(a => a.Context).Returns(() => capturedContext);
-        mockAccessor.Setup(a => a.IsResolved).Returns(() => capturedContext != null);
-
         var services = new ServiceCollection();
-        services.AddSingleton(mockAccessor.Object);
+        services.AddSingleton<ITenantAccessor>(new SettableTenantAccessor());
 
         if (registerDbFactory)
         {

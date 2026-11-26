@@ -8,7 +8,6 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -840,7 +839,7 @@ public class SignalRBroadcastServiceTests
             Hub<AlertHub>(),
             Hub<HomeAssistantHub>(),
             Hub<OverviewHub>(),
-            failure == BroadcastFailure.NoTenant ? new Mock<ITenantAccessor>().Object : SettableTenantAccessor.Resolved(),
+            failure == BroadcastFailure.NoTenant ? new SettableTenantAccessor() : SettableTenantAccessor.Resolved(),
             Options.Create(new JsonHubProtocolOptions()),
             NullLogger<SignalRBroadcastService>.Instance);
         return (service, sends);

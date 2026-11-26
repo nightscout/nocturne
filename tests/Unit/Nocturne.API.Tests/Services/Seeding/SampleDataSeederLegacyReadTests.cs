@@ -51,8 +51,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
     private SampleDataSeeder CreateSeeder()
     {
         var contexts = _db.ContextFactory.AsNocturneFactory();
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(TenantId);
+        var tenant = SettableTenantAccessor.Resolved(TenantId);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -83,7 +82,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
 
         var audit = new SystemAuditContext();
         return new SampleDataSeeder(
-            tenant.Object,
+            tenant,
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             entries.Object,

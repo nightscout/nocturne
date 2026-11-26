@@ -70,8 +70,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
         var repository = new AlertRepository(contexts);
         var rules = new AlertRuleRepository(contexts, TimeProvider.System);
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(t => t.TenantId).Returns(tenant);
+        var accessor = SettableTenantAccessor.Resolved(tenant);
 
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
@@ -123,7 +122,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             Notice = new UnevaluableRuleNotice(
                 repository,
                 rules,
-                accessor.Object,
+                accessor,
                 delivery.Object,
                 enricher.Object,
                 resolution.Object,
@@ -392,11 +391,9 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
         var referencing = await SeedRuleAsync(harness.Tenant, "After low", "alert_state", "warning",
             conditionParams: $$"""{"alert_id":"{{target}}","state":"firing"}""");
         await UpdateRuleAsync(harness.Tenant, referencing, $"{column} = @value", unreadable);
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(t => t.IsResolved).Returns(true);
-        accessor.SetupGet(t => t.TenantId).Returns(harness.Tenant);
+        var accessor = SettableTenantAccessor.Resolved(harness.Tenant);
         var references = new AlertReferenceService(
-            harness.Repository, accessor.Object, NullLogger<AlertReferenceService>.Instance);
+            harness.Repository, accessor, NullLogger<AlertReferenceService>.Instance);
 
         (await references.FindReferencingRulesAsync(target, CancellationToken.None))
             .Should().Equal([referencing], "deleting the target would leave the reference dangling");

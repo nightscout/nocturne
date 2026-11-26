@@ -7,7 +7,6 @@ using Moq;
 using Nocturne.API.Controllers.V4.PlatformAdmin;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -72,7 +71,7 @@ public class ConnectorAdminControllerTests
             Mock.Of<ILogger<ConnectorAdminController>>());
 
     private static ConnectorCursorResetService Engine(NocturneDbContext db) =>
-        new(new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),
+        new(new ConnectorConfigurationRepository(new TestNocturneDbContextFactory(db)), new TenantRepository(new TestNocturneDbContextFactory(db)), Mock.Of<IConnectorSyncService>(), new SettableTenantAccessor(),
             TimeProvider.System,
             Mock.Of<ILogger<ConnectorCursorResetService>>());
 

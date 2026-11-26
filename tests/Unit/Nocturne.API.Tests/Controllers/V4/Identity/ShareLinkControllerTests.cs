@@ -12,6 +12,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -38,8 +39,7 @@ public sealed class ShareLinkControllerTests
 
     private ShareLinkController BuildController(bool historyClamped, DateTime? accessEndsAt, params string[] grantedScopes)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = SettableTenantAccessor.Resolved(Guid.NewGuid());
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
@@ -63,7 +63,7 @@ public sealed class ShareLinkControllerTests
                 .StoreOn(httpContext);
         }
 
-        return new ShareLinkController(_service.Object, tenantAccessor.Object, _audit.Object)
+        return new ShareLinkController(_service.Object, tenantAccessor, _audit.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

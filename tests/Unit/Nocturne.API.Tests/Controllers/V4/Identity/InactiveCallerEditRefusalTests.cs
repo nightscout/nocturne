@@ -9,6 +9,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -30,10 +31,10 @@ public sealed class InactiveCallerEditRefusalTests
     private readonly Mock<ITenantMemberService> _memberService = new(MockBehavior.Strict);
     private readonly Mock<ITenantMembershipRepository> _members = new(MockBehavior.Strict);
     private readonly Mock<IShareLinkService> _shareLinks = new(MockBehavior.Strict);
-    private readonly Mock<ITenantAccessor> _accessor = new();
+    private readonly ITenantAccessor _accessor;
 
     public InactiveCallerEditRefusalTests() =>
-        _accessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+        _accessor = SettableTenantAccessor.Resolved(_tenantId);
 
     private ControllerContext InactiveCaller()
     {
@@ -44,7 +45,7 @@ public sealed class InactiveCallerEditRefusalTests
     }
 
     private MemberInviteController Members() =>
-        new(_invites.Object, _tenants.Object, _roles.Object, _memberService.Object, _accessor.Object, _members.Object)
+        new(_invites.Object, _tenants.Object, _roles.Object, _memberService.Object, _accessor, _members.Object)
         {
             ControllerContext = InactiveCaller(),
         };
@@ -73,7 +74,7 @@ public sealed class InactiveCallerEditRefusalTests
     [Fact]
     public async Task A_role_edit_is_refused_and_nothing_is_read_or_written()
     {
-        var controller = new RoleController(_roles.Object, _accessor.Object) { ControllerContext = InactiveCaller() };
+        var controller = new RoleController(_roles.Object, _accessor) { ControllerContext = InactiveCaller() };
 
         var result = await controller.UpdateRole(
             Guid.CreateVersion7(), new UpdateRoleRequest("Role", null, [Scope.FullAccess]), TestPublicAccessCache.Create(), default);
@@ -85,7 +86,7 @@ public sealed class InactiveCallerEditRefusalTests
     [Fact]
     public async Task A_share_edit_is_refused_and_nothing_is_written()
     {
-        var controller = new ShareLinkController(_shareLinks.Object, _accessor.Object, Mock.Of<IAuthAuditService>())
+        var controller = new ShareLinkController(_shareLinks.Object, _accessor, Mock.Of<IAuthAuditService>())
         {
             ControllerContext = InactiveCaller(),
         };
@@ -101,7 +102,7 @@ public sealed class InactiveCallerEditRefusalTests
     [Fact]
     public async Task Revealing_the_share_link_is_refused_and_no_token_is_returned()
     {
-        var controller = new ShareLinkController(_shareLinks.Object, _accessor.Object, Mock.Of<IAuthAuditService>())
+        var controller = new ShareLinkController(_shareLinks.Object, _accessor, Mock.Of<IAuthAuditService>())
         {
             ControllerContext = InactiveCaller(),
         };

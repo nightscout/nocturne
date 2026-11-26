@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 
@@ -119,11 +120,10 @@ public class ClockFaceAlertsGateTests
         var members = new Mock<ITenantMemberService>();
         members.Setup(m => m.GetMemberAccessAsync(_owner, _tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantMemberAccess(new HashSet<string>(ownerPermissions), false, null));
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.TenantId).Returns(_tenant);
+        var tenant = SettableTenantAccessor.Resolved(_tenant);
 
         return new ClockFaceAlertsController(
-            _faces.Object, contexts, new AlertReceiptService(contexts, new OAuthGrantRepository(contexts), TimeProvider.System), members.Object, tenant.Object)
+            _faces.Object, contexts, new AlertReceiptService(contexts, new OAuthGrantRepository(contexts), TimeProvider.System), members.Object, tenant)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

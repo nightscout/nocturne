@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Subject = Nocturne.Core.Models.Authorization.Subject;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -30,7 +31,7 @@ public class TotpControllerSetupFailureTests
     private readonly Mock<ISessionService> _sessionService = new();
     private readonly Mock<ISubjectService> _subjectService = new();
     private readonly Mock<IAuthAuditService> _auditService = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly SettableTenantAccessor _tenantAccessor = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
 
     private TotpController CreateController(string sessionId = LiveSession.Id)
@@ -55,7 +56,7 @@ public class TotpControllerSetupFailureTests
                 _subjectService.Object, _auditService.Object),
             _subjectService.Object,
             _auditService.Object,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions()),
             NullLogger<TotpController>.Instance)

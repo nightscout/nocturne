@@ -1107,13 +1107,9 @@ public class TenantOverviewServiceTests
     {
         TenantContext? current = null;
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.Setup(a => a.SetTenant(It.IsAny<TenantContext>()))
-            .Callback<TenantContext>(tc => current = tc);
-
         var services = new ServiceCollection();
         (fakes ?? new Fakes()).Register(services, () => current?.TenantId, latest, failingTenantId);
-        services.AddScoped(_ => accessor.Object);
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor(onSet: tc => current = tc));
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
         services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));

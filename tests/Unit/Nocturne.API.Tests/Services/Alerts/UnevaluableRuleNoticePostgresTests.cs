@@ -7,7 +7,6 @@ using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -158,8 +157,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
 
         public UnevaluableRuleNotice Process(ConditionVersionLog? log = null, AlertRepository? repository = null)
         {
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.SetupGet(t => t.TenantId).Returns(Tenant);
+            var tenant = SettableTenantAccessor.Resolved(Tenant);
 
             var rules = new Mock<IAlertRuleRepository>();
             rules
@@ -171,7 +169,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
             return new UnevaluableRuleNotice(
                 repository ?? Counting(),
                 rules.Object,
-                tenant.Object,
+                tenant,
                 Delivery.Object,
                 Enricher.Object,
                 Resolution.Object,
@@ -464,7 +462,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
         var notice = new UnevaluableRuleNotice(
             Mock.Of<IAlertRepository>(MockBehavior.Strict),
             Mock.Of<IAlertRuleRepository>(MockBehavior.Strict),
-            Mock.Of<ITenantAccessor>(t => t.TenantId == run.Tenant),
+            SettableTenantAccessor.Resolved(run.Tenant),
             Mock.Of<IAlertDeliveryService>(MockBehavior.Strict),
             Mock.Of<ISensorContextEnricher>(MockBehavior.Strict),
             Mock.Of<IExcursionResolutionHandler>(MockBehavior.Strict),

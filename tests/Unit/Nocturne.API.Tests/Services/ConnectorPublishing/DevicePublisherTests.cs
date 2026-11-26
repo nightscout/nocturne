@@ -1,5 +1,4 @@
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -13,6 +12,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
@@ -56,7 +56,7 @@ public class DevicePublisherTests
             _mockPumpSnapshotRepository.Object,
             _mockUploaderSnapshotRepository.Object,
             new PublishSkipTally(),
-            Mock.Of<ITenantAccessor>(), NullLogger<DevicePublisher>.Instance
+            new SettableTenantAccessor(), NullLogger<DevicePublisher>.Instance
         );
     }
 
