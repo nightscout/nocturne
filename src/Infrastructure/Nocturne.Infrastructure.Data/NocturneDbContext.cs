@@ -683,11 +683,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// The <see cref="LegacyIdKeyedEntities"/> an isValid:false upload asks for deleted rows of
     /// (<c>ILegacyKeyedRepository.GetDeletedLegacyIdsAsync</c>, <c>DecomposedTreatmentTable.DeletedAsync</c>):
-    /// the entry and device status snapshot tables and the decomposed treatment tables. Notes are left
-    /// out, because their unfiltered <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
+    /// the entry and device status snapshot tables, the decomposed treatment tables, and the therapy
+    /// settings a profile document is found by. Notes are left out, because their unfiltered
+    /// <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
     /// </summary>
     internal static readonly Type[] DeletedLegacyIdLookupEntities =
     [
+        typeof(TherapySettingsEntity),
         typeof(SensorGlucoseEntity),
         typeof(MeterGlucoseEntity),
         typeof(CalibrationEntity),

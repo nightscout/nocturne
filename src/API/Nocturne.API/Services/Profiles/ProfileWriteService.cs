@@ -1,3 +1,6 @@
+using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
@@ -20,6 +23,7 @@ public class ProfileWriteService : IProfileWriteService
     private readonly ITherapySettingsRepository _therapySettings;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<Profile> _events;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<ProfileWriteService> _logger;
     private const string CollectionName = "profiles";
 
@@ -29,6 +33,7 @@ public class ProfileWriteService : IProfileWriteService
         ITherapySettingsRepository therapySettings,
         IWriteSideEffects sideEffects,
         IDataEventSink<Profile> events,
+        IAuditContext auditContext,
         ILogger<ProfileWriteService> logger
     )
     {
@@ -37,11 +42,12 @@ public class ProfileWriteService : IProfileWriteService
         _therapySettings = therapySettings;
         _sideEffects = sideEffects;
         _events = events;
+        _auditContext = auditContext;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Profile>> CreateProfilesAsync(
+    public async Task<BulkWrite<Profile>> CreateProfilesAsync(
         IEnumerable<Profile> profiles,
         CancellationToken cancellationToken = default
     )
@@ -57,17 +63,85 @@ public class ProfileWriteService : IProfileWriteService
             }
         }
 
-        await _decomposer.DecomposeBatchAsync(profileList, WriteOrigin.Live, cancellationToken);
+        if (!profileList.Any(p => p.IsValid == false))
+        {
+            await WriteAsync(profileList, cancellationToken);
+            return [.. profileList];
+        }
+
+        var sorted = await SortInvalidAsync(profileList, cancellationToken);
+        var invalidated = new List<Profile>();
+        using (SystemAuditScope.Push(_auditContext, keepWriter: true))
+        {
+            foreach (var (profile, _) in sorted.Invalidating.DistinctBy(p => p.Profile.Id, StringComparer.Ordinal))
+            {
+                if (await _decomposer.DeleteDocumentAsync(profile.Id!, WriteOrigin.Live, cancellationToken) > 0)
+                    invalidated.Add(profile);
+            }
+        }
+
+        if (sorted.StoredDeleted.Count > 0)
+            await _decomposer.StoreDeletedAsync([.. sorted.StoredDeleted.Select(p => p.Profile)], cancellationToken);
+        if (sorted.Writing.Count > 0)
+            await WriteAsync([.. sorted.Writing.Select(p => p.Profile)], cancellationToken);
+        if (invalidated.Count > 0)
+            await OnDeletedAsync(cancellationToken);
+
+        return new BulkWrite<Profile>(profileList, 0) { Invalidated = invalidated };
+    }
+
+    private async Task WriteAsync(List<Profile> profiles, CancellationToken cancellationToken)
+    {
+        await _decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live, cancellationToken);
 
         await _sideEffects.OnCreatedAsync(
             CollectionName,
-            profileList,
+            profiles,
             cancellationToken: cancellationToken
         );
 
-        await _events.OnCreatedAsync(profileList, cancellationToken);
+        await _events.OnCreatedAsync(profiles, cancellationToken);
+    }
 
-        return profileList;
+    /// <summary>
+    /// Sorts <paramref name="profiles"/> by <see cref="InvalidUploads{TUpload}"/>: a document sent with
+    /// <c>isValid: false</c> whose id holds live stores deletes them, and one whose id holds none is
+    /// stored deleted. A document is named only by its id, resolved first as PUT and DELETE resolve it,
+    /// and a deleted one is found by the stores it carries.
+    /// </summary>
+    private async Task<InvalidUploads<(Profile Profile, int Index)>> SortInvalidAsync(
+        List<Profile> profiles, CancellationToken cancellationToken)
+    {
+        foreach (var versions in profiles.GroupBy(p => p.Id!, StringComparer.Ordinal).Where(v => v.Last().IsValid == false))
+        {
+            if (await _projection.ResolveDocumentIdAsync(versions.Key, cancellationToken) is { } documentId)
+            {
+                foreach (var version in versions)
+                    version.Id = documentId;
+            }
+        }
+
+        var ids = profiles.Where(p => p.IsValid == false).Select(p => p.Id!).Distinct(StringComparer.Ordinal).ToList();
+        var live = await _therapySettings.GetDocumentRowsAsync(ids, cancellationToken);
+        var indexed = profiles.Select((profile, index) => (Profile: profile, Index: index)).ToList();
+
+        return await InvalidUploads<(Profile Profile, int Index)>.SortAsync(indexed, indexed, new(
+            p => p.Profile.Id,
+            p => p.Index,
+            p => p.Profile.IsValid,
+            (p, valid) => p.Profile.IsValid = valid,
+            p => live.ContainsKey(p.Profile.Id!),
+            _ => true,
+            async (unstored, token) =>
+            {
+                var stores = profiles
+                    .Where(p => unstored.Contains(p.Id!))
+                    .SelectMany(p => p.Store.Keys.Select(store => (LegacyId: $"{p.Id}:{store}", DocumentId: p.Id!)))
+                    .DistinctBy(s => s.LegacyId, StringComparer.Ordinal)
+                    .ToDictionary(s => s.LegacyId, s => s.DocumentId, StringComparer.Ordinal);
+                var deleted = await _therapySettings.GetDeletedLegacyIdsAsync(stores.Keys, token);
+                return deleted.Select(legacyId => stores[legacyId]).ToHashSet(StringComparer.Ordinal);
+            }), cancellationToken);
     }
 
     /// <inheritdoc />

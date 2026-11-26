@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -35,7 +36,7 @@ public class DeletedInclusiveWindowIndexTests
     public void EveryEntryAndDeviceStatusWindowTable_HasTheUnfilteredTenantTimestampIndex()
     {
         var read = new[] { typeof(SensorGlucoseRepository), typeof(MeterGlucoseRepository), typeof(CalibrationRepository) }
-            .Select(EntityOf)
+            .Select(V4RepositoryEntities.Of)
             .Concat(typeof(DeviceStatusGroupRepository.Rows).GetProperties()
                 .Select(p => p.PropertyType.GetGenericArguments().Single()))
             .ToList();
@@ -44,16 +45,5 @@ public class DeletedInclusiveWindowIndexTests
 
         read.Should().BeSubsetOf(NocturneDbContext.V4DeletedInclusiveWindowEntities,
             "an entry or device status window read that takes deleted rows walks the tenant timestamp index, which the partial list indexes cannot stand in for");
-    }
-
-    private static Type EntityOf(Type repository)
-    {
-        for (var type = repository; type is not null; type = type.BaseType)
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(V4RepositoryBase<,>))
-                return type.GetGenericArguments()[1];
-        }
-
-        throw new InvalidOperationException($"{repository.Name} does not read through V4RepositoryBase");
     }
 }

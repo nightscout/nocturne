@@ -140,32 +140,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
         var firstMinted = Guid.CreateVersion7();
         result.CorrelationId = firstMinted;
 
-        var entries = new List<StoreEntry>();
-        var first = true;
-        foreach (var profile in profiles)
-        {
-            if (profile.Store.Count == 0)
-            {
-                Logger.LogWarning("Profile {Id} has no store entries, skipping decomposition", profile.Id);
-                continue;
-            }
-
-            // One id per profile, as the single-profile path always minted, so a profile's stores
-            // created together share it and two profiles created together do not.
-            var minted = first ? firstMinted : Guid.CreateVersion7();
-            first = false;
-            foreach (var (storeName, profileData) in profile.Store)
-            {
-                if (IsProfileSwitchStoreName(storeName))
-                {
-                    Logger.LogDebug("Skipped profile switch store {StoreName} of profile {Id}", storeName, profile.Id);
-                    continue;
-                }
-
-                entries.Add(new StoreEntry(profile, storeName, profileData, $"{profile.Id}:{storeName}", minted));
-            }
-        }
-
+        var entries = StoreEntries(profiles, firstMinted);
         if (entries.Count == 0)
             return;
 
@@ -223,6 +198,63 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer
             origin, ct: ct));
 
         changes.Versions.AddRange(Changed(basal).Select(VersionKey));
+    }
+
+    /// <summary>The stores of <paramref name="profiles"/>, leaving out profile-switch snapshots.</summary>
+    /// <param name="firstMinted">The correlation id minted for the first profile with a store.</param>
+    private List<StoreEntry> StoreEntries(IReadOnlyList<Profile> profiles, Guid firstMinted)
+    {
+        var entries = new List<StoreEntry>();
+        var first = true;
+        foreach (var profile in profiles)
+        {
+            if (profile.Store.Count == 0)
+            {
+                Logger.LogWarning("Profile {Id} has no store entries, skipping decomposition", profile.Id);
+                continue;
+            }
+
+            // One id per profile, as the single-profile path always minted, so a profile's stores
+            // created together share it and two profiles created together do not.
+            var minted = first ? firstMinted : Guid.CreateVersion7();
+            first = false;
+            foreach (var (storeName, profileData) in profile.Store)
+            {
+                if (IsProfileSwitchStoreName(storeName))
+                {
+                    Logger.LogDebug("Skipped profile switch store {StoreName} of profile {Id}", storeName, profile.Id);
+                    continue;
+                }
+
+                entries.Add(new StoreEntry(profile, storeName, profileData, $"{profile.Id}:{storeName}", minted));
+            }
+        }
+
+        return entries;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The delete is the system's (<see cref="InvalidUploads{TUpload}"/>). A document stored deleted is
+    /// in force nowhere, so it claims no default and no schedule-derived rate or Loop snapshot follows it.
+    /// </remarks>
+    public async Task StoreDeletedAsync(IReadOnlyList<Profile> profiles, CancellationToken ct = default)
+    {
+        var entries = StoreEntries(profiles, Guid.CreateVersion7());
+        if (entries.Count == 0)
+            return;
+
+        using var _ = SystemAttributedBatchWrites(_auditContext);
+        await _therapySettingsRepo.StoreDeletedAsync(
+            [.. entries.Select(e => MapToTherapySettings(e.Profile, e.Data, e.StoreName, e.LegacyId, isDefault: false, e.MintedCorrelationId))], ct);
+        await _basalScheduleRepo.StoreDeletedAsync(
+            [.. entries.Select(e => MapToBasalSchedule(e.Profile, e.Data, e.StoreName, e.LegacyId, e.MintedCorrelationId))], ct);
+        await _carbRatioScheduleRepo.StoreDeletedAsync(
+            [.. entries.Select(e => MapToCarbRatioSchedule(e.Profile, e.Data, e.StoreName, e.LegacyId, e.MintedCorrelationId))], ct);
+        await _sensitivityScheduleRepo.StoreDeletedAsync(
+            [.. entries.Select(e => MapToSensitivitySchedule(e.Profile, e.Data, e.StoreName, e.LegacyId, e.MintedCorrelationId))], ct);
+        await _targetRangeScheduleRepo.StoreDeletedAsync(
+            [.. entries.Select(e => MapToTargetRangeSchedule(e.Profile, e.Data, e.StoreName, e.LegacyId, e.MintedCorrelationId, Logger))], ct);
     }
 
     /// <summary>

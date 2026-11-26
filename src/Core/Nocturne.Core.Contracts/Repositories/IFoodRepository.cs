@@ -71,6 +71,25 @@ public interface IFoodRepository
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// The ids among <paramref name="ids"/> a stored food was written under, each with whether that food
+    /// is deleted.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, bool>> GetStoredIdsAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Stores <paramref name="foods"/> as rows already deleted, so only v3 history serves them, with
+    /// <c>isValid: false</c>. <see cref="CreateFoodAsync"/> of the same id restores the row.
+    /// </summary>
+    /// <returns>The foods as stored, in order.</returns>
+    Task<IReadOnlyList<Food>> StoreDeletedAsync(
+        IReadOnlyCollection<Food> foods,
+        CancellationToken cancellationToken = default
+    );
+
     /// <param name="food">The updated food data</param>
     /// <returns>The updated food entry, or null if not found</returns>
     Task<Food?> UpdateFoodAsync(

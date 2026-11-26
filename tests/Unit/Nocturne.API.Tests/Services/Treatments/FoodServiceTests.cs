@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -38,6 +39,7 @@ public class FoodServiceTests
             _mockDocumentProcessingService.Object,
             _mockSideEffects.Object,
             Mock.Of<IDataEventSink<Food>>(),
+            Mock.Of<IAuditContext>(),
             _mockLogger.Object
         );
     }
@@ -55,6 +57,7 @@ public class FoodServiceTests
             _mockDocumentProcessingService.Object,
             _mockSideEffects.Object,
             Mock.Of<IDataEventSink<Food>>(),
+            Mock.Of<IAuditContext>(),
             _mockLogger.Object
         );
 
@@ -74,6 +77,7 @@ public class FoodServiceTests
                 _mockDocumentProcessingService.Object,
                 _mockSideEffects.Object,
                 Mock.Of<IDataEventSink<Food>>(),
+                Mock.Of<IAuditContext>(),
                 _mockLogger.Object
             )
         );
@@ -91,6 +95,7 @@ public class FoodServiceTests
                 null!,
                 _mockSideEffects.Object,
                 Mock.Of<IDataEventSink<Food>>(),
+                Mock.Of<IAuditContext>(),
                 _mockLogger.Object
             )
         );
@@ -108,6 +113,7 @@ public class FoodServiceTests
                 _mockDocumentProcessingService.Object,
                 null!,
                 Mock.Of<IDataEventSink<Food>>(),
+                Mock.Of<IAuditContext>(),
                 _mockLogger.Object
             )
         );
@@ -125,6 +131,7 @@ public class FoodServiceTests
                 _mockDocumentProcessingService.Object,
                 _mockSideEffects.Object,
                 Mock.Of<IDataEventSink<Food>>(),
+                Mock.Of<IAuditContext>(),
                 null!
             )
         );

@@ -38,7 +38,7 @@ public class V3CreateResponseTests
         writer
             .Setup(w => w.CreateProfilesAsync(It.IsAny<IEnumerable<Profile>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) =>
-                p.Select(x => { x.Id = StoredId; return x; }).ToList());
+                [.. p.Select(x => { x.Id = StoredId; return x; })]);
         var controller = WithContext(new ProfileController(
             Mock.Of<IProfileProjectionService>(),
             writer.Object,
@@ -143,7 +143,7 @@ public class V3CreateResponseTests
         var writer = new Mock<IProfileWriteService>();
         writer
             .Setup(w => w.CreateProfilesAsync(It.IsAny<IEnumerable<Profile>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => p.ToList());
+            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => [.. p]);
         var controller = WithContext(new ProfileController(
             Mock.Of<IProfileProjectionService>(),
             writer.Object,

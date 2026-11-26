@@ -237,6 +237,9 @@ public class ProfileController : BaseV3Controller<Profile>
                 return StatusCode(201, createdProfiles.ToArray());
             }
 
+            if (createdProfiles.Invalidated is [var invalidated])
+                return V3Deduplicated(invalidated.Id, srvModified: null);
+
             var created = createdProfiles.First();
             return V3Created(nameof(GetProfileById), created.Id);
         }
@@ -285,6 +288,9 @@ public class ProfileController : BaseV3Controller<Profile>
                     "Request body must contain valid profile data"
                 );
             }
+
+            if (profile.IsValid == false)
+                return IsValidImmutable();
 
             ProcessProfileForCreation(profile);
 

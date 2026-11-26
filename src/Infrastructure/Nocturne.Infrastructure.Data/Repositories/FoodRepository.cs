@@ -281,6 +281,60 @@ public class FoodRepository : IFoodRepository
         return resultEntities.Select(FoodMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    /// <remarks>An id is held as <see cref="CreateFoodAsync"/> writes it: as the legacy ObjectId, or by the key derived from it.</remarks>
+    public async Task<IReadOnlyDictionary<string, bool>> GetStoredIdsAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (ids.Count == 0)
+            return new Dictionary<string, bool>();
+
+        var requested = ids.ToHashSet(StringComparer.Ordinal);
+        var byKey = requested.ToLookup(RecordIdKey.ParseIdToGuid);
+        var originalIds = requested.ToList();
+        var keys = byKey.Select(key => key.Key).ToList();
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var rows = await db.Foods.IncludingDeleted().AsNoTracking()
+            .Where(f => keys.Contains(f.Id) || (f.OriginalId != null && originalIds.Contains(f.OriginalId)))
+            .Select(f => new { f.Id, f.OriginalId, Deleted = f.DeletedAt != null })
+            .ToListAsync(cancellationToken);
+
+        var stored = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            if (row.OriginalId is { } originalId && requested.Contains(originalId))
+                stored[originalId] = row.Deleted;
+            foreach (var id in byKey[row.Id])
+                stored[id] = row.Deleted;
+        }
+        return stored;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Food>> StoreDeletedAsync(
+        IReadOnlyCollection<Food> foods,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (foods.Count == 0)
+            return [];
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var deletedAt = db.NowAtStoredPrecision();
+        var entities = foods.Select(FoodMapper.ToEntity).ToList();
+        foreach (var entity in entities)
+            entity.DeletedAt = deletedAt;
+        db.Foods.AddRange(entities);
+
+        await db.SaveChangesAsync(cancellationToken);
+        await ReportWrittenAsync();
+
+        return [.. entities.Select(ToHistoryFood)];
+    }
+
     /// <summary>
     /// Update an existing food entry
     /// </summary>

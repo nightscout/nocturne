@@ -87,7 +87,7 @@ public class UploaderIdBindingTests
         writeService
             .Setup(w => w.CreateProfilesAsync(It.IsAny<IEnumerable<Profile>>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<Profile>, CancellationToken>((p, _) => created.AddRange(p))
-            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => p.ToList());
+            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => [.. p]);
         var controller = WithContext(new ProfileController(
             Mock.Of<IProfileProjectionService>(),
             writeService.Object,
