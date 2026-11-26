@@ -69,7 +69,7 @@ public class GoogleHealthTests : IDisposable
         await db.SaveChangesAsync();
         var services = new ServiceCollection();
         services.AddSingleton(db.AsFactory());
-        services.AddSingleton(Mock.Of<ITenantAccessor>());
+        services.AddSingleton<ITenantAccessor>(new SettableTenantAccessor());
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IGoogleHealthWorkStore, GoogleHealthWorkRepository>();
@@ -1926,16 +1926,14 @@ public class GoogleHealthTests : IDisposable
         TimeSpan? revokeTimeout = null)
     {
         var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(value => value.IsResolved).Returns(true);
-        tenant.SetupGet(value => value.TenantId).Returns(tenantId);
+        var tenant = SettableTenantAccessor.Resolved(tenantId);
         var http = new HttpClient(handler, false);
         _httpClients.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(
             http,
             tokenCache ?? new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            tenant.Object,
+            tenant,
             platformOptions,
             NullLogger<GoogleHealthAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
@@ -1947,11 +1945,11 @@ public class GoogleHealthTests : IDisposable
             new GoogleHealthClient(http),
             oauth,
             new GoogleHealthSessionStore(store.Configurations, oauth,
-                holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions,
+                holders ?? new InMemoryGoogleHealthGrantHolders(), tenant, platformOptions,
                 NullLogger<GoogleHealthSessionStore>.Instance, time ?? TimeProvider.System, revokeTimeout),
             store.Configurations,
             store.Loader,
-            tenant.Object,
+            tenant,
             store.State,
             patientRecords.Object,
             platformOptions,
@@ -2128,6 +2126,7 @@ public class GoogleHealthTests : IDisposable
     /// <summary>The tenant <paramref name="db"/> is on, read live, as the writer's scope accessor reads it.</summary>
     private static ITenantAccessor TenantOf(NocturneDbContext db)
     {
+        // A mock because the answer is read from the context on each call, and the test repins the context.
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(a => a.TenantId).Returns(() => db.TenantId);
         return tenant.Object;

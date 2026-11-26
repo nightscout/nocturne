@@ -262,11 +262,10 @@ public class AlertDeliveryTimeoutTests
             })
             .Build();
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.Setup(a => a.Context).Returns(new TenantContext(Tenant, "acme", "Acme", true, IsDemo: false));
+        var accessor = SettableTenantAccessor.Resolved(Tenant, "acme", "Acme");
 
         return new ChatBotProvider(
-            factory.Object, configuration, accessor.Object, NullLogger<ChatBotProvider>.Instance);
+            factory.Object, configuration, accessor, NullLogger<ChatBotProvider>.Instance);
     }
 
     private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
@@ -318,7 +317,7 @@ public class AlertDeliveryTimeoutTests
         var service = new AlertDeliveryService(
             db.AsNocturneFactory(),
             Mock.Of<ITenantMembershipRepository>(),
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),
             services,

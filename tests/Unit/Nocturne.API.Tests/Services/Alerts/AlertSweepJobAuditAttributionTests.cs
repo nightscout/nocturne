@@ -52,7 +52,7 @@ public class AlertSweepJobAuditAttributionTests
         services.AddSingleton(NoHeldRules.Notice());
         services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
         services.AddSingleton(Mock.Of<IAlertChannelNotice>());
-        services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IAlertOrchestrator>(sp =>

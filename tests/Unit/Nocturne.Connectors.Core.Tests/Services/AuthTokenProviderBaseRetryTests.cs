@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -335,15 +336,13 @@ public class AuthTokenProviderBaseRetryTests
         Guid tenantId,
         Func<int, Task<(string? Result, bool ShouldRetry)>> login)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId);
 
         return new SignInProvider(
             new HttpClient(),
             cache,
             NoOpResolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<SignInProvider>.Instance,
             login);
     }
@@ -382,7 +381,7 @@ public class AuthTokenProviderBaseRetryTests
         new HttpClient(),
         new ConnectorTokenCache(),
         NoOpResolver,
-        Mock.Of<ITenantAccessor>(),
+        new SettableTenantAccessor(),
         NullLogger<RetryTokenProvider>.Instance,
         delays ?? new RecordingRetryDelayStrategy());
 
@@ -419,7 +418,7 @@ public class AuthTokenProviderBaseRetryTests
             new HttpClient(),
             new ConnectorTokenCache(),
             NoOpResolver,
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             NullLogger<ThrowingTokenProvider>.Instance,
             new RecordingRetryDelayStrategy())
     {

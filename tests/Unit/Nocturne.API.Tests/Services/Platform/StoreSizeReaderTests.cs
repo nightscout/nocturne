@@ -8,6 +8,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -29,7 +30,7 @@ public class StoreSizeReaderTests
     }
 
     private static ITenantAccessor Tenant(Guid? id = null) =>
-        Mock.Of<ITenantAccessor>(t => t.TenantId == (id ?? TestTenantCache.DefaultTenantId));
+        SettableTenantAccessor.Resolved(id ?? TestTenantCache.DefaultTenantId);
 
     [Theory]
     [InlineData(true, false)]

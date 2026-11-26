@@ -1,4 +1,3 @@
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Tests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -244,6 +243,6 @@ public class ClientIdRekeyTests : IDisposable
             bolus, carbs, bgChecks, calculations, Mock.Of<ITempBasalRepository>(),
             Mock.Of<IBasalInjectionRepository>(), notes, deviceEvents,
             Mock.Of<IPatientInsulinRepository>(), Mock.Of<IBasalRateResolver>(), Mock.Of<ITherapySettingsResolver>(),
-            Mock.Of<IPatientDeviceStamper>(), audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance);
+            Mock.Of<IPatientDeviceStamper>(), audit, new PublishSkipTally(), new SettableTenantAccessor(), NullLogger<TreatmentPublisher>.Instance);
     }
 }

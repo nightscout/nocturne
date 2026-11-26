@@ -71,7 +71,7 @@ public class AlertDeliveryServiceStoreFailureTests
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
             members.Object,
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),
             services,

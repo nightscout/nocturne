@@ -31,7 +31,7 @@ public sealed class ProfileActivationWindowPlanTests(ProfileActivationWindowPlan
     [InlineData(false)]
     public async Task WindowRead_WalksTheTenantStartIndex(bool includeDeleted)
     {
-        await using var conn = new NpgsqlConnection(fixture.Database.AppConnectionString);
+        await using var conn = new NpgsqlConnection(fixture.AppConnectionString);
         await conn.OpenAsync();
         await conn.PinTenantAsync(fixture.Tenant);
 
@@ -74,16 +74,14 @@ public sealed class ProfileActivationWindowPlanTests(ProfileActivationWindowPlan
 /// A tenant of 20,000 treatment profile activations, every 25th soft-deleted, a month older than
 /// four other tenants of as many.
 /// </summary>
-public sealed class ProfileActivationWindowPlanFixture : IAsyncLifetime
+public sealed class ProfileActivationWindowPlanFixture() : MigratedDatabase("profile_activation_plan")
 {
-    public TestDatabase Database { get; private set; } = null!;
-
     public Guid Tenant { get; } = Guid.NewGuid();
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("profile_activation_plan");
-        await using var conn = new NpgsqlConnection(Database.SuperuserConnectionString);
+        await base.InitializeAsync();
+        await using var conn = new NpgsqlConnection(SuperuserConnectionString);
         await conn.OpenAsync();
 
         foreach (var (tenant, age) in Enumerable.Range(0, 4).Select(_ => (Guid.NewGuid(), "0 days")).Append((Tenant, "30 days")))
@@ -105,6 +103,4 @@ public sealed class ProfileActivationWindowPlanFixture : IAsyncLifetime
         await using var analyze = new NpgsqlCommand("ANALYZE profile_activations", conn);
         await analyze.ExecuteNonQueryAsync();
     }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 }

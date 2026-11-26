@@ -51,7 +51,7 @@ public class AlertDeliveryServiceMuteTests
         return new AlertDeliveryService(
             factory.Object.AsNocturneFactory(),
             new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),
             services,

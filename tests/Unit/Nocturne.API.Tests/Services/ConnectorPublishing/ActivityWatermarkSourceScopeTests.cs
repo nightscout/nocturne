@@ -19,7 +19,6 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -127,7 +126,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             Mock.Of<IStepCountService>(),
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             new ActivityDedupRepository(_context.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),

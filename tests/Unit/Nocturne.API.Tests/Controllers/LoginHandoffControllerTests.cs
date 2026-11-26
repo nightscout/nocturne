@@ -13,7 +13,6 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -68,8 +67,7 @@ public class LoginHandoffControllerTests : IDisposable
                 new Mock<ILogger<AuthAuditService>>().Object),
             TimeProvider.System);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         _controller = new LoginHandoffController(
             _tenantContext.AsFactory(),
@@ -77,7 +75,7 @@ public class LoginHandoffControllerTests : IDisposable
             _sessionService.Object,
             new TenantMemberService(
                 new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _time),
-            tenantAccessor.Object,
+            tenantAccessor,
             Options.Create(new OidcOptions { Cookie = new CookieSettings { Secure = true } }),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }))
         {

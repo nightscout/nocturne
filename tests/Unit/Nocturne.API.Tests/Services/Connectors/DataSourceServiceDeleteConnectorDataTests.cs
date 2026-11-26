@@ -25,7 +25,6 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -156,7 +155,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     }
 
     private static GoogleHealthPurgeGuard GoogleHealthGuard(GoogleHealthCoordinator coordinator, TimeSpan? gateTimeout = null) =>
-        new(coordinator, Mock.Of<ITenantAccessor>(tenant => tenant.TenantId == TenantId), gateTimeout);
+        new(coordinator, SettableTenantAccessor.Resolved(TenantId), gateTimeout);
 
     private void SeedOneOfEachType()
     {
@@ -935,7 +934,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     }
 
     private OuraImportPurgeGuard OuraGuard(TenantRunGuard runGuard) =>
-        new(runGuard, Mock.Of<ITenantAccessor>(tenant => tenant.TenantId == TenantId));
+        new(runGuard, SettableTenantAccessor.Resolved(TenantId));
 
     private static string OuraDataSourceId
     {

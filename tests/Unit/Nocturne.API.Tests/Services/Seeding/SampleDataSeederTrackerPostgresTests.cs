@@ -60,8 +60,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
     private SampleDataSeeder CreateSeeder(Guid tenantId)
     {
         var contexts = Contexts(tenantId);
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(tenantId);
+        var tenant = SettableTenantAccessor.Resolved(tenantId);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -90,7 +89,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
         time.SetLocalTimeZone(TimeZoneInfo.Utc);
         var audit = new SystemAuditContext();
         return new SampleDataSeeder(
-            tenant.Object,
+            tenant,
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             entries.Object,

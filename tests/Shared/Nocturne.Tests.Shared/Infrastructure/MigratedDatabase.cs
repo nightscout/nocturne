@@ -12,6 +12,8 @@ public class MigratedDatabase(string prefix) : IAsyncLifetime
 {
     private TestDatabase _created = null!;
 
+    public string Name => _created.Name;
+
     public string AppConnectionString => _created.AppConnectionString;
 
     public string MigratorConnectionString => _created.MigratorConnectionString;

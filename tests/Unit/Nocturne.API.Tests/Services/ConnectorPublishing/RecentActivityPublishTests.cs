@@ -12,7 +12,6 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -224,7 +223,7 @@ public class RecentActivityPublishTests : IDisposable
         Mock.Of<IStepCountService>(),
         Mock.Of<IHeartRateService>(),
         Mock.Of<ITenantOwnerResolver>(),
-        Mock.Of<ITenantAccessor>(),
+        new SettableTenantAccessor(),
         new ActivityDedupRepository(_context.AsFactory()),
         Mock.Of<IProfileActivationRepository>(),
         new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),

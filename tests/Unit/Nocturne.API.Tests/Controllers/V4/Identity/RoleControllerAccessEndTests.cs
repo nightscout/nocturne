@@ -115,8 +115,7 @@ public sealed class RoleControllerAccessEndTests : IDisposable
 
     private RoleController BuildController(DateTime? callerEnd)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var scopes = new HashSet<string>([Scope.RolesManage, Scope.GlucoseRead]);
         var httpContext = new DefaultHttpContext();
@@ -135,7 +134,7 @@ public sealed class RoleControllerAccessEndTests : IDisposable
             new TenantRoleService(
                 new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new FakeTimeProvider(Now), _invites.Object,
                 new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory()), _dbContext.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
-            tenantAccessor.Object)
+            tenantAccessor)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

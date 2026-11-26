@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.PlatformAdmin;
@@ -117,7 +118,7 @@ public sealed class EndedSessionMintRefusalTests
             Mock.Of<ISubjectRepository>(MockBehavior.Strict),
             Mock.Of<ISubjectDeletion>(MockBehavior.Strict),
             requests.Object,
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             Mock.Of<IInAppNotificationService>(MockBehavior.Strict),
             NullLogger<AccessRequestController>.Instance)
         {

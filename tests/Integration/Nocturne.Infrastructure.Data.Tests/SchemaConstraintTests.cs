@@ -4,16 +4,13 @@ using Npgsql;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>A migrated database with one tenant holding one connector, stored under its canonical name.</summary>
-public class SchemaConstraintFixture : IAsyncLifetime
+public class SchemaConstraintFixture() : MigratedDatabase("schema_constraints")
 {
     internal static readonly Guid Tenant = Guid.Parse("11111111-1111-7111-8111-111111111111");
 
-    private string _migratorConnectionString = string.Empty;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        _migratorConnectionString =
-            (await SharedPostgres.CreateMigratedDatabaseAsync("schema_constraints")).MigratorConnectionString;
+        await base.InitializeAsync();
 
         await using var conn = await OpenPinnedAsync();
         await conn.SeedTenantAsync(Tenant, "tenant", "Tenant");
@@ -26,8 +23,6 @@ public class SchemaConstraintFixture : IAsyncLifetime
             """;
         await cmd.ExecuteNonQueryAsync();
     }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>
     /// Runs <paramref name="sql"/> for <see cref="Tenant"/> in a transaction it rolls back, and
@@ -57,7 +52,7 @@ public class SchemaConstraintFixture : IAsyncLifetime
 
     private async Task<NpgsqlConnection> OpenPinnedAsync()
     {
-        var conn = new NpgsqlConnection(_migratorConnectionString);
+        var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         await conn.PinTenantAsync(Tenant);
         return conn;

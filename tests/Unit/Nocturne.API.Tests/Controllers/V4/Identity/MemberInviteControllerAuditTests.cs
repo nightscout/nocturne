@@ -83,8 +83,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
 
     private MemberInviteController Controller(params string[] grantedScopes)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
@@ -98,7 +97,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
             TestTenantService.Over(_db),
             new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_db.AsFactory()), _db.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             Mock.Of<ITenantMemberService>(),
-            tenantAccessor.Object,
+            tenantAccessor,
             new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

@@ -11,6 +11,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -100,14 +101,12 @@ public class RequireInstanceStandingAttributeTests
 
     private static AuthorizationFilterContext Build(AuthContext? auth, bool tenantResolved, ITenantRepository tenants)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.IsResolved).Returns(tenantResolved);
-        accessor.SetupGet(a => a.TenantId).Returns(tenantResolved ? RequestTenant : Guid.Empty);
+        var accessor = tenantResolved ? SettableTenantAccessor.Resolved(RequestTenant) : new SettableTenantAccessor();
 
         var httpContext = new DefaultHttpContext
         {
             RequestServices = new ServiceCollection()
-                .AddSingleton(accessor.Object)
+                .AddSingleton<ITenantAccessor>(accessor)
                 .AddSingleton(tenants)
                 .BuildServiceProvider(),
         };

@@ -11,7 +11,6 @@ using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -26,7 +25,7 @@ public class AlertDeliveryEndpointTests
     private readonly Mock<INocturneDbContextFactory> _contextFactoryMock = new();
     private readonly Mock<IAlertAcknowledgementService> _acknowledgementServiceMock = new();
     private readonly Mock<IAlertDeliveryService> _deliveryServiceMock = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessorMock = new();
+    private readonly SettableTenantAccessor _tenantAccessor = new();
     private readonly Mock<ILogger<AlertsController>> _loggerMock = new();
 
     private AlertsController CreateController()
@@ -36,7 +35,7 @@ public class AlertDeliveryEndpointTests
             _acknowledgementServiceMock.Object,
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
-            _tenantAccessorMock.Object,
+            _tenantAccessor,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -162,14 +161,14 @@ public class AlertDeliveryEndpointTests
             _acknowledgementServiceMock.Object,
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
-            _tenantAccessorMock.Object,
+            _tenantAccessor,
             _loggerMock.Object).GetDeliveryPayload(delivery.Id, CancellationToken.None);
         var missing = await new AlertsController(
             new TestNocturneDbContextFactory(ctx),
             _acknowledgementServiceMock.Object,
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
-            _tenantAccessorMock.Object,
+            _tenantAccessor,
             _loggerMock.Object).GetDeliveryPayload(Guid.CreateVersion7(), CancellationToken.None);
 
         found.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(payload);

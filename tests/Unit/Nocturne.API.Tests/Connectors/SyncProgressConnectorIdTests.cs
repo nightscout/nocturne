@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Connectors;
@@ -130,7 +131,7 @@ public class SyncProgressConnectorIdTests
         services.AddHttpClient();
         services.AddSingleton(TimeProvider.System);
         services.AddBaseConnectorServices();
-        services.AddSingleton(Mock.Of<ITenantAccessor>());
+        services.AddSingleton<ITenantAccessor>(new SettableTenantAccessor());
         services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
         services.AddSingleton(Mock.Of<IGoogleHealthGrantHolders>());
         services.AddSingleton(Mock.Of<IGoogleHealthPlatformSettings>());

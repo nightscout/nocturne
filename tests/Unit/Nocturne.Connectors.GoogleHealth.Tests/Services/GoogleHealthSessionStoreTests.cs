@@ -9,7 +9,6 @@ using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -92,21 +91,19 @@ public class GoogleHealthSessionStoreTests : IDisposable
                 ConnectorName = "GoogleHealth",
                 Configuration = JsonDocument.Parse("""{"enabled":true}""")
             });
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(accessor => accessor.IsResolved).Returns(true);
-        tenant.SetupGet(accessor => accessor.TenantId).Returns(tenantId);
+        var tenant = SettableTenantAccessor.Resolved(tenantId);
         var http = new HttpClient(handler ?? new ThrowingHandler());
         _httpClients.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(
             http,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            tenant.Object,
+            tenant,
             TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
         return new GoogleHealthSessionStore(
-            configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(),
+            configurations.Object, oauth, holders.Object, tenant, TestPlatform.Options(),
             NullLogger<GoogleHealthSessionStore>.Instance, time ?? TimeProvider.System, revokeTimeout);
     }
 

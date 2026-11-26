@@ -22,7 +22,6 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -31,6 +30,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -593,7 +593,7 @@ public class V4ReadLimitClampTests
                 Mock.Of<ISignalRBroadcastService>(),
                 Mock.Of<ITrackerAlertRuleSyncService>(),
                 Mock.Of<IAlertRepository>(),
-                Mock.Of<ITenantAccessor>(),
+                new SettableTenantAccessor(),
                 Mock.Of<IAlertAcknowledgementService>(),
                 new TrackerDeviceEventWriter(
                     Mock.Of<IDeviceEventRepository>(),

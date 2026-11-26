@@ -5,11 +5,11 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -75,7 +75,7 @@ public class ClockAnomalyNoticeTests
         owner.Setup(o => o.GetOwnerSubjectIdAsync(Tenant, It.IsAny<CancellationToken>())).ReturnsAsync(Owner);
 
         _notice = new ClockAnomalyNotice(
-            _notifications.Object, owner.Object, Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            _notifications.Object, owner.Object, SettableTenantAccessor.Resolved(Tenant),
             new ClockAnomalyNoticeLog(_clock), _clock, NullLogger<ClockAnomalyNotice>.Instance);
     }
 

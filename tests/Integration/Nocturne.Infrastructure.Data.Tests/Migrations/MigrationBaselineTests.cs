@@ -25,24 +25,22 @@ public class MigrationBaselineTests(MigrationBaselineTests.Databases databases)
 
     /// <summary>
     /// One database per test: an unmigrated one whose history names a migration older than the
-    /// baseline, one whose history names only a newer one, and a fresh install.
+    /// baseline, one whose history names only a newer one, and a fresh install, which is the migrated
+    /// database the fixture itself holds.
     /// </summary>
-    public sealed class Databases : IAsyncLifetime
+    public sealed class Databases() : MigratedDatabase("baseline_fresh")
     {
         public string Older { get; private set; } = string.Empty;
         public string Newer { get; private set; } = string.Empty;
-        public string Fresh { get; private set; } = string.Empty;
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
+            await base.InitializeAsync();
             Older = (await SharedPostgres.CreateEmptyDatabaseAsync("baseline_older")).MigratorConnectionString;
             await RecordHistoryAsync(Older, OlderMigration);
             Newer = (await SharedPostgres.CreateEmptyDatabaseAsync("baseline_newer")).MigratorConnectionString;
             await RecordHistoryAsync(Newer, "29991231000000_FromTheFuture");
-            Fresh = (await SharedPostgres.CreateMigratedDatabaseAsync("baseline_fresh")).MigratorConnectionString;
         }
-
-        public Task DisposeAsync() => Task.CompletedTask;
     }
 
     [Fact]
@@ -69,10 +67,10 @@ public class MigrationBaselineTests(MigrationBaselineTests.Databases databases)
     [Fact]
     public async Task A_fresh_database_records_the_baseline_under_the_id_it_replaces_and_migrates_again_cleanly()
     {
-        (await HistoryAsync(databases.Fresh)).First().Should().Be(Baseline.Id);
+        (await HistoryAsync(databases.MigratorConnectionString)).First().Should().Be(Baseline.Id);
 
         var migrate = () => DatabaseInitializationExtensions.RunMigrationsAsync(
-            databases.Fresh, NullLogger.Instance, new TenantConnectionInterceptor());
+            databases.MigratorConnectionString, NullLogger.Instance, new TenantConnectionInterceptor());
         await migrate.Should().NotThrowAsync();
     }
 

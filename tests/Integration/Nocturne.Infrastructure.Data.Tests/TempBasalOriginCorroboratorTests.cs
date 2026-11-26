@@ -13,7 +13,7 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// pinned to one tenant, on a real PostgreSQL. A first run is cancelled after its first page, then
 /// resumed, then run again.
 /// </summary>
-public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
+public class TempBasalOriginCorroboratorFixture() : MigratedDatabase("temp_basal_origin")
 {
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111111111");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222222");
@@ -80,8 +80,6 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     internal static readonly Guid SnapshotA = Guid.Parse("50000000-0000-7000-8000-000000000001");
     internal static readonly Guid SnapshotB = Guid.Parse("50000000-0000-7000-8000-000000000002");
 
-    private TestDatabase _database = null!;
-
     internal int CrossTenantWritten { get; private set; }
     internal int JudgedBeforeCancel { get; private set; }
     internal int FirstWritten { get; private set; }
@@ -94,9 +92,9 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
 
     internal sealed record Row(string Origin, string? Evidence, Guid? SnapshotId, DateTime UpdatedAt);
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        _database = await SharedPostgres.CreateMigratedDatabaseAsync("temp_basal_origin");
+        await base.InitializeAsync();
         await SeedAsync();
 
         CrossTenantWritten = await CorroborateAsync(pinnedTo: TenantA, tenant: TenantB);
@@ -130,7 +128,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     }
 
     private NocturneDbContext Context(Guid pinnedTo, params IInterceptor[] interceptors) =>
-        TestContexts.Context(_database.AppConnectionString, pinnedTo, interceptors);
+        TestContexts.Context(AppConnectionString, pinnedTo, interceptors);
 
     /// <summary>Cancels the run once its first page has committed, so the run stops on that event and not on a clock.</summary>
     private sealed class CancelAfterFirstCommit(CancellationTokenSource run) : DbTransactionInterceptor
@@ -145,7 +143,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     /// <summary>The newest snapshot write so far, read on the database's clock, which the late snapshot is stamped on.</summary>
     private async Task<DateTime> LatestSnapshotWriteAsync()
     {
-        await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
+        await using var conn = new NpgsqlConnection(SuperuserConnectionString);
         await conn.OpenAsync();
         await using var cmd = new NpgsqlCommand("SELECT max(sys_updated_at) FROM aps_snapshots", conn);
         return (DateTime)(await cmd.ExecuteScalarAsync())!;
@@ -153,7 +151,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
 
     private async Task SeedLateSnapshotAsync()
     {
-        await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         await conn.PinTenantAsync(TenantA);
         await using var cmd = conn.CreateCommand();
@@ -163,8 +161,6 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
             """;
         await cmd.ExecuteNonQueryAsync();
     }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 
     private async Task<int> CorroborateAsync(
         Guid pinnedTo, Guid tenant, int pageSize = 500, TimeSpan pauseAfterWrite = default, CancellationToken ct = default,
@@ -178,7 +174,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     private async Task<Dictionary<Guid, Row>> ReadAsync()
     {
         var rows = new Dictionary<Guid, Row>();
-        await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
@@ -202,7 +198,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
 
     private async Task SeedAsync()
     {
-        await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
         await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
@@ -445,12 +441,12 @@ public class TempBasalOriginCorroboratorConcurrencyTests(TempBasalOriginCorrobor
 
         var corroborate = Task.Run(async () =>
         {
-            await using var db = TestContexts.Context(fixture.Database.AppConnectionString, Tenant);
+            await using var db = TestContexts.Context(fixture.AppConnectionString, Tenant);
             return await TempBasalOriginCorroborator.CorroborateTenantAsync(
                 db, Tenant, DateTime.UtcNow.AddMinutes(-30), 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
         });
 
-        await PostgresLockWaits.UntilBlockedAsync(fixture.Database.SuperuserConnectionString, corroborate);
+        await PostgresLockWaits.UntilBlockedAsync(fixture.SuperuserConnectionString, corroborate);
         await transaction.CommitAsync();
 
         (await corroborate).Should().Be(0);
@@ -464,16 +460,14 @@ public class TempBasalOriginCorroboratorConcurrencyTests(TempBasalOriginCorrobor
 }
 
 /// <summary>A migrated database holding one Trio temp basal and the snapshot that enacted it.</summary>
-public class TempBasalOriginCorroboratorConcurrencyFixture : IAsyncLifetime
+public class TempBasalOriginCorroboratorConcurrencyFixture() : MigratedDatabase("temp_basal_origin_race")
 {
     internal static readonly Guid Tenant = Guid.Parse("a1111111-1111-7111-8111-111111111111");
     internal static readonly Guid TempBasal = Guid.Parse("70000000-0000-7000-8000-000000000001");
 
-    internal TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("temp_basal_origin_race");
+        await base.InitializeAsync();
         await using var conn = await OpenPinnedAsync();
         await conn.SeedTenantAsync(Tenant, "tenant-a", "Tenant A");
         await using var cmd = conn.CreateCommand();
@@ -486,11 +480,9 @@ public class TempBasalOriginCorroboratorConcurrencyFixture : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
-
     internal async Task<NpgsqlConnection> OpenPinnedAsync()
     {
-        var conn = new NpgsqlConnection(Database.MigratorConnectionString);
+        var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         await conn.PinTenantAsync(Tenant);
         return conn;

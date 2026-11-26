@@ -5,8 +5,8 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -24,15 +24,14 @@ public sealed class MembershipRequestInactiveCallerTests
 
     private async Task<IActionResult> ApproveAsync(bool subjectIsInactive)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+        var accessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var http = new DefaultHttpContext();
         http.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.MembersManage };
         http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = _approverId, TenantId = _tenantId };
         new RequestMembership(_approverId, _tenantId, null) { SubjectIsInactive = subjectIsInactive }.StoreOn(http);
 
-        var controller = new MembershipRequestController(_service.Object, accessor.Object)
+        var controller = new MembershipRequestController(_service.Object, accessor)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };

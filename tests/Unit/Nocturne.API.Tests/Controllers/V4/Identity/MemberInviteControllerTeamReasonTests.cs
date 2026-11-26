@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -80,8 +81,7 @@ public sealed class MemberInviteControllerTeamReasonTests
 
     private MemberInviteController Controller(Guid? caller = null)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.FullAccess };
         httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = caller ?? Caller, TenantId = TenantId };
@@ -98,7 +98,7 @@ public sealed class MemberInviteControllerTeamReasonTests
             .ReturnsAsync(() => [.. _summedPermissions]);
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(), _tenantService.Object, roles.Object, Mock.Of<ITenantMemberService>(),
-            tenantAccessor.Object, _members.Object)
+            tenantAccessor, _members.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

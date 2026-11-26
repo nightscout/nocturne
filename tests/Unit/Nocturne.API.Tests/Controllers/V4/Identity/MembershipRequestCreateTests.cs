@@ -6,8 +6,8 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Extensions;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -21,13 +21,12 @@ public class MembershipRequestCreateTests
 
     private MembershipRequestController Controller()
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenant = SettableTenantAccessor.Resolved(_tenantId);
 
         var http = new DefaultHttpContext();
         http.Items[AuthContextKeys.AuthContext] = new AuthContext { IsAuthenticated = true, SubjectId = _subjectId };
 
-        return new MembershipRequestController(_service.Object, tenant.Object)
+        return new MembershipRequestController(_service.Object, tenant)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
             ProblemDetailsFactory = new EchoingProblemDetailsFactory(),

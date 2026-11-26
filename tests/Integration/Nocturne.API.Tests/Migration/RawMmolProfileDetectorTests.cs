@@ -25,7 +25,7 @@ namespace Nocturne.API.Tests.Integration.Migration;
 /// them: a store it could prove raw holds mg/dL values written in one batch, and every other store holds
 /// what was uploaded.
 /// </summary>
-public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
+public sealed class RawMmolProfileStoresFixture() : MigratedDatabase("raw_mmol_profile_stores")
 {
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111112355");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222355");
@@ -122,15 +122,11 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
         new(Guid.CreateVersion7(), TenantB, Snapshot("mmol", RawTargets, RawIsf), Deleted: true),
     ];
 
-    /// <summary>The database as the runtime role.</summary>
-    internal string AppConnectionString { get; private set; } = string.Empty;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("raw_mmol_profile_stores");
-        AppConnectionString = database.AppConnectionString;
+        await base.InitializeAsync();
 
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
         await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
@@ -150,8 +146,6 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
                 """);
         }
     }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 
     private static async Task SeedStoreAsync(NpgsqlConnection conn, Store store)
     {

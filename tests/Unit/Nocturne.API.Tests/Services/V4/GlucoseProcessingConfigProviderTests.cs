@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
@@ -13,14 +14,12 @@ public class GlucoseProcessingConfigProviderTests
 {
     private readonly Mock<ISettingsRepository> _settingsRepository;
     private readonly GlucoseProcessingConfigProvider _sut;
-    private Guid _tenantId = Guid.NewGuid();
+    private readonly SettableTenantAccessor _tenantAccessor = SettableTenantAccessor.Resolved(Guid.NewGuid());
 
     public GlucoseProcessingConfigProviderTests()
     {
         _settingsRepository = new Mock<ISettingsRepository>();
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(x => x.TenantId).Returns(() => _tenantId);
-        _sut = new GlucoseProcessingConfigProvider(_settingsRepository.Object, tenantAccessor.Object);
+        _sut = new GlucoseProcessingConfigProvider(_settingsRepository.Object, _tenantAccessor);
     }
 
     // --- SetPreferredProcessingAsync ---
@@ -223,7 +222,7 @@ public class GlucoseProcessingConfigProviderTests
             .ReturnsAsync(new Settings { Key = "preferredGlucoseProcessing", Value = "Unsmoothed" });
 
         (await _sut.GetPreferredProcessingAsync()).Should().Be(GlucoseProcessing.Smoothed);
-        _tenantId = Guid.NewGuid();
+        _tenantAccessor.SetTenant(new TenantContext(Guid.NewGuid(), "other", "Other", true, false));
 
         (await _sut.GetPreferredProcessingAsync()).Should().Be(GlucoseProcessing.Unsmoothed);
     }

@@ -160,9 +160,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     /// <summary>A tenant's session store over its own secrets, recording what it revokes at Google.</summary>
     private GoogleHealthSessionStore Sessions(Guid tenant, PostgresGoogleHealthGrantHolders holders)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(value => value.IsResolved).Returns(true);
-        accessor.SetupGet(value => value.TenantId).Returns(tenant);
+        var accessor = SettableTenantAccessor.Resolved(tenant);
         var platform = new Mock<IGoogleHealthPlatformSettings>();
         platform.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleHealthPlatformOptions
         {
@@ -174,9 +172,9 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         disposables.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(http, new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            accessor, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
-        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform.Object,
+        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor, platform.Object,
             NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System);
     }
 

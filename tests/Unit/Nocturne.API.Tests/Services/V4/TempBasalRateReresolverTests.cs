@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
@@ -47,7 +48,7 @@ public class TempBasalRateReresolverTests
         Func<ProfileVersionCache, IBasalRateResolver>? basalRates = null)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
         services.AddScoped(_ => new ProfileVersionCache(_tenantCache));
         services.AddScoped(_ => _basalSchedules.Object);
@@ -59,9 +60,7 @@ public class TempBasalRateReresolverTests
             basalRates?.Invoke(sp.GetRequiredService<ProfileVersionCache>()) ?? _basalRates.Object));
 
         var request = services.BuildServiceProvider().CreateScope().ServiceProvider;
-        var tenant = Mock.Get(request.GetRequiredService<ITenantAccessor>());
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.Context).Returns(new TenantContext(Guid.CreateVersion7(), "t", "T", true, false));
+        request.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(Guid.CreateVersion7(), "t", "T", true, false));
 
         return new TempBasalRateReresolver(request, NullLogger<TempBasalRateReresolver>.Instance);
     }

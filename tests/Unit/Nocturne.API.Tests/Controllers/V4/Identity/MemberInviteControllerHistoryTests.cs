@@ -7,6 +7,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -69,11 +70,10 @@ public class MemberInviteControllerHistoryTests
 
     private MemberInviteController Controller()
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenant = SettableTenantAccessor.Resolved(_tenantId);
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(), Mock.Of<ITenantService>(), Mock.Of<ITenantRoleService>(),
-            Mock.Of<ITenantMemberService>(), tenant.Object, Mock.Of<ITenantMembershipRepository>());
+            Mock.Of<ITenantMemberService>(), tenant, Mock.Of<ITenantMembershipRepository>());
     }
 
     private static IActionResult? Authorize(IReadOnlySet<string> grantedScopes) =>

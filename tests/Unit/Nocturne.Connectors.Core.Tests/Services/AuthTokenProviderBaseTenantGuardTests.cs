@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -9,6 +8,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
 using Xunit;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -24,16 +24,14 @@ public class AuthTokenProviderBaseTenantGuardTests
     [Fact]
     public async Task GetValidTokenAsync_Throws_WhenTenantNotResolved()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(false);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.Empty);
+        var tenantAccessor = new SettableTenantAccessor();
 
         using var httpClient = new HttpClient();
         var provider = new TestTokenProvider(
             httpClient,
             new ConnectorTokenCache(),
             NoOpResolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<TestTokenProvider>.Instance);
 
         var config = new TestConnectorConfig();

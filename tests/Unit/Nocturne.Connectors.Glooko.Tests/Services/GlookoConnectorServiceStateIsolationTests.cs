@@ -239,6 +239,7 @@ public class GlookoConnectorServiceStateIsolationTests
 
     private static ITenantAccessor AmbientTenantAccessor()
     {
+        // A mock because both answers are read from the async-local tenant on each call.
         var accessor = new Mock<ITenantAccessor>();
         accessor.Setup(a => a.IsResolved).Returns(() => AmbientTenant.Id != Guid.Empty);
         accessor.Setup(a => a.TenantId).Returns(() => AmbientTenant.Id);

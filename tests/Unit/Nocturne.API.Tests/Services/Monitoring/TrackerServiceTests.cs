@@ -7,12 +7,12 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -60,7 +60,7 @@ public class TrackerServiceTests
             _broadcast.Object,
             _ruleSync.Object,
             Mock.Of<IAlertRepository>(),
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             Mock.Of<IAlertAcknowledgementService>(),
             new TrackerDeviceEventWriter(
                 _deviceEvents.Object,

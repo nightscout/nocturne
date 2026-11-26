@@ -21,6 +21,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -37,7 +38,7 @@ public class AlertReplayServiceLeafLogTests
     private readonly Mock<IDndWindowRepository> _dndWindows = new();
     private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly Mock<IIobCalculator> _iobCalculator = new();
     private readonly Mock<ICobCalculator> _cobCalculator = new();
     private readonly Mock<ITreatmentService> _treatmentService = new();
@@ -55,7 +56,7 @@ public class AlertReplayServiceLeafLogTests
 
     public AlertReplayServiceLeafLogTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
         _glucoseRepository
             .Setup(r => r.GetHiddenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
@@ -102,7 +103,7 @@ public class AlertReplayServiceLeafLogTests
             _dndWindows.Object,
             _glucoseRepository.Object,
             enricher,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             Options.Create(new AlertEvaluationOptions()),
             new RustAlertReplayEngine(new AlertEngineErrors(
                 new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),

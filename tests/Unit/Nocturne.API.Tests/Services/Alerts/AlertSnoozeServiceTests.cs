@@ -11,7 +11,6 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -76,7 +75,7 @@ public class AlertSnoozeServiceTests
 
     private AlertSnoozeService CreateService() => new(
         _factory.AsNocturneFactory(),
-        Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+        SettableTenantAccessor.Resolved(Tenant),
         _repository.Object,
         _rules.Object,
         _delivery.Object,

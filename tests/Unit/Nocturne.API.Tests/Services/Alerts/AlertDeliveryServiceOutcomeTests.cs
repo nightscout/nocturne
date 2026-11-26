@@ -8,7 +8,6 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Realtime;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -71,7 +70,7 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
             new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             _broadcast.Object,
             Mock.Of<IEngineAlarmRelay>(),
             provider,

@@ -49,15 +49,12 @@ public sealed class TenantCacheTests : IDisposable
     private TenantCache Cache(ICategoryReadContext reader, Guid? tenantId = null, bool demo = false)
     {
         var id = tenantId ?? TenantA;
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.Context).Returns(new TenantContext(id, "t", "T", true, IsDemo: false));
-        tenant.Setup(t => t.TenantId).Returns(id);
-        tenant.Setup(t => t.IsResolved).Returns(true);
+        var tenant = SettableTenantAccessor.Resolved(id, "t", "T");
         return new TenantCache(
             _distributed,
             _local,
             _flights,
-            tenant.Object,
+            tenant,
             new ReaderCachePartition(reader),
             Mock.Of<IDemoModeService>(d => d.IsEnabled == demo));
     }
@@ -212,9 +209,9 @@ public sealed class TenantCacheTests : IDisposable
     public async Task Without_a_resolved_tenant_reads_miss_writes_drop_and_removal_does_nothing()
     {
         await WriteAsync(Cache(Owner()), "owner");
-        var tenant = new Mock<ITenantAccessor>();
+        var tenant = new SettableTenantAccessor();
         var unresolved = new TenantCache(
-            _distributed, _local, _flights, tenant.Object, new ReaderCachePartition(Owner()), Mock.Of<IDemoModeService>());
+            _distributed, _local, _flights, tenant, new ReaderCachePartition(Owner()), Mock.Of<IDemoModeService>());
 
         (await ReadAsync(unresolved)).Should().BeNull();
         await WriteAsync(unresolved, "unresolved");

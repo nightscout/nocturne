@@ -20,7 +20,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
 {
     private static readonly Guid TenantId = InterruptedJobSweepPostgresFixture.TenantId;
     private static readonly Guid SourceId = InterruptedJobSweepPostgresFixture.SourceId;
-    private readonly TestDatabase _database = fixture.Database;
+    private readonly MigratedDatabase _database = fixture;
 
     /// <summary>A live migration run is resumed by its job, so the sweep leaves it live.</summary>
     [Fact]
@@ -86,7 +86,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
 
     private Task<NpgsqlConnection> OpenSuperuserAsync() => OpenAsync(_database);
 
-    internal static async Task<NpgsqlConnection> OpenAsync(TestDatabase database)
+    internal static async Task<NpgsqlConnection> OpenAsync(MigratedDatabase database)
     {
         var conn = new NpgsqlConnection(database.SuperuserConnectionString);
         await conn.OpenAsync();
@@ -94,23 +94,19 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
     }
 }
 
-public sealed class InterruptedJobSweepPostgresFixture : IAsyncLifetime
+public sealed class InterruptedJobSweepPostgresFixture() : MigratedDatabase("interrupted_sweep")
 {
     internal static readonly Guid TenantId = Guid.Parse("44444444-4444-7444-8444-444444444444");
     internal static readonly Guid SourceId = Guid.Parse("55555555-5555-7555-8555-555555555555");
 
-    public TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("interrupted_sweep");
-        await using var conn = await InterruptedJobSweepTests.OpenAsync(Database);
+        await base.InitializeAsync();
+        await using var conn = await InterruptedJobSweepTests.OpenAsync(this);
         await conn.SeedTenantAsync(TenantId, "sweep", "Sweep");
         await conn.ExecuteAsync($"""
             INSERT INTO migration_sources (id, tenant_id, mode, source_identifier, created_at)
             VALUES ('{SourceId}', '{TenantId}', 'Api', 'https://source.example', now());
             """);
     }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 }

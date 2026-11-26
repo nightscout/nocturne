@@ -10,6 +10,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -34,8 +35,7 @@ public sealed class MembershipRequestAccessEndTests
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback(new InvocationAction(i => passed = (DateTime?)i.Arguments[5]))
             .ReturnsAsync(new DecideMembershipRequestResult(true, null));
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+        var accessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var http = new DefaultHttpContext();
         http.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.MembersManage };
@@ -45,7 +45,7 @@ public sealed class MembershipRequestAccessEndTests
                 _tenantId,
                 new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, approverAccessEndsAt), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, approverAccessEndsAt), null))
             .StoreOn(http);
-        var controller = new MembershipRequestController(_service.Object, accessor.Object)
+        var controller = new MembershipRequestController(_service.Object, accessor)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
@@ -105,8 +105,7 @@ public sealed class MembershipRequestAccessEndTests
             .Callback(new InvocationAction(i => passed = (
                 (IReadOnlyCollection<string>)i.Arguments[4], (DateTime?)i.Arguments[5], (bool)i.Arguments[6])))
             .ReturnsAsync(new DecideMembershipRequestResult(true, null));
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+        var accessor = SettableTenantAccessor.Resolved(_tenantId);
         var sum = new HashSet<string> { Scope.MembersManage, Scope.GlucoseRead, Scope.TreatmentsRead };
 
         var http = new DefaultHttpContext();
@@ -117,7 +116,7 @@ public sealed class MembershipRequestAccessEndTests
                 new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(sum, false, null), ceiling is null ? null : new TenantMemberAccess(ceiling.Scopes, ceiling.HistoryClamped, ceiling.AccessEndsAt), null))
             .StoreOn(http);
         http.SetGrantCeiling(ceiling);
-        var controller = new MembershipRequestController(_service.Object, accessor.Object)
+        var controller = new MembershipRequestController(_service.Object, accessor)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };

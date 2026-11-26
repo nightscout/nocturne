@@ -49,7 +49,7 @@ public class RawMmolProfileNotifierTests : IDisposable
 
         var contexts = _db.AsFactory();
         _services = new ServiceCollection()
-            .AddScoped(_ => Mock.Of<ITenantAccessor>())
+            .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
             .AddScoped(_ => _detector.Object)
             .AddScoped(_ => _owners.Object)
             .AddScoped<IInAppNotificationRepository>(_ => new InAppNotificationRepository(contexts))

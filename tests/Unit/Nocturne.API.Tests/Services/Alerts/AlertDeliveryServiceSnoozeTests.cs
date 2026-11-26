@@ -65,7 +65,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         services.AddSingleton(_httpClientFactory.Object);
         services.AddSingleton(_haHub.Object);
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddSingleton(Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant));
+        services.AddSingleton<ITenantAccessor>(SettableTenantAccessor.Resolved(Tenant));
         services.AddSingleton<IMemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<InAppProvider>();
@@ -81,7 +81,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
             new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             _broadcast.Object,
             _alarmRelay.Object,
             provider,

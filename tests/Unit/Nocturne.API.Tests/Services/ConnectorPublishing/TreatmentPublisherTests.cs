@@ -1,5 +1,4 @@
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -17,6 +16,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -87,7 +87,7 @@ public class TreatmentPublisherTests
             Mock.Of<IPatientDeviceStamper>(),
             auditContext,
             new PublishSkipTally(),
-            Mock.Of<ITenantAccessor>(), NullLogger<TreatmentPublisher>.Instance
+            new SettableTenantAccessor(), NullLogger<TreatmentPublisher>.Instance
         );
     }
 

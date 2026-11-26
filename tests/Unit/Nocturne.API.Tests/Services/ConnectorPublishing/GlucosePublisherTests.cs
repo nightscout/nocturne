@@ -9,7 +9,6 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -17,6 +16,7 @@ using Nocturne.Infrastructure.Data;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -46,7 +46,7 @@ public class GlucosePublisherTests
             _mockPatientDeviceStamper.Object,
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
-            Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance
+            new SettableTenantAccessor(), NullLogger<GlucosePublisher>.Instance
         );
     }
 

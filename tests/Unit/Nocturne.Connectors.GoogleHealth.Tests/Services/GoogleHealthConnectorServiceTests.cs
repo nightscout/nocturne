@@ -16,7 +16,6 @@ using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Health;
 using Nocturne.Tests.Shared.Connectors;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -1226,9 +1225,7 @@ public class GoogleHealthConnectorServiceTests
 
         public Fixture(Func<HttpRequestMessage, HttpResponseMessage> responder, TimeProvider? timeProvider = null)
         {
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.SetupGet(value => value.IsResolved).Returns(true);
-            tenant.SetupGet(value => value.TenantId).Returns(tenantId);
+            var tenant = SettableTenantAccessor.Resolved(tenantId);
             var configurations = new Mock<IConnectorConfigurationService>();
             configurations.Setup(value => value.GetSecretsAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
@@ -1296,7 +1293,7 @@ public class GoogleHealthConnectorServiceTests
                 new HttpClient(handler, false),
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-                tenant.Object,
+                tenant,
                 TestPlatform.Options(),
                 NullLogger<GoogleHealthAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>());
@@ -1305,12 +1302,12 @@ public class GoogleHealthConnectorServiceTests
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 new GoogleHealthClient(new HttpClient(handler, false)),
                 new GoogleHealthSessionStore(configurations.Object, oauth,
-                    Mock.Of<IGoogleHealthGrantHolders>(), tenant.Object, TestPlatform.Options(),
+                    Mock.Of<IGoogleHealthGrantHolders>(), tenant, TestPlatform.Options(),
                     NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,
-                tenant.Object,
+                tenant,
                 loader.Object,
                 Log,
                 Mock.Of<IRetryDelayStrategy>(),

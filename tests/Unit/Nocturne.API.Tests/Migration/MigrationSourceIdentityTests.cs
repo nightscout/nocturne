@@ -323,7 +323,7 @@ public class MigrationSourceIdentityTests
         return new MigrationController(
             service,
             Mock.Of<IConnectorConfigurationService>(),
-            Mock.Of<ITenantAccessor>(a => a.Context == tenant && a.TenantId == tenant.TenantId),
+            new SettableTenantAccessor(tenant),
             TimeProvider.System,
             NullLogger<MigrationController>.Instance)
         {

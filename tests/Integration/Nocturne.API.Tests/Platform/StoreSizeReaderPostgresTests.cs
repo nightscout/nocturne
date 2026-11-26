@@ -156,38 +156,38 @@ public sealed class StoreSizeReaderPostgresTests(StoreSizePostgresFixture fixtur
     }
 }
 
-public sealed class StoreSizePostgresFixture : IAsyncLifetime
+public sealed class StoreSizePostgresFixture() : MigratedDatabase("store_size")
 {
     public const int LargeRows = 4000;
     public const int SmallRows = 1000;
-
-    private TestDatabase _database = null!;
-
-    public string SuperuserConnectionString => _database.SuperuserConnectionString;
 
     public ServiceProvider Provider { get; private set; } = null!;
     public Guid Large { get; private set; }
     public Guid Small { get; private set; }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        _database = await SharedPostgres.CreateMigratedDatabaseAsync("store_size");
+        await base.InitializeAsync();
 
         Provider = TestContexts.BuildProvider(
-            _database.AppConnectionString, configure: services => services.AddScoped<ITenantAccessor, SettableTenantAccessor>());
+            AppConnectionString, configure: services => services.AddScoped<ITenantAccessor, SettableTenantAccessor>());
 
         Large = await SeedTenantAsync("large", LargeRows);
         Small = await SeedTenantAsync("small", SmallRows);
         // Autovacuum's first pass would otherwise add a visibility map page between a test's reads.
-        await NpgsqlTestCommands.ExecuteAsync(_database.SuperuserConnectionString, "VACUUM ANALYZE");
+        await NpgsqlTestCommands.ExecuteAsync(SuperuserConnectionString, "VACUUM ANALYZE");
     }
 
-    public async Task DisposeAsync() => await Provider.DisposeAsync();
+    public override async Task DisposeAsync()
+    {
+        await Provider.DisposeAsync();
+        await base.DisposeAsync();
+    }
 
     private async Task<Guid> SeedTenantAsync(string name, int rows)
     {
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.SeedTenantAsync(_database.SuperuserConnectionString, tenant, $"size-{name}-{tenant:N}", name);
+        await NpgsqlTestCommands.SeedTenantAsync(SuperuserConnectionString, tenant, $"size-{name}-{tenant:N}", name);
 
         var now = DateTime.UtcNow;
         await using var db = await Provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(tenant);
@@ -199,7 +199,7 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
 
     public async Task<long> RelationBytesAsync(string table)
     {
-        await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
+        await using var conn = new NpgsqlConnection(SuperuserConnectionString);
         await conn.OpenAsync();
         return await conn.ScalarAsync<long>($"SELECT pg_total_relation_size('{table}')");
     }

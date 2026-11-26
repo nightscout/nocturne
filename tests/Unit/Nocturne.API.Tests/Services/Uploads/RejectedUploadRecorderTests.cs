@@ -6,12 +6,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Uploads;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Uploads;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Uploads;
@@ -29,8 +29,7 @@ public class RejectedUploadRecorderTests
 
     public RejectedUploadRecorderTests()
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.TenantId).Returns(Tenant);
+        var tenant = SettableTenantAccessor.Resolved(Tenant);
         _owners.Setup(o => o.GetOwnerSubjectIdAsync(Tenant, It.IsAny<CancellationToken>())).ReturnsAsync("owner");
         _store.Setup(s => s.UpsertAsync(It.IsAny<RejectedUpload>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((RejectedUpload upload, CancellationToken _) =>
@@ -40,7 +39,7 @@ public class RejectedUploadRecorderTests
                 return isNew;
             });
         _recorder = new RejectedUploadRecorder(
-            _store.Object, _notifications.Object, _owners.Object, tenant.Object,
+            _store.Object, _notifications.Object, _owners.Object, tenant,
             TimeProvider.System, NullLogger<RejectedUploadRecorder>.Instance);
     }
 

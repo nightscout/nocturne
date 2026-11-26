@@ -11,6 +11,7 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.TenantAdmin;
@@ -36,7 +37,7 @@ public class MigrationControllerUrlTests
     }
 
     private MigrationController Controller(HttpContext? http = null) =>
-        new(_migrations.Object, _connectors.Object, Mock.Of<ITenantAccessor>(), TimeProvider.System, NullLogger<MigrationController>.Instance)
+        new(_migrations.Object, _connectors.Object, new SettableTenantAccessor(), TimeProvider.System, NullLogger<MigrationController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http ?? new DefaultHttpContext() },
         };

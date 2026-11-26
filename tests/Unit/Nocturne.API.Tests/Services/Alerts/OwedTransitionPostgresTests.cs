@@ -133,16 +133,15 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             foreach (var channel in Channels)
                 connections.Add(Id, channel.Destination, $"connection-{channel.Destination}");
 
-            var tenantAccessor = Mock.Of<ITenantAccessor>(a => a.TenantId == Id);
             var canonical = new Mock<ICanonicalGlucoseService>();
             canonical
                 .Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => Recent);
 
-            return new ServiceCollection()
+            var root = new ServiceCollection()
                 .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
                 .AddSingleton<TimeProvider>(Time)
-                .AddSingleton(tenantAccessor)
+                .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
                 .AddSingleton<INocturneDbContextFactory>(new SuppliedContextFactory(Context))
                 .AddSingleton<IAlertRepository>(repository ?? Repository())
                 .AddSingleton(Rules.Object)
@@ -155,13 +154,13 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton(connections)
                 .AddSingleton<HomeAssistantProvider>()
                 .AddSingleton<InAppProvider>()
-                .AddSingleton<IAlertDeliveryService, AlertDeliveryService>()
-                .AddSingleton<IExcursionOpenedHandler, ExcursionOpenedHandler>()
-                .AddSingleton<IExcursionResolutionHandler, ExcursionResolutionHandler>()
+                .AddScoped<IAlertDeliveryService, AlertDeliveryService>()
+                .AddScoped<IExcursionOpenedHandler, ExcursionOpenedHandler>()
+                .AddScoped<IExcursionResolutionHandler, ExcursionResolutionHandler>()
                 .AddSingleton<IExcursionTracker>(new ExcursionTracker(
                     Tracker(), new AlertRuleEvaluationGate(), Time, NullLogger<ExcursionTracker>.Instance,
                     new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), Time))))
-                .AddSingleton<IAlertSnoozeService, AlertSnoozeService>()
+                .AddScoped<IAlertSnoozeService, AlertSnoozeService>()
                 .AddSingleton(Mock.Of<IUnevaluableRuleNotice>())
                 .AddSingleton(NoHeldRules.Notice())
                 .AddSingleton(Mock.Of<IClockAnomalyNotice>())
@@ -169,6 +168,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton(canonical.Object)
                 .AddSingleton(EnricherOf())
                 .BuildServiceProvider();
+            return TenantJobScope.Open(root, new TenantContext(Id, "slug", "Slug", true, IsDemo: false), "test").ServiceProvider;
         }
 
         /// <summary>The enricher, which gives the Do Not Disturb scopes in <see cref="Dnd"/> as they are at the call.</summary>
@@ -184,7 +184,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         /// <summary>The alarm the tenant's alerting instances keep sounding, or null.</summary>
         public Task<EngineAlarm?> AlarmingAsync() =>
             new EngineAlarmRelay(
-                    new SuppliedContextFactory(Context), Mock.Of<ITenantAccessor>(a => a.TenantId == Id),
+                    new SuppliedContextFactory(Context), SettableTenantAccessor.Resolved(Id),
                     Mock.Of<ITenantGlucoseUnits>(), Mock.Of<ICanonicalGlucoseService>(), Mock.Of<ISignalRBroadcastService>(),
                     Time, NullLogger<EngineAlarmRelay>.Instance)
                 .HighestAlarmingAsync(CancellationToken.None);

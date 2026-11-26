@@ -10,6 +10,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -33,12 +34,7 @@ public sealed class SelfAdmissionResponseTests
         return http;
     }
 
-    private ITenantAccessor Accessor()
-    {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(_tenantId);
-        return accessor.Object;
-    }
+    private ITenantAccessor Accessor() => SettableTenantAccessor.Resolved(_tenantId);
 
     private static void ShouldBeCoded(IActionResult result, int status, string code)
     {
