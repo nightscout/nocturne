@@ -811,6 +811,46 @@ public class AlertRulesControllerChannelDestinationTests
     }
 
     [Fact]
+    public async Task A_whatsapp_number_no_link_names_is_stamped_like_a_typed_in_channel_and_a_linked_one_is_not()
+    {
+        var (controller, db) = CreateController();
+        await LinkIdentityAsync(db, "whatsapp", WhatsAppWaId);
+        var ends = DateTime.UtcNow.AddDays(3);
+        ActAs(controller, Subject, ends);
+
+        await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            Channels = [Typed(ChannelType.WhatsAppDm, "+15551234567"), Typed(ChannelType.WhatsAppDm, "+" + WhatsAppWaId)],
+        }, CancellationToken.None);
+
+        var stored = await StoredChannelsAsync(db);
+        stored[0].Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == Subject && c.StopsAt == ends && c.RecipientSubjectId == null);
+        stored[1].Should().Match<AlertRuleChannelEntity>(
+            c => c.AddedBySubjectId == null && c.StopsAt == null && c.RecipientSubjectId == Subject);
+    }
+
+    [Fact]
+    public async Task A_stopped_whatsapp_number_no_link_names_can_be_kept()
+    {
+        var (controller, db) = CreateController();
+        await AddMemberAsync(db, Subject);
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var channel = await db.AlertRuleChannels.SingleAsync(c => c.ChannelType == ChannelType.DiscordChannel);
+        channel.ChannelType = ChannelType.WhatsAppDm;
+        channel.Destination = "+15551234567";
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        ActAs(controller, Subject);
+
+        var kept = OkRule(await controller.KeepChannel(rule.Id, channel.Id, CancellationToken.None));
+
+        kept.Channels.Single(c => c.Id == channel.Id).State.Should().Be(AlertChannelState.Active);
+    }
+
+    [Fact]
     public async Task A_typed_in_channel_saved_by_no_member_is_not_stamped()
     {
         var (controller, db) = CreateController();

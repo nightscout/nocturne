@@ -441,7 +441,7 @@ public class AlertRulesController : ControllerBase
         if (channel is null)
             return NotFound();
 
-        if (ChannelDestinations.ModeOf(channel.ChannelType) != ChannelDestinationMode.UserSupplied)
+        if (!ChannelDestinations.IsTypedIn(channel.ChannelType, channel.RecipientSubjectId))
             return Problem(detail: KeepMemberChannelDetail, statusCode: StatusCodes.Status400BadRequest);
 
         if (HttpContext?.GetSubjectId() is not { } subjectId)

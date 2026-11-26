@@ -235,7 +235,7 @@ internal sealed class AlertDeliveryService(
 
             return ChannelDestinations.ResolvesFromLinkedIdentity(channel.ChannelType)
                    && ChannelDestinations.PlatformOf(channel.ChannelType) is { } platform
-                   && ChatIdentities.Contains((platform, channel.Destination));
+                   && ChatIdentities.Contains((platform, ChannelDestinations.LinkKey(channel.ChannelType, channel.Destination)));
         }
     }
 
