@@ -36,6 +36,13 @@ const bot = () =>
       },
       slack: { enabled: true, botToken: "not-a-token", signingSecret: "not-a-secret" },
       telegram: { enabled: true, botToken: "not-a-token" },
+      whatsapp: {
+        enabled: true,
+        accessToken: "not-a-token",
+        appSecret: "not-a-secret",
+        phoneNumberId: "1000",
+        verifyToken: "not-a-token",
+      },
     },
   });
 
@@ -58,6 +65,19 @@ describe("createBot", () => {
     expect(telegram).not.toBeInstanceOf(AccentedSlackAdapter);
     expect(telegram?.name).toBe("telegram");
   });
+
+  it.each(["discord", "slack", "telegram", "whatsapp"])(
+    "keeps no thread history for %s, so the bot's state holds no message text",
+    (name) => {
+      const adapter = bot().getAdapter(name) as unknown as {
+        persistThreadHistory?: boolean;
+        persistMessageHistory?: boolean;
+      };
+
+      expect(adapter.persistThreadHistory ?? false).toBe(false);
+      expect(adapter.persistMessageHistory ?? false).toBe(false);
+    },
+  );
 });
 
 describe("the Telegram webhook", () => {

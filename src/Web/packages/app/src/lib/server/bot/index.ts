@@ -1,9 +1,16 @@
-import { createBot, registerAllCommands, AlertDeliveryHandler, type BotOptions, type PlatformCredentials } from "@nocturne/bot";
+import {
+	createBot,
+	registerAllCommands,
+	AlertDeliveryHandler,
+	type BotOptions,
+	type PlatformCredentials,
+} from "@nocturne/bot";
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
 import { DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, RESEND_API_KEY, RESEND_FROM_ADDRESS } from "$app/env/private";
 import { createServerApiClient, getApiBaseUrl } from "#lib/server/api-client-factory.js";
 import { getHashedInstanceKey } from "#lib/server/instance-key.js";
 import { fetchDecryptedPlatformCredentials } from "./platform-credentials";
+import { botPostgresUrl } from "./state-url";
 import type { PlatformCredentials as ApiPlatformCredentials } from "#lib/api/index.js";
 
 type Bot = ReturnType<typeof createBot>;
@@ -115,18 +122,7 @@ async function initBot(): Promise<Bot> {
 			whatsapp: buildPlatformConfig("whatsapp", dbCredentials),
 			resend: buildPlatformConfig("resend", dbCredentials),
 		},
-		// The bot adapter expects a postgresql:// URL, not the .NET-style
-		// ConnectionStrings__nocturne-postgres value (which is
-		// Host=...;Port=...;Database=... key/value format and causes the
-		// pg client to resolve literal strings like "base" as hostnames).
-		// Aspire injects NOCTURNE_POSTGRES_URI pointing at the
-		// nocturne_web role — a least-privileged role that owns only its
-		// own chat_state_* tables and cannot touch tenant-scoped tables.
-		// Fall back to DATABASE_URL for non-Aspire deployments.
-		postgresUrl:
-			process.env.NOCTURNE_POSTGRES_URI ??
-			process.env.DATABASE_URL ??
-			"",
+		postgresUrl: botPostgresUrl(),
 	};
 
 	const bot = createBot(options);

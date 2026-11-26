@@ -5,7 +5,7 @@ import { isRecord, nonEmptyString } from "#lib/utils/type-guards.js";
 import { applySecurityHeaders, parseFrameAncestors } from "#lib/server/security-headers.js";
 import { MARKETING_URL, ALLOWED_FRAME_ANCESTORS } from "$app/env/private";
 import { PUBLIC_DEFAULT_LANGUAGE } from "$app/env/public";
-import { dev } from "$app/env";
+import { building, dev } from "$app/env";
 import {
   getApiBaseUrl,
   createServerApiClient,
@@ -14,7 +14,7 @@ import { isApiOutage } from "#lib/server/api-outage.js";
 import { forgetSession, getCachedSession, sessionCacheKey } from "#lib/server/session-cache.js";
 import { authenticateGuestSession } from "#lib/server/guest-session-auth.js";
 import { mintDemoSession } from "#lib/server/demo-session.js";
-import { sequence, type Handle, type HandleServerError } from "@sveltejs/kit/hooks";
+import { sequence, type Handle, type HandleServerError, type ServerInit } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 import { buildProxyHeaders, buildProxyResponseHeaders } from "#lib/server/api-proxy-headers.js";
@@ -420,6 +420,14 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   });
 
   return resolve(event);
+};
+
+/** Runs once at server start, before the first request. Nothing here may delay that request. */
+export const init: ServerInit = () => {
+  if (building) return;
+  import("#lib/server/bot/thread-history.js")
+    .then((history) => history.purgeKeptThreadHistory())
+    .catch((err: unknown) => console.warn("[bot] could not load the bot to delete its kept thread history:", err));
 };
 
 export const handleError: HandleServerError = async ({ kind, error, event }) => {
