@@ -69,7 +69,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         => await DecomposeBatchAsync([entry], origin, edit: true, ct);
 
     /// <inheritdoc />
-    public Task<EntryDecomposition> DecomposeBatchAsync(
+    public Task<InvalidatingDecomposition<Entry>> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
         => DecomposeBatchAsync(entries, origin, edit: false, ct);
 
@@ -86,10 +86,10 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
     /// other entry is pointed at the reading it names (<see cref="PointEntriesAtStoredRecordsAsync"/>),
     /// where a write-back echo is skipped too.
     /// </remarks>
-    private async Task<EntryDecomposition> DecomposeBatchAsync(
+    private async Task<InvalidatingDecomposition<Entry>> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, bool edit, CancellationToken ct)
     {
-        var result = new EntryDecomposition();
+        var result = new InvalidatingDecomposition<Entry>();
         if (entries.Count == 0)
             return result;
 
@@ -389,7 +389,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
         /// invalid uploads as rows already deleted with no device attributed, so a deleted document
         /// registers none.
         /// </summary>
-        public async Task SettleInvalidAsync(EntryDecomposition result, WriteOrigin origin, CancellationToken ct)
+        public async Task SettleInvalidAsync(InvalidatingDecomposition<Entry> result, WriteOrigin origin, CancellationToken ct)
         {
             if (_invalidatedLegacyIds.Count > 0 || _invalidatedIds.Count > 0)
             {

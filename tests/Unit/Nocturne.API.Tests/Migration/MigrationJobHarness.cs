@@ -8,12 +8,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -101,7 +104,7 @@ internal static class MigrationJobHarness
         HttpMessageHandler handler,
         Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
         Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null,
-        Func<Profile, DecompositionResult>? profileOutcome = null,
+        Func<Profile, InvalidatingDecomposition<Profile>>? profileOutcome = null,
         IInterceptor? interceptor = null,
         Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null,
         Action<DbContextOptionsBuilder>? database = null)
@@ -131,7 +134,7 @@ internal static class MigrationJobHarness
         profiles
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<Profile> batch, WriteOrigin _, CancellationToken _) =>
-                profileOutcome?.Invoke(batch.Single()) ?? new DecompositionResult());
+                profileOutcome?.Invoke(batch.Single()) ?? new InvalidatingDecomposition<Profile>());
 
         var activities = new Mock<IActivityDecomposer>();
         activities
@@ -155,6 +158,10 @@ internal static class MigrationJobHarness
             .AddSingleton(deviceStatuses.Object)
             .AddSingleton(profiles.Object)
             .AddSingleton(activities.Object)
+            .AddFoodServices()
+            .AddSingleton(Mock.Of<IDocumentProcessingService>())
+            .AddSingleton(Mock.Of<IWriteSideEffects>())
+            .AddLogging()
             .BuildServiceProvider();
     }
 

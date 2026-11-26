@@ -585,11 +585,11 @@ public abstract class DecomposerBase
     /// they are system-attributed, except a user's edit of one entry
     /// (<see cref="Entries.IEntryDecomposer.DecomposeAsync"/>). A legacy treatment or profile persists only as its decomposed
     /// rows, so their audit rows are the whole trail of a careportal entry or an edit: a live treatment
-    /// keeps the caller's attribution and only a backfill is system-attributed, except the removal of a
-    /// reclassified treatment's rows (<see cref="TreatmentDecomposer.DropAbsentAsync"/>), and
-    /// <see cref="ProfileDecomposer"/> scopes only store removals during document replacement, since
-    /// an unchanged re-upsert writes nothing to audit. Connector syncs are system-attributed by the
-    /// sync scope's own audit context.
+    /// keeps the caller's attribution and only a backfill is system-attributed. The deletes and writes
+    /// the system decides on rather than the caller, such as a reclassified treatment's rows
+    /// (<see cref="TreatmentDecomposer.DropAbsentAsync"/>), a profile's dropped stores or a document
+    /// sent with <c>isValid: false</c> (<see cref="InvalidUploads{TUpload}"/>), are system-attributed
+    /// whatever the origin. Connector syncs are system-attributed by the sync scope's own audit context.
     /// </remarks>
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext, keepWriter: true);

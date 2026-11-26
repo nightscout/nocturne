@@ -869,16 +869,7 @@ public static class ServiceRegistrationExtensions
         });
 
         // Food services
-        services.AddScoped<IFoodService, FoodService>();
-        services.AddScoped<IDataEventSink<Food>>(sp =>
-        {
-            var sinks = new List<IDataEventSink<Food>>();
-            var writeBack = sp.GetService<NightscoutFoodWriteBackSink>();
-            if (writeBack is not null) sinks.Add(writeBack);
-            return new CompositeDataEventSink<Food>(
-                sinks,
-                sp.GetService<ILogger<CompositeDataEventSink<Food>>>());
-        });
+        services.AddFoodServices();
         services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService>();
         services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
@@ -966,6 +957,25 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ILoopAnalysisService, LoopAnalysisService>();
         services.AddScoped<IDataOverviewService, DataOverviewService>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// The food catalog's <see cref="IFoodService"/> and the event sink it announces through, which
+    /// writes back to Nightscout when a write-back sink is registered.
+    /// </summary>
+    public static IServiceCollection AddFoodServices(this IServiceCollection services)
+    {
+        services.AddScoped<IFoodService, FoodService>();
+        services.AddScoped<IDataEventSink<Food>>(sp =>
+        {
+            var sinks = new List<IDataEventSink<Food>>();
+            var writeBack = sp.GetService<NightscoutFoodWriteBackSink>();
+            if (writeBack is not null) sinks.Add(writeBack);
+            return new CompositeDataEventSink<Food>(
+                sinks,
+                sp.GetService<ILogger<CompositeDataEventSink<Food>>>());
+        });
         return services;
     }
 

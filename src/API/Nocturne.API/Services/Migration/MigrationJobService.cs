@@ -26,6 +26,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services.Migration;
@@ -1451,7 +1452,8 @@ internal class MigrationJob
             ("treatments", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_treatmentsCollection, pass, token)),
             ("devicestatus", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_deviceStatusCollection, pass, token)),
             ("profile", false, (client, _, token) => MigrateProfilesViaApiAsync(client, token)),
-            ("food", false, (client, _, token) => MigrateFoodViaApiAsync(client, dbContext, token)),
+            ("food", false, (client, _, token) => MigrateFoodViaApiAsync(
+                client, dbContext, scope.ServiceProvider.GetRequiredService<IFoodService>(), token)),
             ("activity", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_activityCollection, pass, token)),
         };
 
@@ -2063,7 +2065,7 @@ internal class MigrationJob
         {
             try
             {
-                if (System.Text.Json.JsonSerializer.Deserialize<T>(documents[i]) is { } document)
+                if (ReadDocument<T>(documents[i]) is { } document)
                 {
                     parsed.Add(document);
                     continue;
@@ -2087,6 +2089,10 @@ internal class MigrationJob
 
         return ([.. parsed], newlyFailed);
     }
+
+    /// <summary>A document as Nightscout serves it, read as <typeparamref name="T"/>.</summary>
+    private static T? ReadDocument<T>(System.Text.Json.JsonElement document) where T : class =>
+        System.Text.Json.JsonSerializer.Deserialize<T>(document);
 
     /// <summary>
     /// What a paged collection has done so far, carried from one <see cref="ImportPass"/> to the next
@@ -2293,6 +2299,7 @@ internal class MigrationJob
     private async Task MigrateFoodViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
@@ -2327,35 +2334,13 @@ internal class MigrationJob
 
             var foods = parsed.Where(f => f.Id is not { Length: > 0 } id || servedIds.Add(id)).ToArray();
 
+            List<Food> importing = [];
             foreach (var food in foods)
             {
                 try
                 {
-                    if (!await FoodImportBlockedAsync(dbContext, food.Id, food.Name ?? "", food.Type ?? "food", ct))
-                    {
-                        dbContext.Foods.Add(
-                            new Infrastructure.Data.Entities.FoodEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                OriginalId = food.Id,
-                                Type = food.Type ?? "food",
-                                Category = food.Category ?? "",
-                                Subcategory = food.Subcategory ?? "",
-                                Name = food.Name ?? "",
-                                Portion = food.Portion,
-                                Carbs = food.Carbs,
-                                Fat = food.Fat,
-                                Protein = food.Protein,
-                                Energy = food.Energy,
-                                Gi = (Infrastructure.Data.Entities.GlycemicIndex)(food.Gi > 0 ? food.Gi : 2),
-                                Unit = food.Unit ?? "g",
-                                Foods = food.Foods != null ? System.Text.Json.JsonSerializer.Serialize(food.Foods) : null,
-                                HideAfterUse = food.HideAfterUse,
-                                Hidden = food.Hidden,
-                                Position = food.Position,
-                            }
-                        );
-                    }
+                    if (await ImportableAsync(dbContext, food, ct))
+                        importing.Add(food);
                     totalMigrated++;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -2364,7 +2349,7 @@ internal class MigrationJob
                 }
             }
 
-            await dbContext.SaveChangesAsync(ct);
+            await foodService.ImportFoodAsync(importing, ct);
             totalSkipped += documents.Length;
 
             UpdateCollectionProgress(collectionName, 0, totalMigrated, totalFailed, false);
@@ -2452,7 +2437,8 @@ internal class MigrationJob
                     await MigrateMongoDecomposedCollectionAsync(database, s_activityCollection, ct);
                     break;
                 case "devicestatus" or "profile" or "food":
-                    await MigrateMongoCollectionAsync(database, collectionName, dbContext, ct);
+                    await MigrateMongoCollectionAsync(
+                        database, collectionName, dbContext, scope.ServiceProvider.GetRequiredService<IFoodService>(), ct);
                     break;
                 default:
                     _logger.LogWarning("MongoDB migration cannot import the {Collection} collection; skipping it", collectionName);
@@ -2603,6 +2589,7 @@ internal class MigrationJob
         IMongoDatabase database,
         string collectionName,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
@@ -2634,7 +2621,7 @@ internal class MigrationJob
 
                 try
                 {
-                    await TransformAndSaveDocumentAsync(collectionName, doc, dbContext, ct);
+                    await TransformAndSaveDocumentAsync(collectionName, doc, dbContext, foodService, ct);
                     totalMigrated++;
                 }
                 catch (Exception ex)
@@ -2681,6 +2668,7 @@ internal class MigrationJob
         string collectionName,
         BsonDocument doc,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
@@ -2693,7 +2681,7 @@ internal class MigrationJob
                 await TransformProfileAsync(doc, dbContext, ct);
                 break;
             case "food":
-                await TransformFoodAsync(doc, dbContext, ct);
+                await TransformFoodAsync(doc, dbContext, foodService, ct);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(collectionName), collectionName, null);
@@ -2772,6 +2760,7 @@ internal class MigrationJob
             IsAPNSProduction = doc.Contains("isAPNSProduction") && doc["isAPNSProduction"].IsBoolean
                 ? doc["isAPNSProduction"].AsBoolean
                 : null,
+            IsValid = IsValidOf(doc),
         };
 
         using var scope = CreateTenantScope();
@@ -2782,50 +2771,47 @@ internal class MigrationJob
     private async Task TransformFoodAsync(
         BsonDocument doc,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
-        var name = doc.Contains("name") ? doc["name"].AsString : "";
-        var type = doc.Contains("type") ? doc["type"].AsString : "food";
-
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        if (await FoodImportBlockedAsync(dbContext, originalId, name, type, ct))
+        var food = ReadDocument<Food>(ToNightscoutJson(doc))!;
+        if (!await ImportableAsync(dbContext, food, ct))
             return;
 
-        var entity = new Infrastructure.Data.Entities.FoodEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Type = type,
-            Category = doc.Contains("category") ? doc["category"].AsString : "",
-            Subcategory = doc.Contains("subcategory") ? doc["subcategory"].AsString : "",
-            Name = name,
-            Portion = doc.Contains("portion") ? doc["portion"].ToDouble() : 0,
-            Carbs = doc.Contains("carbs") ? doc["carbs"].ToDouble() : 0,
-            Fat = doc.Contains("fat") ? doc["fat"].ToDouble() : 0,
-            Protein = doc.Contains("protein") ? doc["protein"].ToDouble() : 0,
-            Energy = doc.Contains("energy") ? doc["energy"].ToDouble() : 0,
-            Gi = doc.Contains("gi") ? (Infrastructure.Data.Entities.GlycemicIndex)doc["gi"].ToInt32() : Infrastructure.Data.Entities.GlycemicIndex.Medium,
-            Unit = doc.Contains("unit") ? doc["unit"].AsString : "g",
-            Foods = doc.Contains("foods") ? doc["foods"].ToJson() : null,
-            HideAfterUse = doc.Contains("hideAfterUse") && doc["hideAfterUse"].AsBoolean,
-            Hidden = doc.Contains("hidden") && doc["hidden"].AsBoolean,
-            Position = doc.Contains("position") ? doc["position"].ToInt32() : 99999,
-        };
+        await foodService.ImportFoodAsync([food], ct);
+    }
 
-        dbContext.Foods.Add(entity);
+    private static bool? IsValidOf(BsonDocument doc) =>
+        doc.TryGetValue("isValid", out var isValid) && isValid.IsBoolean ? isValid.AsBoolean : null;
+
+    /// <summary>
+    /// Gives <paramref name="food"/> the defaults a v1 upload gets for the fields it leaves out, and
+    /// answers whether the migration writes it: not when <see cref="FoodImportBlockedAsync"/> finds it held.
+    /// </summary>
+    private static async Task<bool> ImportableAsync(NocturneDbContext dbContext, Food food, CancellationToken ct)
+    {
+        food.Type ??= "food";
+        food.Category ??= "";
+        food.Subcategory ??= "";
+        food.Name ??= "";
+        food.ApplyUnitAndGiDefaults();
+        return !await FoodImportBlockedAsync(dbContext, food.Id, food.Name, food.Type, ct);
     }
 
     /// <summary>
     /// Whether a migrated food is already held: live, or deleted by the user, whose delete a
     /// re-import must not undo (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
+    /// A food is held under its id as the food write path stores it (<see cref="RecordIdKey.Matching{T}"/>),
+    /// or under its name and type.
     /// </summary>
-    internal static Task<bool> FoodImportBlockedAsync(
-        NocturneDbContext dbContext, string? originalId, string name, string type, CancellationToken ct) =>
-        dbContext.Foods.IncludingDeleted()
-            .Where(f => (originalId != null && f.OriginalId == originalId) || (f.Name == name && f.Type == type))
-            .WhereBlocksRecreation()
-            .AnyAsync(ct);
+    internal static async Task<bool> FoodImportBlockedAsync(
+        NocturneDbContext dbContext, string? originalId, string name, string type, CancellationToken ct)
+    {
+        var held = dbContext.Foods.IncludingDeleted().WhereBlocksRecreation();
+        return (originalId is not null && await held.AnyAsync(RecordIdKey.Matching<FoodEntity>(originalId), ct))
+            || await held.AnyAsync(f => f.Name == name && f.Type == type, ct);
+    }
 
     /// <summary>
     /// Nightscout expects the api-secret header to be the SHA1 hash of the
