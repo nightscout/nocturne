@@ -144,6 +144,9 @@ export function createBot(options: BotOptions): Chat {
   return new Chat({
     userName: "nocturne",
     adapters,
+    // A typed command holds its thread for its API calls; the default drops a second command sent
+    // meanwhile, or each but one of a batch Meta delivers again after an outage.
+    concurrency: "concurrent",
     state: createPostgresState({ url: options.postgresUrl }),
   });
 }
