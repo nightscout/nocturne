@@ -1,6 +1,7 @@
 import type { Chat, SlashCommandEvent } from "chat";
 import { GlucoseCard } from "../cards/glucose.js";
 import { createLogger } from "../lib/logger.js";
+import { settled } from "../lib/settled.js";
 import { getApi } from "../lib/request-context.js";
 import { requireLink } from "../lib/require-link.js";
 
@@ -28,6 +29,6 @@ export function registerGlucoseCommands(bot: Chat) {
     });
   };
 
-  bot.onSlashCommand("/bg", handleBg);
-  bot.onSlashCommand("/glucose", handleBg);
+  bot.onSlashCommand("/bg", settled("/bg", handleBg));
+  bot.onSlashCommand("/glucose", settled("/glucose", handleBg));
 }
