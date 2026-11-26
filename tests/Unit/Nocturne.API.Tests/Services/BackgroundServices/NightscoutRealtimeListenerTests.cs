@@ -473,6 +473,112 @@ public class NightscoutRealtimeListenerTests
         }
     }
 
+    /// <summary>
+    /// A site that refused the upgrade is not asked again on the next start: the connect goes straight
+    /// to polling, so it neither dials a WebSocket nor waits for the connect cap to pass.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UpgradeFailedBefore_ConnectsOnPollingWithoutAnUpgrade()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        var site = new EngineIoSite(refuseWebSockets: true);
+        await using var app = await site.StartAsync();
+        var config = new NightscoutConnectorConfiguration { Enabled = true, Url = app.Urls.Single() };
+        var clock = new FakeTimeProvider();
+        var sut = NewRefusedUpgradeService(db, config, clock);
+
+        try
+        {
+            await StartAfterTheUpgradeIsRefusedAsync(sut, site, clock);
+            await InvokeStopRealtimeListenersAsync(sut);
+            var upgradeAttempts = site.WebSocketRequests;
+
+            await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None)
+                .WaitAsync(Eventually.DefaultPatience);
+
+            site.WebSocketRequests.Should().Be(upgradeAttempts);
+            var client = SocketClients(sut).Values.Should().ContainSingle().Subject;
+            client.Connected.Should().BeTrue();
+            client.Options.Transport.Should().Be(TransportProtocol.Polling);
+        }
+        finally
+        {
+            await InvokeStopRealtimeListenersAsync(sut);
+        }
+    }
+
+    /// <summary>
+    /// What failed was the upgrade at one address. A tenant whose realtime address changes, by its
+    /// <c>RealtimeUrl</c> or its <c>Url</c>, may now sit behind a proxy that passes it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartRealtimeListenersAsync_AddressChangedSinceTheUpgradeFailed_TriesTheUpgradeAgain(
+        bool throughRealtimeUrl)
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        var site = new EngineIoSite(refuseWebSockets: true);
+        await using var app = await site.StartAsync();
+        var url = app.Urls.Single();
+        var config = new NightscoutConnectorConfiguration { Enabled = true, Url = url };
+        var clock = new FakeTimeProvider();
+        var sut = NewRefusedUpgradeService(db, config, clock);
+
+        try
+        {
+            await StartAfterTheUpgradeIsRefusedAsync(sut, site, clock);
+            await InvokeStopRealtimeListenersAsync(sut);
+            var upgradeAttempts = site.WebSocketRequests;
+
+            if (throughRealtimeUrl)
+                config.RealtimeUrl = $"{url}/proxied";
+            else
+                config.Url = $"{url}/proxied";
+
+            await StartAfterTheUpgradeIsRefusedAsync(sut, site, clock, upgradeAttempts);
+
+            site.WebSocketRequests.Should().BeGreaterThan(upgradeAttempts);
+            SocketClients(sut).Values.Should().ContainSingle().Which.Connected.Should().BeTrue();
+        }
+        finally
+        {
+            await InvokeStopRealtimeListenersAsync(sut);
+        }
+    }
+
+    /// <summary>
+    /// A proxy that is fixed has to be found without a restart of the service, so the upgrade is tried
+    /// again once the retry period has passed.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UpgradeFailedLongAgo_TriesTheUpgradeAgain()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        var site = new EngineIoSite(refuseWebSockets: true);
+        await using var app = await site.StartAsync();
+        var config = new NightscoutConnectorConfiguration { Enabled = true, Url = app.Urls.Single() };
+        var clock = new FakeTimeProvider();
+        var sut = NewRefusedUpgradeService(db, config, clock);
+
+        try
+        {
+            await StartAfterTheUpgradeIsRefusedAsync(sut, site, clock);
+            await InvokeStopRealtimeListenersAsync(sut);
+            var upgradeAttempts = site.WebSocketRequests;
+
+            clock.Advance(NightscoutConnectorBackgroundService.UpgradeRetryPeriod);
+            await StartAfterTheUpgradeIsRefusedAsync(sut, site, clock, upgradeAttempts);
+
+            site.WebSocketRequests.Should().BeGreaterThan(upgradeAttempts);
+            SocketClients(sut).Values.Should().ContainSingle().Which.Connected.Should().BeTrue();
+        }
+        finally
+        {
+            await InvokeStopRealtimeListenersAsync(sut);
+        }
+    }
+
     [Fact]
     public void AuthorizeMessage_WithNoSecretOrToken_SendsNeither()
     {
@@ -514,6 +620,35 @@ public class NightscoutRealtimeListenerTests
         => (ConcurrentDictionary<Guid, SocketIO>)typeof(NightscoutConnectorBackgroundService)
             .GetField("_socketClients", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(sut)!;
+
+    private static NightscoutConnectorBackgroundService NewRefusedUpgradeService(
+        SqliteTestDatabase db,
+        NightscoutConnectorConfiguration config,
+        FakeTimeProvider clock)
+    {
+        var serviceProvider = BuildServiceProvider(db, config);
+        return new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), new ListLogger<NightscoutConnectorBackgroundService>(), clock)
+        {
+            ConnectTimeout = TimeSpan.FromHours(1),
+        };
+    }
+
+    /// <summary>
+    /// Starts the listeners against a site that refuses the upgrade: waits for a WebSocket request
+    /// past <paramref name="upgradeAttempts"/>, then passes the connect cap that the refused upgrade
+    /// waits out.
+    /// </summary>
+    private static async Task StartAfterTheUpgradeIsRefusedAsync(
+        NightscoutConnectorBackgroundService sut,
+        EngineIoSite site,
+        FakeTimeProvider clock,
+        int upgradeAttempts = 0)
+    {
+        var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+        await Eventually.UntilAsync("the WebSocket handshake to be refused", () => site.WebSocketRequests > upgradeAttempts);
+        clock.Advance(sut.ConnectTimeout);
+        await start.WaitAsync(Eventually.DefaultPatience);
+    }
 
     private static Task InvokeStartRealtimeListenersAsync(
         NightscoutConnectorBackgroundService sut,
