@@ -11,6 +11,17 @@ const TYPED_COMMAND_PLATFORMS = new Set(["whatsapp"]);
 
 const COMMANDS = new Set(DISCORD_COMMAND_MANIFEST.map((c) => `/${c.name}`));
 
+/** Commands people try for help; they get the list at once, however often they ask. */
+const HELP_COMMANDS = new Set(["/help", "/start"]);
+
+/**
+ * Any other message gets the list at most once in this time per thread, so the bot and another
+ * auto-responder cannot answer each other without end.
+ */
+const HELP_INTERVAL_MS = 10 * 60 * 1000;
+
+const helpKey = (threadId: string) => `nocturne:typed-help:${threadId}`;
+
 const COMMAND_NAME = /^\/[A-Za-z][\w-]*$/;
 
 export interface TypedCommand {
@@ -38,18 +49,31 @@ export function typedCommandHelp(unknownCommand: string | null): string {
   const opening = unknownCommand
     ? `I do not know the command ${unknownCommand}. Send one of these commands:`
     : "Send one of these commands:";
-  return [opening, ...lines].join("\n");
+  return [opening, ...lines, "A word in [ ] is optional."].join("\n");
 }
 
-/** Runs a command typed in a direct message on a platform without slash commands; see {@link TYPED_COMMAND_PLATFORMS}. */
+/**
+ * Runs a command typed in a direct message on a platform without slash commands; see
+ * {@link TYPED_COMMAND_PLATFORMS}.
+ *
+ * A direct message handler takes every direct message on every platform: while one is registered,
+ * the SDK sends no direct message to `onNewMention` or `onSubscribedMessage`. A handler for direct
+ * messages on other platforms goes here, not there.
+ */
 export function registerTypedCommands(bot: Chat) {
   bot.onDirectMessage(
     settled("typed command", async (thread, message) => {
-      if (!TYPED_COMMAND_PLATFORMS.has(thread.adapter.name) || message.author.isMe) return;
+      if (!TYPED_COMMAND_PLATFORMS.has(thread.adapter.name)) return;
 
       const typed = parseTypedCommand(message.text);
+      if (typed && HELP_COMMANDS.has(typed.command)) {
+        await thread.post(typedCommandHelp(null));
+        return;
+      }
       if (!typed || !COMMANDS.has(typed.command)) {
-        await thread.post(typedCommandHelp(typed?.command ?? null));
+        if (await bot.getState().setIfNotExists(helpKey(thread.id), true, HELP_INTERVAL_MS)) {
+          await thread.post(typedCommandHelp(typed?.command ?? null));
+        }
         return;
       }
 

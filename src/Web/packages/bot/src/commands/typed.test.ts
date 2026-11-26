@@ -1,8 +1,8 @@
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Chat } from "chat";
+import type { Chat } from "chat";
 import { createMemoryState } from "@chat-adapter/state-memory";
-import { NocturneWhatsAppAdapter } from "../adapters/nocturne-whatsapp.js";
+import { createBot } from "../bot.js";
 import { runWithContext, type BotRequestContext } from "../lib/request-context.js";
 import type { BotApiClient } from "../types.js";
 import { DISCORD_COMMAND_MANIFEST } from "./manifest.js";
@@ -10,8 +10,17 @@ import { registerAllCommands } from "./index.js";
 import { parseTypedCommand, registerTypedCommands, typedCommandHelp } from "./typed.js";
 
 vi.mock("../lib/logger.js", () => ({
-  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() }),
 }));
+
+/** The bot as it runs, on an in-memory state in place of Postgres. */
+vi.mock("@chat-adapter/state-pg", async () => {
+  const { createMemoryState } = await import("@chat-adapter/state-memory");
+  return { createPostgresState: () => createMemoryState() };
+});
+
+/** Resolves `react` from its own install, which this package does not hoist; not under test here. */
+vi.mock("@resend/chat-sdk-adapter", () => ({ createResendAdapter: () => ({ name: "resend" }) }));
 
 describe("parseTypedCommand", () => {
   it.each([
@@ -42,27 +51,30 @@ describe("typedCommandHelp", () => {
 });
 
 describe("registerTypedCommands", () => {
-  function register() {
+  async function register() {
     let onDirectMessage: ((...args: unknown[]) => Promise<void>) | undefined;
     const processSlashCommand = vi.fn();
+    const state = createMemoryState();
+    await state.connect();
     const bot = {
       onDirectMessage: (handler: (...args: unknown[]) => Promise<void>) => {
         onDirectMessage = handler;
       },
       processSlashCommand,
+      getState: () => state,
     } as unknown as Chat;
     registerTypedCommands(bot);
     const post = vi.fn();
-    const dm = (platform: string, text: string, isMe = false) =>
+    const dm = (platform: string, text: string) =>
       onDirectMessage!(
-        { adapter: { name: platform }, channelId: `${platform}:channel`, post },
-        { text, author: { userId: "user-1", isMe }, raw: { text } },
+        { id: `${platform}:thread`, adapter: { name: platform }, channelId: `${platform}:channel`, post },
+        { text, author: { userId: "user-1", isMe: false }, raw: { text } },
       );
     return { dm, post, processSlashCommand };
   }
 
   it("runs a known command as the slash command, with its argument as the text", async () => {
-    const { dm, processSlashCommand } = register();
+    const { dm, processSlashCommand } = await register();
 
     await dm("whatsapp", "/connect myfamily");
 
@@ -79,8 +91,8 @@ describe("registerTypedCommands", () => {
     );
   });
 
-  it.each(["hello", "/help"])("answers %j with the commands", async (text) => {
-    const { dm, post, processSlashCommand } = register();
+  it.each(["hello", "/foo"])("answers %j with the commands", async (text) => {
+    const { dm, post, processSlashCommand } = await register();
 
     await dm("whatsapp", text);
 
@@ -88,10 +100,30 @@ describe("registerTypedCommands", () => {
     expect(post).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("/connect"));
   });
 
+  it("answers other messages with the commands once in ten minutes, so it cannot loop with another auto-responder", async () => {
+    const { dm, post } = await register();
+
+    await dm("whatsapp", "hello");
+    await dm("whatsapp", "Thank you for your message.");
+    await dm("whatsapp", "/foo");
+
+    expect(post).toHaveBeenCalledOnce();
+  });
+
+  it.each(["/help", "/start", "/HELP"])("answers %j with the commands every time", async (text) => {
+    const { dm, post } = await register();
+
+    await dm("whatsapp", text);
+    await dm("whatsapp", text);
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenCalledWith(expect.stringMatching(/^Send one of these commands:/));
+  });
+
   it.each(["discord", "slack", "telegram"])(
     "leaves direct messages on %s, which has slash commands, alone",
     async (platform) => {
-      const { dm, post, processSlashCommand } = register();
+      const { dm, post, processSlashCommand } = await register();
 
       await dm(platform, "/bg");
       await dm(platform, "hello");
@@ -101,12 +133,17 @@ describe("registerTypedCommands", () => {
     },
   );
 
-  it("does not answer its own messages", async () => {
-    const { dm, post } = register();
+  it("knows exactly the commands that have a handler", () => {
+    const registered: string[] = [];
+    const bot = {
+      onSlashCommand: (name: string) => registered.push(name),
+      onAction: vi.fn(),
+      onDirectMessage: vi.fn(),
+    } as unknown as Chat;
 
-    await dm("whatsapp", "Send one of these commands:", true);
+    registerAllCommands(bot, "nocturne.test");
 
-    expect(post).not.toHaveBeenCalled();
+    expect(registered.sort()).toEqual(DISCORD_COMMAND_MANIFEST.map((c) => `/${c.name}`).sort());
   });
 });
 
@@ -132,20 +169,17 @@ describe("a command typed on WhatsApp", () => {
     vi.unstubAllGlobals();
   });
 
-  async function typed(text: string, api: Record<string, unknown>) {
-    const chat = new Chat({
-      userName: "nocturne",
-      logger: "silent",
-      state: createMemoryState(),
-      adapters: {
-        whatsapp: new NocturneWhatsAppAdapter({
+  async function typed(texts: string[], api: Record<string, unknown>, scopedApi: Record<string, unknown> = {}) {
+    const chat = createBot({
+      postgresUrl: "postgres://nobody@localhost:5432/not-connected",
+      platforms: {
+        whatsapp: {
+          enabled: true,
           accessToken: "not-a-token",
           appSecret: APP_SECRET,
           phoneNumberId: PHONE_NUMBER_ID,
           verifyToken: "not-a-token",
-          userName: "nocturne",
-          logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() },
-        }),
+        },
       },
     });
     registerAllCommands(chat, "nocturne.test");
@@ -162,15 +196,13 @@ describe("a command typed on WhatsApp", () => {
                 messaging_product: "whatsapp",
                 metadata: { phone_number_id: PHONE_NUMBER_ID },
                 contacts: [{ wa_id: WA_ID, profile: { name: "Alex" } }],
-                messages: [
-                  {
-                    from: WA_ID,
-                    id: "wamid.in",
-                    timestamp: String(Math.floor(Date.now() / 1000)),
-                    type: "text",
-                    text: { body: text },
-                  },
-                ],
+                messages: texts.map((text, i) => ({
+                  from: WA_ID,
+                  id: `wamid.in.${i}`,
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type: "text",
+                  text: { body: text },
+                })),
               },
             },
           ],
@@ -185,7 +217,7 @@ describe("a command typed on WhatsApp", () => {
     });
     const context: BotRequestContext = {
       unscopedApi: api as unknown as BotApiClient,
-      scopedApiFactory: vi.fn(),
+      scopedApiFactory: vi.fn(() => scopedApi as unknown as BotApiClient),
       resolvedTenantSlug: null,
       resolvedLink: null,
     };
@@ -202,7 +234,7 @@ describe("a command typed on WhatsApp", () => {
   it("links the sender's WhatsApp account with /connect, sending the link to them alone", async () => {
     const create = vi.fn().mockResolvedValue({ token: "pending-token" });
 
-    await typed("/connect sleepy", { pendingLinks: { create } });
+    await typed(["/connect sleepy"], { pendingLinks: { create } });
 
     expect(create).toHaveBeenCalledExactlyOnceWith("whatsapp", WA_ID, null, "sleepy", "connect-slash");
     expect(sent).toHaveLength(1);
@@ -213,7 +245,7 @@ describe("a command typed on WhatsApp", () => {
   it("tells an unlinked sender to connect, naming WhatsApp", async () => {
     const resolve = vi.fn().mockResolvedValue([]);
 
-    await typed("/status", { directory: { resolve } });
+    await typed(["/status"], { directory: { resolve } });
 
     expect(resolve).toHaveBeenCalledExactlyOnceWith("whatsapp", WA_ID);
     expect(textsSent()).toEqual([
@@ -221,8 +253,37 @@ describe("a command typed on WhatsApp", () => {
     ]);
   });
 
+  it("runs a command for a linked sender with the API scoped to their Nocturne account", async () => {
+    const resolve = vi.fn().mockResolvedValue([
+      {
+        id: "link-1",
+        tenantId: "11111111-1111-1111-1111-111111111111",
+        tenantSlug: "sleepy",
+        nocturneUserId: "user-1",
+        label: "home",
+        displayName: "Home",
+        isDefault: true,
+      },
+    ]);
+    const getAll = vi.fn().mockResolvedValue({ data: [] });
+
+    await typed(["/BG"], { directory: { resolve } }, { sensorGlucose: { getAll } });
+
+    expect(getAll).toHaveBeenCalledOnce();
+    expect(textsSent()).toEqual(["No recent glucose readings found for Home."]);
+  });
+
+  it("runs every command of a batch Meta delivers at once", async () => {
+    const resolve = vi.fn().mockResolvedValue([]);
+
+    await typed(["/status", "/alerts"], { directory: { resolve } });
+
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(textsSent()).toHaveLength(2);
+  });
+
   it("answers a message that is not a command with the commands", async () => {
-    await typed("hello", {});
+    await typed(["hello"], {});
 
     expect(textsSent()).toHaveLength(1);
     expect(textsSent()[0]).toContain("Send one of these commands:");

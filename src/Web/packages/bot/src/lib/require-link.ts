@@ -61,7 +61,7 @@ interface LinkResolutionInput {
  * // Zero candidates branch:
  * //   User invokes /bg, never ran /connect.
  * //   Ephemeral: "Your Discord account isn't linked to a Nocturne account
- * //   yet. Run `/connect` to get started." (The platform is the event's.)
+ * //   yet. Run `/connect` to get started." It names the event's platform.
  *
  * @example
  * // Single candidate branch:
