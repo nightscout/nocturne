@@ -12,7 +12,6 @@
         "value": 70,
         "clear_margin": 5
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
         "type": "iob",

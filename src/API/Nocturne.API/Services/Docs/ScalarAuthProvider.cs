@@ -6,6 +6,7 @@ using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Docs;
 
@@ -117,7 +118,7 @@ public sealed class ScalarAuthProvider
         {
             resolved = await ResolveAsync(context.Request.Host, context.RequestAborted);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             // An unreadable opt-in is not an opt-in: a failed lookup must not serve the docs
             // on a tenant that never turned them on.
@@ -139,10 +140,11 @@ public sealed class ScalarAuthProvider
         {
             await PrepareScalarAuthAsync(resolved, context);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException)
         {
             // The reference is worth serving even unauthenticated: fall through to the
-            // static configuration rather than failing the page.
+            // static configuration rather than failing the page. The session is refused with
+            // InvalidOperationException for a demo member a reset has retired since the lookup.
             _logger.LogWarning(ex, "Failed to prepare Scalar authentication context");
         }
 

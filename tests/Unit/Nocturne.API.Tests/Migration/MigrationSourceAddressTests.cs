@@ -146,7 +146,7 @@ public class MigrationSourceAddressTests
         });
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        result.SiteName.Should().Be("example-nightscout.invalid/nightscout");
+        result.SiteName.Should().Be("example-nightscout.invalid/…");
         source.Requests.Select(u => u.AbsoluteUri).Should().Equal(
             "https://example-nightscout.invalid/nightscout/api/v1/status?token=synthetic-token");
         source.CarriedSecret.Should().Equal(false);
@@ -183,7 +183,7 @@ public class MigrationSourceAddressTests
         });
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        result.SiteName.Should().Be("example-nightscout.invalid/nightscout");
+        result.SiteName.Should().Be("example-nightscout.invalid/…");
         source.Requests.Select(u => u.AbsoluteUri).Should().Equal(
             "https://example-nightscout.invalid/nightscout/api/v1/status");
     }

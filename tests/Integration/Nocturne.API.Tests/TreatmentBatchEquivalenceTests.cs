@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -147,8 +148,7 @@ public partial class TreatmentBatchEquivalenceTests : ApiIntegrationTestBase
     private async Task<Dictionary<string, List<string>>> DecomposeAsync(
         int seed, IReadOnlyList<string> sequence, Func<ITreatmentService, IReadOnlyList<Treatment>, Task> decompose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
 
         var treatments = sequence.Select(json => JsonSerializer.Deserialize<Treatment>(json)!).ToList();

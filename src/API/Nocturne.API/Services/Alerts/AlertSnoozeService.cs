@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -27,6 +28,7 @@ internal sealed class AlertSnoozeService(
     ICanonicalGlucoseService canonicalGlucose,
     ISignalRBroadcastService broadcastService,
     IEngineAlarmRelay alarmRelay,
+    IExcursionResolutionHandler resolutionHandler,
     TimeProvider timeProvider,
     ILogger<AlertSnoozeService> logger)
     : IAlertSnoozeService
@@ -105,6 +107,7 @@ internal sealed class AlertSnoozeService(
             || excursion.HysteresisStartedAt is not null
             || excursion.AcknowledgedAt is not null
             || !ruleEntity.IsEnabled
+            || !AlertRuleMapper.IsReadable(ruleEntity)
             || AlertSnooze.IsSnoozed(instance.SnoozedUntil, now))
         {
             return false;
@@ -126,11 +129,7 @@ internal sealed class AlertSnoozeService(
             LastReadingAt = latest?.Timestamp,
         };
 
-        var rule = new AlertRuleSnapshot(
-            ruleEntity.Id, tenantId, ruleEntity.Name, ruleEntity.ConditionType,
-            ruleEntity.ConditionParams, ruleEntity.Severity, ruleEntity.ClientConfiguration,
-            ruleEntity.SortOrder, ruleEntity.AutoResolveEnabled, ruleEntity.AutoResolveParams,
-            ruleEntity.AllowThroughDnd, ruleEntity.ScopeClass);
+        var rule = AlertRuleMapper.ToSnapshot(ruleEntity);
 
         // The enricher is only consulted for the active DND scopes. If it fails the alert is
         // delivered: missing a still-standing alert is the worse error.
@@ -154,14 +153,15 @@ internal sealed class AlertSnoozeService(
             return false;
         }
 
-        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
-        var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
-
+        var inputs = await RuleSendInputs.ReadAsync(rule.Id, tenantId, repository, ruleRepository, ct);
         var payload = AlertPayloads.Build(
-            rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
+            rule, baseContext, tenantId, excursion.Id, instance.Id, inputs.Tenant, inputs.ActiveExcursionCount, now);
 
-        await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
+        var owed = await repository.OweOpeningAsync(excursion.Id, now, ct);
+        await deliveryService.RenotifyAsync(instance.Id, inputs.Channels, payload, ct);
+        await resolutionHandler.CloseAgainIfEndedAsync(excursion.Id, tenantId, ct);
+        if (owed)
+            await repository.SettleTransitionAsync(excursion.Id, ExcursionTransitionType.ExcursionOpened, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",

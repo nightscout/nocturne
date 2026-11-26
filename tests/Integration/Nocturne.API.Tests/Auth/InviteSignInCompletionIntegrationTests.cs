@@ -9,6 +9,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -44,8 +45,8 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     {
         await using (var conn = await OpenPostgresAsync())
         {
+            await conn.PinTenantAsync(Fixture.TenantId);
             await conn.ExecuteAsync("""
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 DELETE FROM tenant_members WHERE tenant_id = @tenant AND subject_id = ANY(@signedIn);
                 DELETE FROM tenant_members WHERE tenant_id = ANY(@created);
                 DELETE FROM tenants WHERE id = ANY(@created);
@@ -54,7 +55,7 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM refresh_tokens WHERE subject_id = ANY(@signedIn);
                 DELETE FROM subjects WHERE id = ANY(@signedIn);
                 """,
-                ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+                ("tenant", Fixture.TenantId),
                 ("created", _createdTenants.ToArray()), ("links", _creationLinks.ToArray()),
                 ("signedIn", _signedIn.ToArray()));
         }
@@ -166,12 +167,12 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     {
         var token = $"invite-{Guid.NewGuid():N}";
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, Fixture.TenantId, RoleSeeds.Viewer);
+        await conn.PinTenantAsync(Fixture.TenantId);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES (@inviteId, @tenantId, @ownerId, @hash, @roleIds::jsonb, false, now() + interval '1 day', 0, now());
             """,
-            ("tenantText", Fixture.TenantId.ToString()), ("inviteId", Guid.CreateVersion7()), ("tenantId", Fixture.TenantId),
+            ("inviteId", Guid.CreateVersion7()), ("tenantId", Fixture.TenantId),
             ("ownerId", Fixture.OwnerSubjectId), ("hash", HashUtils.Sha256Hex(token)),
             ("roleIds", $"[\"{viewerRoleId}\"]"));
         return token;

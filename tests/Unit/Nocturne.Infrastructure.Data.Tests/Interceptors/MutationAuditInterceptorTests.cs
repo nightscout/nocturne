@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Tests.Shared.Infrastructure;
 
@@ -629,6 +630,42 @@ public class MutationAuditInterceptorTests : IDisposable
         var secretChange = changes!["SecretField"];
         secretChange.GetProperty("old").GetString().Should().Be("[redacted]");
         secretChange.GetProperty("new").GetString().Should().Be("[redacted]");
+    }
+
+    [Fact]
+    public async Task A_stored_value_its_converter_could_not_read_is_recorded_as_unreadable()
+    {
+        var ruleId = Guid.CreateVersion7();
+        using (var context = CreateContext())
+        {
+            context.AlertRules.Add(new AlertRuleEntity
+            {
+                Id = ruleId,
+                TenantId = _tenantId,
+                Name = "Legacy",
+                ConditionType = AlertConditionType.Threshold,
+                ConditionParams = """{"direction":"below","value":70}""",
+                Severity = AlertRuleSeverity.Warning,
+            });
+            await context.SaveChangesAsync();
+            await context.Database.ExecuteSqlRawAsync("UPDATE alert_rules SET severity = 'normal'");
+        }
+
+        using var editing = CreateContext();
+        var rule = await editing.AlertRules.SingleAsync(r => r.Id == ruleId);
+        rule.Severity = AlertRuleSeverity.Critical;
+        await InvokeSavingChanges(editing);
+        var update = editing.ChangeTracker.Entries<MutationAuditLogEntity>().Select(e => e.Entity).Single();
+
+        using var deleting = CreateContext();
+        deleting.AlertRules.Remove(await deleting.AlertRules.SingleAsync(r => r.Id == ruleId));
+        await InvokeSavingChanges(deleting);
+        var delete = deleting.ChangeTracker.Entries<MutationAuditLogEntity>().Select(e => e.Entity).Single();
+
+        JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(update.ChangesJson!)!["Severity"]
+            .GetProperty("old").GetString().Should().Be("[unreadable]");
+        JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(delete.ChangesJson!)!["Severity"]
+            .GetString().Should().Be("[unreadable]");
     }
 
     [Theory]

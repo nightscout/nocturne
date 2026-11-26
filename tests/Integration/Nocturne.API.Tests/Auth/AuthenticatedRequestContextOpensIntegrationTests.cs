@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -154,11 +155,11 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
     private async Task MarkEveryCredentialJustUsedAsync()
     {
         await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenant, false);
             UPDATE tenant_members SET last_used_at = now();
             UPDATE oauth_grants SET last_used_at = now();
-            """, ("tenant", Fixture.TenantId.ToString()));
+            """);
     }
 
     private static Action<HttpRequestMessage> Cookie(string session) =>
@@ -190,8 +191,7 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
     private async Task ExecuteAsync(string sql, Guid subjectId)
     {
         await using var conn = await OpenPostgresAsync();
-        (await conn.ExecuteAsync(
-            "SELECT set_config('app.current_tenant_id', @tenant, false);" + sql,
-            ("tenant", Fixture.TenantId.ToString()), ("subject", subjectId))).Should().BeGreaterThan(0);
+        await conn.PinTenantAsync(Fixture.TenantId);
+        (await conn.ExecuteAsync(sql, ("subject", subjectId))).Should().BeGreaterThan(0);
     }
 }

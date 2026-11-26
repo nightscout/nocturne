@@ -8,7 +8,13 @@ vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }));
 
-async function connect(platform: string, user: Record<string, unknown>, raw: unknown = {}, text = "sleepy") {
+async function connect(
+  platform: string,
+  user: Record<string, unknown>,
+  raw: unknown = {},
+  text = "sleepy",
+  postEphemeral = vi.fn().mockResolvedValue({ id: "ephemeral-1" }),
+) {
   const commands = new Map<string, (event: SlashCommandEvent) => Promise<void>>();
   const bot = {
     onSlashCommand: (name: string, fn: (event: SlashCommandEvent) => Promise<void>) => {
@@ -26,7 +32,7 @@ async function connect(platform: string, user: Record<string, unknown>, raw: unk
   };
   const event = {
     adapter: { name: platform },
-    channel: { post: vi.fn(), postEphemeral: vi.fn().mockResolvedValue(null) },
+    channel: { post: vi.fn(), postEphemeral },
     text,
     user: { userId: "4242", ...user },
     raw,
@@ -80,5 +86,27 @@ describe("/connect", () => {
     const { create, event } = await connect("discord", { userName: "sam_t" }, {}, "a".repeat(64));
     expect(create).not.toHaveBeenCalled();
     expect(event.channel.postEphemeral).toHaveBeenCalledOnce();
+  });
+});
+
+describe("/connect delivery of the link", () => {
+  it("sends the link to the user alone", async () => {
+    const { event } = await connect("discord", { userName: "sam_t" });
+
+    expect(event.channel.postEphemeral).toHaveBeenCalledWith(
+      event.user,
+      expect.stringContaining("/auth/bot/authorize?state=pending-token"),
+      { fallbackToDM: true },
+    );
+    expect(event.channel.post).not.toHaveBeenCalled();
+  });
+
+  it("never posts the link where others can read it when the private message is refused", async () => {
+    const refused = vi.fn().mockRejectedValue(new Error("Forbidden: bot can't initiate conversation with a user"));
+    const { event } = await connect("telegram", { userName: "sam_tester" }, {}, "sleepy", refused);
+
+    expect(event.channel.post).toHaveBeenCalledOnce();
+    expect(event.channel.post).toHaveBeenCalledWith(expect.not.stringContaining("authorize"));
+    expect(event.channel.post).toHaveBeenCalledWith(expect.stringContaining("direct message"));
   });
 });

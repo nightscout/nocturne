@@ -19,10 +19,6 @@ public sealed record ReplayScenarioFile
 
     public required string Description { get; init; }
 
-    /// <summary>
-    /// The .NET runner reads no <c>hysteresis_minutes</c> from these rules, as the backend stores
-    /// none; every scenario here holds 0.
-    /// </summary>
     public required List<ScenarioRule> Rules { get; init; }
 
     public required List<ReplayScenarioTick> Ticks { get; init; }

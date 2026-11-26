@@ -11,7 +11,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 10,
       "auto_resolve_enabled": false,
       "on_unknown": "met"
     }

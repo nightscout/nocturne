@@ -16,8 +16,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 /// <summary>
 /// A soft delete undoes the supersession it gave spans the deleting member's 24 hour clamp hides, as the
 /// foreign key's <c>SetNull</c> reached them, and ends them at successors the clamp hides. A restore ends
-/// hidden spans at the restored span again. An upsert of a hidden span judges its end against superseders
-/// and successors the clamp hides.
+/// hidden spans at the restored span again. An upsert judges a span's end against superseders and
+/// successors the clamp hides.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -180,6 +180,23 @@ public class StateSpanSupersessionClampTests : IAsyncLifetime
         var row = await ReadAsync(older);
         row.EndTimestamp.Should().BeCloseTo(now.AddDays(-2.5), TimeSpan.FromMilliseconds(1));
         row.SupersededById.Should().Be(supersessor);
+    }
+
+    /// <summary>A backfill of an open span from five days ago; the span after it ended over two days ago.</summary>
+    [Fact]
+    public async Task ClampedWriterUpsert_OfAnOldOpenSpan_EndsItAtASuccessorTheClampHides()
+    {
+        var now = DateTime.UtcNow;
+        var successor = Guid.NewGuid();
+        await SeedAsync(Legacy(successor, "tt-successor", now.AddDays(-3), now.AddDays(-2.5), null));
+
+        await using (var scope = _provider.CreateAsyncScope())
+            await ClampedRepository(scope).BulkUpsertAsync([Sent("tt-backfill", now.AddDays(-5), null)]);
+
+        await using var read = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);
+        var row = await read.StateSpans.AsNoTracking().SingleAsync(s => s.LegacyId == "tt-backfill");
+        row.EndTimestamp.Should().BeCloseTo(now.AddDays(-3), TimeSpan.FromMilliseconds(1));
+        row.SupersededById.Should().Be(successor);
     }
 
     private static StateSpanEntity Legacy(Guid id, string legacyId, DateTime start, DateTime? end, Guid? supersededBy) => new()

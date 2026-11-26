@@ -6,6 +6,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -180,18 +181,12 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Handed Off Member");
         var code = $"login-{Guid.NewGuid():N}";
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
-                VALUES (@id, @tenantId, @subjectId, @hash, 'Login', now() + interval '5 minutes', now());
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", memberId);
-            cmd.Parameters.AddWithValue("hash", HashUtils.Sha256Hex(code));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
+            VALUES (@id, @tenantId, @subjectId, @hash, 'Login', now() + interval '5 minutes', now());
+            """,
+            ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", memberId), ("hash", HashUtils.Sha256Hex(code)));
 
         await SetActiveAsync(conn, memberId, false);
         try

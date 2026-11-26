@@ -70,7 +70,8 @@ public class SleepSessionRepository : ISleepSessionRepository
     {
         await using var lease = await OpenAsync(cancellationToken);
         return await lease.Context.SleepSessions.AsNoTracking()
-            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+            .OverlapsWindow(e => e.StartTime, e => e.EndTime, from, to, OverlapEdges.StartAtToExcluded)
+            .AnyAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -78,7 +79,8 @@ public class SleepSessionRepository : ISleepSessionRepository
     {
         await using var lease = await OpenAsync(cancellationToken);
         return await lease.Context.SleepStages.AsNoTracking()
-            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+            .OverlapsWindow(e => e.StartTime, e => e.EndTime, from, to, OverlapEdges.BothExcluded)
+            .AnyAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -412,17 +414,7 @@ public class SleepSessionRepository : ISleepSessionRepository
     {
         var query = ctx.SleepSessions.AsNoTracking();
 
-        if (from.HasValue)
-        {
-            var fromValue = from.Value;
-            query = query.Where(e => e.EndTime >= fromValue);
-        }
-
-        if (to.HasValue)
-        {
-            var toValue = to.Value;
-            query = query.Where(e => e.StartTime <= toValue);
-        }
+        query = query.OverlapsWindow(e => e.StartTime, e => e.EndTime, from, to);
 
         if (type.HasValue)
         {

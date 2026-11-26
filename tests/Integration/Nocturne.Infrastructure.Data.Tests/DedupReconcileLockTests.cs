@@ -83,10 +83,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
             && c.Parameters.Cast<DbParameter>().Any(p => Equals(p.Value, "carbintake")));
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, o => o.EnableRetryOnFailure())
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.Retrying, interceptors: interceptors);
 
     private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());
 
@@ -128,10 +125,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var cursor = new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.CreateVersion7());
 
         // A context without the retrying strategy, which refuses a transaction held open by hand.
-        await using var reconcile = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        await using var reconcile = TestContexts.Context(database.AppConnectionString, tenant);
         await using var transaction = await reconcile.Database.BeginTransactionAsync();
         await DuplicateReconciler.SetCursorAsync(reconcile, cursor, default);
 

@@ -192,6 +192,18 @@ impl TrackerState {
         })
     }
 
+    /// The last decision's instant and how far ahead of `now` it is, when
+    /// beyond the tolerance (engine-semantics.md §5.4): a held evaluation
+    /// reads it to tell whether the hold is continuous.
+    pub(crate) fn updated_ahead(&self, now: DateTime<Utc>) -> Option<(ClockAnchor, TimeDelta)> {
+        Elapsed {
+            anchor: self.updated_at,
+            source: Some(ClockAnchor::UpdatedAt),
+            measure: Measure::AtLeast(TimeDelta::zero()),
+        }
+        .ahead(now)
+    }
+
     /// A stored hold this engine cannot have written (engine-semantics.md
     /// §6.4): while held, `updated_at` stays at or before `held_since` until
     /// the evaluation that reaches the bound sets it past the bound, and from
@@ -275,12 +287,6 @@ pub struct HeldOutcome {
     pub held_too_long: bool,
 }
 
-/// Rule inputs consumed by the tracker.
-#[derive(Debug, Clone, Copy)]
-pub struct TrackerRuleConfig {
-    pub hysteresis_minutes: i32,
-}
-
 /// In-memory tracker for a set of rules. Each rule numbers its own
 /// excursions ([`TrackerState::last_excursion`]).
 #[derive(Debug, Default)]
@@ -347,7 +353,6 @@ impl ExcursionTracker {
     pub fn process_evaluation(
         &mut self,
         rule_id: Uuid,
-        config: TrackerRuleConfig,
         condition_met: bool,
         auto_resolve_met: bool,
         now: DateTime<Utc>,
@@ -357,7 +362,7 @@ impl ExcursionTracker {
             .entry(rule_id)
             .or_insert_with(|| TrackerState::fresh(now));
         state.held_since = None;
-        advance(state, config, condition_met, auto_resolve_met, now)
+        advance(state, condition_met, auto_resolve_met, now)
     }
 
     /// An evaluation the rule holds (§6.4). The first of a hold records its
@@ -366,13 +371,10 @@ impl ExcursionTracker {
     /// reported, once per hold, and from it an open excursion reads its root as
     /// not met, so it goes through hysteresis and closes; a rule with none is
     /// left as it is. The bound's start beyond the tolerance ahead of `now`
-    /// is not reached on that evaluation (§5.4).
-    pub fn process_held(
-        &mut self,
-        rule_id: Uuid,
-        config: TrackerRuleConfig,
-        now: DateTime<Utc>,
-    ) -> HeldOutcome {
+    /// is not reached on that evaluation (§5.4). A hold that starts while
+    /// `updated_at` is ahead of `now` moves it back to `now`: left ahead, it
+    /// would read as written after the hold began, and restart the hold.
+    pub fn process_held(&mut self, rule_id: Uuid, now: DateTime<Utc>) -> HeldOutcome {
         let state = self
             .states
             .entry(rule_id)
@@ -380,19 +382,22 @@ impl ExcursionTracker {
         if state.hold_is_stale() {
             state.held_since = None;
         }
-        state.held_since.get_or_insert(now);
+        if state.held_since.is_none() {
+            state.held_since = Some(now);
+            state.updated_at = state.updated_at.min(now);
+        }
         let reached = state
             .hold_bound()
             .is_some_and(|bound| bound.truth(now).is_true());
         if !reached {
             return HeldOutcome {
-                transition: self.close_elapsed_hysteresis(rule_id, config, now),
+                transition: self.close_elapsed_hysteresis(rule_id, now),
                 held_too_long: false,
             };
         }
         let held_too_long = !state.hold_bound_reported();
         let transition = if state.active_excursion.is_some() {
-            advance(state, config, false, false, now)
+            advance(state, false, false, now)
         } else {
             if held_too_long {
                 state.updated_at = now;
@@ -409,18 +414,11 @@ impl ExcursionTracker {
     /// elapsed (§6.1), without an evaluation: a host's periodic check for
     /// windows no evaluation arrives to close. Any other state is a `None`
     /// transition and unchanged.
-    pub fn close_elapsed_hysteresis(
-        &mut self,
-        rule_id: Uuid,
-        config: TrackerRuleConfig,
-        now: DateTime<Utc>,
-    ) -> Transition {
+    pub fn close_elapsed_hysteresis(&mut self, rule_id: Uuid, now: DateTime<Utc>) -> Transition {
         let Some(state) = self.states.get_mut(&rule_id) else {
             return Transition::none();
         };
-        if state.state != TrackerStateKind::Hysteresis
-            || !hysteresis_elapsed(state, config.hysteresis_minutes, now)
-        {
+        if state.state != TrackerStateKind::Hysteresis || !hysteresis_elapsed(state, now) {
             return Transition::none();
         }
         state.touch(now);
@@ -460,7 +458,6 @@ impl ExcursionTracker {
 /// whatever the transition.
 fn advance(
     state: &mut TrackerState,
-    config: TrackerRuleConfig,
     condition_met: bool,
     auto_resolve_met: bool,
     now: DateTime<Utc>,
@@ -468,7 +465,7 @@ fn advance(
     let transition = match state.state {
         TrackerStateKind::Idle => handle_idle(state, condition_met, auto_resolve_met),
         TrackerStateKind::Active => handle_active(state, condition_met, now),
-        TrackerStateKind::Hysteresis => handle_hysteresis(state, config, condition_met, now),
+        TrackerStateKind::Hysteresis => handle_hysteresis(state, condition_met, now),
     };
     state.updated_at = now;
     transition
@@ -522,7 +519,6 @@ fn handle_active(state: &mut TrackerState, condition_met: bool, now: DateTime<Ut
 
 fn handle_hysteresis(
     state: &mut TrackerState,
-    config: TrackerRuleConfig,
     condition_met: bool,
     now: DateTime<Utc>,
 ) -> Transition {
@@ -536,7 +532,7 @@ fn handle_hysteresis(
         };
     }
 
-    if hysteresis_elapsed(state, config.hysteresis_minutes, now) {
+    if hysteresis_elapsed(state, now) {
         return close_from_hysteresis(state);
     }
     Transition::none()
@@ -568,21 +564,20 @@ fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
     }
 }
 
-/// `now - hysteresis_started_at >= hysteresis_minutes` (§6.1). Every
-/// hysteresis state has a start: entering hysteresis sets one and
+/// `now >= hysteresis_started_at` (§6.1). Every hysteresis state has a
+/// start: entering hysteresis sets one and
 /// [`ExcursionTracker::restore_state`] adopts one. A start beyond the
 /// tolerance ahead of `now` does not close the window (§5.4).
-fn hysteresis_elapsed(state: &TrackerState, hysteresis_minutes: i32, now: DateTime<Utc>) -> bool {
-    hysteresis_window(state, hysteresis_minutes).is_some_and(|w| w.truth(now).is_true())
+fn hysteresis_elapsed(state: &TrackerState, now: DateTime<Utc>) -> bool {
+    hysteresis_window(state).is_some_and(|w| w.truth(now).is_true())
 }
 
-/// The window that `state` started, as exact whole minutes since the start,
-/// so a non-positive window has always elapsed; `None` without a start. One
-/// whose end is past the representable calendar never elapses.
-pub(crate) fn hysteresis_window(state: &TrackerState, hysteresis_minutes: i32) -> Option<Elapsed> {
+/// The window that `state` started, which has elapsed once its start is not
+/// beyond the tolerance ahead (§5.4); `None` without a start.
+pub(crate) fn hysteresis_window(state: &TrackerState) -> Option<Elapsed> {
     state.hysteresis_started_at.map(|started| Elapsed {
         anchor: started,
         source: Some(ClockAnchor::HysteresisStartedAt),
-        measure: Measure::AtLeast(TimeDelta::minutes(i64::from(hysteresis_minutes))),
+        measure: Measure::AtLeast(TimeDelta::zero()),
     })
 }

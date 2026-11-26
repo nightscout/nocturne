@@ -86,7 +86,8 @@ internal sealed class HeldRuleNotice(
                      || !held.TryGetValue(n.AlertRuleId, out var h)
                      || h.HeldSince != n.HeldSince))
         {
-            await IsolatedAsync(notice.AlertRuleId, "resolving", () => ResolveNoticeAsync(notice.ExcursionId, ct));
+            await IsolatedAsync(notice.AlertRuleId, "resolving", () => RuleNoticeDispatch.ResolveAsync(
+                notice.ExcursionId, ExcursionCloseReason.Manual, tenantId, repository, resolutionHandler, timeProvider, ct));
         }
 
         foreach (var hold in held.Values.Where(h => h.UpdatedAt >= h.HeldSince + bound && !h.WrittenOver(bound)))
@@ -145,24 +146,10 @@ internal sealed class HeldRuleNotice(
             (tenant, activeExcursionCount) => AlertPayloads.Held(
                 rule.Name, rule.ConditionType, rule.Severity, closedAlert, HeldFacts.Parse(hold.HeldFacts),
                 tenantId, notice.ExcursionId, notice.InstanceId, tenant, activeExcursionCount, now),
-            tenantId, repository, ruleRepository, deliveryService, contextEnricher, logger, ct);
+            tenantId, repository, ruleRepository, deliveryService, contextEnricher, resolutionHandler, logger, ct);
 
         logger.LogInformation(
             "Notice {InstanceId} sent that alert rule {AlertRuleId} has waited for usable data since {HeldSince}",
             notice.InstanceId, rule.Id, hold.HeldSince);
-
-        // A retirement or the hold's end during the dispatch resolved the notice before a provider
-        // made what the resolution clears (an in-app notification), so resolve it again.
-        if (!(await repository.GetStandingHeldNoticesAsync(rule.Id, ct)).Any(n => n.ExcursionId == notice.ExcursionId))
-            await ResolveNoticeAsync(notice.ExcursionId, ct);
-    }
-
-    private async Task ResolveNoticeAsync(Guid excursionId, CancellationToken ct)
-    {
-        await repository.EndNoticeAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct);
-        await resolutionHandler.HandleClosedAsync(
-            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual),
-            tenantAccessor.TenantId,
-            ct);
     }
 }

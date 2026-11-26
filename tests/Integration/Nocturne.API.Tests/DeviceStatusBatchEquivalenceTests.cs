@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -123,8 +124,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
     private async Task<Dictionary<string, List<string>>> DecomposeAsync(
         IReadOnlyList<string> sequence, Func<IDeviceStatusService, IReadOnlyList<DeviceStatus>, Task> decompose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
 
         var statuses = sequence.Select(json => JsonSerializer.Deserialize<DeviceStatus>(json)!).ToList();

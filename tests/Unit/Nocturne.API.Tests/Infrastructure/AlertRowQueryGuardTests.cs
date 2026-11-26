@@ -34,6 +34,7 @@ public class AlertRowQueryGuardTests
     [
         nameof(AlertExcursionQueries.OfCondition),
         nameof(AlertExcursionQueries.StandingNotices),
+        nameof(AlertExcursionQueries.ResolvedNotices),
         nameof(AlertExcursionQueries.OfStandingNotices),
     ];
 

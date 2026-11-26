@@ -23,8 +23,8 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
 
@@ -563,7 +563,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
-            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
         services.AddSingleton(AccountLinkRoutes.Off);
         var tenants = new Mock<ITenantService>();
@@ -581,8 +581,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         if (db.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
             await db.Database.OpenConnectionAsync();
         await db.Database.ExecuteSqlRawAsync("SET ROLE nocturne_app");
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.current_tenant_id', {tenant.ToString()}, false)");
-        db.TenantId = tenant;
+        await db.PinTenantAsync(tenant);
     }
 
     private static HealthRecordTransactions Transactions(NocturneDbContext db) =>

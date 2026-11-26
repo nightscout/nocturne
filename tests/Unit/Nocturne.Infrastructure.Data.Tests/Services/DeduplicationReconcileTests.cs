@@ -164,7 +164,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -186,7 +186,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(20).ToMills(), source);
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0);
     }
@@ -216,7 +216,7 @@ public class DeduplicationReconcileTests : IDisposable
             await DeduplicationModules.Linker(_context.AsFactory()).DeduplicateBatchAsync(RecordType.StateSpan,
                 [new DeduplicationInput(span.Id, span.StartTimestamp.ToMills(), span.Source!, MatchCriteriaMapper.From(span))]);
         }
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.StateSpan, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.StateSpan, CancellationToken.None);
 
         merged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "statespan").ToListAsync();
@@ -234,7 +234,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, twin, t.ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1);
     }
@@ -251,7 +251,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(20).ToMills(), "unknown");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -268,7 +268,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -293,7 +293,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.SensorGlucose, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.SensorGlucose, CancellationToken.None);
 
         merged.Should().Be(expectedMerges);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters()
@@ -312,7 +312,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddMinutes(15).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -330,7 +330,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, live, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -491,7 +491,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, c, t.AddSeconds(40).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(2);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -563,7 +563,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(64).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -585,7 +585,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, libre, t.AddSeconds(128).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -603,7 +603,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(64).ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -639,7 +639,7 @@ public class DeduplicationReconcileTests : IDisposable
         var afterDeferral = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
         afterDeferral.Select(l => l.CanonicalId).Distinct().Should().HaveCount(2);
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1, "the full job sees the whole picture and the pair is genuinely one event");
         var afterMerge = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -674,7 +674,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         deferred.Should().Be(0);
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0, "the spanning group pairs with both of the others, so nothing is unambiguous");
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -698,7 +698,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(3).ToMills(), "dexcom-connector");
         await _context.SaveChangesAsync();
 
-        await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
         links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3,
@@ -720,7 +720,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, partner, WideBase.AddMinutes(2).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(2, "the tight pair collapses, then the wide pass folds the partner in");
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -744,7 +744,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, other, WideBase.AddSeconds(50).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(1);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -775,7 +775,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(30).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        var merged = await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         merged.Should().Be(0);
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
@@ -793,7 +793,7 @@ public class DeduplicationReconcileTests : IDisposable
         AddPrimaryLink(RecordType.CarbIntake, glooko, WideBase.AddMilliseconds(offsetMillis).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
-        await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+        await _service.MergeAllAsync(RecordType.CarbIntake, CancellationToken.None);
 
         var links = await _context.LinkedRecords.AsNoTracking().IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
         links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(expectedGroups);

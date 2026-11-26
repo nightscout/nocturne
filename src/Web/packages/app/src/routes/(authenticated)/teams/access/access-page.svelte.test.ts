@@ -5,6 +5,7 @@ import { page as pageState } from "$app/state";
 import { remoteCommand } from "#lib/test-stubs/remote-resource.js";
 import { formatMediumDate } from "#lib/utils/formatting.js";
 import type { TeamAccessLinkDetails, TeamAccessSiteOption } from "@nocturne/api-client";
+import { ApproveTeamAccessRequestSchema } from "@nocturne/api-client/schemas";
 
 const mocks = vi.hoisted(() => ({
   getAccessLinkInfo: vi.fn(),
@@ -141,12 +142,49 @@ describe("team access page", () => {
     await vi.waitFor(() =>
       expect(mocks.approveAccessLink).toHaveBeenCalledWith({
         token: "abc",
-        request: { tenantId: samSite, roleIds: [viewerRole], limitTo24Hours: false, accessEndsAt: undefined },
+        request: {
+          tenantId: samSite,
+          roleIds: [viewerRole],
+          limitTo24Hours: false,
+          accessEndsAt: undefined,
+          staffRule: "team_decides",
+        },
       }),
     );
     await vi.waitFor(() =>
       expect(mocks.goToTenant).toHaveBeenCalledWith("sam", "nocturne.test", "settings/members"),
     );
+  });
+
+  it("offers the three staff rules with the team deciding chosen", async () => {
+    render(AccessPage);
+
+    await expect
+      .element(page.getByRole("radiogroup", { name: "Who decides which staff of the team can see this site" }))
+      .toBeVisible();
+    await expect.element(page.getByRole("radio", { name: /The team decides, and I hear about new staff/ })).toBeChecked();
+    await expect.element(page.getByRole("radio", { name: /I approve each staff member/ })).not.toBeChecked();
+    await expect.element(page.getByRole("radio", { name: /I trust the whole team/ })).not.toBeChecked();
+  });
+
+  it("sends the staff rule the person chose, in a body the generated schema accepts", async () => {
+    const tenantId = "0195a1c2-7d3e-7f00-8a00-000000000001";
+    const roleId = "0195a1c2-7d3e-7f00-8a00-000000000002";
+    live.info = details([
+      site({ tenantId, roles: [{ id: roleId, name: "Viewer", slug: "viewer", permissions: ["glucose.read"] }], defaultRoleId: roleId }),
+    ]);
+    mocks.approveAccessLink.mockResolvedValue({ accessId: "a", tenantId });
+    render(AccessPage);
+
+    await page.getByRole("radio", { name: /I trust the whole team/ }).click();
+    await approveButton().click();
+
+    await vi.waitFor(() => expect(mocks.approveAccessLink).toHaveBeenCalled());
+    const request = mocks.approveAccessLink.mock.calls[0]![0].request;
+    expect(request.staffRule).toBe("team_trusted");
+    const parsed = ApproveTeamAccessRequestSchema.safeParse(request);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.staffRule).toBe("team_trusted");
   });
 
   it("sends the roles the person ticked, and no role they cleared", async () => {

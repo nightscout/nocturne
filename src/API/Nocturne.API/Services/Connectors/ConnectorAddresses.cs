@@ -10,10 +10,10 @@ namespace Nocturne.API.Services.Connectors;
 /// <see cref="DelegatedConfigurationGuard.ChoosesDestination"/> picks, which its schema marks
 /// <see cref="SchemaMarker"/>. The path or query of an address can be the credential
 /// (<see cref="NightscoutAddress"/>), so a client is given only its
-/// <see cref="NightscoutAddress.Masked"/> form and has no stored value to send back. A save keeps
+/// <see cref="NightscoutAddress.Shown"/> form and has no stored value to send back. A save keeps
 /// the stored address unless it names a new one: an address it leaves out, or a required one it
 /// sends blank, is the stored one. A blank optional address clears it. The sent value is never
-/// compared with the masked form, as a changed path can mask the same.
+/// compared with the shown form, as every path on one host shows the same.
 /// </summary>
 public sealed class ConnectorAddresses
 {
@@ -44,8 +44,8 @@ public sealed class ConnectorAddresses
             .ToList());
     }
 
-    /// <summary><paramref name="configuration"/> with each address it holds in its masked form.</summary>
-    public JsonDocument Masked(JsonDocument configuration)
+    /// <summary><paramref name="configuration"/> with each address it holds in its shown form.</summary>
+    public JsonDocument Shown(JsonDocument configuration)
     {
         if (_addresses.Count == 0 || JsonNode.Parse(configuration.RootElement.GetRawText()) is not JsonObject document)
             return configuration;
@@ -54,7 +54,7 @@ public sealed class ConnectorAddresses
         {
             if (document[key] is JsonValue value && value.TryGetValue<string>(out var address)
                 && !string.IsNullOrWhiteSpace(address))
-                document[key] = NightscoutAddress.Masked(address);
+                document[key] = NightscoutAddress.Shown(address);
         }
 
         return JsonDocument.Parse(document.ToJsonString());

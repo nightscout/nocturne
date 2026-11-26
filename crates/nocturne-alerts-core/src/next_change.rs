@@ -72,7 +72,7 @@ pub(crate) fn next_change_at(
     if let Some(tracker) = state.tracker.state(rule.id) {
         match tracker.state {
             TrackerStateKind::Hysteresis => {
-                if let Some(window) = hysteresis_window(tracker, rule.hysteresis_minutes) {
+                if let Some(window) = hysteresis_window(tracker) {
                     if window.truth(now).is_true() {
                         scan.candidate(due_now);
                     } else {

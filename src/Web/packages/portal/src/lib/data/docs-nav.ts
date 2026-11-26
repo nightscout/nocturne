@@ -26,6 +26,11 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         ],
     },
     {
+        id: "managed-service",
+        title: "Managed service",
+        items: [{ href: "/docs/managed-service", label: "Providers" }],
+    },
+    {
         id: "installation",
         title: "Installation",
         items: [

@@ -11,7 +11,6 @@
         "direction": "above",
         "value": 200
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "on_unknown": "met"
     },
@@ -23,7 +22,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "on_unknown": "not_met"
     },
@@ -35,7 +33,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "on_unknown": "hold"
     }

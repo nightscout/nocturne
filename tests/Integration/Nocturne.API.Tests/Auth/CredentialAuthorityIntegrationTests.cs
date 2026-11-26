@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Migrations;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -44,8 +45,7 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
         using var client = CreateAuthenticatedClient();
         (await client.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_ownerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Authority Owner");
@@ -77,9 +77,8 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     {
         var token = await MintAsync(_memberSession, "treatments.readwrite");
 
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "DELETE FROM tenant_members WHERE subject_id = @s AND tenant_id = @t;";
             cmd.Parameters.AddWithValue("s", _memberId);
@@ -131,17 +130,10 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         // A row left with no scopes by an older release.
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @t, false);
-                UPDATE oauth_grants SET scopes = ARRAY[]::text[] WHERE id = @g;
-                """;
-            cmd.Parameters.AddWithValue("t", _tenantId.ToString());
-            cmd.Parameters.AddWithValue("g", grantId);
-            await cmd.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(_tenantId);
+            await conn.ExecuteAsync("UPDATE oauth_grants SET scopes = ARRAY[]::text[] WHERE id = @g;", ("g", grantId));
         }
 
         using var anonymous = Fixture.CreateHttpClient("nocturne-api", "http");
@@ -211,8 +203,7 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     [InlineData(LoginCodeIssuer.PlatformAdminOwner)]
     public async Task SessionRedeemedFromALoginCode_IsNotTheMembersOwnSignIn(LoginCodeIssuer issuer)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         if (issuer == LoginCodeIssuer.PlatformAdminOwner)
             await MakePlatformAdminOwnerAsync(conn, _ownerId);
 
@@ -291,8 +282,7 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task SessionRedeemedFromALoginCode_CarriesNoPlatformAdminStanding()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await using (var promote = conn.CreateCommand())
         {
             promote.CommandText = "UPDATE subjects SET is_platform_admin = true WHERE id = @id;";
@@ -385,8 +375,7 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
         var handoff = await HandOffAsync(issuing, _memberId);
         using var handedOff = CookieClient(handoff);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await conn.ExecuteAsync($"""
             UPDATE refresh_tokens SET login_code_id = NULL
              WHERE subject_id = '{_memberId}' AND device_description = 'Login handoff'
@@ -498,9 +487,8 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
     {
         const string secret = "integration-caretaker-nightscout-secret";
         Guid caretakerId;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             (caretakerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
                 conn, _tenantId, "Authority Caretaker", RoleSeeds.Permissions[RoleSeeds.Caretaker]);
         }

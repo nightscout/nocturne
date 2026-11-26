@@ -11,7 +11,9 @@ namespace Nocturne.Infrastructure.Data.Mappers;
 public static class StateSpanMapper
 {
     /// <summary>
-    /// Convert domain model to database entity
+    /// Convert domain model to a database entity to insert. <see cref="StateSpan.SupersededById"/> is
+    /// not carried: only supersession sets <see cref="StateSpanEntity.SupersededById"/>
+    /// (<see cref="Extensions.StateSpanSupersessionExtensions"/>).
     /// </summary>
     public static StateSpanEntity ToEntity(StateSpan stateSpan)
     {
@@ -27,9 +29,6 @@ public static class StateSpanMapper
                 ? JsonSerializer.Serialize(stateSpan.Metadata)
                 : null,
             LegacyId = stateSpan.OriginalId,
-            SupersededById = !string.IsNullOrEmpty(stateSpan.SupersededById)
-                ? RecordIdKey.ParseIdToGuid(stateSpan.SupersededById)
-                : null,
         };
     }
 

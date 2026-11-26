@@ -269,10 +269,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         scope.ServiceProvider.GetRequiredService<DuplicateReconciler>();
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>Every row, soft-deleted included, whose flag disagrees with the anti-join.</summary>
     private Task<List<string>> MismatchesAsync(Guid tenant) => QueryAsync(tenant, string.Join("\nUNION ALL\n",
@@ -306,8 +303,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
     }
 

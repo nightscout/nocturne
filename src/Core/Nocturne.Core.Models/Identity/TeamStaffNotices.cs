@@ -20,6 +20,7 @@ public sealed record StaffNotices(IReadOnlyList<TeamSiteKey> Recount, IReadOnlyL
 
 /// <summary>
 /// A team's current name, and the staff whose rows at a site wait for an owner's approval, as the database
-/// holds them now.
+/// holds them now. None wait while <paramref name="Trusted"/>, when the site trusts the whole team
+/// (<see cref="TeamStaffRule.TeamTrusted"/>) and its owners are told nothing of its staff.
 /// </summary>
-public sealed record TeamStaffWaiting(string TeamName, IReadOnlyList<Guid> WaitingSubjectIds);
+public sealed record TeamStaffWaiting(string TeamName, IReadOnlyList<Guid> WaitingSubjectIds, bool Trusted);

@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -38,9 +39,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the PKCE flow tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "PKCE Test User");
@@ -282,9 +281,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         var codeHash = HashUtils.Sha256Hex(expiredCode);
         var (codeVerifier, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         // Look up the client entity ID
         Guid clientEntityId;
@@ -296,33 +293,20 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         }
 
         // Set tenant context for RLS
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(_tenantId);
 
         // Insert an expired authorization code
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO oauth_authorization_codes
-                    (id, tenant_id, client_entity_id, subject_id, code_hash, scopes, redirect_uri, code_challenge, expires_at, created_at, limit_to_24_hours)
-                VALUES
-                    (@id, @tenantId, @clientEntityId, @subjectId, @codeHash, ARRAY['glucose.read','treatments.read'], @redirectUri, @codeChallenge, @expiresAt, @createdAt, false);
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("tenantId", _tenantId);
-            cmd.Parameters.AddWithValue("clientEntityId", clientEntityId);
-            cmd.Parameters.AddWithValue("subjectId", _subjectId);
-            cmd.Parameters.AddWithValue("codeHash", codeHash);
-            cmd.Parameters.AddWithValue("redirectUri", "http://localhost:9999/callback");
-            cmd.Parameters.AddWithValue("codeChallenge", codeChallenge);
-            cmd.Parameters.AddWithValue("expiresAt", DateTime.UtcNow.AddMinutes(-5));
-            cmd.Parameters.AddWithValue("createdAt", DateTime.UtcNow.AddMinutes(-15));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO oauth_authorization_codes
+                (id, tenant_id, client_entity_id, subject_id, code_hash, scopes, redirect_uri, code_challenge, expires_at, created_at, limit_to_24_hours)
+            VALUES
+                (@id, @tenantId, @clientEntityId, @subjectId, @codeHash, ARRAY['glucose.read','treatments.read'], @redirectUri, @codeChallenge, @expiresAt, @createdAt, false);
+            """,
+            ("id", Guid.CreateVersion7()), ("tenantId", _tenantId), ("clientEntityId", clientEntityId),
+            ("subjectId", _subjectId), ("codeHash", codeHash), ("redirectUri", "http://localhost:9999/callback"),
+            ("codeChallenge", codeChallenge), ("expiresAt", DateTime.UtcNow.AddMinutes(-5)),
+            ("createdAt", DateTime.UtcNow.AddMinutes(-15)));
 
         // Act - try to exchange the expired code
         var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>

@@ -209,7 +209,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 && joins.Contains((member, via, row.CreatedAt)),
             row.TeamId is { } team ? new MemberHistoryTeam(team, teamNames.GetValueOrDefault(team) ?? details.Name) : null,
             details.Roles,
-            kind == MemberHistoryKind.TeamStaffRuleChanged ? details.TeamManagesStaff : null);
+            kind == MemberHistoryKind.TeamStaffRuleChanged ? details.StaffRule : null);
     }
 
     /// <summary>
@@ -242,7 +242,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         string? Role, string? Permission, MemberHistoryLimit? HistoryLimit, Guid? InviteId,
         IReadOnlyList<string>? Gained, IReadOnlyList<string>? Lost, bool AccessEndRecorded, DateTime? AccessEndsAt,
         MembershipJoinHow? JoinedHow, MembershipEndHow? RemovedHow, Guid? By, string? Name, IReadOnlyList<string>? Roles,
-        bool? TeamManagesStaff)
+        string? StaffRule)
     {
         private static readonly Details Unknown = new(null, null, null, null, null, null, false, null, null, null, null, null, null, null);
 
@@ -278,11 +278,20 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 Guid.TryParse(Text(root, MemberAccessAudit.ByKey), out var by) ? by : null,
                 Text(root, TeamAudit.NameKey),
                 List(root, TeamAudit.RolesKey),
-                root.TryGetProperty(TeamAudit.TeamManagesStaffKey, out var manages)
-                    && manages.ValueKind is JsonValueKind.True or JsonValueKind.False
-                    ? manages.GetBoolean()
-                    : null);
+                StaffRuleOf(root));
         }
+
+        private static string? StaffRuleOf(JsonElement root) =>
+            Text(root, TeamAudit.StaffRuleKey) is { } rule
+                ? TeamStaffRule.IsKnown(rule) ? rule : null
+                : root.TryGetProperty(TeamAudit.TeamManagesStaffKey, out var manages)
+                    ? manages.ValueKind switch
+                    {
+                        JsonValueKind.True => TeamStaffRule.TeamDecides,
+                        JsonValueKind.False => TeamStaffRule.OwnerApproves,
+                        _ => null,
+                    }
+                    : null;
 
         private static string? Text(JsonElement root, string key) =>
             root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

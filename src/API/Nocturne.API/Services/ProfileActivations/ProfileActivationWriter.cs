@@ -1,6 +1,7 @@
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.ProfileActivations;
 
@@ -278,8 +279,8 @@ public sealed class ProfileActivationWriter
         public ProfileActivationSettlement Plan(ProfileActivation activation)
         {
             var start = activation.StartTimestamp;
-            var running = _members.Values
-                .Where(a => a.StartTimestamp <= start && (a.EndTimestamp == null || a.EndTimestamp > start))
+            var running = _members.Values.AsQueryable()
+                .ActiveAt(a => a.StartTimestamp, a => a.EndTimestamp, start)
                 .OrderByDescending(a => a.StartTimestamp).ThenByDescending(a => a.Id)
                 .Take(Neighbourhood)
                 .Reverse();

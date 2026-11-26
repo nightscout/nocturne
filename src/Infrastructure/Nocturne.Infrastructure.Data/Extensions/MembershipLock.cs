@@ -45,10 +45,12 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// subject and client, then the subject row, then one membership lock
 /// (<see cref="Nocturne.Core.Contracts.Auth.IOAuthGrantRepository.LockConsentAsync"/>). Each of these takes
 /// the locks of the memberships it changes last. Account deletion takes the subject's row, then the owners
-/// locks of an active subject's sites, then the manager locks of its teams, then the team access locks of every site the
-/// teams it will remove have access to, then its memberships' locks; removing every membership of a
-/// subject takes the row, the owners locks and then the manager locks, so both read the subject's
-/// memberships after a team write that removes one of their reasons commits.
+/// locks of its sites (only an active subject's, unless it removes even a last owner), then the manager
+/// locks of its teams, then the team access locks of every site the teams it will remove have access to,
+/// then its memberships' locks, so it reads the subject's memberships after a team write that removes one
+/// of their reasons commits. Only then does it stop what the subject made, which takes none of these locks,
+/// so a write that caps what the subject made under one of them has committed before the deletion writes
+/// those rows.
 /// </para>
 /// </remarks>
 internal static class MembershipLock

@@ -78,6 +78,7 @@ public class AlertSnoozeServiceTests
         _canonical.Object,
         _broadcast.Object,
         _alarmRelay.Object,
+        Mock.Of<IExcursionResolutionHandler>(),
         _time,
         NullLogger<AlertSnoozeService>.Instance);
 
@@ -401,6 +402,30 @@ public class AlertSnoozeServiceTests
         var seeded = await SeedAsync(ruleEnabled: false);
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
+        _delivery.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(nameof(AlertRuleEntity.ConditionType))]
+    [InlineData(nameof(AlertRuleEntity.Severity))]
+    [InlineData(nameof(AlertRuleEntity.ScopeClass))]
+    public async Task Resume_does_nothing_for_a_rule_holding_a_value_no_member_has(string column)
+    {
+        var seeded = await SeedAsync(severity: AlertRuleSeverity.Critical);
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var rule = await db.AlertRules.SingleAsync(r => r.Id == seeded.RuleId);
+            switch (column)
+            {
+                case nameof(AlertRuleEntity.ConditionType): rule.ConditionType = (AlertConditionType)(-1); break;
+                case nameof(AlertRuleEntity.Severity): rule.Severity = (AlertRuleSeverity)(-1); break;
+                default: rule.ScopeClass = (RuleScopeClass)(-1); break;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None))
+            .Should().BeFalse("the rule is not evaluated, so nothing says its alert still stands");
         _delivery.VerifyNoOtherCalls();
     }
 

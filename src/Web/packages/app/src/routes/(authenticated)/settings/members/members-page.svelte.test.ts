@@ -778,7 +778,7 @@ describe("members page deciding about a team and its staff", () => {
     hasEnded: false,
     approvedByName: "Sam",
     givenAt: "2026-11-01T00:00:00Z",
-    teamManagesStaff: false,
+    staffRule: "owner_approves",
     staff: [{ subjectId: wrenId, displayName: "Wren", status: "pending" }],
   });
   const caller = (reasons: TenantMemberDto["reasons"]): TenantMemberDto => ({
@@ -829,9 +829,9 @@ describe("members page deciding about a team and its staff", () => {
     render(MembersPage);
 
     await expect.element(browserPage.getByRole("button", { name: "Approve Wren" })).toBeVisible();
-    await expect.element(browserPage.getByText("Waits for your approval")).toBeVisible();
+    await expect.element(browserPage.getByText("Waits for your approval", { exact: true })).toBeVisible();
     await expect.element(browserPage.getByRole("button", { name: "Change the access of Clinic" })).toBeVisible();
-    await expect.element(browserPage.getByRole("switch")).toBeVisible();
+    await expect.element(browserPage.getByRole("radio", { name: /I trust the whole team/ })).toBeVisible();
   });
 
   it("gives no control to a member who manages members but is not an owner", async () => {
@@ -841,7 +841,7 @@ describe("members page deciding about a team and its staff", () => {
     await expect.element(browserPage.getByText("Wren", { exact: true })).toBeVisible();
     expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
     expect(browserPage.getByRole("button", { name: "Change the access of Clinic" }).elements()).toHaveLength(0);
-    expect(browserPage.getByRole("switch").elements()).toHaveLength(0);
+    expect(browserPage.getByRole("radio").elements()).toHaveLength(0);
   });
 
   it("gives no control to an owner whose direct reason has ended", async () => {

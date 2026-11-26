@@ -18,6 +18,7 @@ using Nocturne.Core.Models.Widget;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -330,7 +331,7 @@ public class TenantOverviewService : ITenantOverviewService
             // AlertRuleSeverity orders Critical=0 < Warning < Info, so Min is most severe.
             highestSeverity = activeExcursions
                 .Where(e => e.AlertRule is not null)
-                .Select(e => (AlertRuleSeverity?)e.AlertRule!.Severity)
+                .Select(e => (AlertRuleSeverity?)AlertRuleMapper.Readable(e.AlertRule!.Severity))
                 .Min();
 
             trackers = TrackerStatusCondenser.Condense(

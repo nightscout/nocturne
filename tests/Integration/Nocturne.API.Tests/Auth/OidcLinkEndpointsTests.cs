@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -207,9 +208,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     /// </summary>
     private async Task<Guid> GetTenantIdAsync()
     {
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         return await AuthTestHelpers.GetTenantIdAsync(conn);
     }
@@ -223,9 +222,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         var subjectId = _seededSubjectId = Guid.CreateVersion7();
         var tokenHash = HashUtils.Sha256Hex(TestAccessToken);
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         // Drop any grant left by a prior run, so the token resolves to exactly one subject.
         await conn.ExecuteAsync("DELETE FROM oauth_grants WHERE token_hash = @hash;", ("hash", tokenHash));
@@ -247,13 +244,17 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 
         // The credential itself. Device and service tokens are grants on oauth_grants; subjects
         // carry no token of their own.
-        await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
-            INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
-            VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], 'OIDC test token', @hash, now());
-            """,
-            ("id", Guid.CreateVersion7()), ("tenantId", _tenantId), ("tenantText", _tenantId.ToString()),
-            ("subjectId", subjectId), ("hash", tokenHash));
+        await using (var transaction = await conn.BeginTransactionAsync())
+        {
+            await conn.PinTenantAsync(_tenantId, local: true);
+            await conn.ExecuteAsync("""
+                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
+                VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], 'OIDC test token', @hash, now());
+                """,
+                ("id", Guid.CreateVersion7()), ("tenantId", _tenantId),
+                ("subjectId", subjectId), ("hash", tokenHash));
+            await transaction.CommitAsync();
+        }
 
         // Grant admin role to the subject on the tenant
         await conn.ExecuteAsync("""
@@ -275,9 +276,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     {
         var providerId = Guid.CreateVersion7();
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         await conn.ExecuteAsync("""
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
@@ -296,9 +295,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     {
         var identityId = Guid.CreateVersion7();
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         await conn.ExecuteAsync("""
             INSERT INTO subject_oidc_identities (id, subject_id, provider_id, oidc_subject_id, issuer, email, linked_at)
@@ -317,9 +314,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     {
         var passkeyId = Guid.CreateVersion7();
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         await conn.ExecuteAsync("""
             INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)

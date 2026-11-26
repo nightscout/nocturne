@@ -52,15 +52,12 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
     private readonly StatementRecorder _statements = new();
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), _statements)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, [_statements]);
 
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'direct-access', true, now(), now());
             """);
@@ -80,7 +77,7 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
     {
         var reason = Guid.CreateVersion7();
         var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(site.Tenant, "Clinic");
-        return ExecuteAsync($"""
+        return NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             {teamAccessSql}
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
             VALUES ('{reason}', '{member}', 'team', '{teamAccess}', false, NULL);
@@ -111,7 +108,7 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
     {
         var subject = await NewSubjectAsync(site, name);
         var member = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
             VALUES ('{member}', '{site.Tenant}', '{subject}', false, now(), now());
@@ -247,7 +244,7 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
     {
         var site = await SiteAsync($"bare-{read}");
         var subject = await NewSubjectAsync(site, $"bare-{read}-member");
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, access_ends_at, sys_created_at, sys_updated_at)
             VALUES ('{Guid.CreateVersion7()}', '{site.Tenant}', '{subject}', true, '{DirectEnds:O}', now(), now());
@@ -295,13 +292,5 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
         while (await reader.ReadAsync())
             kinds.Add(reader.GetString(0));
         return kinds;
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 }

@@ -1,5 +1,4 @@
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services.Deduplication;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -208,10 +207,7 @@ public class DuplicateRewriteReconcileTests(DuplicateRewriteReconcileTests.Datab
         context.Boluses.AsNoTracking().CountAsync(b => !b.IsDuplicate);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, o => o.EnableRetryOnFailure())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.Retrying);
 
     private async Task<Guid> SeedTenantAsync()
     {

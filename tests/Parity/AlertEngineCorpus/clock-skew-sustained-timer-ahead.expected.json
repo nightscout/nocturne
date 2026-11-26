@@ -53,6 +53,10 @@
             {
               "fact": "sustained",
               "ahead_ms": 600000
+            },
+            {
+              "fact": "updated_at",
+              "ahead_ms": 600000
             }
           ]
         }

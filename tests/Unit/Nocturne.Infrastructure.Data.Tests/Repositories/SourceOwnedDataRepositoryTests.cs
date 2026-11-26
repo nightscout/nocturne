@@ -37,7 +37,7 @@ public class SourceOwnedDataRepositoryTests : IDisposable
 
     public SourceOwnedDataRepositoryTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant);
         _changes
             .Setup(r => r.PublishAsync(It.IsAny<RecordsChanged>(), It.IsAny<CancellationToken>()))
             .Callback((RecordsChanged batch, CancellationToken _) =>

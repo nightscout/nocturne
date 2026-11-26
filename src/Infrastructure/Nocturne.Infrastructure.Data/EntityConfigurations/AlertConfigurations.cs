@@ -25,12 +25,12 @@ internal sealed class AlertRuleEntityConfiguration : IEntityTypeConfiguration<Al
 
         entity.ToTable("alert_rules");
         entity.Property(e => e.ConditionType).HasConversion(
-            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertConditionType>());
+            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertConditionType>(tolerant: true));
         entity.Property(e => e.ConditionParams).HasColumnType("jsonb").HasDefaultValue("{}");
         entity.Property(e => e.Severity).HasConversion(
-            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertRuleSeverity>());
+            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertRuleSeverity>(tolerant: true));
         entity.Property(e => e.ScopeClass).HasConversion(
-            new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>());
+            new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>(tolerant: true));
         entity.Property(e => e.ClientConfiguration).HasColumnType("jsonb").HasDefaultValue("{}");
         entity.Property(e => e.IsEnabled).HasDefaultValue(true);
         entity.Property(e => e.OnUnknown).HasDefaultValue(Core.Models.Alerts.AlertRuleOnUnknown.Hold);

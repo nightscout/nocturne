@@ -52,6 +52,7 @@ wire_enum! {
         Sustained = "sustained",
         HysteresisStartedAt = "hysteresis_started_at",
         HeldSince = "held_since",
+        UpdatedAt = "updated_at",
     }
 }
 
@@ -78,9 +79,10 @@ impl ClockAnchor {
             ClockAnchor::ActiveDoNotDisturb => Some(F::DoNotDisturb),
             ClockAnchor::SensorState => Some(F::SensorState),
             ClockAnchor::ApsDetermination => Some(F::ApsDetermination),
-            ClockAnchor::Sustained | ClockAnchor::HysteresisStartedAt | ClockAnchor::HeldSince => {
-                None
-            }
+            ClockAnchor::Sustained
+            | ClockAnchor::HysteresisStartedAt
+            | ClockAnchor::HeldSince
+            | ClockAnchor::UpdatedAt => None,
         }
     }
 }

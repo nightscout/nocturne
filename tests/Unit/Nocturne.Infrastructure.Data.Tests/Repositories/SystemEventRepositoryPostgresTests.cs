@@ -35,11 +35,7 @@ public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTes
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .AddInterceptors(interceptors)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>Runs <paramref name="competitor"/> once, just before the first save it sees.</summary>
     private sealed class CommitBeforeFirstSave(Func<Task> competitor) : SaveChangesInterceptor

@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Nocturne.Infrastructure.Data.Tests.V4Goldens;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -43,12 +44,11 @@ public class AutoPreparedStatementRecoveryTests(RlsCompletenessFixture fx) : IAs
         {
             AutoPrepareMinUsages = 2,
         }.ConnectionString;
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(_connectionString, configuration: null, c => c.MaxPoolSize = 1);
-        services.AddScoped<TestAuditContext>();
-        services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        _provider = TestContexts.BuildProvider(_connectionString, c => c.MaxPoolSize = 1, services =>
+        {
+            services.AddScoped<TestAuditContext>();
+            services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
+        });
     }
 
     public async Task DisposeAsync() => await _provider.DisposeAsync();
@@ -64,10 +64,7 @@ public class AutoPreparedStatementRecoveryTests(RlsCompletenessFixture fx) : IAs
     {
         await using var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(
             new PostgreSqlConfiguration { ConnectionString = _connectionString, MaxPoolSize = 1 });
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(dataSource);
         NocturneDbContext Unrepaired() => new(options) { TenantId = _tenant };
 
         await using (var db = Unrepaired())

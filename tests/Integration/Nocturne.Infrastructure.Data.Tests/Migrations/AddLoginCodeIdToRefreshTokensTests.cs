@@ -40,7 +40,7 @@ public class AddLoginCodeIdToRefreshTokensFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "login_code_id_refresh_tokens");
         _migrator = database.MigratorConnectionString;
 
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{Subject}', 'handoff-revoke', true, false, now(), now(), 'Approved');
             """);
@@ -56,12 +56,13 @@ public class AddLoginCodeIdToRefreshTokensFixture : IAsyncLifetime
             await context.GetService<IMigrator>().MigrateAsync();
 
         After = await ReadTokensAsync();
-        RowsChangedBySecondRun = await ExecuteAsync(AddLoginCodeIdToRefreshTokens.RevokeUnmarkedHandoffsSql);
+        RowsChangedBySecondRun = await NpgsqlTestCommands.ExecuteAsync(_migrator, AddLoginCodeIdToRefreshTokens.RevokeUnmarkedHandoffsSql);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private Task<int> InsertTokenAsync(Guid id, string device, string expiresAt, bool revoked) => ExecuteAsync($"""
+    private Task<int> InsertTokenAsync(Guid id, string device, string expiresAt, bool revoked) => NpgsqlTestCommands.ExecuteAsync(
+        _migrator, $"""
         INSERT INTO refresh_tokens (id, token_hash, subject_id, oidc_session_id, issued_at, expires_at,
                                     revoked_at, revoked_reason, device_description, created_at, updated_at)
         VALUES ('{id}', '{id:N}', '{Subject}', 'session-{id:N}', now() - interval '2 days', {expiresAt},
@@ -70,10 +71,7 @@ public class AddLoginCodeIdToRefreshTokensFixture : IAsyncLifetime
         """);
 
     private DbContextOptions<NocturneDbContext> Options() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migrator, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(_migrator);
 
     private async Task<Dictionary<Guid, TokenRow>> ReadTokensAsync()
     {
@@ -93,14 +91,6 @@ public class AddLoginCodeIdToRefreshTokensFixture : IAsyncLifetime
         }
 
         return rows;
-    }
-
-    private async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
     }
 }
 

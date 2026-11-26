@@ -31,7 +31,7 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
 
     public TreatmentDecomposerSourceDeleteRollbackTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _failure);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, "test", _failure);
         _context = _db.CreateContext();
 
         _decomposer = TreatmentDecomposerDoubles.Build(

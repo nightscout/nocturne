@@ -13,7 +13,6 @@
           "fact": "target_low"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
         "direction": "below",
         "value": 80
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

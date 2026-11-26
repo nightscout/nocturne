@@ -549,7 +549,7 @@ public class TeamsControllerTests
             "TenantId", "DisplayName", "AlreadyGiven", "Roles", "DefaultRoleId", "LimitForced", "LatestEnd");
         typeof(TeamSiteAccess).GetProperties().Select(p => p.Name).Should().BeEquivalentTo(
             ["TenantId", "DisplayName", "RoleNames", "LimitTo24Hours", "AccessEndsAt", "HasEnded", "GivenAt",
-                "TeamManagesStaff", "PendingStaffCount", "DeclinedStaffCount"],
+                "StaffRule", "PendingStaffCount", "DeclinedStaffCount"],
             "a team learns a site's name, what it was given and how many of its staff wait or were declined, never who approved, who decided or who is in it");
     }
 

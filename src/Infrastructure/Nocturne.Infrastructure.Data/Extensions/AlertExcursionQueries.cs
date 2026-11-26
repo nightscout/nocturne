@@ -43,6 +43,13 @@ public static class AlertExcursionQueries
     public static IQueryable<AlertExcursionEntity> StandingNotices(this IQueryable<AlertExcursionEntity> excursions) =>
         excursions.Where(e => e.UnevaluableConditionVersion != null && e.Instances.Any(i => i.ResolvedAt == null));
 
+    /// <summary>
+    /// Notices about a rule, of either kind, that were resolved: their instance is resolved, which a
+    /// resolution does after it ends the notice and in the step that writes its reason.
+    /// </summary>
+    public static IQueryable<AlertExcursionEntity> ResolvedNotices(this IQueryable<AlertExcursionEntity> excursions) =>
+        excursions.Where(e => e.UnevaluableConditionVersion != null && !e.Instances.Any(i => i.ResolvedAt == null));
+
     /// <summary>The unresolved instances of notices about a rule, of either kind.</summary>
     public static IQueryable<AlertInstanceEntity> OfStandingNotices(this IQueryable<AlertInstanceEntity> instances) =>
         instances.Where(i => i.ResolvedAt == null && i.AlertExcursion!.UnevaluableConditionVersion != null);

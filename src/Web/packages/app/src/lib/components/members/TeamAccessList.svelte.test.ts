@@ -21,7 +21,7 @@ const team = (teamId: string, teamName: string): TenantTeamAccess => ({
   limitTo24Hours: false,
   hasEnded: false,
   givenAt: "2026-11-01T00:00:00Z",
-  teamManagesStaff: true,
+  staffRule: "team_decides",
   staff: [],
 });
 

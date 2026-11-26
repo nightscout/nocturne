@@ -12,7 +12,6 @@
         "to": "23:59",
         "timezone": "Pacific/Auckland"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
         "to": "23:59",
         "timezone": null
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -36,7 +34,6 @@
         "to": "13:00",
         "timezone": null
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

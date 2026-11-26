@@ -34,10 +34,7 @@ public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLiven
     private sealed class Factory(string connectionString, params IInterceptor[] interceptors) : SingleReaderDbContextFactory
     {
         public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
-                .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-                .Options));
+            ValueTask.FromResult(TestContexts.Context(connectionString, null, interceptors));
     }
 
     /// <summary>

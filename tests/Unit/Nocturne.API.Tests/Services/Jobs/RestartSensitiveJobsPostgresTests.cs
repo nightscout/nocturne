@@ -182,8 +182,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -298,8 +297,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         services.AddMetrics();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -337,8 +335,8 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     private async Task<string?> EvidenceAsync(Guid tenant, Guid tempBasal)

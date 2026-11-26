@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -89,7 +90,7 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
                 "/api/v2/authorization/roles", new { name, permissions = Array.Empty<string>() });
 
             (await RefusalOfAsync(response)).Should().Be(invalid);
-            (await RoleCountAsync(conn, name)).Should().Be(0);
+            (await AuthTestHelpers.RoleCountAsync(conn, name)).Should().Be(0);
         }
         finally
         {
@@ -108,7 +109,7 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
             var created = await owner.PostAsJsonAsync(
                 "/api/v2/authorization/roles", new { name = original, permissions = Array.Empty<string>() });
             created.StatusCode.Should().Be(HttpStatusCode.Created);
-            var id = (await RoleIdAsync(conn, original)).ToString();
+            var id = (await AuthTestHelpers.RoleIdAsync(conn, original)).ToString();
 
             var invalid = await RefusalOfAsync(await owner.PutAsJsonAsync(
                 "/api/v2/authorization/roles", new { id, name = "", permissions = Array.Empty<string>() }));
@@ -117,7 +118,7 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
                 "/api/v2/authorization/roles", new { id, name = PlatformAdminRole, permissions = Array.Empty<string>() });
 
             (await RefusalOfAsync(response)).Should().Be(invalid);
-            (await RoleCountAsync(conn, original)).Should().Be(1);
+            (await AuthTestHelpers.RoleCountAsync(conn, original)).Should().Be(1);
         }
         finally
         {
@@ -142,16 +143,6 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (ownerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Role Name Owner");
         return AuthTestHelpers.CreateBearerClient(Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, ownerId));
-    }
-
-    private static async Task<Guid> RoleIdAsync(NpgsqlConnection conn, string name)
-    {
-        return await conn.ScalarAsync<Guid>("SELECT id FROM roles WHERE name = @name;", ("name", name));
-    }
-
-    private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
-    {
-        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE name = @name;", ("name", name));
     }
 
     /// <summary>

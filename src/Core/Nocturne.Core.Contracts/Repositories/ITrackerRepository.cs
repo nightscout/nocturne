@@ -102,7 +102,7 @@ public interface ITrackerRepository
         int limit,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Whether a run started before <paramref name="to"/> and was running at or after <paramref name="from"/>.</summary>
+    /// <summary>Whether a run started before <paramref name="to"/> and was still running after <paramref name="from"/>, as <see cref="GetRunsOverlappingAsync"/> reads runs.</summary>
     Task<bool> AnyRunInAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
 
     Task<TrackerInstance?> GetInstanceByIdAsync(Guid id, CancellationToken cancellationToken = default);

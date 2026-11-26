@@ -47,15 +47,14 @@ fn min(m: i64) -> TimeDelta {
 }
 
 fn rule(kind: &str, params: Value) -> Rule {
-    rule_with(kind, params, None, 0)
+    rule_with(kind, params, None)
 }
 
-fn rule_with(kind: &str, params: Value, auto_resolve: Option<Value>, hysteresis: i32) -> Rule {
+fn rule_with(kind: &str, params: Value, auto_resolve: Option<Value>) -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE,
         "condition_type": kind,
         "condition_params": params,
-        "hysteresis_minutes": hysteresis,
         "auto_resolve_enabled": auto_resolve.is_some(),
         "auto_resolve_params": auto_resolve,
     }))
@@ -517,28 +516,8 @@ fn a_change_past_the_host_calendar_is_none() {
 #[test]
 fn hysteresis_changes_when_its_window_closes() {
     let condition = json!({ "direction": "below", "value": 70 });
-    let entering = Case::new(
-        rule_with("threshold", condition.clone(), None, 5),
-        ctx(json!({ "latest_value": 120 })),
-    )
-    .seeded(Seed {
-        timers: vec![],
-        tracker: Some(tracker(TrackerStateKind::Active, None)),
-    });
-    assert_next_change(&entering, now() + min(5));
-
-    let held = Case::new(
-        rule_with("threshold", condition.clone(), None, 5),
-        ctx(json!({ "latest_value": 120 })),
-    )
-    .seeded(Seed {
-        timers: vec![],
-        tracker: Some(tracker(TrackerStateKind::Hysteresis, Some(now() - min(2)))),
-    });
-    assert_next_change(&held, now() + min(3));
-
     let closes_at_once = Case::new(
-        rule_with("threshold", condition, None, 0),
+        rule("threshold", condition.clone()),
         ctx(json!({ "latest_value": 120 })),
     )
     .seeded(Seed {
@@ -546,6 +525,16 @@ fn hysteresis_changes_when_its_window_closes() {
         tracker: Some(tracker(TrackerStateKind::Active, None)),
     });
     assert_next_change(&closes_at_once, now() + RESOLUTION);
+
+    let ahead = Case::new(
+        rule("threshold", condition),
+        ctx(json!({ "latest_value": 120 })),
+    )
+    .seeded(Seed {
+        timers: vec![],
+        tracker: Some(tracker(TrackerStateKind::Hysteresis, Some(now() + min(8)))),
+    });
+    assert_next_change(&ahead, now() + min(3));
 }
 
 #[test]
@@ -612,7 +601,7 @@ fn the_auto_resolve_tree_counts_while_auto_resolve_is_enabled() {
     let resolve = json!({ "type": "staleness", "staleness": { "operator": ">=", "value": 15 } });
     let context = ctx(json!({ "latest_value": 60, "last_reading_at": ago(min(5)) }));
     let enabled = Case::new(
-        rule_with("threshold", condition.clone(), Some(resolve), 0),
+        rule_with("threshold", condition.clone(), Some(resolve)),
         context.clone(),
     );
     assert_eq!(enabled.next_change(), Some(now() + min(10)));

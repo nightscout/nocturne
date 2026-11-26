@@ -4,6 +4,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -29,14 +31,9 @@ internal sealed record ReaderCounts(long Steps, long Foods, long Notes, long Spa
 
 internal static class TenantReaderData
 {
-    public static ServiceProvider BuildProvider(string connectionString)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(connectionString, configuration: null);
-        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
-        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-    }
+    public static ServiceProvider BuildProvider(string connectionString) =>
+        TestContexts.BuildProvider(
+            connectionString, configure: services => services.AddScoped<ITenantAccessor, SettableTenantAccessor>());
 
     public static async Task<Guid> SeedTenantAsync(RlsCompletenessFixture fx, IServiceProvider root)
     {
@@ -88,7 +85,7 @@ internal static class TenantReaderData
             await context.Database.OpenConnectionAsync();
         try
         {
-            var connection = context.Database.GetDbConnection();
+            var connection = (NpgsqlConnection)context.Database.GetDbConnection();
             return new ReaderCounts(
                 await CountAsync(connection, "step_counts", tenant),
                 await CountAsync(connection, "foods", tenant),
@@ -130,13 +127,8 @@ internal static class TenantReaderData
         reader.SetFullHistory(fullHistory);
     }
 
-    private static async Task<long> CountAsync(DbConnection connection, string table, Guid tenant)
-    {
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {table} WHERE tenant_id = @tid";
-        AddParam(cmd, "@tid", tenant);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountAsync(NpgsqlConnection connection, string table, Guid tenant) =>
+        connection.ScalarAsync<long>($"SELECT COUNT(*) FROM {table} WHERE tenant_id = @tid", ("tid", tenant));
 
     private static void AddParam(DbCommand cmd, string name, object value)
     {

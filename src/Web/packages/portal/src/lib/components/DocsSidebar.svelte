@@ -2,6 +2,7 @@
     import { page } from "$app/state";
     import Rocket from "@lucide/svelte/icons/rocket";
     import Download from "@lucide/svelte/icons/download";
+    import Cloud from "@lucide/svelte/icons/cloud";
     import Settings from "@lucide/svelte/icons/settings";
     import Shield from "@lucide/svelte/icons/shield";
     import Share2 from "@lucide/svelte/icons/share-2";
@@ -23,6 +24,7 @@
     // Exhaustive by type: a new section in docs-nav.ts will not compile until it has an icon.
     const ICONS: Record<DocsSectionId, typeof Rocket> = {
         "getting-started": Rocket,
+        "managed-service": Cloud,
         installation: Download,
         authentication: Shield,
         sharing: Share2,

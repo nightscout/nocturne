@@ -7,6 +7,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -57,10 +58,10 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
     {
         await using (var conn = await OpenPostgresAsync())
         {
+            await conn.PinTenantAsync(Fixture.TenantId);
             await conn.ExecuteAsync("""
                 CREATE TEMP TABLE admission_subjects AS
                     SELECT subject_id FROM subject_oidc_identities WHERE provider_id = @provider;
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 DELETE FROM tenant_members WHERE subject_id IN (SELECT subject_id FROM admission_subjects);
                 DELETE FROM refresh_tokens WHERE subject_id IN (SELECT subject_id FROM admission_subjects);
                 DELETE FROM subject_roles WHERE subject_id IN (SELECT subject_id FROM admission_subjects);
@@ -69,7 +70,7 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM oidc_providers WHERE id = @provider;
                 DELETE FROM tenant_creation_invites WHERE label = @issuer;
                 """,
-                ("provider", _providerId), ("tenantText", Fixture.TenantId.ToString()), ("issuer", _issuer));
+                ("provider", _providerId), ("issuer", _issuer));
         }
 
         await base.DisposeAsync();
@@ -131,12 +132,12 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
         var member = await CreateFromProviderAsync("member", name: "member");
         await using (var conn = await OpenPostgresAsync())
         {
+            await conn.PinTenantAsync(Fixture.TenantId);
             await conn.ExecuteAsync("""
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, now(), now());
                 """,
-                ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", member));
+                ("tenant", Fixture.TenantId), ("subject", member));
         }
 
         var result = await SignInAsync("member", Fixture.TenantId);
@@ -290,12 +291,12 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
         await using var conn = await OpenPostgresAsync();
         var token = $"invite-{Guid.NewGuid():N}";
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, Fixture.TenantId, RoleSeeds.Viewer);
+        await conn.PinTenantAsync(Fixture.TenantId);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES (@inviteId, @tenantId, @ownerId, @hash, @roleIds::jsonb, false, now() + interval '1 day', 0, now());
             """,
-            ("tenantText", Fixture.TenantId.ToString()), ("inviteId", Guid.CreateVersion7()),
+            ("inviteId", Guid.CreateVersion7()),
             ("tenantId", Fixture.TenantId), ("ownerId", Fixture.OwnerSubjectId),
             ("hash", HashUtils.Sha256Hex(token)), ("roleIds", $"[\"{viewerRoleId}\"]"));
         return token;

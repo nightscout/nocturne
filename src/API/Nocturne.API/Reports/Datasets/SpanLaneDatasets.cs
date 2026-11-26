@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Reports.Datasets;
 
@@ -120,7 +121,8 @@ internal sealed class AlertExcursionsDataset : LaneDataset
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var rows = await db.AlertExcursions.AsNoTracking()
             .OfCondition()
-            .Where(e => e.StartedAt < end && (e.EndedAt == null || e.EndedAt > start))
+            .OverlapsWindow(
+                e => e.StartedAt, e => e.EndedAt, start, end, OverlapEdges.BothExcluded)
             .OrderBy(e => e.StartedAt).Take(limit)
             .Select(e => new { e.StartedAt, e.EndedAt, e.AcknowledgedAt, Rule = e.AlertRule!.Name, Severity = (AlertRuleSeverity?)e.AlertRule.Severity })
             .ToListAsync(cancellationToken);
@@ -134,12 +136,13 @@ internal sealed class AlertExcursionsDataset : LaneDataset
         })]);
     }
 
-    internal static ChartColor SeverityColor(AlertRuleSeverity? severity) => severity switch
-    {
-        AlertRuleSeverity.Critical => ChartColor.SystemEventAlarm,
-        AlertRuleSeverity.Warning => ChartColor.SystemEventWarning,
-        _ => ChartColor.SystemEventInfo,
-    };
+    internal static ChartColor SeverityColor(AlertRuleSeverity? stored) =>
+        (stored is { } severity ? AlertRuleMapper.Readable(severity) : (AlertRuleSeverity?)null) switch
+        {
+            AlertRuleSeverity.Critical => ChartColor.SystemEventAlarm,
+            AlertRuleSeverity.Warning => ChartColor.SystemEventWarning,
+            _ => ChartColor.SystemEventInfo,
+        };
 }
 
 /// <summary>
@@ -287,7 +290,8 @@ internal sealed class CompressionLowsDataset : LaneDataset
     {
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var rows = await db.CompressionLowSuggestions.AsNoTracking()
-            .Where(s => s.StartMills < to && s.EndMills > from)
+            .OverlapsWindow(
+                s => s.StartMills, s => s.EndMills, from, to, OverlapEdges.BothExcluded)
             .OrderBy(s => s.StartMills).Take(limit)
             .Select(s => new { s.StartMills, s.EndMills, s.Status, s.LowestGlucose })
             .ToListAsync(cancellationToken);

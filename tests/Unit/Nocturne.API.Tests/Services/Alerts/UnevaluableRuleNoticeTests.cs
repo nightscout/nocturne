@@ -578,27 +578,6 @@ public class UnevaluableRuleNoticeTests
     }
 
     [Fact]
-    public async Task A_retirement_during_the_dispatch_is_resolved_again_after_it()
-    {
-        _delivery
-            .Setup(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
-                It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
-            .Returns(async (Guid instanceId, IReadOnlyList<AlertRuleChannelSnapshot> _, AlertPayload _, CancellationToken ct) =>
-            {
-                await Process().ResolveAsync(RuleId, ExcursionCloseReason.RuleDisabled, ct);
-                await RecordDeliveryAsync(instanceId, ct);
-            });
-
-        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
-
-        var notice = await _db.AlertExcursions.SingleAsync();
-        _resolution.Verify(h => h.HandleClosedAsync(
-            It.Is<ExcursionTransition>(t => t.ExcursionId == notice.Id && t.CloseReason == ExcursionCloseReason.RuleDisabled),
-            Tenant, It.IsAny<CancellationToken>()), Times.Exactly(2),
-            "what the provider made after the retirement (an in-app notification) is cleared too");
-    }
-
-    [Fact]
     public async Task A_notice_of_a_rule_that_can_be_evaluated_again_is_resolved_by_a_later_run_when_the_first_try_fails()
     {
         await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);

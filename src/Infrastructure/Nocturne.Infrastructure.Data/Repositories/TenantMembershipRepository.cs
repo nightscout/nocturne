@@ -566,41 +566,6 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         return new DirectReasonRemoval(outcome, kept, keptEnd);
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<SubjectMembershipsRemoval> RemoveMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct)
-    {
-        if (_unit is not null)
-            return await RemoveMembershipsUnderOwnerLocksAsync(_unit.Context, subjectId, _linkRoute, ct);
-
-        await using var unit = await DbUnitOfWork.OpenPlatformAsync(Pinnable, ct);
-        return await unit.CommitAsync(
-            async token =>
-            {
-                var removal = await RemoveMembershipsUnderOwnerLocksAsync(unit.Context, subjectId, _linkRoute, token);
-                await unit.Context.SaveChangesAsync(token);
-                return removal;
-            },
-            ct: ct);
-    }
-
-    private static async Task<SubjectMembershipsRemoval> RemoveMembershipsUnderOwnerLocksAsync(
-        NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
-    {
-        var leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, linkRoute, ct);
-        await db.LockTeamManagersOfSubjectAsync(subjectId, ct);
-        var memberships = await db.TenantMembers
-            .Include(m => m.MemberRoles)
-            .Where(m => m.SubjectId == subjectId)
-            .ToListAsync(ct);
-        await db.LockMembershipsAsync(memberships.Select(m => (m.TenantId, m.SubjectId)), ct);
-
-        foreach (var membership in memberships)
-            await StageRemovalAsync(db, membership, ct);
-        foreach (var membership in memberships)
-            await MembershipReasons.RemoveMemberAsync(db, membership, MembershipEndHow.System, ct);
-        return new SubjectMembershipsRemoval(memberships.Count, leftWithoutOwner);
-    }
-
     /// <summary>
     /// Stages the removal of <paramref name="member"/>, whose role links are loaded, with its audit rows,
     /// the removed row last.

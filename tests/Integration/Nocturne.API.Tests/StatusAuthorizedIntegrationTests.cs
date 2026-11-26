@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -90,15 +91,9 @@ public class StatusAuthorizedIntegrationTests : ApiIntegrationTestBase
         (await AuthorizedAsync(anonymous, "/api/v1/status.json")).ValueKind.Should().Be(JsonValueKind.Null);
 
         await using (var conn = await OpenPostgresAsync())
-        await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE oauth_grants SET revoked_at = now() WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantId.ToString());
-            cmd.Parameters.AddWithValue("subject", _subjectId);
-            await cmd.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(_tenantId);
+            await conn.ExecuteAsync("UPDATE oauth_grants SET revoked_at = now() WHERE subject_id = @subject;", ("subject", _subjectId));
         }
 
         (await AuthorizedAsync(anonymous, url)).ValueKind.Should().Be(JsonValueKind.Null);

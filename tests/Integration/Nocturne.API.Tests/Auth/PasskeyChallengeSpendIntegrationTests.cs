@@ -28,8 +28,7 @@ public class PasskeyChallengeSpendIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task Of_many_completions_of_one_challenge_at_once_exactly_one_signs_in()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Spend Member");
         using var key = await PasskeyAssertions.StoreKeyAsync(conn, memberId);

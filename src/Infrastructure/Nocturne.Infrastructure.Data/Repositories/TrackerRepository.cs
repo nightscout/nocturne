@@ -254,9 +254,8 @@ public class TrackerRepository : ITrackerRepository, ITrackerConsumableLock
         var ids = definitionIds.ToList();
         var instances = await db
             .TrackerInstances.AsNoTracking()
-            .Where(i => ids.Contains(i.DefinitionId)
-                && i.StartedAt <= at
-                && (i.CompletedAt == null || i.CompletedAt > at))
+            .Where(i => ids.Contains(i.DefinitionId))
+            .ActiveAt(i => i.StartedAt, i => i.CompletedAt, at)
             .OrderByDescending(i => i.StartedAt)
             .Select(i => new
             {
@@ -344,7 +343,7 @@ public class TrackerRepository : ITrackerRepository, ITrackerConsumableLock
     {
         await using var lease = await OpenAsync(cancellationToken);
         return await lease.Context.TrackerInstances.AnyAsync(
-            e => e.StartedAt < to && (e.CompletedAt == null || e.CompletedAt >= from), cancellationToken);
+            e => e.StartedAt < to && (e.CompletedAt == null || e.CompletedAt > from), cancellationToken);
     }
 
     /// <inheritdoc />

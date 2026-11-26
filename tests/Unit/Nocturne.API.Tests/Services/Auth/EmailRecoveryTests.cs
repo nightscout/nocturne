@@ -70,7 +70,7 @@ public class EmailRecoveryTests : IDisposable
         _tenant = new TenantContext(_tenantId, "alpha", "Alpha household", true, false);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
 
         using var seed = _db.CreateContext(Guid.Empty);
         seed.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "alpha", DisplayName = "Alpha household" });

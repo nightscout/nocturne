@@ -46,7 +46,8 @@ public interface IAlertRepository
 
     /// <summary>
     /// Returns every rule of <paramref name="tenantId"/>, enabled or not, in <c>SortOrder</c>,
-    /// without its channels.
+    /// without its channels. A condition type, severity or scope class no member has reads as the
+    /// stand-in the rule editor shows for it.
     /// </summary>
     /// <remarks>
     /// A startup loop calls it once per tenant. Callers serving a request are bound as for
@@ -89,9 +90,10 @@ public interface IAlertRepository
         Guid excursionId, DateTime triggeredAt, bool whileOpen, CancellationToken ct);
 
     /// <summary>
-    /// The tenant's excursions of a condition whose opening or close still owes work
-    /// (<c>IAlertTrackerRepository.CreateExcursionAsync</c>) and was last taken up before
-    /// <paramref name="takenUpBefore"/>, oldest first.
+    /// The tenant's excursions of a condition, and notices that were resolved, whose opening or close
+    /// still owes work (<c>IAlertTrackerRepository.CreateExcursionAsync</c>) and was last taken up
+    /// before <paramref name="takenUpBefore"/>, oldest first. A standing notice owes its dispatch to
+    /// its own check, which builds its payload.
     /// </summary>
     Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct);
 
@@ -105,6 +107,20 @@ public interface IAlertRepository
 
     /// <summary>Records that the work <paramref name="kind"/> of <paramref name="excursionId"/> owed is done.</summary>
     Task SettleTransitionAsync(Guid excursionId, ExcursionTransitionType kind, CancellationToken ct);
+
+    /// <summary>
+    /// Records that the close of <paramref name="excursionId"/> owes its work again, taken up at
+    /// <paramref name="now"/>, when the excursion has ended or the notice was resolved (its instance
+    /// is resolved). False when it is open, stands, or does not exist.
+    /// </summary>
+    Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Records that the opening of <paramref name="excursionId"/> owes its work, taken up at
+    /// <paramref name="now"/>, for a re-notification of it (<see cref="IAlertSnoozeService.ResumeAsync"/>).
+    /// False, with nothing written, when the opening already owes work or the excursion does not exist.
+    /// </summary>
+    Task<bool> OweOpeningAsync(Guid excursionId, DateTime now, CancellationToken ct);
 
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
@@ -187,9 +203,14 @@ public interface IAlertRepository
     /// <summary>
     /// Marks an alert instance as suppressed at fire time without dispatching deliveries.
     /// Writes <paramref name="reason"/> to <c>alert_instances.suppression_reason</c> so Replay
-    /// and History can display "would have fired but suppressed" rows. Currently the only
-    /// reason emitted by the orchestrator is <c>"dnd"</c>.
+    /// and History can display "would have fired but suppressed" rows. The reasons are the Do Not
+    /// Disturb scopes (<c>DndSuppressionGate.SuppressionReason</c>).
     /// </summary>
+    /// <remarks>
+    /// Does nothing to an instance with a delivery row: its dispatch may have reached a channel, and
+    /// a late run of its opening (the sweep finishing an opening or a snooze's re-notification that
+    /// died) that meets a scope begun since must not record it as silenced, nor drop it from the alarm.
+    /// </remarks>
     Task MarkInstanceSuppressedAsync(Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
@@ -221,7 +242,11 @@ public interface IAlertRepository
     /// </summary>
     Task<IReadOnlyList<StandingUnevaluableNotice>> GetStandingUnevaluableNoticesAsync(Guid? ruleId, CancellationToken ct);
 
-    /// <summary>Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved.</summary>
+    /// <summary>
+    /// Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved, and records
+    /// that its close owes its work, which <see cref="GetOwedTransitionsAsync"/> offers once its
+    /// instance is resolved.
+    /// </summary>
     Task EndNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct);
 
     /// <summary>

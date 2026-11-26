@@ -40,7 +40,7 @@ public class ProfileActivationRepository
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx.ProfileActivations.AsNoTracking()
-            .Where(e => e.Timestamp <= to && (e.EndTimestamp == null || e.EndTimestamp > from))
+            .OverlapsWindow(e => e.Timestamp, e => e.EndTimestamp, from, to, OverlapEdges.EndAtFromExcluded)
             .OrderByDescending(e => e.Timestamp)
             .ThenByDescending(e => e.Id)
             .Take(limit)

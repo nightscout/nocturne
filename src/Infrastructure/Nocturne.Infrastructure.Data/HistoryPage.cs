@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -46,7 +47,7 @@ public static class HistoryPage
         var from = (cursorMills + 1).ToUtcDateTime();
         var horizon = await HistoryHorizon.GetAsync(context, logger, ct);
         var page = await source
-            .Where(InRange(stamp, from, horizon))
+            .InHalfOpenWindow(stamp, from, horizon)
             .OrderBy(stamp)
             .ThenBy(id)
             .Take(limit)
@@ -91,7 +92,7 @@ public static class HistoryPage
     {
         var from = millisecond.ToUtcDateTime();
         return source
-            .Where(InRange(stamp, from, from.AddMilliseconds(1)))
+            .InHalfOpenWindow(stamp, from, from.AddMilliseconds(1))
             .OrderBy(stamp)
             .ThenBy(id)
             .ToListAsync(ct);
@@ -104,22 +105,4 @@ public static class HistoryPage
     /// </summary>
     public static IQueryable<T> IncludingDeleted<T>(this IQueryable<T> source) where T : class =>
         source.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]);
-
-    private static Expression<Func<T, bool>> InRange<T>(
-        Expression<Func<T, DateTime>> stamp,
-        DateTime? from,
-        DateTime? to)
-    {
-        Expression body = from is { } lower
-            ? Expression.GreaterThanOrEqual(stamp.Body, Expression.Constant(lower, typeof(DateTime)))
-            : Expression.Constant(true);
-
-        if (to is { } upper)
-        {
-            var lessThan = Expression.LessThan(stamp.Body, Expression.Constant(upper, typeof(DateTime)));
-            body = from is null ? lessThan : Expression.AndAlso(body, lessThan);
-        }
-
-        return Expression.Lambda<Func<T, bool>>(body, stamp.Parameters[0]);
-    }
 }

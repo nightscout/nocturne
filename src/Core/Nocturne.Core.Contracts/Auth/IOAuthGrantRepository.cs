@@ -172,11 +172,10 @@ public interface IOAuthGrantRepository
     /// revokes the grant it writes, so a subject with no membership of a tenant holds no grant on it.
     /// </returns>
     /// <remarks>
-    /// The subject row comes before the membership lock because account deletion and
-    /// <c>RemoveMembershipsOfSubjectAsync</c> lock that row <c>FOR UPDATE</c> and then wait for the
-    /// membership locks, while the grant's insert needs the row <c>FOR KEY SHARE</c> through its
-    /// foreign key: taking it later would let a consent and a deletion each wait for what the other
-    /// holds.
+    /// The subject row comes before the membership lock because account deletion locks that row
+    /// <c>FOR UPDATE</c> and then waits for the membership locks, while the grant's insert needs the
+    /// row <c>FOR KEY SHARE</c> through its foreign key: taking it later would let a consent and a
+    /// deletion each wait for what the other holds.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The repository is not over a unit of work, or the unit has no transaction open.</exception>
     Task<bool> LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);

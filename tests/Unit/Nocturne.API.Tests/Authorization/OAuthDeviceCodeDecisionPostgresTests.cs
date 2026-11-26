@@ -77,12 +77,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     }
 
     private NocturneDbContext Context(Guid tenant, IInterceptor? staged = null) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(staged is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors: staged is null ? [] : [staged]);
 
     private sealed record Seeded(Guid Tenant, Guid Client, Guid Grant, Guid Subject, Guid OtherSubject, string UserCode, SuppliedContextFactory Contexts);
 
