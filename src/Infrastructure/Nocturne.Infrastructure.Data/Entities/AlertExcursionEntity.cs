@@ -95,7 +95,8 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
 
     /// <summary>
     /// As <see cref="OpenedOwedAt"/>, for the work the excursion's close calls for
-    /// (<c>IExcursionResolutionHandler</c>), written in the transaction that closes it.
+    /// (<c>IExcursionResolutionHandler</c>), written in the transaction that closes it, or that ends a
+    /// notice.
     /// </summary>
     [Column("closed_owed_at")]
     public DateTime? ClosedOwedAt { get; set; }

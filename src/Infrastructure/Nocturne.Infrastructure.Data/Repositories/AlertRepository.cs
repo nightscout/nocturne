@@ -659,6 +659,7 @@ public class AlertRepository : IAlertRepository
         if (notice is null) return;
 
         notice.EndedAt = at;
+        notice.ClosedOwedAt = at;
         await context.SaveChangesAsync(ct);
     }
 

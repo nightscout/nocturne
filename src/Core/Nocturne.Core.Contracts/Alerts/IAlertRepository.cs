@@ -230,7 +230,11 @@ public interface IAlertRepository
     /// </summary>
     Task<IReadOnlyList<StandingUnevaluableNotice>> GetStandingUnevaluableNoticesAsync(Guid? ruleId, CancellationToken ct);
 
-    /// <summary>Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved.</summary>
+    /// <summary>
+    /// Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved, and records
+    /// that its close owes its work, which <see cref="GetOwedTransitionsAsync"/> offers once its
+    /// instance is resolved.
+    /// </summary>
     Task EndNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct);
 
     /// <summary>

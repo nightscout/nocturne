@@ -224,6 +224,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Func<Task>? BeforeOweClose;
         public Func<Task>? AfterOweClose;
         public Func<Task>? AfterEndNotice;
+        public Func<Task>? AfterResolveInstances;
 
         public override async Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct)
         {
@@ -258,6 +259,14 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         {
             await base.EndNoticeAsync(excursionId, at, ct);
             if (AfterEndNotice is { } after)
+                await after();
+        }
+
+        public override async Task ResolveInstancesForExcursionAsync(
+            Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
+        {
+            await base.ResolveInstancesForExcursionAsync(excursionId, resolvedAt, resolutionReason, ct);
+            if (AfterResolveInstances is { } after)
                 await after();
         }
     }
@@ -1149,5 +1158,34 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         await tenant.SweepAsync(tenant.Process(), AfterLease.AddMinutes(10));
 
         (await tenant.OwedAsync(excursion)).Opened.Should().BeNull("a closed excursion ends what its opening owed");
+    }
+
+    /// <summary>
+    /// The notice was sent and its dispatch settled; its retirement dies after it resolves the
+    /// instance, with the reason, and before it archives the notification.
+    /// </summary>
+    [Fact]
+    public async Task A_notice_whose_retirement_dies_after_its_resolve_is_archived_by_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var events = await RecordAlarmsAndNotificationsAsync(tenant, InAppProvider.UnevaluableNotificationType);
+        await UnevaluableNotice(tenant, tenant.Process())
+            .CheckAsync(new EnabledAlertRules([tenant.Rule], []), CancellationToken.None);
+        var notice = await NoticeOfAsync(tenant);
+        (await tenant.OwedAsync(notice)).Should().Be((null, null));
+        var dying = tenant.Hooked();
+        dying.AfterResolveInstances = () => throw new NpgsqlException("the retiring process dies once the instance is resolved");
+
+        await UnevaluableNotice(tenant, tenant.Process(dying))
+            .Invoking(n => n.ResolveAsync(tenant.Rule.Id, ExcursionCloseReason.RuleDisabled, CancellationToken.None))
+            .Should().ThrowAsync<NpgsqlException>();
+        events.Last(e => e is "notified" or "archived").Should().Be("notified", "the run died with its notification standing");
+
+        await tenant.SweepAsync(tenant.Process(), AfterLease);
+
+        events.Last(e => e is "notified" or "archived").Should().Be("archived", "no notification stays up for a resolved notice");
+        (await tenant.InstancesAsync(notice)).Should().ContainSingle()
+            .Which.ResolutionReason.Should().Be(ExcursionCloseReason.RuleDisabled.ToWireString());
+        (await tenant.OwedAsync(notice)).Should().Be((null, null));
     }
 }
