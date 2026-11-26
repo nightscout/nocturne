@@ -1,8 +1,10 @@
 import type { Cookies } from "@sveltejs/kit";
-import { runWithContext, type BotRequestContext } from "@nocturne/bot";
+import { runWithContext, type BotOptions, type BotRequestContext } from "@nocturne/bot";
 import { getBot } from "./index.js";
 import { buildScopedBotApiClient, buildUnscopedBotApiClient } from "./api-client.js";
 import { getEffectiveHost, getOriginalProto } from "#lib/server/request-host.js";
+
+type Platform = keyof NonNullable<BotOptions["platforms"]>;
 
 interface WebhookRequest {
   request: Request;
@@ -40,7 +42,7 @@ export function botRequestContext({ request, cookies, fetch }: WebhookRequest): 
  * relies on adapter-node keeping the event loop alive after the response is sent: a serverless
  * adapter would kill the detached tasks and need a `waitUntil` equivalent.
  */
-export async function handleBotWebhook(platform: string, event: WebhookRequest): Promise<Response> {
+export async function handleBotWebhook(platform: Platform, event: WebhookRequest): Promise<Response> {
   const bot = await getBot();
   const webhook = bot.webhooks[platform];
   if (!webhook) {

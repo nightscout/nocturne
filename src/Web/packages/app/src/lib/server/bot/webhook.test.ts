@@ -35,7 +35,7 @@ describe("handleBotWebhook", () => {
     for (const name of Object.keys(webhooks)) delete webhooks[name];
   });
 
-  it("runs the adapter inside a request context, as the Discord route always has", async () => {
+  it("runs the adapter inside the bot's request context", async () => {
     let seen: { unscoped: BotApiClient; scoped: BotApiClient } | undefined;
     webhooks.whatsapp = async () => {
       seen = { unscoped: getUnscopedApi(), scoped: getScopedApiFactory()("family") };
