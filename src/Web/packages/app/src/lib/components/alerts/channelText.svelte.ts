@@ -73,14 +73,13 @@ export function channelDestinationLabel(kind: ChannelKind): string | undefined {
       return "Channel ID";
     case ChannelType.TelegramGroup:
       return "Chat ID";
-    case ChannelType.WhatsAppDm:
-      return "Phone (E.164)";
     case ChannelType.ResendEmail:
       return "Email address";
     case ChannelType.InApp:
     case ChannelType.DiscordDm:
     case ChannelType.SlackDm:
     case ChannelType.TelegramDm:
+    case ChannelType.WhatsAppDm:
     case ChannelType.DeviceAction:
       return undefined;
     default: {
@@ -107,7 +106,7 @@ export function channelDestinationHelper(
     case ChannelType.TelegramGroup:
       return "Add the bot to the group, then use its chat ID (a negative number) or the group's @username.";
     case ChannelType.WhatsAppDm:
-      return "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code.";
+      return "Sent to the WhatsApp account you linked.";
     case ChannelType.InApp:
     case ChannelType.Webhook:
     case ChannelType.ResendEmail:
@@ -131,13 +130,12 @@ export function channelDestinationPatternMessage(
       return "A channel ID starts with C, G or D.";
     case ChannelType.TelegramGroup:
       return "A group chat ID is a negative number, or an @username.";
-    case ChannelType.WhatsAppDm:
-      return "A phone number starts with + and a country code, digits only.";
     case ChannelType.InApp:
     case ChannelType.Webhook:
     case ChannelType.DiscordDm:
     case ChannelType.SlackDm:
     case ChannelType.TelegramDm:
+    case ChannelType.WhatsAppDm:
     case ChannelType.ResendEmail:
     case ChannelType.DeviceAction:
       return undefined;

@@ -419,7 +419,9 @@ public class AlertRuleRepository : IAlertRuleRepository
             Secret = channel.KeepsStoredSecret ? retained.Secrets.GetValueOrDefault(key) : channel.Secret,
             AddedBySubjectId = stamps is null ? channel.AddedBySubjectId : stamps.AddedBySubjectId,
             StopsAt = stamps is null ? channel.StopsAt : stamps.StopsAt,
-            RecipientSubjectId = channel.RecipientSubjectId ?? stamps?.RecipientSubjectId,
+            RecipientSubjectId = stamps is not null && ChannelDestinations.IsTypedIn(channel.ChannelType, stamps.RecipientSubjectId)
+                ? null
+                : channel.RecipientSubjectId ?? stamps?.RecipientSubjectId,
             SortOrder = sortOrder,
             CreatedAt = now,
         };

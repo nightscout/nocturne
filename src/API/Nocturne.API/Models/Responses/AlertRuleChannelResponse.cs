@@ -23,6 +23,10 @@ public class AlertRuleChannelResponse
     /// <summary>The name of the member a channel in <see cref="AlertChannelState.NoRecipient"/>
     /// goes to, when known.</summary>
     public string? MemberName { get; set; }
+    /// <summary>Whether the channel's destination is typed in, so it stops with the access of the
+    /// member who added it and can be kept by another. A WhatsApp number a member has linked since
+    /// it was typed in goes to that member, and is not.</summary>
+    public bool? TypedIn { get; set; }
     /// <summary>The name of the member who added a channel whose destination was typed in, when
     /// known.</summary>
     public string? AddedByName { get; set; }

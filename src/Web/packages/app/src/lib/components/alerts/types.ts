@@ -997,6 +997,7 @@ export function channelStateOf(c: AlertRuleChannelResponse): ChannelState {
 		memberName: c.memberName,
 		addedByName: c.addedByName,
 		stopsAt: c.stopsAt,
+		typedIn: c.typedIn,
 	};
 }
 
@@ -1099,6 +1100,8 @@ export interface ChannelState {
 	addedByName?: string;
 	/** An ISO instant. */
 	stopsAt?: string;
+	/** Whether the destination is typed in, so another member can keep the channel once it stops. */
+	typedIn?: boolean;
 }
 
 export interface ChannelDef extends ChannelState {
