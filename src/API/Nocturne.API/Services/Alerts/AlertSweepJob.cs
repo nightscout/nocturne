@@ -368,8 +368,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// <see cref="SmartSnoozeConfig"/> to enable it with count to spare, and then either its
     /// <see cref="SmartSnoozeConfig.Conditions"/> to hold against a context built from the tenant's
     /// fresh canonical reading, or, when it configures none, <see cref="SmartSnoozeTrendGate"/> to
-    /// pass. Anything else clears the snooze and hands the instance to
-    /// <see cref="IAlertSnoozeService.ResumeAsync"/>, which re-notifies if the alert still stands.
+    /// pass. Anything else hands the instance to <see cref="IAlertSnoozeService.ResumeAsync"/>, which
+    /// ends the snooze and re-notifies if the alert still stands. A resume that fails before it ends
+    /// the snooze leaves it lapsed for the next run, which decides it again.
     /// </summary>
     private async Task CheckSnoozedInstancesAsync(Sweep sweep, CancellationToken ct)
     {
@@ -447,13 +448,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             }
             else
             {
-                await sweep.Repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
-                    tenantId,
-                    instance.InstanceId,
-                    SnoozedUntil: DateTime.MinValue), ct);
-
                 logger.LogInformation(
-                    "Snooze cleared for instance {InstanceId} (count: {Count}/{Max}, reason: {Reason})",
+                    "Snooze lapsed for instance {InstanceId} (count: {Count}/{Max}, reason: {Reason})",
                     instance.InstanceId, instance.SnoozeCount, cfg.MaxCount, reason);
 
                 await ResumeAsync(sweep.Services, instance.InstanceId, ct);
@@ -464,8 +460,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     }
 
     /// <summary>
-    /// Re-notifies a cleared snooze through <see cref="IAlertSnoozeService.ResumeAsync"/>. One
-    /// instance's failure is logged, not rethrown, so the rest of the tenant's pass still runs.
+    /// Ends a lapsed snooze through <see cref="IAlertSnoozeService.ResumeAsync"/>, which re-notifies
+    /// when the alert still stands. One instance's failure is logged, not rethrown, so the rest of the
+    /// tenant's pass still runs.
     /// </summary>
     private async Task ResumeAsync(IServiceProvider services, Guid instanceId, CancellationToken ct)
     {

@@ -431,6 +431,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("receipt_confirmed_at");
 
+                    b.Property<DateTime?>("RenotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("renotified_at");
+
                     b.Property<string>("ResolutionReason")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")

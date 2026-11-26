@@ -9,8 +9,8 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="IHeldRuleNotice"/>) through the rule's own channels at its severity, behind the Do Not
 /// Disturb gate its excursions pass (<see cref="DndGatedDispatch"/>), runs the notice's resolution
 /// again when it ended during the dispatch (<see cref="IExcursionResolutionHandler.CloseAgainIfEndedAsync"/>),
-/// then settles the work its row owed. A channel already answered is not sent again
-/// (<see cref="IAlertDeliveryService.DispatchAsync"/>).
+/// then settles the work its row owed. A dispatch run again sends what the notice's latest send
+/// still owes (<see cref="IAlertDeliveryService.DispatchAsync"/>).
 /// </summary>
 internal static class RuleNoticeDispatch
 {
