@@ -5,6 +5,7 @@ using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -137,6 +138,87 @@ public class EntryReadServiceFindFilterTests
         count.Should().Be(7);
         _mgRepo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    private void SetupIncludingDeleted(
+        HistoryRecord<SensorGlucose>[] readings,
+        HistoryRecord<MeterGlucose>[]? meters = null,
+        HistoryRecord<Calibration>[]? calibrations = null)
+    {
+        _sgRepo.Setup(r => r.GetForEntriesIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<GlucoseStreams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(readings);
+        _mgRepo.Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(meters ?? []);
+        _calRepo.Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(calibrations ?? []);
+    }
+
+    [Fact]
+    public async Task QueryAsync_IsValidFalse_ReturnsTheDeletedEntriesOfEveryTypeAndNoLiveOne()
+    {
+        var liveSg = MakeSg(Now, 120);
+        var deletedSg = MakeSg(Now.AddMinutes(-5), 130);
+        var deletedMbg = MakeMbg(Now.AddMinutes(-10));
+        var liveCal = MakeCal(Now.AddMinutes(-15));
+        SetupIncludingDeleted(
+            [new(liveSg, false), new(deletedSg, true)],
+            [new(deletedMbg, true)],
+            [new(liveCal, false)]);
+
+        var result = await _sut.QueryAsync(new EntryQuery { Find = "find[isValid]=false", Count = 10 });
+
+        result.Select(e => e.Mills).Should().Equal(
+            new DateTimeOffset(deletedSg.Timestamp).ToUnixTimeMilliseconds(),
+            new DateTimeOffset(deletedMbg.Timestamp).ToUnixTimeMilliseconds());
+        result.Select(e => e.Type).Should().Equal("sgv", "mbg");
+        result.Should().OnlyContain(e => e.IsValid == false);
+    }
+
+    [Fact]
+    public async Task CountAsync_IsValidFalse_CountsTheDeletedEntriesTheListReturns()
+    {
+        SetupIncludingDeleted(
+            [new(MakeSg(Now, 120), false), new(MakeSg(Now.AddMinutes(-5), 130), true)],
+            [new(MakeMbg(Now.AddMinutes(-10)), true)]);
+
+        var count = await _sut.CountAsync(find: "find[isValid]=false");
+        var listed = await _sut.QueryAsync(new EntryQuery { Find = "find[isValid]=false", Count = 10 });
+
+        count.Should().Be(2);
+        listed.Should().HaveCount((int)count);
+    }
+
+    [Fact]
+    public async Task QueryAsync_FindThatDoesNotNameIsValid_ReadsLiveEntriesOnly()
+    {
+        SetupSg(MakeSg(Now, 200));
+        SetupIncludingDeleted([new(MakeSg(Now.AddMinutes(-5), 190), true)]);
+
+        var result = await _sut.QueryAsync(new EntryQuery { Find = "find[sgv][$gte]=180", Count = 10 });
+
+        result.Should().ContainSingle().Which.IsValid.Should().NotBe(false);
+        _sgRepo.Verify(r => r.GetForEntriesIncludingDeletedAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
+            It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<GlucoseStreams>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mgRepo.Verify(r => r.GetIncludingDeletedAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static MeterGlucose MakeMbg(DateTime ts) => new()
+    {
+        Id = Guid.NewGuid(),
+        Timestamp = ts,
+        Mgdl = 110,
+        Device = "test-meter",
+        CreatedAt = ts,
+        ModifiedAt = ts,
+    };
 
     private static SensorGlucose MakeSg(DateTime ts, double mgdl) => new()
     {

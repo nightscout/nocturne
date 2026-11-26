@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Effects;
@@ -23,6 +24,7 @@ internal static class FoodServices
             new DocumentProcessingService(TimeProvider.System, NullLogger<DocumentProcessingService>.Instance),
             sideEffects ?? Mock.Of<IWriteSideEffects>(),
             events ?? Mock.Of<IDataEventSink<Food>>(),
+            Mock.Of<IAuditContext>(),
             NullLogger<FoodService>.Instance
         );
 }

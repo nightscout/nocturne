@@ -43,13 +43,15 @@ public class UploadedInvalidEntryIntegrationTests : ApiIntegrationTestBase
 
     private readonly DateTimeOffset _at = DateTimeOffset.UtcNow.AddMinutes(-10);
 
-    private JsonObject Entry(string type, string? id = null, bool? isValid = null, double value = 120)
+    private JsonObject Entry(
+        string type, string? id = null, bool? isValid = null, double value = 120, DateTimeOffset? at = null)
     {
+        var time = at ?? _at;
         var entry = new JsonObject
         {
             ["type"] = type,
-            ["date"] = _at.ToUnixTimeMilliseconds(),
-            ["dateString"] = _at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            ["date"] = time.ToUnixTimeMilliseconds(),
+            ["dateString"] = time.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             ["device"] = "AndroidAPS-DexcomG6",
         };
         if (id is not null)
@@ -246,6 +248,42 @@ public class UploadedInvalidEntryIntegrationTests : ApiIntegrationTestBase
         var live = await LiveAsync(client);
         (live.V1.Length, live.V3.Length).Should().Be((1, 1));
         live.V1.Should().NotContain(id);
+    }
+
+    [Theory]
+    [InlineData("sgv")]
+    [InlineData("mbg")]
+    [InlineData("cal")]
+    public async Task A_v1_find_naming_isValid_lists_the_entry_stored_deleted_and_its_count_agrees(string type)
+    {
+        var client = CreateAuthenticatedClient();
+        var live = NewId();
+        var deleted = NewId();
+        await UploadAsync(client, Entry(type, live, at: _at.AddMinutes(-5)), v3: false);
+        await UploadAsync(client, Entry(type, deleted, isValid: false), v3: false);
+
+        var invalid = (await GetAsync(client, "/api/v1/entries?find[isValid]=false&count=100")).AsArray();
+        var counted = (await GetAsync(client, "/api/v1/count/entries/where?find[isValid]=false")).AsArray();
+        var notNamingIsValid = (await GetAsync(client, "/api/v1/entries?find[device]=AndroidAPS-DexcomG6&count=100")).AsArray();
+
+        var listed = invalid.Should().ContainSingle().Subject!;
+        listed["_id"]!.GetValue<string>().Should().Be(deleted);
+        listed["type"]!.GetValue<string>().Should().Be(type);
+        listed["isValid"]!.GetValue<bool>().Should().BeFalse();
+        counted.Should().ContainSingle().Which!["count"]!.GetValue<long>().Should().Be(1);
+        notNamingIsValid.Select(e => e!["_id"]!.GetValue<string>()).Should().Equal(live);
+    }
+
+    [Fact]
+    public async Task A_v3_search_naming_isValid_lists_no_entry_stored_deleted()
+    {
+        var client = CreateAuthenticatedClient();
+        await UploadAsync(client, Entry("sgv", NewId(), isValid: false), v3: false);
+        (await GetAsync(client, "/api/v1/entries?find[isValid]=false&count=100")).AsArray().Should().ContainSingle();
+
+        var search = await GetAsync(client, "/api/v3/entries?isValid$eq=false&limit=100");
+
+        search["result"]!.AsArray().Should().BeEmpty();
     }
 
     [Theory]

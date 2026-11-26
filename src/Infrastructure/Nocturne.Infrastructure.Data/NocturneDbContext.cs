@@ -647,13 +647,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// V4 record tables a read ranges over one tenant by timestamp with its soft-deleted rows, which
-    /// the partial list indexes leave out: the legacy treatment window read that includes deleted rows
-    /// (<c>ILegacyKeyedRepository.GetIncludingDeletedAsync</c>, and on profile activations
-    /// <c>LegacyProfileActivationTable.InWindow</c>), and on sensor glucose the dedup unlinked read.
+    /// the partial list indexes leave out: the legacy window read that includes deleted rows
+    /// (<c>ILegacyKeyedRepository.GetIncludingDeletedAsync</c>, on profile activations
+    /// <c>LegacyProfileActivationTable.InWindow</c>, on sensor glucose
+    /// <c>ISensorGlucoseRepository.GetForEntriesIncludingDeletedAsync</c>, and over the device status
+    /// tables <c>IDeviceStatusGroupRepository.GetIncludingDeletedAsync</c>), and on sensor glucose the
+    /// dedup unlinked read.
     /// </summary>
     internal static readonly Type[] V4DeletedInclusiveWindowEntities =
     [
         typeof(SensorGlucoseEntity),
+        typeof(MeterGlucoseEntity),
+        typeof(CalibrationEntity),
         typeof(BolusEntity),
         typeof(CarbIntakeEntity),
         typeof(TempBasalEntity),
@@ -662,6 +667,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(DeviceEventEntity),
         typeof(BolusCalculationEntity),
         typeof(ProfileActivationEntity),
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(DeviceStatusExtrasEntity),
     ];
 
     /// <summary>
@@ -674,11 +683,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// The <see cref="LegacyIdKeyedEntities"/> an isValid:false upload asks for deleted rows of
     /// (<c>ILegacyKeyedRepository.GetDeletedLegacyIdsAsync</c>, <c>DecomposedTreatmentTable.DeletedAsync</c>):
-    /// the entry and device status snapshot tables and the decomposed treatment tables. Notes are left
-    /// out, because their unfiltered <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
+    /// the entry and device status snapshot tables, the decomposed treatment tables, and the therapy
+    /// settings a profile document is found by. Notes are left out, because their unfiltered
+    /// <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
     /// </summary>
     internal static readonly Type[] DeletedLegacyIdLookupEntities =
     [
+        typeof(TherapySettingsEntity),
         typeof(SensorGlucoseEntity),
         typeof(MeterGlucoseEntity),
         typeof(CalibrationEntity),

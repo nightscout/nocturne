@@ -79,6 +79,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 new TreatmentQuery
                 {
                     Find = findQuery,
+                    IncludesDeletedWhenNamed = false,
                     Count = parameters.Limit,
                     Skip = parameters.Offset,
                     ReverseResults = !parameters.Sort.Descending,

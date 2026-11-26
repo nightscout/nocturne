@@ -427,6 +427,9 @@ public class FoodController : BaseV3Controller<Food>
                 return StatusCode(201, createdRecords.ToArray());
             }
 
+            if (createdRecords.Invalidated is [var invalidated])
+                return V3Deduplicated(invalidated.Id, srvModified: null);
+
             var created = createdRecords.FirstOrDefault();
             if (created == null)
             {
@@ -491,6 +494,9 @@ public class FoodController : BaseV3Controller<Food>
                     "Request body must contain valid food data"
                 );
             }
+
+            if (food.IsValid == false)
+                return IsValidImmutable();
 
             ProcessFoodForCreation(food);
 

@@ -26,6 +26,13 @@ public interface IProfileDecomposer
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Stores every named profile of <paramref name="profiles"/> as V4 records already deleted, so only
+    /// v3 history serves each document, with <c>isValid: false</c>. A later
+    /// <see cref="DecomposeBatchAsync"/> of the same document writes it again.
+    /// </summary>
+    Task StoreDeletedAsync(IReadOnlyList<Profile> profiles, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes all V4 records that were decomposed from a legacy Profile with the given ID.
     /// Uses prefix matching since one legacy Profile fans out to multiple composite LegacyIds.
     /// </summary>

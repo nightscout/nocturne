@@ -309,12 +309,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.ILegacyKeyedRepository{T}.GetIncludingDeletedAsync" />
     /// <remarks>Reads through <see cref="PagedRead"/> over the rows with the soft-delete filter lifted.</remarks>
     public async Task<IReadOnlyList<HistoryRecord<TModel>>> GetIncludingDeletedAsync(
-        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default)
+        DateTime? from, DateTime? to, string? source, int limit, bool descending, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await PagedRead(
             ctx.Set<TEntity>().IncludingDeleted().AsNoTracking(),
-            from, to, device: null, source: null, limit, offset: 0, descending).ToListAsync(ct);
+            from, to, device: null, source, limit, offset: 0, descending).ToListAsync(ct);
         return entities.Select(e => new HistoryRecord<TModel>(ToDomain(e), e.DeletedAt is not null)).ToList();
     }
 

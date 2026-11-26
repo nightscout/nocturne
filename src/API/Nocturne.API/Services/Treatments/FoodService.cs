@@ -1,11 +1,15 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -24,6 +28,7 @@ public class FoodService : IFoodService
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<Food> _events;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<FoodService> _logger;
     private const string CollectionName = "food";
 
@@ -34,6 +39,7 @@ public class FoodService : IFoodService
     /// <param name="documentProcessingService">Service for HTML sanitization of food fields.</param>
     /// <param name="sideEffects">Handles cache invalidation and SignalR broadcasting on writes.</param>
     /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
+    /// <param name="auditContext">The scope's audit actor, attributed to the system for the deletes an <c>isValid: false</c> upload makes.</param>
     /// <param name="logger">The logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
     public FoodService(
@@ -41,6 +47,7 @@ public class FoodService : IFoodService
         IDocumentProcessingService documentProcessingService,
         IWriteSideEffects sideEffects,
         IDataEventSink<Food> events,
+        IAuditContext auditContext,
         ILogger<FoodService> logger
     )
     {
@@ -55,6 +62,7 @@ public class FoodService : IFoodService
         _events =
             events
             ?? throw new ArgumentNullException(nameof(events));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -102,7 +110,7 @@ public class FoodService : IFoodService
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Food>> CreateFoodAsync(
+    public async Task<BulkWrite<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
         FoodWriteMode mode,
         CancellationToken cancellationToken = default
@@ -111,7 +119,11 @@ public class FoodService : IFoodService
         var foodList = foods.Where(f => f != null).ToList();
         _logger.LogDebug("Creating {Count} food records", foodList.Count);
 
-        return await PersistCreatedAsync(ProcessFoodDocuments(foodList).ToList(), cancellationToken);
+        var processed = ProcessFoodDocuments(foodList).ToList();
+        if (!processed.Any(f => f.IsValid == false))
+            return [.. await PersistCreatedAsync(processed, cancellationToken)];
+
+        return await CreateWithInvalidAsync(processed, cancellationToken);
 
         IEnumerable<Food> ProcessFoodDocuments(IEnumerable<Food> documents)
         {
@@ -219,6 +231,59 @@ public class FoodService : IFoodService
 
         var created = await PersistCreatedAsync([food], cancellationToken);
         return created.First();
+    }
+
+    /// <summary>
+    /// Creates <paramref name="processed"/>, settling the foods sent with <c>isValid: false</c> by
+    /// <see cref="InvalidUploads{TUpload}"/>: one whose id a live food holds deletes it, and one whose id
+    /// no food holds is stored already deleted. A food is named only by its id.
+    /// </summary>
+    /// <returns>Each food as stored, or as given where it wrote nothing.</returns>
+    private async Task<BulkWrite<Food>> CreateWithInvalidAsync(List<Food> processed, CancellationToken cancellationToken)
+    {
+        var ids = processed.Where(f => f.IsValid == false && !string.IsNullOrEmpty(f.Id)).Select(f => f.Id!).ToList();
+        var stored = await _food.GetStoredIdsAsync(ids, cancellationToken);
+
+        var indexed = processed.Select((food, index) => (Food: food, Index: index)).ToList();
+        var sorted = await InvalidUploads<(Food Food, int Index)>.SortAsync(indexed, indexed, new(
+            f => string.IsNullOrEmpty(f.Food.Id) ? null : f.Food.Id,
+            f => f.Index,
+            f => f.Food.IsValid,
+            (f, valid) => f.Food.IsValid = valid,
+            f => stored.TryGetValue(f.Food.Id!, out var deleted) && !deleted,
+            _ => true,
+            (unstored, _) => Task.FromResult<IReadOnlySet<string>>(
+                unstored.Where(id => stored.GetValueOrDefault(id)).ToHashSet(StringComparer.Ordinal))), cancellationToken);
+
+        var served = new Dictionary<Food, Food>(ReferenceEqualityComparer.Instance);
+        var invalidated = new HashSet<Food>(ReferenceEqualityComparer.Instance);
+        using (SystemAuditScope.Push(_auditContext, keepWriter: true))
+        {
+            foreach (var (food, _) in sorted.Invalidating.DistinctBy(f => f.Food.Id, StringComparer.Ordinal))
+            {
+                if (await DeleteFoodAsync(food.Id!, cancellationToken))
+                    invalidated.Add(food);
+            }
+
+            var storedDeleted = sorted.StoredDeleted.Select(f => f.Food).ToList();
+            if (storedDeleted.Count > 0)
+            {
+                foreach (var (food, row) in storedDeleted.Zip(await _food.StoreDeletedAsync(storedDeleted, cancellationToken)))
+                    served[food] = row;
+            }
+        }
+
+        var writing = sorted.Writing.Select(f => f.Food).ToList();
+        if (writing.Count > 0)
+        {
+            foreach (var (food, row) in writing.Zip(await PersistCreatedAsync(writing, cancellationToken)))
+                served[food] = row;
+        }
+
+        return new BulkWrite<Food>([.. processed.Select(f => served.GetValueOrDefault(f, f))], 0)
+        {
+            Invalidated = [.. processed.Where(invalidated.Contains)],
+        };
     }
 
     private async Task<List<Food>> PersistCreatedAsync(List<Food> processedList, CancellationToken cancellationToken)

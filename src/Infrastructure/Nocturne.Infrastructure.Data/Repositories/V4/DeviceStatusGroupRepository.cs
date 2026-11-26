@@ -26,6 +26,15 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceStatusGroup>> GetAsync(
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default) =>
+        [.. (await ReadWindowAsync(from, to, device, limit, offset, descending, includeDeleted: false, ct)).Select(s => s.Record)];
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<HistoryRecord<DeviceStatusGroup>>> GetIncludingDeletedAsync(
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default) =>
+        ReadWindowAsync(from, to, device, limit, offset, descending, includeDeleted: true, ct);
+
     /// <remarks>
     /// The arms are read one at a time in the page's order, each cut at <c>offset + limit</c> rows
     /// and bounded on the far side by the last row of the page so far: no row past it can enter the
@@ -33,11 +42,12 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     /// be walked to its end through its anti-joins. Each arm is an index walk on its table's tenant
     /// timestamp index.
     /// </remarks>
-    public async Task<IReadOnlyList<DeviceStatusGroup>> GetAsync(
-        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default)
+    private async Task<IReadOnlyList<HistoryRecord<DeviceStatusGroup>>> ReadWindowAsync(
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, bool includeDeleted,
+        CancellationToken ct)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var rows = Rows.Live(ctx);
+        var rows = includeDeleted ? Rows.IncludingDeleted(ctx) : Rows.Live(ctx);
         var take = offset + limit;
         var page = new List<AnchorRow>();
 
@@ -62,7 +72,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
 
         var anchors = page.Skip(offset).ToList();
         var members = await Members.LoadAsync(rows, anchors, ct);
-        return members.GroupsOf(anchors).Select(g => g.Group).ToList();
+        return members.GroupsOf(anchors).Select(g => new HistoryRecord<DeviceStatusGroup>(g.Group, g.Anchor.Deleted)).ToList();
     }
 
     /// <inheritdoc />

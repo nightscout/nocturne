@@ -357,7 +357,7 @@ public class LegacyPostBodyTests
         writer
             .Setup(w => w.CreateProfilesAsync(It.IsAny<IEnumerable<Profile>>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<Profile>, CancellationToken>((p, _) => profiles.AddRange(p))
-            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => p);
+            .ReturnsAsync((IEnumerable<Profile> p, CancellationToken _) => [.. p]);
         return writer.Object;
     }
 

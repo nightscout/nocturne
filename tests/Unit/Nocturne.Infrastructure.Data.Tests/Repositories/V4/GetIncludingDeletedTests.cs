@@ -69,7 +69,7 @@ public class GetIncludingDeletedTests : IDisposable
         await AddAsync(11, deleted: true);
 
         var rows = await _repository.GetIncludingDeletedAsync(
-            Start, Start.AddMinutes(10), limit: 10, descending: false);
+            Start, Start.AddMinutes(10), source: null, limit: 10, descending: false);
 
         rows.Select(r => (r.Record.Id, r.Deleted)).Should().Equal(
             (first.Id, true), (live.Id, false), (last.Id, false));
@@ -82,8 +82,8 @@ public class GetIncludingDeletedTests : IDisposable
         var middle = await AddAsync(1, deleted: true);
         var newest = await AddAsync(2, deleted: true);
 
-        var newestFirst = await _repository.GetIncludingDeletedAsync(null, null, limit: 2, descending: true);
-        var oldestFirst = await _repository.GetIncludingDeletedAsync(null, null, limit: 2, descending: false);
+        var newestFirst = await _repository.GetIncludingDeletedAsync(null, null, source: null, limit: 2, descending: true);
+        var oldestFirst = await _repository.GetIncludingDeletedAsync(null, null, source: null, limit: 2, descending: false);
 
         newestFirst.Select(r => r.Record.Id).Should().Equal(newest.Id, middle.Id);
         oldestFirst.Select(r => r.Record.Id).Should().Equal(oldest.Id, middle.Id);
@@ -97,7 +97,7 @@ public class GetIncludingDeletedTests : IDisposable
         var liveCopy = await AddAsync(0);
         await DuplicateGroups.LinkAsync(_context, RecordType.Bolus, primary.Id, deletedCopy.Id, liveCopy.Id);
 
-        var rows = await _repository.GetIncludingDeletedAsync(null, null, limit: 10, descending: true);
+        var rows = await _repository.GetIncludingDeletedAsync(null, null, source: null, limit: 10, descending: true);
 
         rows.Should().ContainSingle().Which.Record.Id.Should().Be(primary.Id);
     }
@@ -109,7 +109,7 @@ public class GetIncludingDeletedTests : IDisposable
         var deletedCopy = await AddAsync(0, deleted: true);
         await DuplicateGroups.LinkAsync(_context, RecordType.Bolus, primary.Id, deletedCopy.Id);
 
-        var rows = await _repository.GetIncludingDeletedAsync(null, null, limit: 10, descending: true);
+        var rows = await _repository.GetIncludingDeletedAsync(null, null, source: null, limit: 10, descending: true);
 
         var row = rows.Should().ContainSingle().Subject;
         (row.Record.Id, row.Deleted).Should().Be((primary.Id, true));

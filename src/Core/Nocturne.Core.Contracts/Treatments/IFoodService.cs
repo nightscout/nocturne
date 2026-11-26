@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Treatments;
@@ -28,9 +29,12 @@ public interface IFoodService
     /// Create new food records with WebSocket broadcasting
     /// </summary>
     /// <param name="mode">The write rules. V1 and V3 pass <see cref="FoodWriteMode.Legacy"/>.</param>
-    /// <remarks>A <see cref="FoodWriteMode.Native"/> batch skips a food whose name sanitizes to empty and creates the rest.</remarks>
-    /// <returns>Created food records with assigned IDs</returns>
-    Task<IEnumerable<Food>> CreateFoodAsync(
+    /// <remarks>
+    /// A <see cref="FoodWriteMode.Native"/> batch skips a food whose name sanitizes to empty and creates the rest.
+    /// A food sent with <c>isValid: false</c> is stored deleted, or deletes the live food its id names.
+    /// </remarks>
+    /// <returns>Each food as stored, or as given where it wrote nothing.</returns>
+    Task<BulkWrite<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
         FoodWriteMode mode,
         CancellationToken cancellationToken = default

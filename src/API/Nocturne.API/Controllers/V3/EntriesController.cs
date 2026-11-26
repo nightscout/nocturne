@@ -86,6 +86,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 {
                     Type = type,
                     Find = findQuery,
+                    IncludesDeletedWhenNamed = false,
                     Count = parameters.Limit,
                     Skip = parameters.Offset,
                     ReverseResults = !parameters.Sort.Descending,

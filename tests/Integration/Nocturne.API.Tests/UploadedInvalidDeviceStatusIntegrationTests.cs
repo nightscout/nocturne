@@ -36,15 +36,16 @@ public class UploadedInvalidDeviceStatusIntegrationTests : ApiIntegrationTestBas
 
     private readonly DateTimeOffset _at = DateTimeOffset.UtcNow.AddMinutes(-10);
 
-    private JsonObject Status(string? id = null, bool? isValid = null, double reservoir = 120)
+    private JsonObject Status(string? id = null, bool? isValid = null, double reservoir = 120, DateTimeOffset? at = null)
     {
-        var createdAt = _at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var time = at ?? _at;
+        var createdAt = time.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         var status = new JsonObject
         {
             ["app"] = "AAPS",
             ["device"] = "openaps://AndroidAPS",
             ["created_at"] = createdAt,
-            ["date"] = _at.ToUnixTimeMilliseconds(),
+            ["date"] = time.ToUnixTimeMilliseconds(),
             ["pump"] = new JsonObject { ["reservoir"] = reservoir, ["clock"] = createdAt },
             ["uploader"] = new JsonObject { ["battery"] = 80 },
             ["openaps"] = new JsonObject
@@ -125,6 +126,39 @@ public class UploadedInvalidDeviceStatusIntegrationTests : ApiIntegrationTestBas
         IsDeleted(deleted).Should().BeTrue();
         Is(deleted, id).Should().BeTrue();
         deleted!["pump"]!["reservoir"]!.GetValue<double>().Should().Be(120);
+    }
+
+    [Fact]
+    public async Task A_v1_find_naming_isValid_lists_the_status_stored_deleted_and_its_count_agrees()
+    {
+        var client = CreateAuthenticatedClient();
+        var live = NewId();
+        var deleted = NewId();
+        await UploadAsync(client, Status(live, at: _at.AddMinutes(-5)), v3: false);
+        await UploadAsync(client, Status(deleted, isValid: false), v3: false);
+
+        var invalid = (await GetAsync(client, "/api/v1/devicestatus?find[isValid]=false&count=100")).AsArray();
+        var counted = (await GetAsync(client, "/api/v1/count/devicestatus/where?find[isValid]=false")).AsArray();
+        var notNamingIsValid = (await GetAsync(client, "/api/v1/devicestatus?find[pump][$exists]=true&count=100")).AsArray();
+
+        var listed = invalid.Should().ContainSingle().Subject!;
+        listed["_id"]!.GetValue<string>().Should().Be(deleted);
+        listed["isValid"]!.GetValue<bool>().Should().BeFalse();
+        listed["pump"]!["reservoir"]!.GetValue<double>().Should().Be(120);
+        counted.Should().ContainSingle().Which!["count"]!.GetValue<long>().Should().Be(1);
+        notNamingIsValid.Select(s => s!["_id"]!.GetValue<string>()).Should().Equal(live);
+    }
+
+    [Fact]
+    public async Task A_v3_search_naming_isValid_lists_no_status_stored_deleted()
+    {
+        var client = CreateAuthenticatedClient();
+        await UploadAsync(client, Status(NewId(), isValid: false), v3: false);
+        (await GetAsync(client, "/api/v1/devicestatus?find[isValid]=false&count=100")).AsArray().Should().ContainSingle();
+
+        var search = await GetAsync(client, "/api/v3/devicestatus?isValid$eq=false&limit=100");
+
+        search["result"]!.AsArray().Should().BeEmpty();
     }
 
     [Theory]

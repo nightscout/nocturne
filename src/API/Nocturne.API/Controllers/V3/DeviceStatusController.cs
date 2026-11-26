@@ -64,7 +64,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 .ParseDeviceStatus(
                     ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                         ?? ConvertV3FilterToV1Find(parameters.Filter))
-                .WithFieldRenamed("identifier", "_id");
+                .WithFieldRenamed("identifier", "_id")
+                .OnlyValid();
 
             var deviceStatusList = (
                 await _deviceStatuses.GetDeviceStatusesAsync(

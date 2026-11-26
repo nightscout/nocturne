@@ -317,7 +317,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         if (range.IncludeDeleted)
         {
             var rows = await repository(repositories).GetIncludingDeletedAsync(
-                range.From, range.To, range.Limit, range.Descending, ct);
+                range.From, range.To, source: null, range.Limit, range.Descending, ct);
             return rows.Select(row => Fetch(row.Record, row.Deleted)).ToList();
         }
 
