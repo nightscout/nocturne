@@ -13,15 +13,14 @@ WhatsApp. This page gives the steps for WhatsApp. For account linking, alert del
 other parts that all platforms share, see [Chat Bots](/docs/bots).
 
 WhatsApp messages go through Meta's Cloud API. You need a Meta developer account and a phone
-number for the bot. The number cannot also be in use in the WhatsApp app on a phone.
+number for the bot.
 
 ## 1. Create a Meta app
 
 1. Go to [Meta for Developers](https://developers.facebook.com/apps) and create an app.
-2. For the app type, select **Business**.
-3. In the app, add the **WhatsApp** product.
-4. In **WhatsApp > API Setup**, add the phone number for the bot, or use the test number that
-   Meta gives you.
+2. For the use case, select **Connect with customers through WhatsApp**.
+3. In **WhatsApp > API Setup**, add the phone number for the bot. You can also use the test
+   number that Meta gives you.
 
 ## 2. Collect the credentials
 
@@ -34,11 +33,18 @@ number for the bot. The number cannot also be in use in the WhatsApp app on a ph
 
 <Callout type="warning" title="The API Setup token expires">
 
-  The access token on the <strong>API Setup</strong> page is temporary. It expires after
-  24 hours, and then the bot stops. For production, create a System User in Meta Business
-  Settings, give it access to the app, and generate a permanent token for it.
+  The access token on the <strong>API Setup</strong> page is temporary. When it expires, the
+  bot stops. For production, use a token that does not expire. See the steps below.
 
 </Callout>
+
+To make a token that does not expire:
+
+1. In Meta Business Settings, create a System User.
+2. Give the System User access to the app and to the WhatsApp Business Account.
+3. Generate a token for the System User, with the expiry set to **Never**.
+4. Give the token the `whatsapp_business_messaging` and `whatsapp_business_management`
+   permissions.
 
 To make a verify token, you can use `openssl rand -hex 32`.
 
@@ -49,16 +55,19 @@ Enter the four values with one of the two methods below. For the full workflow, 
 
 ### Option A: Admin UI
 
-Go to **Platform > Administration > Integrations** and fill in the **WhatsApp** card:
+1. Go to **Platform > Administration > Integrations**.
+2. In the **WhatsApp** card, fill in the fields:
 
-| Field | Value |
-|-------|-------|
-| **Access Token** | The access token from step 2 |
-| **App Secret** | The app secret from step 2 |
-| **Phone Number ID** | The phone number ID from step 2 |
-| **Verify Token** | The verify token that you chose |
+   | Field | Value |
+   |-------|-------|
+   | **Access Token** | The access token from step 2 |
+   | **App Secret** | The app secret from step 2 |
+   | **Phone Number ID** | The phone number ID from step 2 |
+   | **Verify Token** | The verify token that you chose |
 
-Select the **Enabled** switch, select **Save**, and restart the Nocturne web service.
+3. Set the switch to **Enabled**.
+4. Select **Save**.
+5. Restart the Nocturne web service.
 
 ### Option B: Environment variables
 
@@ -69,12 +78,14 @@ WHATSAPP_PHONE_NUMBER_ID=...
 WHATSAPP_VERIFY_TOKEN=...
 ```
 
-Restart Nocturne after you set them.
+After you set them, restart the Nocturne web service.
+
+The alert template in step 6 has no environment variable. To use a template, use Option A.
 
 ## 4. Configure the webhook
 
-Save the credentials in Nocturne and restart it before you do this step. Meta checks the
-webhook when you save it.
+Meta checks the webhook when you save it. Before you do this step, save the credentials in
+Nocturne and restart the Nocturne web service.
 
 1. In the Meta app, go to **WhatsApp > Configuration**.
 2. In the **Webhook** section, select **Edit**.
@@ -95,20 +106,25 @@ webhook when you save it.
 </Callout>
 
 Nocturne gets the **messages** field for each message that a person sends and for the status
-of each message that the bot sends. It gets **user_id_update** when a person changes their
-phone number. Then the person's link to Nocturne stays in use.
+of each message that the bot sends. Meta sends **user_id_update** when the WhatsApp user ID of
+a person changes. The bot then continues to know that person.
 
 ## 5. Link a WhatsApp account
 
 WhatsApp has no slash command menu. People type the commands as messages.
 
 1. From WhatsApp, send `/connect` to the bot's number.
-2. Open the link that the bot sends, and sign in to Nocturne.
-3. Send `/status`. The bot replies with the accounts that you linked.
-4. Send `/bg` to get the latest glucose reading.
+2. Open the link that the bot sends.
+3. Sign in to Nocturne.
+4. Send `/status`. The bot replies with the accounts that you linked.
+5. Send `/bg` to get the latest glucose reading.
 
-Send `/help` for the list of commands. If you send a message that is not a command, the bot
-replies with the list.
+If the instance has more than one site, send `/connect` with the slug of your site, for example
+`/connect myfamily`.
+
+Send `/help` or `/start` for the list of commands. If you send a command that the bot does not
+know, the bot tells you and sends the list. If you send a message that is not a command, the
+bot sends the list, at most one time in 10 minutes.
 
 ## 6. Receive alerts in WhatsApp
 
@@ -143,9 +159,10 @@ To deliver alerts outside the window, configure an alert template:
 3. Add one **Quick reply** button, for example *Acknowledge*.
 4. Send the template to Meta for approval.
 5. After Meta approves it, go to **Platform > Administration > Integrations** in Nocturne.
-6. In the **WhatsApp** card, enter the **Alert Template Name** and the **Alert Template
-   Language**, for example `en_US`.
-7. Select **Save**, and restart the Nocturne web service.
+6. In the **WhatsApp** card, enter the **Alert Template Name**.
+7. Enter the **Alert Template Language**, for example `en_US`.
+8. Select **Save**.
+9. Restart the Nocturne web service.
 
 If you do not enter a language, Nocturne uses `en`. The language must be the same as the
 language of the approved template.
@@ -160,9 +177,9 @@ When the window is closed, Nocturne sends the alert as this template. The quick 
 acknowledges the alert, as the button on a normal alert does. A notice that a rule cannot run
 or is on hold is not sent as a template.
 
-<Callout type="info" title="Meta charges for templates">
+<Callout type="info" title="Meta charges for messages">
 
-  Meta charges for each template message that the bot sends. Messages in the 24-hour window
-  have no charge.
+  Meta charges for template messages, and for some other messages. For the current prices,
+  see [WhatsApp pricing](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing).
 
 </Callout>
