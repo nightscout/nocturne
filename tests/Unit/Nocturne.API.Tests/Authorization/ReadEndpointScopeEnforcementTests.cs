@@ -161,6 +161,7 @@ public class ReadEndpointScopeEnforcementTests
             ["JobLedgerController.List"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["TenantCreationInviteAdminController.GetOverview"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["PlatformPolicyController.GetPolicy"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantUsageController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["WebhookSettingsController.GetWebhookSettings"] = V4Reason.NotStored,
 

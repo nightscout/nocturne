@@ -42,6 +42,8 @@ public class V4ReadLimitCoverageTests
             // A monolithic legacy-shaped profile carries every schedule array inline, so the page
             // is far heavier per record than the rest of this surface.
             ["ProfileController.GetProfileRecords"] = "clamps to its own tighter ceiling",
+            // An operator read across tenants: a limit outside 1 to 500 is refused with 400.
+            ["TenantUsageController.Get"] = "refuses a limit above its own ceiling",
         };
 
     [Fact]
