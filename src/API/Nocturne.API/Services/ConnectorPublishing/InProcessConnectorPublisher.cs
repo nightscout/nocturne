@@ -7,6 +7,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// In-process implementation of <see cref="IConnectorPublisher"/> that wires connector output
 /// directly to the running API services without HTTP or message-queue overhead.
 /// Used when connectors run in the same process as the API (the default Aspire configuration).
+/// A connector holds every store as <see cref="ConnectorStoreFailures{TStore}"/>.
 /// </summary>
 /// <seealso cref="IConnectorPublisher"/>
 /// <seealso cref="IGlucosePublisher"/>
@@ -47,7 +48,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
     /// <param name="treatments">The treatment publisher for bolus, basal, and carb data.</param>
     /// <param name="device">The device publisher for device status and metadata.</param>
     /// <param name="metadata">The metadata publisher for connector-level metadata.</param>
-    /// <param name="state">The state the publishing connector keeps between runs; the connector holds it as <see cref="ConnectorStateFailures"/>.</param>
+    /// <param name="state">The state the publishing connector keeps between runs.</param>
     /// <param name="skips">The scope's tally the four publishers add to.</param>
     public InProcessConnectorPublisher(
         IGlucosePublisher glucose,
@@ -58,10 +59,10 @@ public class InProcessConnectorPublisher : IConnectorPublisher
         PublishSkipTally skips)
     {
         _skips = skips;
-        Glucose = glucose;
-        Treatments = treatments;
-        Device = device;
-        Metadata = metadata;
-        State = new ConnectorStateFailures(state);
+        Glucose = ConnectorStoreFailures<IGlucosePublisher>.Over(glucose);
+        Treatments = ConnectorStoreFailures<ITreatmentPublisher>.Over(treatments);
+        Device = ConnectorStoreFailures<IDevicePublisher>.Over(device);
+        Metadata = ConnectorStoreFailures<IMetadataPublisher>.Over(metadata);
+        State = ConnectorStoreFailures<IConnectorStateStore>.Over(state);
     }
 }

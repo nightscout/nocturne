@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.GoogleHealth.Configurations;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
@@ -133,7 +134,7 @@ public class SyncProgressConnectorIdTests
         services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
         services.AddSingleton(Mock.Of<IGoogleHealthGrantHolders>());
         services.AddSingleton(Mock.Of<IGoogleHealthPlatformSettings>());
-        services.AddSingleton(Mock.Of<IGoogleHealthReadingWriter>());
+        services.AddKeyedSingleton(GoogleHealthServiceKeys.Writer, Mock.Of<IGoogleHealthReadingWriter>());
         services.AddSingleton(Mock.Of<IGoogleHealthSyncCoordinator>());
         services.AddConnectors(new ConfigurationBuilder().Build());
         return services.BuildServiceProvider();
