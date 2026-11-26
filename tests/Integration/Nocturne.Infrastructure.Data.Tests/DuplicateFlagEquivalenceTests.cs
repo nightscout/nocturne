@@ -290,7 +290,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         deleted.Promoted.Should().Equal(later.Copy);
 
         await using var scope = Scope(tenant);
-        var merge = Task.Run(() => Dedup(scope).MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, default));
+        var merge = Task.Run(() => Dedup(scope).MergeAllAsync(RecordType.CarbIntake, default));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
 
         await transaction.CommitAsync();
@@ -672,7 +672,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
             await test.ExecuteAsync(tenant, correct(second.Id));
 
             await using var scope = test.Scope(tenant);
-            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            var merged = await Dedup(scope).MergeAllAsync(type, default);
             merged.Should().BePositive($"the corrected copy of {type} matches the first");
             Exercised.Add("merged");
             return $"split then merge {type}: {merged}";
@@ -698,7 +698,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         private async Task<string> MergeAsync(RecordType type)
         {
             await using var scope = test.Scope(tenant);
-            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            var merged = await Dedup(scope).MergeAllAsync(type, default);
             if (merged > 0)
                 Exercised.Add("merged");
             return $"merge {type}: {merged}";
