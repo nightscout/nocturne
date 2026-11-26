@@ -115,6 +115,9 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
     const { alertTemplate, ...adapterConfig } = config;
     super(adapterConfig);
     this.alertTemplate = alertTemplate ?? null;
+    // The stock adapter keeps every message of a thread in the bot's state, which must hold no
+    // health data (see purgeThreadHistory). Its type fixes the flag to true, so it is set here.
+    Reflect.set(this, "persistThreadHistory", false);
   }
 
   override async handleWebhook(request: Request, options?: WebhookOptions): Promise<Response> {

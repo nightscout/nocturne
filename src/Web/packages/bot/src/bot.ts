@@ -114,6 +114,8 @@ export function createBot(options: BotOptions): Chat {
     const configured = typeof telegram === "object" ? telegram : undefined;
     adapters.telegram = createTelegramAdapter({
       botToken: configured?.botToken,
+      // Kept history holds people's messages in the bot's state; see purgeThreadHistory.
+      persistThreadHistory: false,
       secretToken: telegramWebhookSecretToken(
         configured?.webhookSecretToken || process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN,
       ),

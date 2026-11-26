@@ -1,4 +1,11 @@
-import { createBot, registerAllCommands, AlertDeliveryHandler, type BotOptions, type PlatformCredentials } from "@nocturne/bot";
+import {
+	createBot,
+	registerAllCommands,
+	purgeThreadHistory,
+	AlertDeliveryHandler,
+	type BotOptions,
+	type PlatformCredentials,
+} from "@nocturne/bot";
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
 import { DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, RESEND_API_KEY, RESEND_FROM_ADDRESS } from "$app/env/private";
 import { createServerApiClient, getApiBaseUrl } from "#lib/server/api-client-factory.js";
@@ -139,6 +146,10 @@ async function initBot(): Promise<Bot> {
 		);
 	}
 	registerAllCommands(bot, baseDomain);
+
+	purgeThreadHistory(bot).catch((err: unknown) => {
+		console.warn("[bot] could not delete the kept thread history:", err);
+	});
 
 	const enabledPlatforms = Object.entries(options.platforms ?? {})
 		.filter(([, val]) => val !== false && val !== undefined)
