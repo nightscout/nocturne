@@ -342,6 +342,7 @@ public partial class TeamRepository
                 ApprovedByName = a.ApprovedBy == null ? null : a.ApprovedBy.Name,
                 a.SysCreatedAt,
                 a.StaffRule,
+                StaffReach = a.Team!.StaffReach,
                 Staff = db.TeamSiteStaff
                     .Where(s => s.TeamTenantAccessId == a.Id && s.TeamMember!.Kind == TeamMemberKind.Staff)
                     .OrderBy(s => s.Status != TeamSiteStaffStatus.Pending)
@@ -349,6 +350,7 @@ public partial class TeamRepository
                     .ThenBy(s => s.TeamMemberId)
                     .Select(s => new
                     {
+                        s.Id,
                         s.TeamMember!.SubjectId,
                         DisplayName = s.TeamMember.Subject!.Name,
                         s.Status,
@@ -366,6 +368,12 @@ public partial class TeamRepository
                 .Distinct()
                 .ToListAsync(ct))
             .ToHashSet();
+        var inGroup = (await db.TeamSiteStaff.AsNoTracking()
+                .Where(s => s.TeamTenantAccess!.TenantId == tenantId)
+                .Where(TeamReasons.SharesGroup)
+                .Select(s => s.Id)
+                .ToListAsync(ct))
+            .ToHashSet();
         return rows.Select(r => new TenantTeamAccess(
             r.TeamId,
             r.TeamName,
@@ -377,6 +385,7 @@ public partial class TeamRepository
             r.ApprovedByName,
             DateTime.SpecifyKind(r.SysCreatedAt, DateTimeKind.Utc),
             r.StaffRule,
+            r.StaffReach,
             r.Staff.Select(s => new TenantTeamStaff(
                 s.SubjectId,
                 s.DisplayName,
@@ -384,7 +393,8 @@ public partial class TeamRepository
                 new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
                 MembershipLiveness.HasEnded(s.EndsAt, now),
                 TeamSuggestableRoles.NameOf(s.RoleCeilingSlug),
-                blocked.Contains(s.SubjectId))).ToList())).ToList();
+                blocked.Contains(s.SubjectId),
+                r.StaffReach != TeamStaffReach.EveryPerson && !inGroup.Contains(s.Id))).ToList())).ToList();
     }
 
     /// <inheritdoc/>

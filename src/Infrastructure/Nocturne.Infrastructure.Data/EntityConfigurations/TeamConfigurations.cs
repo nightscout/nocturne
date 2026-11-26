@@ -18,6 +18,71 @@ internal sealed class TeamEntityConfiguration : IEntityTypeConfiguration<TeamEnt
             .WithOne(m => m.Team)
             .HasForeignKey(m => m.TeamId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        entity.Property(e => e.StaffReach)
+            .HasDefaultValue(TeamStaffReach.EveryPerson)
+            .ValueGeneratedNever();
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_teams_staff_reach",
+            $"staff_reach IN ('{TeamStaffReach.EveryPerson}', '{TeamStaffReach.TheirGroups}')"));
+    }
+}
+
+internal sealed class TeamGroupEntityConfiguration : IEntityTypeConfiguration<TeamGroupEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamGroupEntity> entity)
+    {
+        entity.HasOne(e => e.Team)
+            .WithMany()
+            .HasForeignKey(e => e.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(e => e.People)
+            .WithOne(p => p.TeamGroup)
+            .HasForeignKey(p => p.TeamGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(e => e.Staff)
+            .WithOne(s => s.TeamGroup)
+            .HasForeignKey(s => s.TeamGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.Property(e => e.NameKey)
+            .HasMaxLength(TeamEntity.NameMaxLength)
+            .HasComputedColumnSql("lower(name)", stored: true);
+
+        entity.HasIndex(e => new { e.TeamId, e.NameKey }).IsUnique();
+    }
+}
+
+internal sealed class TeamGroupPersonEntityConfiguration : IEntityTypeConfiguration<TeamGroupPersonEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamGroupPersonEntity> entity)
+    {
+        entity.HasOne(e => e.Tenant)
+            .WithMany()
+            .HasForeignKey(e => e.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TeamGroupId, e.TenantId }).IsUnique();
+
+        entity.HasIndex(e => e.TenantId);
+    }
+}
+
+internal sealed class TeamGroupStaffEntityConfiguration : IEntityTypeConfiguration<TeamGroupStaffEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamGroupStaffEntity> entity)
+    {
+        entity.HasOne(e => e.TeamMember)
+            .WithMany(m => m.GroupPlaces)
+            .HasForeignKey(e => e.TeamMemberId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TeamGroupId, e.TeamMemberId }).IsUnique();
+
+        entity.HasIndex(e => e.TeamMemberId);
     }
 }
 

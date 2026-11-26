@@ -30,6 +30,14 @@ vi.mock("#lib/api/generated/teams.generated.remote.js", () => ({
   createManagerInvite: vi.fn(),
   revokeManagerInvite: vi.fn(),
   deleteTeam: vi.fn(),
+  createGroup: vi.fn(),
+  renameGroup: vi.fn(),
+  deleteGroup: vi.fn(),
+  addGroupPerson: vi.fn(),
+  removeGroupPerson: vi.fn(),
+  addGroupStaff: vi.fn(),
+  removeGroupStaff: vi.fn(),
+  setStaffReach: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
@@ -340,6 +348,62 @@ describe("team page staff sections", () => {
     });
   });
 
+  describe("what a staff member sees, by the team's setting", () => {
+    const narrowed = { ...manager, staffReach: "their_groups" };
+
+    it("words the staff card for the sites that let them in, and for a group with the site while staff see only their groups", async () => {
+      mocks.team = manager;
+      const { unmount } = render(TeamPage);
+      await expect
+        .element(page.getByText("A staff member can see a site when the site lets them in.", { exact: false }))
+        .toBeVisible();
+      expect(page.getByText("and they are in a group with the site", { exact: false }).elements()).toHaveLength(0);
+      unmount();
+
+      mocks.team = narrowed;
+      render(TeamPage);
+      await expect
+        .element(
+          page.getByText(
+            "A staff member can see a site when the site lets them in and they are in a group with the site.",
+            { exact: false },
+          ),
+        )
+        .toBeVisible();
+    });
+
+    it("words the staff link card for the sites that let them in, and for a group with them while staff see only their groups", async () => {
+      mocks.team = manager;
+      const { unmount } = render(TeamPage);
+      await expect
+        .element(
+          page.getByText(
+            "A staff member works for the team and sees the sites that the team has access to and that let them in.",
+            { exact: false },
+          ),
+        )
+        .toBeVisible();
+      expect(page.getByText("that have a group with them", { exact: false }).elements()).toHaveLength(0);
+      unmount();
+
+      mocks.team = narrowed;
+      render(TeamPage);
+      await expect
+        .element(
+          page.getByText(
+            "A staff member works for the team and sees the sites that the team has access to, that let them in and that have a group with them.",
+            { exact: false },
+          ),
+        )
+        .toBeVisible();
+      expect(
+        page
+          .getByText("sees the sites that the team has access to and that let them in", { exact: false })
+          .elements(),
+      ).toHaveLength(0);
+    });
+  });
+
   describe("staff invites", () => {
     it("says what a staff member is", async () => {
       render(TeamPage);
@@ -542,6 +606,24 @@ describe("team page staff sections", () => {
       for (const [other, absent] of Object.entries(sentences)) {
         if (other !== staffRule) expect(page.getByText(absent).elements(), other).toHaveLength(0);
       }
+    });
+
+    it("says a trusting site lets in only the staff in a group with it while staff see only their groups", async () => {
+      const trusting = "The site trusts the whole team. Every staff member that the site did not stop can see this site.";
+      const inGroup =
+        "The site trusts the whole team. Every staff member that the site did not stop and that is in a group with this site can see this site.";
+      mocks.team = { ...manager, sites: [site({ staffRule: "team_trusted" })], staffReach: "their_groups" };
+      const { unmount } = render(TeamPage);
+
+      await expect.element(page.getByText(inGroup)).toBeVisible();
+      expect(page.getByText(trusting, { exact: true }).elements()).toHaveLength(0);
+      unmount();
+
+      mocks.team = { ...manager, sites: [site({ staffRule: "team_trusted" })], staffReach: "every_person" };
+      render(TeamPage);
+
+      await expect.element(page.getByText(trusting, { exact: true })).toBeVisible();
+      expect(page.getByText(inGroup).elements()).toHaveLength(0);
     });
 
     it("says that declines still hold when the team decides and the site declined staff", async () => {

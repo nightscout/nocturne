@@ -39,6 +39,14 @@ vi.mock("#lib/api/generated/teams.generated.remote.js", () => ({
   createManagerInvite: vi.fn(),
   revokeManagerInvite: vi.fn(),
   deleteTeam: vi.fn(),
+  createGroup: vi.fn(),
+  renameGroup: vi.fn(),
+  deleteGroup: vi.fn(),
+  addGroupPerson: vi.fn(),
+  removeGroupPerson: vi.fn(),
+  addGroupStaff: vi.fn(),
+  removeGroupStaff: vi.fn(),
+  setStaffReach: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({

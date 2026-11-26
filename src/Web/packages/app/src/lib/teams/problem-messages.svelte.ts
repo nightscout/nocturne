@@ -22,6 +22,9 @@ export function teamProblemMessages(): ProblemCodeMessages {
     team_staff_end_invalid: "The end date must be in the future. Choose a later date.",
     team_staff_invite_end_passed:
       "The end date that this invite gives has passed. Ask a manager of the team for a new link.",
+    team_group_name_invalid: "The group name is empty or too long. Change the name and try again.",
+    team_group_name_taken: "Another group of this team has this name. Use a different name.",
+    team_staff_reach_invalid: "Nocturne does not know this setting. Reload the page and try again.",
   };
 }
 

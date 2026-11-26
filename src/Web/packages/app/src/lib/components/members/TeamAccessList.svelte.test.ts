@@ -68,3 +68,20 @@ describe("TeamAccessList link from a notice", () => {
     await expect.element(page.getByRole("group", { name: "Clinic" })).toHaveFocus();
   });
 });
+
+describe("TeamAccessList introduction", () => {
+  const groups = "When a team limits its staff to their groups, only its staff in a group with this site can see it, as this site allows.";
+
+  it("says only staff in a group can see the site when a team limits its staff to their groups", async () => {
+    render(TeamAccessList, props([team(clinicId, "Clinic"), { ...team(nightsId, "Nights"), staffReach: "their_groups" }], null));
+
+    await expect.element(page.getByText(groups, { exact: false })).toBeVisible();
+  });
+
+  it("says nothing of groups when every team lets its staff see every person", async () => {
+    render(TeamAccessList, props([{ ...team(clinicId, "Clinic"), staffReach: "every_person" }], null));
+
+    await expect.element(page.getByText("Approved staff can see this site through the team.", { exact: false })).toBeVisible();
+    expect(page.getByText(groups, { exact: false }).elements()).toHaveLength(0);
+  });
+});

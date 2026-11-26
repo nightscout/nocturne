@@ -395,6 +395,149 @@ public class TeamsController(
     }
 
     /// <summary>
+    /// Makes an empty group in the team. Its name is 1 to 100 characters once trimmed, and no other group of the
+    /// team has it, ignoring case. Changes nobody's access.
+    /// </summary>
+    [HttpPost("{teamId:guid}/groups")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(typeof(TeamGroupCreated), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateGroup(Guid teamId, [FromBody] TeamNameRequest request, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        if (TeamName(request.Name) is not { } name)
+            return GroupNameProblem();
+
+        var created = await teams.CreateGroupAsync(teamId, subjectId, name, ct);
+        return created is { Change: TeamGroupChange.Changed, GroupId: { } groupId }
+            ? StatusCode(StatusCodes.Status201Created, new TeamGroupCreated(groupId))
+            : GroupResult(created.Change);
+    }
+
+    /// <summary>Renames the team's group, as <see cref="CreateGroup"/> takes a name. Changes nobody's access.</summary>
+    [HttpPut("{teamId:guid}/groups/{groupId:guid}/name")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RenameGroup(Guid teamId, Guid groupId, [FromBody] TeamNameRequest request, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        if (TeamName(request.Name) is not { } name)
+            return GroupNameProblem();
+
+        return GroupResult(await teams.RenameGroupAsync(teamId, subjectId, groupId, name, ct));
+    }
+
+    /// <summary>
+    /// Deletes the team's group. While the team's staff see only the people in their groups, its staff lose the
+    /// access the group alone gave them.
+    /// </summary>
+    [HttpDelete("{teamId:guid}/groups/{groupId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteGroup(
+        Guid teamId, Guid groupId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        return GroupResult(await access.DeleteGroupAsync(teamId, subjectId, groupId, ct));
+    }
+
+    /// <summary>
+    /// Puts a site the team follows, with access that has not ended, in the team's group. One already there
+    /// changes nothing.
+    /// </summary>
+    [HttpPost("{teamId:guid}/groups/{groupId:guid}/people/{tenantId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddGroupPerson(
+        Guid teamId, Guid groupId, Guid tenantId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        return GroupResult(await access.AddGroupPersonAsync(teamId, subjectId, groupId, tenantId, ct));
+    }
+
+    /// <summary>Takes a site out of the team's group. One not there changes nothing.</summary>
+    [HttpDelete("{teamId:guid}/groups/{groupId:guid}/people/{tenantId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveGroupPerson(
+        Guid teamId, Guid groupId, Guid tenantId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        return GroupResult(await access.RemoveGroupPersonAsync(teamId, subjectId, groupId, tenantId, ct));
+    }
+
+    /// <summary>Puts a staff member of the team whose end has not passed in the team's group. One already there changes nothing.</summary>
+    [HttpPost("{teamId:guid}/groups/{groupId:guid}/staff/{subjectId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddGroupStaff(
+        Guid teamId, Guid groupId, Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return GroupResult(await access.AddGroupStaffAsync(teamId, callerId, groupId, subjectId, ct));
+    }
+
+    /// <summary>Takes a staff member of the team out of the team's group. One not there changes nothing.</summary>
+    [HttpDelete("{teamId:guid}/groups/{groupId:guid}/staff/{subjectId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveGroupStaff(
+        Guid teamId, Guid groupId, Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return GroupResult(await access.RemoveGroupStaffAsync(teamId, callerId, groupId, subjectId, ct));
+    }
+
+    /// <summary>
+    /// Sets which people the team's staff reach: every person the team follows, or only the people in their
+    /// groups (<see cref="TeamStaffReach"/>). Each site's own decisions still apply. The value in force changes
+    /// nothing.
+    /// </summary>
+    [HttpPut("{teamId:guid}/staff-reach")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetStaffReach(
+        Guid teamId, [FromBody] SetTeamStaffReachRequest request, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        if (!TeamStaffReach.IsKnown(request.StaffReach))
+            return this.ProblemWithCode(
+                TeamProblemCodes.StaffReachInvalid,
+                $"The staff reach must be one of {string.Join(", ", TeamStaffReach.All)}.",
+                StatusCodes.Status400BadRequest);
+
+        return GroupResult(await access.SetStaffReachAsync(teamId, subjectId, request.StaffReach, ct));
+    }
+
+    /// <summary>
     /// Makes a link that lets whoever opens it, signed in, give the team access to a site they own,
     /// within the role, limit and end it suggests. The token is in this response only.
     /// </summary>
@@ -614,6 +757,19 @@ public class TeamsController(
     private static string? TeamName(string? name) =>
         name?.Trim() is { Length: > 0 and <= TeamEntity.NameMaxLength } trimmed ? trimmed : null;
 
+    private ObjectResult GroupNameProblem() => this.ProblemWithCode(
+        TeamProblemCodes.GroupNameInvalid,
+        $"The group name must be 1 to {TeamEntity.NameMaxLength} characters.",
+        StatusCodes.Status400BadRequest);
+
+    private IActionResult GroupResult(TeamGroupChange change) => change switch
+    {
+        TeamGroupChange.Changed => NoContent(),
+        TeamGroupChange.NameTaken => this.ProblemWithCode(
+            TeamProblemCodes.GroupNameTaken, "Another group of this team has this name.", StatusCodes.Status409Conflict),
+        _ => NotFound(),
+    };
+
     private ObjectResult NameProblem() => this.ProblemWithCode(
         TeamProblemCodes.NameInvalid,
         $"The team name must be 1 to {TeamEntity.NameMaxLength} characters.",
@@ -808,6 +964,15 @@ public static class TeamProblemCodes
     public const string StaffDecisionNotOwner = "team_staff_decision_not_owner";
     public const string StaffTeamTrusted = "team_staff_team_trusted";
     public const string StaffRuleInvalid = "team_staff_rule_invalid";
+    public const string GroupNameInvalid = "team_group_name_invalid";
+    public const string GroupNameTaken = "team_group_name_taken";
+    public const string StaffReachInvalid = "team_staff_reach_invalid";
 }
 
 public sealed record TeamInviteAccepted(Guid TeamId);
+
+/// <summary>The group a manager made.</summary>
+public sealed record TeamGroupCreated(Guid Id);
+
+/// <summary>Which people the team's staff reach, a <see cref="TeamStaffReach"/> value.</summary>
+public sealed record SetTeamStaffReachRequest([property: Required] string StaffReach);

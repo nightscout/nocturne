@@ -88,7 +88,12 @@
       limitNote={endNote}
     />
 
-    <TeamStaffRuleChoices idPrefix="team-access-approve" value={staffRule} onChange={(next) => (staffRule = next)} />
+    <TeamStaffRuleChoices
+      idPrefix="team-access-approve"
+      value={staffRule}
+      onChange={(next) => (staffRule = next)}
+      narrows={false}
+    />
 
     <Button type="submit" size="lg" class="w-full" disabled={!canApprove}>Give the team access</Button>
   {/if}

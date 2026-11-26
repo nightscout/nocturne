@@ -325,7 +325,7 @@ describe("TeamAccessCard stopping a staff member", () => {
     await page.getByRole("alertdialog").getByRole("button", { name: "Let back in" }).click();
 
     await vi.waitFor(() =>
-      expect(onSuccess).toHaveBeenCalledWith("This person can see this site through teams again."),
+      expect(onSuccess).toHaveBeenCalledWith("You let this person back in. Each team gives them what it gave before."),
     );
     expect(mocks.unblockTeamStaff).toHaveBeenCalledWith(approved.subjectId);
   });

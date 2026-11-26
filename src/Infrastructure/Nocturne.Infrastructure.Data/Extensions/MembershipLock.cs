@@ -36,6 +36,11 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// staff it may sync, the owners lock and the team access lock; a role deletion takes the owners lock, the
 /// team access lock, then the locks of the members who hold it. A staff member joining or being edited
 /// takes their row, the team's manager lock and the team access lock of every site the team follows. A
+/// manager putting a site or a staff member in a group of the team or taking one out, deleting a group, or
+/// setting which people the team's staff reach, takes the rows of the staff it may sync, the team's manager
+/// lock and the team access lock of every site it touches; making or renaming a group takes only the manager
+/// lock. A group change and a staff member joining the team, and a group change and the switch, are ordered
+/// by the manager lock; a group change and a site's stop of one person by the site's team access lock. A
 /// site's stop of a team's access, the team's deletion and a staff member's removal take the team's
 /// manager lock and the team access lock of each site they touch; they only remove reasons and insert no
 /// row naming a subject. The startup sync takes one subject's row, then one site's team access lock. A

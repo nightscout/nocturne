@@ -31,6 +31,19 @@ public interface ITeamRepository
     Task<string?> RenameAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
 
     /// <summary>
+    /// Makes an empty group named <paramref name="name"/> in the team. <see cref="TeamGroupChange.NotFound"/>
+    /// when the caller is not a manager of it, <see cref="TeamGroupChange.NameTaken"/> when another of its groups
+    /// has the name, ignoring case. Changes nobody's access.
+    /// </summary>
+    Task<TeamGroupCreation> CreateGroupAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
+
+    /// <summary>
+    /// Renames the team's group, as <see cref="CreateGroupAsync"/> refuses a name; also
+    /// <see cref="TeamGroupChange.NotFound"/> when the team has no such group. Changes nobody's access.
+    /// </summary>
+    Task<TeamGroupChange> RenameGroupAsync(Guid teamId, Guid callerSubjectId, Guid groupId, string name, CancellationToken ct);
+
+    /// <summary>
     /// Removes <paramref name="managerSubjectId"/> from the team; the caller's own id means leave.
     /// Refused with <see cref="ManagerGuardedChange.LastManager"/> when the team would have no
     /// manager who counts, and <see cref="ManagerGuardedChange.NotFound"/> when either the caller or

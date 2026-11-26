@@ -55,12 +55,14 @@ public class TeamsControllerTests
         Enum.GetValues<AuthType>().Where(t => t is not (AuthType.SessionCookie or AuthType.LegacyJwt or AuthType.None));
 
     [Fact]
-    public void Every_action_is_one_of_the_twenty_team_routes() =>
+    public void Every_action_is_one_of_the_twenty_eight_team_routes() =>
         Actions.Select(m => m.Name).Should().BeEquivalentTo(
             "GetMyTeams", "CreateTeam", "GetTeam", "RenameTeam", "RemoveManager", "CreateManagerInvite",
             "RevokeManagerInvite", "GetInviteInfo", "AcceptInvite", "DeleteTeam",
             "CreateStaffInvite", "RevokeStaffInvite", "GetStaffInviteInfo", "AcceptStaffInvite", "UpdateStaff", "RemoveStaff",
-            "CreateAccessLink", "RevokeAccessLink", "GetAccessLinkInfo", "ApproveAccessLink");
+            "CreateAccessLink", "RevokeAccessLink", "GetAccessLinkInfo", "ApproveAccessLink",
+            "CreateGroup", "RenameGroup", "DeleteGroup", "AddGroupPerson", "RemoveGroupPerson", "AddGroupStaff",
+            "RemoveGroupStaff", "SetStaffReach");
 
     [Theory]
     [MemberData(nameof(ActionNames))]

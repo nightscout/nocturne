@@ -64,6 +64,12 @@ public class EndOnlyMembershipReadGuardTests
             "a team's access to a site, not a membership",
         [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.WithStaffWaitingLockedAsync"] =
             "a team's access to a site and a staff member's place in the team, which decide who an owner is told waits, not a membership",
+        [$"{Repositories}/TeamRepository.Groups.cs: TeamRepository.LockGroupPersonAsync"] =
+            "a team's access to a site, which a site must hold to be put in a group, not a membership",
+        [$"{Repositories}/TeamRepository.Groups.cs: TeamRepository.GroupsOfAsync"] =
+            "a team's access to a site, which the group list shows as ended, not a membership",
+        [$"{Repositories}/TeamRepository.Groups.cs: TeamRepository.AccessesOutsideGroupsAsync"] =
+            "a team's access to a site, which the switch's count leaves out once ended, not a membership",
         [$"{Repositories}/TeamReasonChanges.cs: TeamReasonChanges.SyncAsync"] =
             "whether one team reason has lapsed, which is left in place, or would be added already ended, not whether the row is a member",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Services/TeamReasons.cs: TeamReasons.OwnsAsync"] =

@@ -144,7 +144,7 @@
     void run(
       `unblock:${subjectId}`,
       () => unblockTeamStaff(subjectId),
-      "This person can see this site through teams again.",
+      "You let this person back in. Each team gives them what it gave before.",
       "Could not let this person back in. Try again.",
       missingItemError(),
       teamStaffBlockProblemMessages(),
