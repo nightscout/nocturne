@@ -58,4 +58,3 @@ public static class PlatformAdminCredentials
     public static bool Carries(AuthContext auth) =>
         CarryingTypes.Contains(auth.AuthType) && !auth.IsHandedOff;
 }
-
