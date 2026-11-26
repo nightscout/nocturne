@@ -87,10 +87,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     private async Task<Seeded> SeedAsync(string slug, bool personPending = false)
     {
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'direct-beside-team', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, $"{slug}-{tenant:N}", "direct-beside-team");
 
         var contexts = Contexts(tenant);
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
@@ -141,13 +138,16 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
                 VALUES ('{Guid.CreateVersion7()}', '{access}', '{teamMember}', 'approved');
                 """
             : string.Empty;
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            SELECT set_config('app.current_tenant_id', '{at}', false);
+        await using var seed = await NpgsqlTestCommands.OpenAsync(database.MigratorConnectionString);
+        await seed.PinTenantAsync(at);
+        await seed.ExecuteAsync($"""
             INSERT INTO teams (id, name) VALUES ('{team}', '{teamName}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{at}', {limit});
             {staff}
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
+            """);
+        await seed.PinTenantAsync(tenant);
+        await seed.ExecuteAsync($"""
             {(existing is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
                 VALUES ('{member}', '{tenant}', '{subject}', {limit}, now(), now());
@@ -336,15 +336,13 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         return (await GuestLinkByPersonAsync(s), await MadeByPersonAsync(s));
     }
 
-    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => NpgsqlTestCommands.ExecuteAsync(
-        database.MigratorConnectionString, $"""
-        SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => NpgsqlTestCommands.ExecuteAsTenantAsync(
+        database.MigratorConnectionString, s.Tenant, $"""
         UPDATE alert_rule_channels SET channel_type = '{channelType}' WHERE id = '{channel}';
         """);
 
     /// <summary>Clears the end of <see cref="Seeded.Person"/>'s row, as a build that knows nothing of reasons would.</summary>
-    private Task ClearAccessEndAsync(Seeded s) => NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-        SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+    private Task ClearAccessEndAsync(Seeded s) => NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, s.Tenant, $"""
         UPDATE tenant_members SET access_ends_at = NULL WHERE tenant_id = '{s.Tenant}' AND subject_id = '{s.Person}';
         """);
 
@@ -951,8 +949,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         await conn.OpenAsync();
         if (tenant is { } pinned)
         {
-            await using var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{pinned}', false)", conn);
-            await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(pinned);
         }
 
         await using var cmd = new NpgsqlCommand(sql, conn);

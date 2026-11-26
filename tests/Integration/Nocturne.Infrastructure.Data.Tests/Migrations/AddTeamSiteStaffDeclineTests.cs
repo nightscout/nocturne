@@ -35,11 +35,10 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
         var subject = Guid.CreateVersion7();
         var tenant = Guid.CreateVersion7();
         var team = Guid.CreateVersion7();
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"decline-{tenant:N}", "Site");
         await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{subject}', 'decline-{subject:N}', true, false, now(), now(), 'Approved');
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'decline-{tenant:N}', 'Site', true, now(), now());
             INSERT INTO teams (id, name) VALUES ('{team}', 'Before');
             INSERT INTO team_members (id, team_id, subject_id, kind) VALUES ('{ExistingMember}', '{team}', '{subject}', 'staff');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
@@ -73,9 +72,8 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
         var tenant = Guid.CreateVersion7();
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"decline-{tenant:N}", "Site");
         await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'decline-{tenant:N}', 'Site', true, now(), now());
             INSERT INTO teams (id, name) VALUES ('{team}', 'Clinic');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{tenant}', false);
@@ -226,8 +224,7 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
     {
         var conn = new NpgsqlConnection(fixture.App);
         await conn.OpenAsync();
-        await using var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{site}', false)", conn);
-        await pin.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(site);
         return conn;
     }
 

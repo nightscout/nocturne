@@ -48,10 +48,7 @@ public class AddTeamSiteBlocksFixture : IAsyncLifetime
     internal async Task<Guid> NewSiteAsync()
     {
         var tenant = Guid.CreateVersion7();
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'block-{tenant:N}', 'Site', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"block-{tenant:N}", "Site");
         return tenant;
     }
 
@@ -174,8 +171,8 @@ public class AddTeamSiteBlocksTests(AddTeamSiteBlocksFixture fixture) : IClassFi
     {
         var conn = new NpgsqlConnection(fixture.App);
         await conn.OpenAsync();
-        await using var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{site?.ToString() ?? string.Empty}', false)", conn);
-        await pin.ExecuteNonQueryAsync();
+        if (site is { } pinned)
+            await conn.PinTenantAsync(pinned);
         return conn;
     }
 }

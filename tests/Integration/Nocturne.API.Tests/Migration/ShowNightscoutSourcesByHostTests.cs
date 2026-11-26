@@ -62,10 +62,7 @@ public class ShowNightscoutSourcesByHostFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "show_nightscout_sources");
         _migrator = database.MigratorConnectionString;
 
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'show-{Tenant:N}', 'show', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, Tenant, $"show-{Tenant:N}", "show");
 
         foreach (var (id, mode, url, description) in new[]
                  {

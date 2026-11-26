@@ -10,7 +10,6 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -60,18 +59,8 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
     private async Task<(Guid Tenant, Guid Rule)> SeedAsync()
     {
         var tenant = Guid.NewGuid();
-        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
-        {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'notice-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"notice-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await NpgsqlTestCommands.SeedTenantAsync(
+            database.MigratorConnectionString, tenant, $"notice-{tenant:N}", "notice-test");
 
         var rule = Guid.CreateVersion7();
         await using var seed = Context(tenant);

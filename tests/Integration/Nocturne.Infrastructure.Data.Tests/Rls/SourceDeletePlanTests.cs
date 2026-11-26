@@ -125,7 +125,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         {
             var conn = new NpgsqlConnection(_database.AppConnectionString);
             await conn.OpenAsync();
-            await QueryPlans.SetTenantAsync(conn, tenant);
+            await conn.PinTenantAsync(tenant);
             return conn;
         }
 
@@ -137,11 +137,10 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         {
             await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
             await conn.OpenAsync();
+            await conn.SeedTenantAsync(tenant, $"srcplan-{tenant:N}", "source-delete-plan-test");
+            await conn.PinTenantAsync(tenant);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'source-delete-plan-test', true, now(), now());
-                SELECT set_config('app.current_tenant_id', @tid::text, false);
                 WITH g AS MATERIALIZED (
                     SELECT gen_random_uuid() AS canonical, gen_random_uuid() AS a, gen_random_uuid() AS b,
                            date_trunc('minute', now()) - make_interval(mins => i) AS ts
@@ -158,7 +157,6 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
                 SELECT gen_random_uuid(), @tid, canonical, @type, b, 'source-b', false, (extract(epoch FROM ts) * 1000)::bigint, now() FROM g;
                 """;
             cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"srcplan-{tenant:N}");
             cmd.Parameters.AddWithValue("groups", groups);
             cmd.Parameters.AddWithValue("type", RecordTypeKeys.Key(linkedType));
             await cmd.ExecuteNonQueryAsync();

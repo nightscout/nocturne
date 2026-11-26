@@ -184,14 +184,6 @@ public class NocturneDbContextFactoryTests : IAsyncDisposable
         public INocturneDbContextFactory Factory { get; } = factory;
     }
 
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public TenantContext? Context { get; private set; }
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     private sealed class StubAuditContext : IAuditContext
     {
         public Guid? SubjectId => null;

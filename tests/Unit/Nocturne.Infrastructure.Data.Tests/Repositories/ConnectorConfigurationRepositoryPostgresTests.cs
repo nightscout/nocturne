@@ -47,14 +47,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'connector-config-repo-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"connector-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"connector-{tenant:N}", "connector-config-repo-test");
         return tenant;
     }
 
@@ -240,11 +233,11 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         await using var saver = new NpgsqlConnection(database.MigratorConnectionString);
         await saver.OpenAsync();
         await using var save = await saver.BeginTransactionAsync();
+        await saver.PinTenantAsync(a, local: true);
         await using (var cmd = saver.CreateCommand())
         {
             cmd.Transaction = save;
             cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, true);
                 UPDATE connector_configurations SET configuration = '{"enabled":true,"region":"us"}'::jsonb
                 WHERE tenant_id = @tenant::uuid AND connector_name = 'glooko'
                 """;
@@ -341,11 +334,11 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         await using var toggler = new NpgsqlConnection(database.MigratorConnectionString);
         await toggler.OpenAsync();
         await using var toggle = await toggler.BeginTransactionAsync();
+        await toggler.PinTenantAsync(a, local: true);
         await using (var cmd = toggler.CreateCommand())
         {
             cmd.Transaction = toggle;
             cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, true);
                 UPDATE connector_configurations SET configuration = '{"enabled":false,"region":"eu"}'::jsonb
                 WHERE tenant_id = @tenant::uuid AND connector_name = 'glooko'
                 """;

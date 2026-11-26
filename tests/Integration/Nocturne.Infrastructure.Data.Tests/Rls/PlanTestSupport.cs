@@ -9,18 +9,8 @@ internal static class PlanTestSupport
         RlsCompletenessFixture fx, Guid tenant, string table, string columns, string values, int rows)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'plan-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"plan-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.SeedTenantAsync(tenant, $"plan-{tenant:N}", "plan-test");
+        await conn.PinTenantAsync(tenant);
 
         await using (var cmd = conn.CreateCommand())
         {

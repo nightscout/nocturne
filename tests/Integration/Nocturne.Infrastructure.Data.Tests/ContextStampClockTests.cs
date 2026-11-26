@@ -114,13 +114,7 @@ public class ContextStampClockTests(ContextStampClockTests.Database database)
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand("""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'context-stamp-clock', true, now(), now())
-            """, conn);
-        cmd.Parameters.AddWithValue("id", tenant);
-        cmd.Parameters.AddWithValue("slug", $"stamp-clock-{tenant:N}");
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"stamp-clock-{tenant:N}", "context-stamp-clock");
         return tenant;
     }
 }

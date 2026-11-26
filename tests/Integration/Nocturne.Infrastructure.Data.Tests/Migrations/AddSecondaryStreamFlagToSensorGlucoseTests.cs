@@ -56,10 +56,8 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
 
     private async Task SeedAsync(Guid tenant)
     {
-        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'stream-{tenant:N}', 'secondary-stream', true, now(), now());
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"stream-{tenant:N}", "secondary-stream");
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(_migrator, tenant, $"""
             INSERT INTO sensor_glucose (id, tenant_id, timestamp, mgdl, data_source, device, sys_created_at, sys_updated_at)
             VALUES (gen_random_uuid(), '{tenant}', now(), 110, 'xdrip', 'phone', now(), now()),
                    (gen_random_uuid(), '{tenant}', now(), 120, 'dexcom-connector', 'share', now(), now());
@@ -100,8 +98,7 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
         foreach (var tenant in new[] { TenantA, TenantB })
         {
             await using var transaction = await conn.BeginTransactionAsync();
-            await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', true)", conn))
-                await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(tenant, local: true);
             await using var cmd = new NpgsqlCommand(sql, conn);
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())

@@ -65,18 +65,16 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.SeedTenantAsync(tenant, $"soft-delete-{tenant:N}", "soft-delete-cleanup-test");
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@tenant, @slug, 'soft-delete-cleanup-test', true, now(), now());
-            SELECT set_config('app.current_tenant_id', @tenant::text, false);
             INSERT INTO tenant_data_retention_config (id, tenant_id, soft_delete_retention_days, created_at, updated_at)
             SELECT gen_random_uuid(), @tenant, @days, now(), now() WHERE @days IS NOT NULL;
             INSERT INTO body_weights (id, tenant_id, mills, weight_kg, sys_created_at, sys_updated_at, deleted_at)
             VALUES (gen_random_uuid(), @tenant, 0, 70, now(), now(), now() - make_interval(days => @ago));
             """;
         cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"soft-delete-{tenant:N}"));
         cmd.Parameters.Add(new NpgsqlParameter("@days", NpgsqlTypes.NpgsqlDbType.Integer)
         {
             Value = (object?)retentionDays ?? DBNull.Value
@@ -89,16 +87,9 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant::text, false);
-            SELECT count(*) FROM body_weights WHERE tenant_id = @tenant;
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@tenant", tenant));
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        await reader.ReadAsync();
-        return reader.GetInt64(0);
+        await conn.PinTenantAsync(tenant);
+        return await conn.ScalarAsync<long>(
+            "SELECT count(*) FROM body_weights WHERE tenant_id = @tenant;", ("tenant", tenant));
     }
 
     /// <summary>

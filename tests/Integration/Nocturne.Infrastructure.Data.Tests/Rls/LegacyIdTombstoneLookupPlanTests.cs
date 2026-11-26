@@ -118,7 +118,7 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
             .ToHashSet(StringComparer.Ordinal);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -160,7 +160,7 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
             .ToHashSet(StringComparer.Ordinal);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -183,18 +183,9 @@ public class LegacyIdTombstoneLookupPlanTests(RlsCompletenessFixture fx)
     private async Task SeedAsync(Guid tenant, string table, string columns, string valuesTemplate)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'tombstone-plan-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"tomb-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.SeedTenantAsync(tenant, $"tomb-{tenant:N}", "tombstone-plan-test");
 
-        await QueryPlans.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         (string Prefix, int Count, string DeletedAt, string ByUser)[] batches =
         [

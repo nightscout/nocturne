@@ -54,10 +54,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     {
         var tenant = Guid.NewGuid();
         var slug = $"{name}-{tenant:N}";
-        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}', 'setup-claim', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, slug, "setup-claim");
         var seeding = Contexts(retrying: false);
         var owner = await new SubjectRepository(seeding, AccountLinkRoutes.Off)
             .CreateSetupOwnerAsync(tenant, new NewSubject("Owner", Username: $"owner-{tenant:N}"), Ct);

@@ -107,12 +107,7 @@ public class UnclampedDuplicateGroupStatementTests : IAsyncLifetime
     private async Task<Store> OpenAsync()
     {
         var conn = await _fx.OpenAppConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", _tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(_tenant);
 
         var recorder = new StatementRecorder();
         var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()

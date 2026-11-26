@@ -35,11 +35,10 @@ public class AddTeamStaffFixture : IAsyncLifetime
 
         ExistingManager = Guid.CreateVersion7();
         var tenant = Guid.CreateVersion7();
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"staff-{tenant:N}", "Site");
         await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{ExistingManager}', 'staff-{ExistingManager:N}', true, false, now(), now(), 'Approved');
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'staff-{tenant:N}', 'Site', true, now(), now());
             INSERT INTO teams (id, name, created_by_subject_id) VALUES ('{ExistingTeam}', 'Before', '{ExistingManager}');
             INSERT INTO team_members (id, team_id, subject_id, kind)
             VALUES ('{Guid.CreateVersion7()}', '{ExistingTeam}', '{ExistingManager}', 'manager');
@@ -79,10 +78,7 @@ public class AddTeamStaffFixture : IAsyncLifetime
     internal async Task<Guid> NewTenantAsync()
     {
         var tenant = Guid.CreateVersion7();
-        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'staff-{tenant:N}', 'Site', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"staff-{tenant:N}", "Site");
         return tenant;
     }
 

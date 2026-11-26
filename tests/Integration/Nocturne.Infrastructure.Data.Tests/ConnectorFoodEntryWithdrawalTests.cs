@@ -77,11 +77,7 @@ public class ConnectorFoodEntryWithdrawalTests
         var tenant = await SeedTenantAsync(_fx, "withdrawal");
         await using var connection = new NpgsqlConnection(_fx.MigratorConnectionString);
         await connection.OpenAsync();
-        await using (var guc = new NpgsqlCommand("SELECT set_config('app.current_tenant_id', @t, false)", connection))
-        {
-            guc.Parameters.AddWithValue("t", tenant.ToString());
-            await guc.ExecuteScalarAsync();
-        }
+        await connection.PinTenantAsync(tenant);
 
         var fault = new FirstTransactionFault(TransactionFault.AfterCommit);
         var options = new DbContextOptionsBuilder<NocturneDbContext>()

@@ -33,7 +33,7 @@ public sealed class ProfileActivationWindowPlanTests(ProfileActivationWindowPlan
     {
         await using var conn = new NpgsqlConnection(fixture.Database.AppConnectionString);
         await conn.OpenAsync();
-        await QueryPlans.SetTenantAsync(conn, fixture.Tenant);
+        await conn.PinTenantAsync(fixture.Tenant);
 
         var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -88,10 +88,9 @@ public sealed class ProfileActivationWindowPlanFixture : IAsyncLifetime
 
         foreach (var (tenant, age) in Enumerable.Range(0, 4).Select(_ => (Guid.NewGuid(), "0 days")).Append((Tenant, "30 days")))
         {
+            await conn.SeedTenantAsync(tenant, $"plan-{tenant:N}", "plan-test");
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, 'plan-' || replace(@tid::text, '-', ''), 'plan-test', true, now(), now());
                 INSERT INTO profile_activations
                     (id, tenant_id, start_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms,
                      snapshot_is_customized, legacy_id, deleted_at, sys_created_at, sys_updated_at)

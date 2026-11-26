@@ -376,14 +376,6 @@ public class EmailRecoveryTests : IDisposable
         }
     }
 
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     private CapturingRequests Requests()
     {
         var services = new ServiceCollection();

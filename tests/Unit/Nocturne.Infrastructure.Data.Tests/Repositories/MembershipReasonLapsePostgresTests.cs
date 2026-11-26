@@ -60,10 +60,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     {
         var (app, migrator) = on ?? (database.AppConnectionString, database.MigratorConnectionString);
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-lapse', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(migrator, tenant, $"{slug}-{tenant:N}", "membership-lapse");
 
         var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);

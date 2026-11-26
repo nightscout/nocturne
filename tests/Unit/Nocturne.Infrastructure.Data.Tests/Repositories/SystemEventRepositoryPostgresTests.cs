@@ -59,11 +59,7 @@ public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTes
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'system-events-{tenant:N}', 'system-events', true, now(), now());
-            """, conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"system-events-{tenant:N}", "system-events");
         return tenant;
     }
 

@@ -58,10 +58,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
         _app = database.AppConnectionString;
 
         foreach (var tenant in new[] { TenantA, TenantB, TenantC })
-            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES ('{tenant}', 'rekey-{tenant:N}', 'rekey', true, now(), now());
-                """);
+            await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"rekey-{tenant:N}", "rekey");
 
         await InsertAsync(TenantA, "glooko",
             vendor: $$"""
@@ -144,8 +141,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
     private Task InsertAsync(
         Guid tenant, string connector, string? vendor = null, string? resume = null,
         string secrets = "{}", string configuration = "{}") =>
-        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
+        NpgsqlTestCommands.ExecuteAsTenantAsync(_migrator, tenant, $"""
             INSERT INTO connector_configurations
                 (id, tenant_id, connector_name, configuration, secrets, schema_version, last_modified,
                  sync_cursors, backfill_low_water_marks)
@@ -170,8 +166,7 @@ public class RekeyConnectorResumeStateFixture : IAsyncLifetime
         {
             await using var conn = new NpgsqlConnection(_migrator);
             await conn.OpenAsync();
-            await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false)", conn))
-                await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(tenant);
             await using var cmd = new NpgsqlCommand("""
                 SELECT connector_name, sync_cursors::text, backfill_low_water_marks::text, secrets::text, configuration::text
                 FROM connector_configurations

@@ -409,13 +409,10 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
     private static async Task<NpgsqlTransaction> HoldRowAsync(NpgsqlConnection connection, Guid tenant, Guid id)
     {
         var transaction = await connection.BeginTransactionAsync();
+        await connection.PinTenantAsync(tenant, local: true);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            SELECT 1 FROM sensor_glucose WHERE id = @id FOR UPDATE;
-            """;
-        command.Parameters.AddWithValue("tenant", tenant.ToString());
+        command.CommandText = "SELECT 1 FROM sensor_glucose WHERE id = @id FOR UPDATE;";
         command.Parameters.AddWithValue("id", id);
         await command.ExecuteNonQueryAsync();
         return transaction;

@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -27,14 +28,7 @@ public class WriterBucketsTests(RlsCompletenessFixture fx)
         var app = Guid.NewGuid();
         var now = DateTime.UtcNow;
         await using (var conn = await fx.OpenMigratorConnectionAsync())
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES ('{tenant}', 'writer-{tenant:N}', 'writer-buckets-test', true, now(), now())
-                """;
-            await cmd.ExecuteNonQueryAsync();
-        }
+            await conn.SeedTenantAsync(tenant, $"writer-{tenant:N}", "writer-buckets-test");
 
         await using var provider = TenantReaderData.BuildProvider(fx.AppConnectionString);
         await using var scope = provider.CreateAsyncScope();

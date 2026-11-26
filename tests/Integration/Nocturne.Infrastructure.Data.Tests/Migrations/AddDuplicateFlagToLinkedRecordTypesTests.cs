@@ -92,10 +92,7 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
     /// <returns>The non-primary copies.</returns>
     private async Task<List<Guid>> SeedAsync(Guid tenant)
     {
-        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'dup-{tenant:N}', 'duplicate-flag-backfill', true, now(), now())
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"dup-{tenant:N}", "duplicate-flag-backfill");
 
         await using var db = new NocturneDbContext(Options()) { TenantId = tenant };
         var at = DateTime.UtcNow.AddDays(-3);
@@ -181,8 +178,7 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
         foreach (var tenant in new[] { TenantA, TenantB })
         {
             await using var transaction = await conn.BeginTransactionAsync();
-            await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', true)", conn))
-                await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(tenant, local: true);
             await using var cmd = new NpgsqlCommand(sql, conn);
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())

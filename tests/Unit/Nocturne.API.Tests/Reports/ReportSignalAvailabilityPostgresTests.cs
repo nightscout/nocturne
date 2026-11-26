@@ -112,14 +112,7 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
             var tenant = Guid.NewGuid();
             await using var conn = new NpgsqlConnection(MigratorConnectionString);
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'report-availability-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("id", tenant);
-            cmd.Parameters.AddWithValue("slug", $"report-availability-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"report-availability-{tenant:N}", "report-availability-test");
             return tenant;
         }
     }

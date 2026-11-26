@@ -61,10 +61,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     {
         var app = connectionString ?? database.AppConnectionString;
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(Migrator(app), $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-reasons', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator(app), tenant, $"{slug}-{tenant:N}", "membership-reasons");
 
         var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);

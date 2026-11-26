@@ -67,12 +67,7 @@ public class ApsLoopCycleReadTests(V4GoldenFixture fixture)
 
         await using var conn = new NpgsqlConnection(fixture.AppConnectionString);
         await conn.OpenAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenant);
         var statements = new StatementRecorder();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)

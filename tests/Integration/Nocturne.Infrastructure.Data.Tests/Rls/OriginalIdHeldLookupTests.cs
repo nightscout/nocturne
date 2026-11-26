@@ -1,4 +1,5 @@
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -119,26 +120,14 @@ public class OriginalIdHeldLookupTests(RlsCompletenessFixture fx)
     {
         var tenant = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@tid, @slug, 'held-original-id-test', true, now(), now())
-            """;
-        cmd.Parameters.AddWithValue("tid", tenant);
-        cmd.Parameters.AddWithValue("slug", $"held-{tenant:N}");
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"held-{tenant:N}", "held-original-id-test");
         return tenant;
     }
 
     private async Task<NocturneDbContext> OpenAsAppAsync(Guid tenant)
     {
         var conn = await fx.OpenAppConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenant);
 
         return new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn, contextOwnsConnection: true)

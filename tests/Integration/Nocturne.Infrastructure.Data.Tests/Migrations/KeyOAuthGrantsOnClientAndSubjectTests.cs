@@ -83,10 +83,9 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"""
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
-            {GrantStatement(Guid.CreateVersion7(), tenant, Subject, client, grantType, DateTime.UtcNow, revokedAt)}
-            """, conn);
+        await conn.PinTenantAsync(tenant);
+        await using var cmd = new NpgsqlCommand(
+            GrantStatement(Guid.CreateVersion7(), tenant, Subject, client, grantType, DateTime.UtcNow, revokedAt), conn);
         try
         {
             await cmd.ExecuteNonQueryAsync();
@@ -113,14 +112,12 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{TenantA}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now());
-            INSERT INTO subjects (id, name) VALUES ('{Subject}', 'subject'), ('{OtherSubject}', 'other subject');
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
+        await conn.ExecuteAsync($"INSERT INTO subjects (id, name) VALUES ('{Subject}', 'subject'), ('{OtherSubject}', 'other subject');");
 
-            SELECT set_config('app.current_tenant_id', '{TenantA}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($"""
             INSERT INTO oauth_clients (id, tenant_id, client_id) VALUES
               ('{ClientInA}', '{TenantA}', 'client'),
               ('{OtherClientInA}', '{TenantA}', 'other-client');
@@ -142,13 +139,14 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
               ('{DeviceOfLoser}', '{TenantA}', '{Subject}', 'loser', 'phone', ARRAY[]::text[], '{OldestInA}'),
               ('{DeviceOfWinner}', '{TenantA}', '{Subject}', 'winner', 'phone', ARRAY[]::text[], '{NewestInA}'),
               ('{DeviceOfMiddle}', '{TenantA}', '{Subject}', 'middle', 'phone', ARRAY[]::text[], '{MiddleInA}');
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{TenantB}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($"""
             INSERT INTO oauth_clients (id, tenant_id, client_id) VALUES ('{ClientInB}', '{TenantB}', 'client');
             {GrantStatement(TiedLowerIdInB, TenantB, Subject, ClientInB, "app", Newer, null)}
             {GrantStatement(TiedHigherIdInB, TenantB, Subject, ClientInB, "app", Newer, null)}
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 
     private static async Task ReadGrantsAsync(string connectionString, Dictionary<Guid, DateTime?> grants)
@@ -157,7 +155,7 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await PinAsync(conn, tenant);
+            await conn.PinTenantAsync(tenant);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT id, revoked_at FROM oauth_grants;";
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -170,7 +168,7 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
-        await PinAsync(conn, TenantA);
+        await conn.PinTenantAsync(TenantA);
 
         await using (var tokens = conn.CreateCommand())
         {
@@ -185,14 +183,6 @@ public class KeyOAuthGrantsOnClientAndSubjectFixture : IAsyncLifetime
         await using var deviceReader = await devices.ExecuteReaderAsync();
         while (await deviceReader.ReadAsync())
             DevicesAfterUp[deviceReader.GetGuid(0)] = deviceReader.GetGuid(1);
-    }
-
-    private static async Task PinAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var pin = conn.CreateCommand();
-        pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-        pin.Parameters.AddWithValue("tenant", tenant.ToString());
-        await pin.ExecuteNonQueryAsync();
     }
 
     private static async Task MigrateAsync(string connectionString, string? target = null)

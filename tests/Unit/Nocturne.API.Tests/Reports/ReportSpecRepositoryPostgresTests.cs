@@ -42,14 +42,7 @@ public class ReportSpecRepositoryPostgresTests(ReportSpecRepositoryPostgresTests
             await using (var conn = new NpgsqlConnection(MigratorConnectionString))
             {
                 await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                    VALUES (@id, @slug, 'report-spec-test', true, now(), now())
-                    """;
-                cmd.Parameters.AddWithValue("id", tenant);
-                cmd.Parameters.AddWithValue("slug", $"report-spec-{tenant:N}");
-                await cmd.ExecuteNonQueryAsync();
+                await conn.SeedTenantAsync(tenant, $"report-spec-{tenant:N}", "report-spec-test");
             }
             return new ReportSpecRepository(new NocturneDbContext(Options) { TenantId = tenant }.AsFactory());
         }

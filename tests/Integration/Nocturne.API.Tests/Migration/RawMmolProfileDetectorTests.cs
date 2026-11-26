@@ -131,11 +131,8 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
 
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await conn.ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{TenantA}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now());
-            """);
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
 
         foreach (var store in Stores)
             await SeedStoreAsync(conn, store);

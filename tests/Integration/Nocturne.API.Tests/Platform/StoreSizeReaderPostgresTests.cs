@@ -187,8 +187,7 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
     private async Task<Guid> SeedTenantAsync(string name, int rows)
     {
         var tenant = Guid.NewGuid();
-        await NpgsqlTestCommands.ExecuteAsync(_database.SuperuserConnectionString,
-            $"INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES ('{tenant}', 'size-{name}-{tenant:N}', '{name}', true, now(), now())");
+        await NpgsqlTestCommands.SeedTenantAsync(_database.SuperuserConnectionString, tenant, $"size-{name}-{tenant:N}", name);
 
         var now = DateTime.UtcNow;
         await using var db = await Provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(tenant);
@@ -203,13 +202,5 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
         await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
         await conn.OpenAsync();
         return await conn.ScalarAsync<long>($"SELECT pg_total_relation_size('{table}')");
-    }
-
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public TenantContext? Context { get; private set; }
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

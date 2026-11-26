@@ -105,9 +105,8 @@ public sealed class InterruptedJobSweepPostgresFixture : IAsyncLifetime
     {
         Database = await SharedPostgres.CreateMigratedDatabaseAsync("interrupted_sweep");
         await using var conn = await InterruptedJobSweepTests.OpenAsync(Database);
+        await conn.SeedTenantAsync(TenantId, "sweep", "Sweep");
         await conn.ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{TenantId}', 'sweep', 'Sweep', true, now(), now());
             INSERT INTO migration_sources (id, tenant_id, mode, source_identifier, created_at)
             VALUES ('{SourceId}', '{TenantId}', 'Api', 'https://source.example', now());
             """);
