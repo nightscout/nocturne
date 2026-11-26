@@ -22,5 +22,5 @@
   },
   "include": ["src/**/*"],
   "references": [{ "path": "../api-client" }],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test-utils.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test-utils.ts", "src/test-stubs/**"]
 }

@@ -86,6 +86,18 @@ describe("handleBotWebhook", () => {
     expect(webhooks.discord).not.toHaveBeenCalled();
   });
 
+  it("hands a HEAD to a platform that takes a GET", async () => {
+    webhooks.whatsapp = vi.fn(async () => new Response(null, { status: 401 }));
+
+    const response = await handleBotWebhook(
+      "whatsapp",
+      event(new Request("https://nocturne.test/api/v4/webhooks/whatsapp", { method: "HEAD" })),
+    );
+
+    expect(response.status).toBe(401);
+    expect(webhooks.whatsapp).toHaveBeenCalledOnce();
+  });
+
   it("answers 404 for a platform whose bot is not enabled", async () => {
     const response = await handleBotWebhook(
       "whatsapp",

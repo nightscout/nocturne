@@ -21,6 +21,16 @@ describe("the platform registry", () => {
     expect(defaultLinkSetting("telegram")).toBeNull();
   });
 
+  it("takes Meta's GET verification only on the WhatsApp webhook", () => {
+    expect(Object.fromEntries(PLATFORMS.map((p) => [p.name, p.webhookMethods]))).toEqual({
+      discord: ["POST"],
+      slack: ["POST"],
+      telegram: ["POST"],
+      whatsapp: ["GET", "POST"],
+      resend: ["POST"],
+    });
+  });
+
   it("takes commands typed in a direct message only on WhatsApp", () => {
     expect(PLATFORMS.filter((p) => p.commands === "typed").map((p) => p.name)).toEqual(["whatsapp"]);
   });

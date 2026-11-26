@@ -46,7 +46,9 @@ export async function handleBotWebhook(platform: string, event: WebhookRequest):
   if (!known) {
     return new Response("There is no such bot platform", { status: 404 });
   }
-  if (!known.webhookMethods.includes(event.request.method)) {
+  // SvelteKit answers a HEAD with the GET handler.
+  const method = event.request.method === "HEAD" ? "GET" : event.request.method;
+  if (!known.webhookMethods.includes(method)) {
     return new Response(null, { status: 405, headers: { Allow: known.webhookMethods.join(", ") } });
   }
   const bot = await getBot();

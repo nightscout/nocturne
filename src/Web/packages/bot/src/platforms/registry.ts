@@ -3,22 +3,16 @@ import { slack } from "./slack.js";
 import { telegram } from "./telegram.js";
 import { whatsapp } from "./whatsapp.js";
 import { resend } from "./resend.js";
+import type { PlatformCredentials as StoredPlatformSettings } from "@nocturne/api-client";
 import type { ChannelKind, PlatformCredentials, PlatformModule } from "./platform.js";
 
-/** Every platform the bot can run on. A new platform is one module and one entry here. */
+/** Every platform the bot can run on. */
 export const PLATFORMS = [discord, slack, telegram, whatsapp, resend] as const satisfies readonly PlatformModule[];
 
 export type PlatformName = (typeof PLATFORMS)[number]["name"];
 
 /** Per platform: its credentials, `true` to read them from the environment, or `false` when off. */
 export type PlatformSettings = Partial<Record<PlatformName, PlatformCredentials | boolean>>;
-
-/** A platform's stored settings, as the API returns them decrypted. */
-export interface StoredPlatformSettings {
-  category?: string;
-  enabled?: boolean;
-  fields?: Readonly<Record<string, string>>;
-}
 
 const BY_NAME = new Map<string, PlatformModule>(PLATFORMS.map((p) => [p.name, p]));
 
