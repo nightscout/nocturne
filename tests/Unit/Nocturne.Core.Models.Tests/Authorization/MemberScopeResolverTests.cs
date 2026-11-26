@@ -444,6 +444,27 @@ public class MemberScopeResolverTests
             .Should().BeEmpty();
     }
 
+    [Fact]
+    public void AViewersAppGrant_ResolvesNotificationsSend()
+    {
+        // A role row never names notifications.send: any member may let an app notify them.
+        Resolve(RoleSeeds.Permissions[RoleSeeds.Viewer], AuthType.OAuthAccessToken, Scope.NotificationsSend)
+            .Should().BeEquivalentTo([Scope.NotificationsSend]);
+    }
+
+    [Fact]
+    public void ZeroPermissionMember_GetsNoNotificationsSend_FromAScopedCredential()
+    {
+        Resolve([], AuthType.OAuthAccessToken, Scope.NotificationsSend).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AnAppGrantWithoutNotificationsSend_DoesNotResolveIt()
+    {
+        Resolve([Scope.FullAccess], AuthType.OAuthAccessToken, Scope.GlucoseRead)
+            .Should().NotContain(Scope.NotificationsSend);
+    }
+
     // ---- connector management ----
 
     [Theory]

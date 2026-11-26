@@ -54,6 +54,8 @@ export function scopeLabels(): Record<Scope, string> {
     "device.notify": "Send notifications to this device, and mute an alert for yourself from it",
     "device.actuate":
       "Use this device's alarms: sound, vibration, flashlight, and full-screen alerts",
+    "notifications.send":
+      "Show you notices in your notifications. If you are an owner or an administrator, also show them to the owners or to all members",
     "roles.manage": "Create, edit and delete roles",
     "members.invite": "Create and send invite links",
     "members.manage": "Edit member roles and remove members",

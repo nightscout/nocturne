@@ -133,6 +133,15 @@ public static class Scope
     /// <summary>Allows the alert engine to actuate hardware on a registered client device (torch, vibration, sound, full-screen).</summary>
     public const string DeviceActuate = "device.actuate";
 
+    // Notifications from outside
+
+    /// <summary>
+    /// Lets a connected app put an informational notice in the notification tray of the member who
+    /// granted it. A grant made by an owner or an administrator also reaches the tenant's owners or
+    /// all its members. A capability, not data access: it reads nothing and has no tiers.
+    /// </summary>
+    public const string NotificationsSend = "notifications.send";
+
     // Full access
 
     /// <summary>Superuser scope, satisfying every other scope across every data category.</summary>
@@ -178,6 +187,7 @@ public static class Scope
         SharingReadWrite,
         DeviceNotify,
         DeviceActuate,
+        NotificationsSend,
     };
 
     /// <summary>
@@ -277,15 +287,17 @@ public static class Scope
 
     /// <summary>
     /// Member-personal capability scopes. These authorize the alert engine to drive the member's
-    /// OWN registered client devices (rows are RLS-scoped to the member's subject), not access to
-    /// the patient record, so <c>MemberScopeMiddleware</c> exempts them from the role-permission
-    /// intersection for any member holding at least one permission. What one member does with them
-    /// reaches only that member: <see cref="DeviceNotify"/> mutes an alert for its holder and never
-    /// changes anyone else's escalation. See the note on <see cref="RoleSeeds.Permissions"/> for why
-    /// enforcement cannot rely on role rows.
+    /// OWN registered client devices (rows are RLS-scoped to the member's subject), or an app to
+    /// notify the member, not access to the patient record, so <c>MemberScopeMiddleware</c> exempts
+    /// them from the role-permission intersection for any member holding at least one permission.
+    /// What one member does with them reaches only that member: <see cref="DeviceNotify"/> mutes an
+    /// alert for its holder and never changes anyone else's escalation, and
+    /// <see cref="NotificationsSend"/> reaches other members only through a grant an owner or an
+    /// administrator made, which the sending endpoint checks itself. See the note on
+    /// <see cref="RoleSeeds.Permissions"/> for why enforcement cannot rely on role rows.
     /// </summary>
     public static readonly IReadOnlySet<string> MemberPersonalScopes =
-        new HashSet<string>(StringComparer.Ordinal) { DeviceNotify, DeviceActuate };
+        new HashSet<string>(StringComparer.Ordinal) { DeviceNotify, DeviceActuate, NotificationsSend };
 
     /// <summary>
     /// The permissions that run a tenant rather than read or write its records: who gets in, what

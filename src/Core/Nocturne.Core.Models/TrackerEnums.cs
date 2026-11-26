@@ -257,7 +257,12 @@ public enum NotificationArchiveReason
     /// <summary>
     /// Displaced by a newer notification once its source reached the per-source active cap
     /// </summary>
-    Superseded
+    Superseded,
+
+    /// <summary>
+    /// Taken back by the sender outside Nocturne that sent it
+    /// </summary>
+    Withdrawn
 }
 
 /// <summary>

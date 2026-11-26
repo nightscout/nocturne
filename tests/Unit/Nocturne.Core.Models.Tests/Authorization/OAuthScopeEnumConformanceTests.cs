@@ -159,6 +159,7 @@ public class OAuthScopeEnumConformanceTests
             [OAuthScope.ConnectorsReadWrite] = Scope.ConnectorsReadWrite,
             [OAuthScope.DeviceNotify] = Scope.DeviceNotify,
             [OAuthScope.DeviceActuate] = Scope.DeviceActuate,
+            [OAuthScope.NotificationsSend] = Scope.NotificationsSend,
             [OAuthScope.HealthRead] = Scope.HealthRead,
             [OAuthScope.HealthReadWrite] = Scope.HealthReadWrite,
             [OAuthScope.FullAccess] = Scope.FullAccess,

@@ -35,6 +35,8 @@ public class NotificationTypeGuardTests
     {
         ["src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeJob.cs: ReleaseNoticeJob.NotifyOwnerAsync"] =
             ["ReleaseNoticeJob.UpdateAvailableType", "ReleaseNoticeJob.ReleaseInstalledType"],
+        ["src/API/Nocturne.API/Services/Notifications/External/ExternalNotificationService.cs: ExternalNotificationService.CreateAsync"] =
+            ["ExternalNotificationSender.OperatorType", "ExternalNotificationSender.AppType"],
     };
 
     private static readonly IReadOnlyList<NotificationTemplate> Templates =

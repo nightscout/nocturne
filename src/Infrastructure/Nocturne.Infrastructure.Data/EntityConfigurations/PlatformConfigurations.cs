@@ -46,6 +46,27 @@ internal sealed class OwnerNoticeEntityConfiguration : IEntityTypeConfiguration<
     }
 }
 
+internal sealed class ExternalNotificationEntityConfiguration : IEntityTypeConfiguration<ExternalNotificationEntity>
+{
+    public void Configure(EntityTypeBuilder<ExternalNotificationEntity> entity)
+    {
+        entity
+            .HasIndex(n => new { n.SenderKind, n.SenderId, n.TenantId, n.SubjectId, n.Key })
+            .HasDatabaseName("ux_external_notifications_sender_tenant_subject_key")
+            .IsUnique();
+
+        entity
+            .HasIndex(n => new { n.SenderKind, n.SenderId, n.TenantId, n.SysCreatedAt })
+            .HasDatabaseName("ix_external_notifications_sender_tenant_created");
+
+        entity
+            .HasOne<TenantEntity>()
+            .WithMany()
+            .HasForeignKey(n => n.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class InstanceKeyCheckEntityConfiguration : IEntityTypeConfiguration<InstanceKeyCheckEntity>
 {
     public void Configure(EntityTypeBuilder<InstanceKeyCheckEntity> entity)

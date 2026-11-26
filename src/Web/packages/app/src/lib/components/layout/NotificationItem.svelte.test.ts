@@ -163,3 +163,72 @@ describe("NotificationItem team staff notice", () => {
     expect(page.getByRole("link", { name: "Open the team" }).elements()).toHaveLength(0);
   });
 });
+
+describe("NotificationItem external notice", () => {
+  function external(
+    type: "external.operator" | "external.app",
+    metadata: Record<string, unknown>,
+  ): InAppNotificationDto {
+    return {
+      id: "n4",
+      type,
+      urgency: NotificationUrgency.Info,
+      title: "update_available",
+      subtitle: "Your plan renews on 1 December.\n<b>Not bold</b>",
+      createdAt: new Date().toISOString(),
+      metadata,
+    } as InAppNotificationDto;
+  }
+
+  it("shows the operator's text as written, under the operator's name", async () => {
+    render(NotificationItem, {
+      notification: external("external.operator", { senderKind: "operator", senderName: "Nocturne.run" }),
+    });
+
+    await expect.element(page.getByText("update_available")).toBeVisible();
+    await expect.element(page.getByText("From Nocturne.run", { exact: true })).toBeVisible();
+    await expect.element(page.getByText(/<b>Not bold<\/b>/)).toBeVisible();
+    expect(page.getByText(/connected app/).elements()).toHaveLength(0);
+  });
+
+  it("marks an app's notice as from a connected app", async () => {
+    render(NotificationItem, {
+      notification: external("external.app", { senderKind: "app", senderName: "Sugarmate" }),
+    });
+
+    await expect.element(page.getByText("From Sugarmate · connected app")).toBeVisible();
+  });
+
+  it("opens the link in a new tab and archives the notice", async () => {
+    const actions: string[] = [];
+    render(NotificationItem, {
+      notification: external("external.app", {
+        senderName: "Sugarmate",
+        linkUrl: "https://app.sugarmate.io/plan",
+        linkLabel: "See your plan",
+      }),
+      onAction: (id: string) => actions.push(id),
+    });
+
+    const link = page.getByRole("link", { name: "See your plan" });
+    await expect.element(link).toHaveAttribute("href", "https://app.sugarmate.io/plan");
+    await expect.element(link).toHaveAttribute("target", "_blank");
+    await expect.element(link).toHaveAttribute("rel", "noopener noreferrer");
+
+    await page.getByRole("button", { name: "Dismiss" }).click();
+    expect(actions).toEqual(["dismiss"]);
+  });
+
+  it("offers no link that is not https", async () => {
+    render(NotificationItem, {
+      notification: external("external.operator", {
+        senderName: "Nocturne.run",
+        linkUrl: "javascript:alert(1)",
+        linkLabel: "Open",
+      }),
+    });
+
+    await expect.element(page.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    expect(page.getByRole("link", { name: "Open" }).elements()).toHaveLength(0);
+  });
+});

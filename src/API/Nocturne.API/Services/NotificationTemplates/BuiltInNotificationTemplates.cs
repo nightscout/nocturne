@@ -5,6 +5,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Notifications.External;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.API.Services.Platform.Releases;
 using Nocturne.API.Services.Timezones;
@@ -181,6 +182,18 @@ public static class BuiltInNotificationTemplates
             Icon = "x-circle",
             Source = "membership"
         });
+
+        foreach (var type in new[] { ExternalNotificationSender.OperatorType, ExternalNotificationSender.AppType })
+        {
+            registry.Register(new NotificationTemplate
+            {
+                Type = type,
+                Category = NotificationCategory.Informational,
+                NamesSubject = false,
+                DefaultUrgency = NotificationUrgency.Info,
+                Icon = ExternalNotificationService.Icon,
+            });
+        }
 
         registry.Register(new NotificationTemplate
         {

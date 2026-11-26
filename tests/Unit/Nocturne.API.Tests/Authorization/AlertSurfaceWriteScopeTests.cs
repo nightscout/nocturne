@@ -77,6 +77,11 @@ public class AlertSurfaceWriteScopeTests
             // viewer and touches no excursion, instance, mute or delivery, so escalation is unchanged
             // for everyone, including the caller.
             ["AlertsController.MarkSeen"] = "append-only receipt; changes no alert state",
+
+            // A connected app's informational notices, gated on notifications.send. They are always
+            // Info and Informational, touch no alert, excursion or rule, and reach no device.
+            ["ExternalNotificationsController.Send"] = "informational notice gated on notifications.send; no alert state",
+            ["ExternalNotificationsController.Withdraw"] = "archives the app's own notices; no alert state",
         };
 
     /// <summary>

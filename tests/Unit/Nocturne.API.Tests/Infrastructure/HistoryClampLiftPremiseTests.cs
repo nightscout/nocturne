@@ -37,6 +37,9 @@ public class HistoryClampLiftPremiseTests
         // owner_notices and instance_key_check are platform tables no policy covers, and their
         // inserts do nothing on conflict.
         "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
+        // external_notifications is a platform table no policy covers, and its insert does nothing on
+        // conflict.
+        "src/API/Nocturne.API/Services/Notifications/External/ExternalNotificationLedger.cs",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
         // platform_policy is a platform table no policy covers, and its insert does nothing on conflict.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantCreationInviteRepository.cs",
