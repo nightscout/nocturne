@@ -68,6 +68,15 @@ export function teamStaffDecisionProblemMessages(): ProblemCodeMessages {
   };
 }
 
+/** The sentence for each problem code stopping a person's access through every team, or ending that stop, can meet. */
+export function teamStaffBlockProblemMessages(): ProblemCodeMessages {
+  return {
+    team_staff_decision_not_owner: "Only an owner of this site can stop a person's access through teams or let them back in.",
+    caller_access_from_team:
+      "You have access to this site only through a team, so you cannot stop a person's access through teams or let them back in.",
+  };
+}
+
 /**
  * The sentence for each problem code an owner's edit of a team's access to their site can meet. The
  * approval's sentences read the same for an edit, except the refusal of a person who is not an owner.

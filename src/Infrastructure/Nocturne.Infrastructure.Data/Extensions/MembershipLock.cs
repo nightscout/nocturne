@@ -29,7 +29,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// owner role, end and limit hold still from its check to its commit. An owner's edit of a team's access and
 /// the switch of who decides its staff take the same locks without the owner's row, since they insert no row
 /// naming the owner; an owner's decision on one staff member takes that member's row, the owners lock and the
-/// team access lock. A role edit takes the rows of the
+/// team access lock. An owner's stop of one person through every team, set or removed, takes the rows of that
+/// person and the owner, the owners lock and the team access lock. It and that person joining another team that
+/// follows the site are ordered by the site's team access lock, which each takes first, and again by the
+/// membership lock their syncs take before they read; the person's row (<c>KEY SHARE</c>) orders neither. A role edit takes the rows of the
 /// staff it may sync, the owners lock and the team access lock; a role deletion takes the owners lock, the
 /// team access lock, then the locks of the members who hold it. A staff member joining or being edited
 /// takes their row, the team's manager lock and the team access lock of every site the team follows. A

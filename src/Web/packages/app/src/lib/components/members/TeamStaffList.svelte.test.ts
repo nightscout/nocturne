@@ -32,18 +32,25 @@ function teamWith(staff: TenantTeamStaff[]): TenantTeamAccess {
   return { teamId: "44444444-4444-4444-4444-444444444444", teamName: "Clinic", staff };
 }
 
-function show(staff: TenantTeamStaff[], extra: Partial<{ canDecide: boolean; busy: string | null }> = {}) {
+function show(
+  staff: TenantTeamStaff[],
+  extra: Partial<{ canDecide: boolean; currentSubjectId: string; busy: string | null; team: TenantTeamAccess }> = {},
+) {
   const onApprove = vi.fn();
   const onDecline = vi.fn();
+  const onBlock = vi.fn();
+  const onUnblock = vi.fn();
   render(TeamStaffList, {
     team: teamWith(staff),
     canDecide: true,
     busy: null,
     onApprove,
     onDecline,
+    onBlock,
+    onUnblock,
     ...extra,
   });
-  return { onApprove, onDecline };
+  return { onApprove, onDecline, onBlock, onUnblock };
 }
 
 const row = (name: string) => page.getByRole("listitem").filter({ hasText: name }).first();
@@ -65,14 +72,8 @@ describe("TeamStaffList statuses", () => {
   });
 
   it("says Approved, not that they see the site, when the team's access has ended", async () => {
-    const onApprove = vi.fn();
-    const onDecline = vi.fn();
-    render(TeamStaffList, {
+    show([approved], {
       team: { ...teamWith([approved]), accessEndsAt: accessEndInstant("2020-01-01"), hasEnded: true },
-      canDecide: true,
-      busy: null,
-      onApprove,
-      onDecline,
     });
 
     await expect.element(row("Ari")).toHaveTextContent("Approved");
@@ -201,6 +202,112 @@ describe("TeamStaffList owner controls", () => {
     show([waiting, approved, declined], { canDecide: false });
 
     await expect.element(row("Ari")).toHaveTextContent("Approved");
+    expect(page.getByRole("button").elements()).toHaveLength(0);
+  });
+});
+
+describe("TeamStaffList stopped staff", () => {
+  const stopped = (member: TenantTeamStaff): TenantTeamStaff => ({ ...member, blocked: true });
+
+  it.each([
+    ["waiting", waiting],
+    ["approved", approved],
+    ["declined", declined],
+  ])("shows Stopped in place of the status of a stopped %s staff member, with no approve or decline", async (_, member) => {
+    show([stopped(member)]);
+
+    const name = member.displayName ?? "";
+    await expect.element(row(name)).toHaveTextContent("Stopped");
+    await expect.element(row(name)).toHaveTextContent("Cannot see this site through any team.");
+    for (const status of ["Approved", "Declined", "Waits for"]) {
+      expect(row(name).getByText(status, { exact: false }).elements()).toHaveLength(0);
+    }
+    expect(page.getByRole("button", { name: /^(Approve|Decline) / }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: `Stop ${name}'s access` }).elements()).toHaveLength(0);
+    await expect.element(page.getByRole("button", { name: `Let ${name} back in` })).toBeVisible();
+  });
+
+  it("does not say a stopped staff member sees the site while the owner trusts the whole team", async () => {
+    show([stopped(waiting)], { team: { ...teamWith([stopped(waiting)]), staffRule: "team_trusted" } });
+
+    await expect.element(row("Wren")).toHaveTextContent("Stopped");
+    expect(page.getByText("Can see this site", { exact: false }).elements()).toHaveLength(0);
+  });
+
+  it.each(["owner_approves", "team_decides", "team_trusted"])(
+    "offers an owner Stop access on every staff line under the rule %s",
+    async (staffRule) => {
+      const staff = [waiting, approved, declined];
+      show(staff, { team: { ...teamWith(staff), staffRule } });
+
+      for (const name of ["Wren", "Ari", "Dee"]) {
+        await expect.element(page.getByRole("button", { name: `Stop ${name}'s access` })).toBeVisible();
+      }
+    },
+  );
+
+  it("offers an owner no Stop access on their own staff line", async () => {
+    show([waiting, approved], { currentSubjectId: approved.subjectId });
+
+    await expect.element(page.getByRole("button", { name: "Stop Wren's access" })).toBeVisible();
+    expect(page.getByRole("button", { name: "Stop Ari's access" }).elements()).toHaveLength(0);
+  });
+
+  it("stops a staff member only after a confirmation that says what follows", async () => {
+    const { onBlock } = show([approved]);
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Stop Ari's access?");
+    await expect
+      .element(dialog)
+      .toHaveTextContent(
+        "Ari stops seeing this site's data through every team, now and later. Access they have through you directly does not change. You can undo this.",
+      );
+    expect(onBlock).not.toHaveBeenCalled();
+
+    await dialog.getByRole("button", { name: "Stop access" }).click();
+
+    expect(onBlock).toHaveBeenCalledWith(approved.subjectId);
+  });
+
+  it("lets a stopped staff member back in only after a confirmation that says what they get", async () => {
+    const { onUnblock } = show([stopped(approved)]);
+
+    await page.getByRole("button", { name: "Let Ari back in" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Let Ari back in?");
+    await expect.element(dialog).toHaveTextContent("Ari gets back what each team gives them at this site.");
+    await expect
+      .element(dialog)
+      .toHaveTextContent("If they have approval, or you trust the whole team, they see this site's data again.");
+    await expect
+      .element(dialog)
+      .toHaveTextContent("If they wait for approval and you do not trust the whole team, they wait again.");
+    await expect
+      .element(dialog)
+      .toHaveTextContent("If they have a decline and you do not trust the whole team, they stay out.");
+    expect(onUnblock).not.toHaveBeenCalled();
+
+    await dialog.getByRole("button", { name: "Let back in" }).click();
+
+    expect(onUnblock).toHaveBeenCalledWith(approved.subjectId);
+  });
+
+  it("does not stop a staff member when the confirmation is cancelled", async () => {
+    const { onBlock } = show([approved]);
+
+    await page.getByRole("button", { name: "Stop Ari's access" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+
+    await expect.element(page.getByRole("alertdialog")).not.toBeInTheDocument();
+    expect(onBlock).not.toHaveBeenCalled();
+  });
+
+  it("shows Stopped with no control to a reader who is not an owner", async () => {
+    show([stopped(approved), waiting], { canDecide: false });
+
+    await expect.element(row("Ari")).toHaveTextContent("Stopped");
     expect(page.getByRole("button").elements()).toHaveLength(0);
   });
 });

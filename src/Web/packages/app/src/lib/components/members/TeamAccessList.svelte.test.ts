@@ -6,6 +6,8 @@ import type { TenantTeamAccess } from "@nocturne/api-client";
 vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   approveTeamStaff: vi.fn(),
   declineTeamStaff: vi.fn(),
+  blockTeamStaff: vi.fn(),
+  unblockTeamStaff: vi.fn(),
   setTeamStaffRule: vi.fn(),
   editTeamAccess: vi.fn(),
 }));

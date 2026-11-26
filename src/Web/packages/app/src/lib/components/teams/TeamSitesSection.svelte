@@ -44,7 +44,7 @@
             {#if !site.hasEnded}
               <p class="text-sm text-muted-foreground">
                 {#if site.staffRule === RULE_TEAM_TRUSTED}
-                  The site trusts the whole team. Every staff member can see this site.
+                  The site trusts the whole team. Every staff member that the site did not stop can see this site.
                 {:else if site.staffRule === RULE_OWNER_APPROVES}
                   An owner of the site must approve each staff member.
                 {:else if (site.declinedStaffCount ?? 0) > 0}

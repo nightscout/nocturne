@@ -61,15 +61,20 @@ public sealed record TeamStaffNarrowing(string? RoleCeilingSlug, bool LimitTo24H
 /// A staff member of a team, as a manager of the team reads them.
 /// </summary>
 /// <param name="HasEnded">Whether <see cref="TeamStaffNarrowing.EndsAt"/> has passed.</param>
-/// <param name="SitesApproved">The sites the team follows where the staff member is approved.</param>
-/// <param name="SitesPending">The sites the team follows where the staff member waits for approval.</param>
+/// <param name="SitesApproved">The sites the team follows where the staff member is approved and not stopped.</param>
+/// <param name="SitesPending">The sites the team follows where the staff member waits for approval and is not stopped.</param>
+/// <param name="SitesBlocked">
+/// The sites the team follows that stopped the staff member reaching them through any team. Never which
+/// sites, and never why.
+/// </param>
 public sealed record TeamStaffMember(
     Guid SubjectId,
     string DisplayName,
     TeamStaffNarrowing Narrowing,
     bool HasEnded,
     int SitesApproved,
-    int SitesPending);
+    int SitesPending,
+    int SitesBlocked);
 
 /// <summary>A staff invite that can still be accepted, as a manager reads it. The token is never read back.</summary>
 public sealed record TeamStaffInviteSummary(
@@ -83,7 +88,11 @@ public sealed record TeamStaffInviteSummary(
     TeamStaffNarrowing Narrowing);
 
 /// <summary>What narrows the caller, a staff member of the team, and whether their end has passed.</summary>
-public sealed record TeamStaffSelf(TeamStaffNarrowing Narrowing, bool HasEnded);
+/// <param name="SitesBlocked">
+/// The sites the team follows that stopped the caller reaching them through any team, as
+/// <see cref="TeamStaffMember.SitesBlocked"/> counts them.
+/// </param>
+public sealed record TeamStaffSelf(TeamStaffNarrowing Narrowing, bool HasEnded, int SitesBlocked);
 
 /// <summary>
 /// A manager invite that can still be accepted, and the manager who made it. The token is never read back.
@@ -374,8 +383,21 @@ public sealed record TenantTeamAccess(
 /// <param name="Status">Whether the site approved them, a <see cref="TeamSiteStaffStatus"/> value.</param>
 /// <param name="HasEnded">Whether <see cref="TeamStaffNarrowing.EndsAt"/> has passed.</param>
 /// <param name="RoleCeilingName">The name of <see cref="TeamStaffNarrowing.RoleCeilingSlug"/>; null when there is no ceiling.</param>
+/// <param name="Blocked">
+/// Whether the site stopped them reaching it through any team, so <paramref name="Status"/> gives nothing
+/// while the stop stands.
+/// </param>
 public sealed record TenantTeamStaff(
-    Guid SubjectId, string DisplayName, string Status, TeamStaffNarrowing Narrowing, bool HasEnded, string? RoleCeilingName);
+    Guid SubjectId, string DisplayName, string Status, TeamStaffNarrowing Narrowing, bool HasEnded, string? RoleCeilingName,
+    bool Blocked);
+
+/// <summary>A person a site stopped reaching it through any team, as the site reads the stop.</summary>
+/// <param name="DisplayName">The person's name.</param>
+/// <param name="BlockedAt">When the stop was set, in UTC.</param>
+/// <param name="BlockedBySubjectId">The owner who set it; null once that subject is deleted.</param>
+/// <param name="BlockedByName">The name of that owner; null once that subject is deleted.</param>
+public sealed record TenantTeamStaffBlock(
+    Guid SubjectId, string DisplayName, DateTime BlockedAt, Guid? BlockedBySubjectId, string? BlockedByName);
 
 /// <summary>
 /// What an owner's decision at their site found: about a team's access to it, or about the team's staff there.
@@ -384,7 +406,10 @@ public enum OwnerDecision
 {
     Decided,
 
-    /// <summary>The team has no access to the site, or the subject is not its staff.</summary>
+    /// <summary>
+    /// The team has no access to the site, or the subject is not its staff; for a stop, the subject is staff
+    /// of no team with access to the site.
+    /// </summary>
     NotFound,
 
     /// <summary>The caller holds no direct reason in force on the site, so gives nothing.</summary>

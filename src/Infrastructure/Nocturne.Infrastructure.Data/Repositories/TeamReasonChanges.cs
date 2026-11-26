@@ -64,6 +64,14 @@ public sealed class TeamReasonChanges
             recountSites.Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList(),
             _given.Where(g => !g.Held).Select(g => g.TenantId).Distinct().Order().Select(site => new TeamSiteKey(site, teamId)).ToList()));
 
+    /// <summary>
+    /// These changes, owing the owners of the sites once they commit a recount of the waiting staff of each
+    /// team and site in <paramref name="recount"/>, and no notice that a team's staff newly reach a site.
+    /// </summary>
+    public TeamReasonChanges WithRecounts(IEnumerable<TeamSiteKey> recount) => new(
+        _unit, _removals, _given, _write,
+        new StaffNotices(recount.Distinct().OrderBy(k => k.TenantId).ThenBy(k => k.TeamId).ToList(), []));
+
     /// <summary>The sites where a team reason changes, in ascending tenant id.</summary>
     public IReadOnlyList<Guid> Sites =>
         _removals.Select(r => r.TenantId).Concat(_given.Select(g => g.TenantId)).Distinct().Order().ToList();
@@ -80,6 +88,10 @@ public sealed class TeamReasonChanges
     /// reason as they lose another keeps the membership. What a member who keeps their membership made is
     /// capped at an end the changes lower. The unit must be pinned to the tenant.
     /// </summary>
+    /// <remarks>
+    /// Each add is saved before the next: an add reads the membership from the database, so a second add for a
+    /// subject who had none would otherwise make the membership twice.
+    /// </remarks>
     /// <returns>The grants the caps lowered, for the caller to evict their sessions once the unit commits.</returns>
     public async Task<IReadOnlyList<OAuthGrantRecord>> StageReasonsAtAsync(Guid tenantId, DateTime now, CancellationToken ct)
     {
@@ -95,6 +107,7 @@ public sealed class TeamReasonChanges
             {
                 await TenantMembershipRepository.StageAddTeamReasonAsync(
                     _unit.Context, given.TenantId, given.SubjectId, given.AccessId, given.Grant, MemberAccessSource.System, now, ct);
+                await _unit.Context.SaveChangesAsync(ct);
             }
         }
 
