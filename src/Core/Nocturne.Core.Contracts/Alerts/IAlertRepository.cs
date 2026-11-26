@@ -90,9 +90,10 @@ public interface IAlertRepository
         Guid excursionId, DateTime triggeredAt, bool whileOpen, CancellationToken ct);
 
     /// <summary>
-    /// The tenant's excursions of a condition whose opening or close still owes work
-    /// (<c>IAlertTrackerRepository.CreateExcursionAsync</c>) and was last taken up before
-    /// <paramref name="takenUpBefore"/>, oldest first.
+    /// The tenant's excursions of a condition, and notices that were resolved, whose opening or close
+    /// still owes work (<c>IAlertTrackerRepository.CreateExcursionAsync</c>) and was last taken up
+    /// before <paramref name="takenUpBefore"/>, oldest first. A standing notice owes its dispatch to
+    /// its own check, which builds its payload.
     /// </summary>
     Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct);
 
@@ -109,7 +110,8 @@ public interface IAlertRepository
 
     /// <summary>
     /// Records that the close of <paramref name="excursionId"/> owes its work again, taken up at
-    /// <paramref name="now"/>, when the excursion has ended. False when it is open or does not exist.
+    /// <paramref name="now"/>, when the excursion has ended or the notice was resolved (its instance
+    /// is resolved). False when it is open, stands, or does not exist.
     /// </summary>
     Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct);
 
