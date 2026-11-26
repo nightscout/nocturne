@@ -339,6 +339,48 @@ describe("lab values outside the estimate range", () => {
   });
 });
 describe("timeline periods and zones", () => {
+  it("does not show an excluded estimate when hovering near the zoomed plot edge", async () => {
+    labResults.push({ ...labResults[0], id: "late-lab", measuredAt: "2025-08-31" });
+    try {
+      applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+      render(EHbA1cPage, {});
+      await page.getByRole("button", { name: "6 months", exact: true }).click();
+      const chart = page.getByTestId("ehba1c-chart");
+      await userEvent.hover(chart, { position: { x: 41, y: 160 } });
+      await expect.element(page.getByTestId("ehba1c-tooltip")).not.toBeInTheDocument();
+      await expect.element(page.getByTestId("ehba1c-line")).toBeInTheDocument();
+    } finally {
+      labResults.pop();
+    }
+  });
+
+  it("does not snap to a hidden lab just outside the selected period", async () => {
+    timelinePoints.push({ ...timelinePoints[1], date: "2025-02-28" });
+    labResults.push(
+      { ...labResults[1], id: "hidden-lab", measuredAt: "2025-02-27", a1cDisplay: timelinePoints[1].a1cDisplay, note: "Excluded edge lab" },
+      { ...labResults[0], id: "late-lab", measuredAt: "2025-08-31" },
+    );
+    try {
+      applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+      render(EHbA1cPage, {});
+      await page.getByRole("button", { name: "6 months", exact: true }).click();
+      expect(page.getByTestId("lab-marker").elements()).toHaveLength(1);
+      const line = page.getByTestId("ehba1c-line").element() as SVGPathElement;
+      const end = line.getPointAtLength(line.getTotalLength());
+      const matrix = line.getScreenCTM();
+      if (!matrix) throw new Error("eHbA1c curve is not positioned in the chart");
+      const point = new DOMPoint(end.x, end.y).matrixTransform(matrix);
+      const chart = page.getByTestId("ehba1c-chart");
+      const bounds = chart.element().getBoundingClientRect();
+      await userEvent.hover(chart, { position: { x: point.x - bounds.x + 1, y: point.y - bounds.y } });
+      await expect.element(page.getByTestId("ehba1c-tooltip")).toHaveTextContent("eHbA1c");
+      await expect.element(page.getByTestId("ehba1c-tooltip")).not.toHaveTextContent("Excluded edge lab");
+    } finally {
+      timelinePoints.pop();
+      labResults.splice(-2);
+    }
+  });
+
   it("uses the latest lab date, clamps month ends, prints the period and resets the overview", async () => {
     labResults.push({ ...labResults[0], id: "late-lab", measuredAt: "2025-08-31" });
     try {

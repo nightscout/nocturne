@@ -293,6 +293,7 @@
     let nearest: Date | null = null;
     let nearestDistance = reach;
     for (const labPoint of labChartPoints) {
+      if (zoom && (labPoint.date < zoom[0] || labPoint.date > zoom[1])) continue;
       if (Math.abs(yScale(labPoint.displayValue) - pointerY) > reach) continue;
       const distance = Math.abs(xScale(labPoint.date) - pointerX);
       if (distance <= nearestDistance) {
@@ -302,7 +303,11 @@
     }
     if (!nearest) return { date: hovered, labs: [] };
     const key = dateKey(nearest);
-    return { date: nearest, labs: labChartPoints.filter((point) => dateKey(point.date) === key) };
+    return {
+      date: nearest,
+      labs: labChartPoints.filter((point) => dateKey(point.date) === key
+        && (!zoom || (point.date >= zoom[0] && point.date <= zoom[1]))),
+    };
   }
 
   function displayValueForChartDate(date: Date): number | null {

@@ -9,7 +9,7 @@
   import { SvelteMap } from "svelte/reactivity";
   import { Chart, Svg, Axis, Spline, Rule, Text, LinearGradient, BrushContext, Highlight, type ChartState } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
-  import { curveMonotoneX } from "d3";
+  import { curveMonotoneX, line } from "d3";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "#lib/components/ui/button/index.js";
   import { formatLongDate, formatShortDate } from "#lib/utils/formatting.js";
@@ -61,7 +61,9 @@
     for (const point of labPoints) {
       if (!rows.has(point.date.getTime())) rows.set(point.date.getTime(), point);
     }
-    return [...rows.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+    return [...rows.values()]
+      .filter((point) => point.date >= xDomain[0] && point.date <= xDomain[1])
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
   });
 
   /**
@@ -171,11 +173,12 @@
           <g clip-path="url(#ehba1c-plot-clip)">
             <LinearGradient stops={stops} units="userSpaceOnUse" vertical y1="0" y2={String(context.height)}>
               {#snippet children({ gradient })}
-                <Spline
-                  {data}
-                  x="date"
-                  y="displayValue"
-                  curve={curveMonotoneX}
+                <!-- A native path keeps clipped spline points out of LayerChart's hover registry. -->
+                <path
+                  d={line<TimelinePoint>()
+                    .x((point) => context.xScale(point.date))
+                    .y((point) => context.yScale(point.displayValue))
+                    .curve(curveMonotoneX)(data) ?? undefined}
                   stroke={gradient}
                   class="stroke-3 fill-none"
                   stroke-linecap="round"
