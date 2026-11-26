@@ -217,6 +217,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
+        services.AddTransient<ITenantUsageReader, TenantUsageReader>();
         services.AddScoped<SourceOwnedDataRepository>();
         services.AddScoped<ISourceOwnedDataReader>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
         services.AddScoped<ISourceOwnedDataPurge>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
