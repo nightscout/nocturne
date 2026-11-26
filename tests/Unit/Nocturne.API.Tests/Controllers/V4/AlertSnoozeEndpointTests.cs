@@ -67,6 +67,7 @@ public class AlertSnoozeEndpointTests
             Mock.Of<ICanonicalGlucoseService>(),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),
+            Mock.Of<IExcursionResolutionHandler>(),
             TimeProvider.System,
             NullLogger<AlertSnoozeService>.Instance);
 

@@ -231,6 +231,7 @@ public class AlertRepository : IAlertRepository
         var rows = await context.AlertExcursions
             .AsNoTracking()
             .OfCondition()
+            .Concat(context.AlertExcursions.AsNoTracking().ResolvedNotices())
             .Where(e => e.OpenedOwedAt < takenUpBefore || e.ClosedOwedAt < takenUpBefore)
             .Select(e => new { e.Id, e.AlertRuleId, e.OpenedOwedAt, e.ClosedOwedAt, e.EndedAt })
             .ToListAsync(ct);
@@ -285,8 +286,10 @@ public class AlertRepository : IAlertRepository
         await using var context = await _contexts.CreateAsync(ct);
 
         var excursion = await context.AlertExcursions.OfCondition(includeTest: true)
+            .Where(e => e.EndedAt != null)
+            .Concat(context.AlertExcursions.ResolvedNotices())
             .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
-        if (excursion?.EndedAt is null)
+        if (excursion is null)
             return false;
         excursion.ClosedOwedAt = now;
         await context.SaveChangesAsync(ct);
@@ -656,7 +659,6 @@ public class AlertRepository : IAlertRepository
         if (notice is null) return;
 
         notice.EndedAt = at;
-        notice.OpenedOwedAt = null;
         await context.SaveChangesAsync(ct);
     }
 

@@ -1652,7 +1652,15 @@ is being sent finds only what existed before the sends. So once they return, an 
 excursion has closed owes its close again and runs it once more, unless the same evaluation's
 close (step 5) runs next and so after the sends. An owed opening found closed, whether by the
 sweep's read or by the instance lock, also runs the close again before it settles: a run that died
-after its sends and before that rerun may have left them standing.
+after its sends and before that rerun may have left them standing. Every other send ends the same
+way, through the one rerun (`IExcursionResolutionHandler.CloseAgainIfEndedAsync`): a snooze's
+re-notification, once it is sent, and a notice's dispatch (§1.4, §6.4), whose resolution is its
+close. A notice counts as resolved once its instance is, the step that writes its reason, so the
+rerun never resolves it first and without one; a resolution that dies before that step leaves the
+notice standing, and its check resolves it again. A notice keeps its dispatch owed when it is
+resolved, until its dispatch or the sweep settles it, so the sweep runs its resolution again when
+the run dies first; the sweep finishes owed work of a notice only once it has been resolved, and a
+standing notice's dispatch stays with its own check.
 
 An acknowledgement is not a cutoff: an acknowledge-all made for another alarm must not consume an
 alert nobody received. An enabled rule whose stored row cannot be read keeps its opening owed,

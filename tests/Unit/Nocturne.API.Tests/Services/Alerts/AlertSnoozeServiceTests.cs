@@ -78,6 +78,7 @@ public class AlertSnoozeServiceTests
         _canonical.Object,
         _broadcast.Object,
         _alarmRelay.Object,
+        Mock.Of<IExcursionResolutionHandler>(),
         _time,
         NullLogger<AlertSnoozeService>.Instance);
 

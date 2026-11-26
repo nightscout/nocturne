@@ -28,6 +28,7 @@ internal sealed class AlertSnoozeService(
     ICanonicalGlucoseService canonicalGlucose,
     ISignalRBroadcastService broadcastService,
     IEngineAlarmRelay alarmRelay,
+    IExcursionResolutionHandler resolutionHandler,
     TimeProvider timeProvider,
     ILogger<AlertSnoozeService> logger)
     : IAlertSnoozeService
@@ -160,6 +161,7 @@ internal sealed class AlertSnoozeService(
             rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
 
         await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
+        await resolutionHandler.CloseAgainIfEndedAsync(excursion.Id, tenantId, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",
