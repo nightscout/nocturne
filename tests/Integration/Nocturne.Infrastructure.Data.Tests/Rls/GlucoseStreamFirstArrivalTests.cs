@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -81,7 +82,7 @@ public class GlucoseStreamFirstArrivalTests(RlsCompletenessFixture fx) : IAsyncL
     {
         var id = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, _tenant);
+        await QueryPlans.SetTenantAsync(conn, _tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO sensor_glucose

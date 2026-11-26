@@ -17,6 +17,10 @@
     "./parse-dispatch": {
       "types": "./dist/alerts/parse-dispatch.d.ts",
       "default": "./dist/alerts/parse-dispatch.js"
+    },
+    "./thread-history": {
+      "types": "./dist/lib/thread-history.d.ts",
+      "default": "./dist/lib/thread-history.js"
     }
   },
   "type": "module",

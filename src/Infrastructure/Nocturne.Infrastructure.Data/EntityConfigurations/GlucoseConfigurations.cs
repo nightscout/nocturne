@@ -21,13 +21,6 @@ internal sealed class SensorGlucoseEntityConfiguration : IEntityTypeConfiguratio
             .HasDatabaseName("ix_sensor_glucose_patient_device_id")
             .HasFilter("patient_device_id IS NOT NULL");
 
-        // These also serve the dedup unlinked read in LinkedRecordTypes, which ranges on timestamp
-        // over soft-deleted rows too and so cannot use the partial list indexes.
-        entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_sensor_glucose_tenant_timestamp")
-            .IsDescending(false, true);
-
         var secondary = entity.Property(e => e.IsSecondaryStream);
         secondary.HasDefaultValue(false).ValueGeneratedNever();
         secondary.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);

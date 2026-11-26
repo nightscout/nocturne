@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -54,7 +55,7 @@ public class SourceDeleteGroupLockPlanTests(SourceDeletePlanTests.NeverAnalysedD
             + string.Join(" | ", recorder.Statements.Select(s => s.CommandText)));
         foreach (var statement in recorder.Statements)
         {
-            var plan = await PlanTestSupport.ExplainAsync(conn, statement);
+            var plan = await QueryPlans.ExplainAsync(conn, statement);
             plan.Descendants("Relation Name").Should().Equal(["linked_records"], "the links are read once: " + plan);
             plan.Descendants("Function Name").Should().Equal(["unnest"], "the id array is joined as rows: " + plan);
             plan.Descendants("Filter").Concat(plan.Descendants("Index Cond")).Concat(plan.Descendants("Recheck Cond"))

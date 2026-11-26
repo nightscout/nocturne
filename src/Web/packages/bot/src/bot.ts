@@ -7,6 +7,7 @@ import { createPostgresState } from "@chat-adapter/state-pg";
 import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
 import { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
+import type { AlertTemplate } from "./whatsapp/alert-template.js";
 import { createLogger } from "./lib/logger.js";
 
 const logger = createLogger();
@@ -26,6 +27,8 @@ export interface PlatformCredentials {
   apiKey?: string;
   webhookSecret?: string;
   webhookSecretToken?: string;
+  alertTemplateName?: string;
+  alertTemplateLanguage?: string;
 }
 
 export interface BotOptions {
@@ -50,6 +53,19 @@ function telegramWebhookSecretToken(configured: string | undefined): string {
     "No Telegram webhook secret token is configured; Telegram webhook calls will be refused until one is set.",
   );
   return randomBytes(32).toString("hex");
+}
+
+/** Meta's language code a template is taken to be approved in when the settings name none. */
+const DEFAULT_TEMPLATE_LANGUAGE = "en";
+
+/**
+ * The approved template alerts are sent as outside the customer service window, from the stored
+ * WhatsApp settings. Without a name there is none, and such alerts fail.
+ */
+function whatsappAlertTemplate(configured: PlatformCredentials | undefined): AlertTemplate | null {
+  const name = configured?.alertTemplateName;
+  if (!name) return null;
+  return { name, language: configured.alertTemplateLanguage || DEFAULT_TEMPLATE_LANGUAGE };
 }
 
 /** A WhatsApp setting from the stored platform settings, else the environment. Refuses to start without one. */
@@ -98,6 +114,8 @@ export function createBot(options: BotOptions): Chat {
     const configured = typeof telegram === "object" ? telegram : undefined;
     adapters.telegram = createTelegramAdapter({
       botToken: configured?.botToken,
+      // Kept history holds people's messages in the bot's state; see purgeThreadHistory.
+      persistThreadHistory: false,
       secretToken: telegramWebhookSecretToken(
         configured?.webhookSecretToken || process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN,
       ),
@@ -114,6 +132,7 @@ export function createBot(options: BotOptions): Chat {
       phoneNumberId: whatsappSetting("phoneNumberId", configured?.phoneNumberId, "WHATSAPP_PHONE_NUMBER_ID"),
       verifyToken: whatsappSetting("verifyToken", configured?.verifyToken, "WHATSAPP_VERIFY_TOKEN"),
       apiUrl: process.env.WHATSAPP_API_URL,
+      alertTemplate: whatsappAlertTemplate(configured),
       userName: "nocturne",
       logger,
     });

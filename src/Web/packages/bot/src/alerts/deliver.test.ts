@@ -143,7 +143,7 @@ describe("AlertDeliveryHandler adapter routing", () => {
       async (channelType, destination, adapter) => {
         await handler.deliver(createEvent(channelType, destination));
 
-        expect(bits.getAdapter).toHaveBeenCalledExactlyOnceWith(adapter);
+        expect(new Set(bits.getAdapter.mock.calls.map(([name]) => name))).toEqual(new Set([adapter]));
         expect(bits.openDM).toHaveBeenCalledExactlyOnceWith(destination);
         expect(bits.thread).toHaveBeenCalledExactlyOnceWith(
           `thread-for-${destination}`,
@@ -509,5 +509,166 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
 
     expect(apiBits.markDelivered).toHaveBeenCalledOnce();
     await expect(window.sentAlert("platform-message-1")).resolves.toBeNull();
+  });
+});
+
+describe("AlertDeliveryHandler on WhatsApp with an alert template", () => {
+  const WA_ID = "61400000000";
+  const THREAD = `whatsapp:1000:${WA_ID}`;
+  const HOUR = 60 * 60 * 1000;
+  const WINDOW_REFUSAL = () =>
+    new WhatsAppApiError(
+      "WhatsApp API error",
+      400,
+      JSON.stringify({ error: { code: 131047, message: "Re-engagement message" } }),
+    );
+
+  let bits: ReturnType<typeof createBot>;
+  let apiBits: ReturnType<typeof createApi>;
+  let window: WhatsAppWindow;
+  let handler: AlertDeliveryHandler;
+  let sendTemplate: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    bits = createBot();
+    apiBits = createApi();
+    window = new WhatsAppWindow(state);
+    handler = new AlertDeliveryHandler(bits.bot, apiBits.api);
+    const adapter = new NocturneWhatsAppAdapter({
+      accessToken: "not-a-token",
+      appSecret: "not-a-secret",
+      phoneNumberId: "1000",
+      verifyToken: "not-a-token",
+      userName: "nocturne",
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() },
+      alertTemplate: { name: "nocturne_alert", language: "en" },
+    });
+    sendTemplate = vi.fn().mockResolvedValue({ id: "wamid.template", threadId: THREAD, raw: {} });
+    adapter.sendTemplate = sendTemplate as never;
+    bits.getAdapter.mockReturnValue(adapter as never);
+  });
+
+  it("sends the template, not the card, into a window known to be closed", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).not.toHaveBeenCalled();
+    expect(sendTemplate).toHaveBeenCalledExactlyOnceWith(
+      THREAD,
+      expect.objectContaining({ name: "nocturne_alert", language: "en" }),
+    );
+    expect(apiBits.markDelivered).toHaveBeenCalledExactlyOnceWith("delivery-1", { platformMessageId: "wamid.template" });
+    expect(apiBits.markFailed).not.toHaveBeenCalled();
+    await expect(window.sentAlert("wamid.template")).resolves.toMatchObject({ deliveryId: "delivery-1", threadId: THREAD });
+  });
+
+  it("sends the card while the window is open, keeping the template to send if Meta fails it for the window", async () => {
+    await window.recordInbound(THREAD, Date.now() - HOUR);
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).toHaveBeenCalledOnce();
+    expect(sendTemplate).not.toHaveBeenCalled();
+    await expect(window.sentAlert("platform-message-1")).resolves.toMatchObject({
+      fallback: true,
+    });
+  });
+
+  it("sends the template when Meta refuses the card for the window at once", async () => {
+    bits.post.mockRejectedValueOnce(WINDOW_REFUSAL());
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(sendTemplate).toHaveBeenCalledOnce();
+    expect(apiBits.markDelivered).toHaveBeenCalledExactlyOnceWith("delivery-1", { platformMessageId: "wamid.template" });
+    expect(apiBits.markFailed).not.toHaveBeenCalled();
+  });
+
+  it("sends the template when Meta failed the card for the window before it was remembered", async () => {
+    await window.rememberEarlyFailure("platform-message-1", { reason: WINDOW_CLOSED_REASON, windowClosed: true });
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(sendTemplate).toHaveBeenCalledOnce();
+    expect(apiBits.markDelivered).toHaveBeenCalledExactlyOnceWith("delivery-1", { platformMessageId: "wamid.template" });
+    expect(apiBits.markFailed).not.toHaveBeenCalled();
+  });
+
+  it("records Meta's reason when the template is refused into a window known to be closed, sending it once", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    sendTemplate.mockRejectedValueOnce(WINDOW_REFUSAL());
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(sendTemplate).toHaveBeenCalledOnce();
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: expect.stringContaining("Re-engagement message"),
+      platformMessageId: undefined,
+    });
+  });
+
+  it("does not fail a template that went out when recording it as sent fails", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    apiBits.markDelivered.mockRejectedValueOnce(new Error("API restarting"));
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(sendTemplate).toHaveBeenCalledOnce();
+    expect(apiBits.markFailed).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the status webhook claimed the template first, and forgets the card", async () => {
+    await window.rememberEarlyFailure("platform-message-1", { reason: WINDOW_CLOSED_REASON, windowClosed: true });
+    await window.claimFallback("platform-message-1");
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).not.toHaveBeenCalled();
+    await expect(window.sentAlert("platform-message-1")).resolves.toBeNull();
+  });
+
+  it("records the template failed when Meta failed it before it was remembered", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    sendTemplate.mockImplementationOnce(async () => {
+      await window.rememberEarlyFailure("wamid.template", { reason: "Message undeliverable", windowClosed: false });
+      return { id: "wamid.template", threadId: THREAD, raw: {} };
+    });
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: "Message undeliverable",
+      platformMessageId: "wamid.template",
+    });
+  });
+
+  it("sends no template for a notice that a rule is on hold, and fails it for the window", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    const event = createEvent("whatsapp_dm", WA_ID);
+
+    await handler.deliver({ ...event, payload: { ...event.payload, kind: "held" } });
+
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+      platformMessageId: undefined,
+    });
+  });
+
+  it("records Meta's reason when the template is refused as well", async () => {
+    bits.post.mockRejectedValueOnce(WINDOW_REFUSAL());
+    sendTemplate.mockRejectedValueOnce(new Error("Template name does not exist in the translation"));
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: "Template name does not exist in the translation",
+    });
   });
 });

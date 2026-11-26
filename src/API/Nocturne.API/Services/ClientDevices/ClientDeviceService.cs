@@ -246,8 +246,8 @@ public class ClientDeviceService : IClientDeviceService
                 .ThenInclude(r => r!.Channels)
             .Include(e => e.Instances)
             .OfCondition(includeTest: true)
-            .Where(e => (e.EndedAt == null || e.EndedAt > now)
-                && e.AlertRule!.IsEnabled
+            .NotEndedBy(e => e.EndedAt, now)
+            .Where(e => e.AlertRule!.IsEnabled
                 && e.AlertRule.Channels.Any(c =>
                     c.ChannelType == ChannelType.DeviceAction && c.Destination == device.Kind))
             .OrderByDescending(e => e.StartedAt)

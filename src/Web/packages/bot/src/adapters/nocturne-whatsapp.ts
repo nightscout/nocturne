@@ -1,10 +1,14 @@
 import { WhatsAppAdapter } from "@chat-adapter/whatsapp";
 import type { WebhookOptions } from "chat";
 import { getScopedApiFactory } from "../lib/request-context.js";
+import { parseAlertPayload } from "../alerts/parse-dispatch.js";
+import { alertTemplateMessage, readTemplatePayload, type AlertTemplate } from "../whatsapp/alert-template.js";
 import {
   WINDOW_CLOSED_ERROR_CODE,
   WINDOW_CLOSED_REASON,
   WhatsAppWindow,
+  isRefusedUnsent,
+  type SentAlert,
 } from "../whatsapp/window.js";
 
 interface StatusError {
@@ -100,9 +104,22 @@ function failureReason(errors: StatusError[]): string {
  * window from a closed one before sending. Meta accepts a send outside the window and fails it
  * afterwards in a `failed` status, which the stock adapter drops: here a failed status for an
  * alert message marks that alert's delivery failed. The API keeps the failure if the bot's own
- * report of the send lands after it.
+ * report of the send lands after it. With an alert template configured, a card Meta fails for the
+ * window is sent again as the template instead.
  */
 export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
+  /** The approved template an alert is sent as outside the window, or null when none is configured. */
+  readonly alertTemplate: AlertTemplate | null;
+
+  constructor(config: ConstructorParameters<typeof WhatsAppAdapter>[0] & { alertTemplate?: AlertTemplate | null }) {
+    const { alertTemplate, ...adapterConfig } = config;
+    super(adapterConfig);
+    this.alertTemplate = alertTemplate ?? null;
+    // The stock adapter keeps every message of a thread in the bot's state, which must hold no
+    // health data (see purgeThreadHistory). Its type fixes the flag to true, so it is set here.
+    Reflect.set(this, "persistThreadHistory", false);
+  }
+
   override async handleWebhook(request: Request, options?: WebhookOptions): Promise<Response> {
     const body = request.method === "POST" ? await request.clone().text() : null;
     const response = await super.handleWebhook(request, options);
@@ -129,6 +146,22 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
         .catch((error: unknown) => this.logger.warn("Failed to record a WhatsApp message time", { error }));
     }
     return identity;
+  }
+
+  /**
+   * A template's quick reply comes back as its payload alone. A payload the bot wrote carries the
+   * action and value of a card button, so the reply runs that button's handler.
+   */
+  protected override handleButtonResponse(
+    ...args: Parameters<WhatsAppAdapter["handleButtonResponse"]>
+  ): ReturnType<WhatsAppAdapter["handleButtonResponse"]> {
+    const [inbound, ...rest] = args;
+    const action = inbound.button ? readTemplatePayload(inbound.button.payload) : null;
+    if (!inbound.button || !action) return super.handleButtonResponse(...args);
+    return super.handleButtonResponse(
+      { ...inbound, button: { ...inbound.button, payload: action.actionId, text: action.value } },
+      ...rest,
+    );
   }
 
   /**
@@ -188,6 +221,13 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
         }
         if (windowClosed) {
           await window.recordClosed(alert.threadId, alert.sentAt);
+          if (alert.fallback && this.alertTemplate) {
+            await this.sendFallback(window, alert, this.alertTemplate, status.id);
+            await window
+              .forgetSent(status.id)
+              .catch((e: unknown) => this.logger.warn("Failed to forget a WhatsApp alert", { messageId: status.id, error: e }));
+            continue;
+          }
         }
         await getScopedApiFactory()(alert.tenantSlug).alerts.markFailed(alert.deliveryId, {
           error: failureReason(status.errors),
@@ -207,5 +247,56 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
       }
     }
     return reported;
+  }
+
+  /**
+   * Sends a card Meta failed for the window again as the template, built from the delivery's
+   * payload as the API holds it, and records it on the same delivery. Only under the claim on the
+   * card (see {@link WhatsAppWindow.claimFallback}). A template Meta refuses marks the delivery
+   * failed with Meta's reason. Once the template is sent nothing here throws, so a retry of the
+   * webhook cannot send it twice.
+   */
+  private async sendFallback(window: WhatsAppWindow, card: SentAlert, template: AlertTemplate, cardId: string) {
+    const alerts = getScopedApiFactory()(card.tenantSlug).alerts;
+    const payload = parseAlertPayload(await alerts.getDeliveryPayload(card.deliveryId));
+    const message = payload ? alertTemplateMessage(template, payload) : null;
+    if (!message) {
+      await alerts.markFailed(card.deliveryId, { error: WINDOW_CLOSED_REASON, platformMessageId: cardId });
+      return;
+    }
+    if (!(await window.claimFallback(cardId))) return;
+
+    const sentAt = Date.now();
+    let sentId: string;
+    try {
+      sentId = (await this.sendTemplate(card.threadId, message)).id;
+    } catch (error) {
+      this.logger.error("The WhatsApp alert template failed", { deliveryId: card.deliveryId, error });
+      // After a refusal nothing went out, so a retry that the report below may need is free to
+      // send it. Any other error can follow a template that went out: the claim is kept.
+      if (isRefusedUnsent(error)) {
+        await window
+          .releaseFallback(cardId)
+          .catch((e: unknown) => this.logger.warn("Failed to release a WhatsApp template claim", { cardId, error: e }));
+      }
+      await alerts.markFailed(card.deliveryId, {
+        error: error instanceof Error ? error.message : String(error),
+        platformMessageId: cardId,
+      });
+      return;
+    }
+    const early = await window
+      .rememberSent(sentId, { deliveryId: card.deliveryId, tenantSlug: card.tenantSlug, threadId: card.threadId, sentAt })
+      .then(() => window.takeEarlyFailure(sentId))
+      .catch((error: unknown) => {
+        this.logger.error("Failed to remember a sent WhatsApp alert", { messageId: sentId, error });
+        return null;
+      });
+    const recorded = early
+      ? alerts.markFailed(card.deliveryId, { error: early.reason, platformMessageId: sentId })
+      : alerts.markDelivered(card.deliveryId, { platformMessageId: sentId });
+    await recorded.catch((error: unknown) =>
+      this.logger.error("Failed to record a WhatsApp alert template's outcome", { deliveryId: card.deliveryId, error }),
+    );
   }
 }

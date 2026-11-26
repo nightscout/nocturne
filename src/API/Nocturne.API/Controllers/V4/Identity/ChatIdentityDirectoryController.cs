@@ -179,7 +179,7 @@ public class ChatIdentityDirectoryController : ControllerBase
             var now = DateTime.UtcNow;
             excursionIds = await db.AlertExcursions.AsNoTracking()
                 .OfCondition(includeTest: true)
-                .Where(e => e.EndedAt == null || e.EndedAt > now)
+                .NotEndedBy(e => e.EndedAt, now)
                 .Select(e => e.Id)
                 .ToListAsync(ct);
         }
