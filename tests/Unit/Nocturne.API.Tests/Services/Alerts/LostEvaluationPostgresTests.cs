@@ -48,20 +48,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     private const string FirstRecord = "no evaluation was recorded for the tenant before";
     private const string Low = """{"direction":"below","value":70}""";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("lost_evaluation");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("lost_evaluation");
 
     /// <summary>
     /// An engine that can fail the next evaluation, or hold every evaluation until released, as a

@@ -20,20 +20,7 @@ namespace Nocturne.API.Tests.Services.V4;
 public class RawMmolProfileDetectorPostgresTests(RawMmolProfileDetectorPostgresTests.Database database)
     : IClassFixture<RawMmolProfileDetectorPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("raw_mmol_detector");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("raw_mmol_detector");
 
     private sealed class Contexts(string connectionString, Guid tenant) : IDbContextFactory<NocturneDbContext>
     {

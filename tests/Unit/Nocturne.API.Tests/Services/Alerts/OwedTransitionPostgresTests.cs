@@ -51,20 +51,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
     private static readonly DateTimeOffset AfterLease = Opened + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1);
     private const string HomeAssistant = "ha-instance";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("owed_transition");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("owed_transition");
 
     private NocturneDbContext Context(Guid tenant) =>
         TestContexts.Context(database.AppConnectionString, tenant);

@@ -18,20 +18,7 @@ public class ContextStampClockTests(ContextStampClockTests.Database database)
 {
     private static readonly DateTimeOffset Start = new DateTimeOffset(2031, 3, 4, 5, 6, 7, TimeSpan.Zero).AddTicks(1234);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("context_stamp_clock");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("context_stamp_clock");
 
     private static readonly IAuditContext Actor = new TestAuditActor { AuthType = "ApiKey" };
 

@@ -36,11 +36,8 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         Scope.SleepRead, Scope.AlertsRead,
     ];
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_availability")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
         /// <summary>A loop snapshot two hours ago, a profile activation an hour ago and one glucose reading three days ago.</summary>
         public Guid Tenant { get; private set; }
 
@@ -53,11 +50,9 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         /// </summary>
         public Guid Modules { get; private set; }
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_availability");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
+            await base.InitializeAsync();
             Tenant = await TenantAsync();
             Other = await TenantAsync();
             Modules = await TenantAsync();
@@ -101,8 +96,6 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
             seed.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.CreateVersion7(), Timestamp = now.AddDays(-3), Mgdl = 120 });
             await seed.SaveChangesAsync();
         }
-
-        public Task DisposeAsync() => Task.CompletedTask;
 
         public DbContextOptions<NocturneDbContext> Options =>
             TestContexts.Options(AppConnectionString);

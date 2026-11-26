@@ -39,20 +39,7 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgresTests.Database database)
     : IClassFixture<UnreadableRuleNoticePostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("unreadable_rule_notice");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("unreadable_rule_notice");
 
     private static readonly DateTime Now = new(2026, 11, 22, 8, 0, 0, DateTimeKind.Utc);
 

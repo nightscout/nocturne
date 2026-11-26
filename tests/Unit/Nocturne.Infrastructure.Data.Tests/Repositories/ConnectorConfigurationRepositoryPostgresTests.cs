@@ -22,20 +22,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfigurationRepositoryPostgresTests.Database database)
     : IClassFixture<ConnectorConfigurationRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("connector_config_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("connector_config_repo");
 
     private NocturneDbContext Context(Guid tenant) =>
         TestContexts.Context(database.AppConnectionString, tenant);

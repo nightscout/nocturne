@@ -41,7 +41,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
     public async Task InitializeAsync()
     {
-        connectionString = fixture.Database.SuperuserConnectionString;
+        connectionString = fixture.SuperuserConnectionString;
         await using var db = Context();
         db.Tenants.AddRange(
             new TenantEntity { Id = tenantId, Slug = $"google-test-{tenantId:N}", DisplayName = "Synthetic", IsActive = true },
@@ -561,7 +561,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
+        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
             .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
@@ -600,12 +600,4 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
 }
 
-public sealed class GoogleHealthPostgresFixture : IAsyncLifetime
-{
-    public TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync() =>
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health");
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class GoogleHealthPostgresFixture() : MigratedDatabase("google_health");

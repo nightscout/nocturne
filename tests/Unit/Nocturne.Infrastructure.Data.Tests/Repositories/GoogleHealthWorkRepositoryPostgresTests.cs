@@ -19,20 +19,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class GoogleHealthWorkRepositoryPostgresTests(GoogleHealthWorkRepositoryPostgresTests.Database database)
     : IClassFixture<GoogleHealthWorkRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health_work_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("google_health_work_repo");
 
     private NocturneDbContext Context(Guid tenant) =>
         TestContexts.Context(database.AppConnectionString, tenant);

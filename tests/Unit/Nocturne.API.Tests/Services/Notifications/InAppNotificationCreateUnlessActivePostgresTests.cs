@@ -20,20 +20,8 @@ namespace Nocturne.API.Tests.Services.Notifications;
 public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationCreateUnlessActivePostgresTests.Database database)
     : IClassFixture<InAppNotificationCreateUnlessActivePostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("notification_create_unless_active")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("notification_create_unless_active");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-
         private DbContextOptions<NocturneDbContext> Options =>
             TestContexts.Options(AppConnectionString, npgsql: TestContexts.Retrying);
 

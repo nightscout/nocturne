@@ -35,27 +35,20 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
     private static readonly string[] Scopes =
         [Scope.GlucoseRead, Scope.AlertsRead, Scope.SleepRead, Scope.TherapyRead, Scope.HeartRateRead];
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_records")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
         /// <summary>Two tenants seeded alike, so a read that crossed tenants would count each row twice.</summary>
         public Guid Tenant { get; private set; }
         public Guid Other { get; private set; }
         public DateTimeOffset Now { get; private set; }
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_records");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
+            await base.InitializeAsync();
             Now = DateTimeOffset.UtcNow;
             Tenant = await SeedTenantAsync();
             Other = await SeedTenantAsync();
         }
-
-        public Task DisposeAsync() => Task.CompletedTask;
 
         public DbContextOptions<NocturneDbContext> Options =>
             TestContexts.Options(AppConnectionString);

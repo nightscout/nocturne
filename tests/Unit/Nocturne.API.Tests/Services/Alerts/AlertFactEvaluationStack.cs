@@ -33,15 +33,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>A migrated PostgreSQL database for one test class, reached under the runtime role.</summary>
-public sealed class AlertFactEvaluationDatabase : IAsyncLifetime
-{
-    public TestDatabase Created { get; private set; } = null!;
-
-    public async Task InitializeAsync() =>
-        Created = await SharedPostgres.CreateMigratedDatabaseAsync("alert_fact_evaluation");
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class AlertFactEvaluationDatabase() : MigratedDatabase("alert_fact_evaluation");
 
 /// <param name="SiteChangeAt">The site change reads show to the pass's scope, as the enricher reads it.</param>
 internal sealed record AlertPass(Guid TenantId, IReadOnlyList<AlertRuleSnapshot> Rules, SensorContext Context, DateTime? SiteChangeAt);
@@ -65,7 +57,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseTenantInterceptor(database.Created.AppConnectionString));
+            .UseTenantInterceptor(database.AppConnectionString));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -124,7 +116,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
     public void PassTheDebounce() => Time.Advance(AlertFactEvaluationScheduler.Debounce);
 
     public NocturneDbContext Context(Guid tenant) =>
-        TestContexts.Context(_database.Created.AppConnectionString, tenant);
+        TestContexts.Context(_database.AppConnectionString, tenant);
 
     public async Task<(TenantContext Tenant, Guid Rule)> SeedTenantAsync(
         string name,
@@ -132,7 +124,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
         string conditionParams = """{"direction":"below","value":70}""")
     {
         var tenant = new TenantContext(Guid.NewGuid(), $"{name}-{Guid.NewGuid():N}", name, true, false);
-        await using (var conn = new NpgsqlConnection(_database.Created.MigratorConnectionString))
+        await using (var conn = new NpgsqlConnection(_database.MigratorConnectionString))
         {
             await conn.OpenAsync();
             await conn.SeedTenantAsync(tenant.TenantId, tenant.Slug, name);

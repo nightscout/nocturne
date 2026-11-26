@@ -24,20 +24,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     : IClassFixture<SetupOwnerClaimPostgresTests.Database>
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("setup_owner_claim");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("setup_owner_claim");
 
     private static NocturneDbContext Context(string connectionString, Guid tenant, bool retrying = false) =>
         TestContexts.Context(connectionString, tenant, npgsql: retrying ? TestContexts.Retrying : null);

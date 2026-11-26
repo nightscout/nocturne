@@ -21,15 +21,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLivenessPostgresTests.Database database)
     : IClassFixture<RefreshTokenRotationLivenessPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync() =>
-            AppConnectionString = (await SharedPostgres.CreateMigratedDatabaseAsync("refresh_token_rotation_liveness")).AppConnectionString;
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("refresh_token_rotation_liveness");
 
     private sealed class Factory(string connectionString, params IInterceptor[] interceptors) : SingleReaderDbContextFactory
     {

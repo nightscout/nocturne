@@ -56,20 +56,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     private const string Below50 = """{"direction":"below","value":50}""";
     private const string TelegramUserId = "864203571";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("rule_save_evaluation");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("rule_save_evaluation");
 
     /// <summary>Records the rules each pass evaluated, then decides them.</summary>
     private sealed class RecordingOrchestrator(AlertOrchestrator inner, List<IReadOnlyList<Guid>> passes) : IAlertOrchestrator

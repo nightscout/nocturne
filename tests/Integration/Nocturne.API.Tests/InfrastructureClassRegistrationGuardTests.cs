@@ -18,8 +18,8 @@ namespace Nocturne.API.Tests.Integration;
 /// the descriptors, so it cannot tell a host registration from the Infrastructure call it replaced.
 /// </summary>
 [Trait("Category", "Integration")]
-public class InfrastructureClassRegistrationGuardTests(ServiceProviderValidationTests.MigratedDatabase fixture)
-    : IClassFixture<ServiceProviderValidationTests.MigratedDatabase>
+public class InfrastructureClassRegistrationGuardTests(ServiceProviderValidationTests.Database fixture)
+    : IClassFixture<ServiceProviderValidationTests.Database>
 {
     private static readonly Assembly InfrastructureAssembly = typeof(NocturneDbContext).Assembly;
 

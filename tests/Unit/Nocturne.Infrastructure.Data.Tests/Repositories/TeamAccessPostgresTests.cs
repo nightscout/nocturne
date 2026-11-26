@@ -25,20 +25,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
     : IClassFixture<TeamAccessPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("team_access");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("team_access");
 
     private sealed record Site(Guid Id, string Name, IReadOnlyDictionary<string, Guid> Roles);
 

@@ -30,20 +30,7 @@ namespace Nocturne.API.Tests.Services.Monitoring;
 public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPostgresTests.Database database)
     : IClassFixture<TrackerAlertRuleSyncRearmPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("tracker_rule_rearm");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("tracker_rule_rearm");
 
     /// <summary>Fails every statement writing <see cref="Table"/> once armed.</summary>
     private sealed class Failure : DbCommandInterceptor

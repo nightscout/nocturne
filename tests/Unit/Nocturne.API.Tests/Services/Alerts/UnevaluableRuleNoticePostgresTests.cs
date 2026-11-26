@@ -40,20 +40,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
 
     private static readonly RustValidationIssue BodyIssue = new("condition", "threshold", "field_missing", "value");
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("unevaluable_rule_notice");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("unevaluable_rule_notice");
 
     /// <summary>
     /// The repository, over a store whose rule holds the condition the run read unless

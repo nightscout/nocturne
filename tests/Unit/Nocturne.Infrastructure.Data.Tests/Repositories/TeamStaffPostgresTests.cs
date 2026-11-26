@@ -27,20 +27,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     : IClassFixture<TeamStaffPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("team_staff");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("team_staff");
 
     private sealed record Site(Guid Id, IReadOnlyDictionary<string, Guid> Roles);
 

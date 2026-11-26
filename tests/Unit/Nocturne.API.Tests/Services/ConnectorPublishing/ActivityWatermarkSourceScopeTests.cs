@@ -51,15 +51,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
     /// One migrated database for the class. Every test publishes the same client ids under its own
     /// tenant (<c>NocturneDbContext.ScopeKeyToTenant</c>).
     /// </summary>
-    public sealed class Databases : IAsyncLifetime
-    {
-        public TestDatabase Database { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Database = await SharedPostgres.CreateMigratedDatabaseAsync("activity_watermark");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Databases() : MigratedDatabase("activity_watermark");
 
     private const string SourceA = "nightscout-connector";
     private const string SourceB = "glooko-connector";
@@ -75,15 +67,14 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
 
     public async Task InitializeAsync()
     {
-        var database = databases.Database;
         var tenant = Guid.NewGuid();
-        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        await using (var conn = new NpgsqlConnection(databases.MigratorConnectionString))
         {
             await conn.OpenAsync();
             await conn.SeedTenantAsync(tenant, $"watermark-{tenant:N}", "activity-watermark-test");
         }
 
-        _context = TestContexts.Context(database.AppConnectionString, tenant);
+        _context = TestContexts.Context(databases.AppConnectionString, tenant);
 
         var processing = new Mock<IDocumentProcessingService>();
         processing

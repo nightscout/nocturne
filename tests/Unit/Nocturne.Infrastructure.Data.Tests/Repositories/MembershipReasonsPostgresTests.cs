@@ -35,20 +35,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         AuthAuditEventType.HistoryLimitChanged, AuthAuditEventType.AccessEndChanged,
     ];
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("membership_reasons");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("membership_reasons");
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
         TestContexts.Context(connectionString, tenant);

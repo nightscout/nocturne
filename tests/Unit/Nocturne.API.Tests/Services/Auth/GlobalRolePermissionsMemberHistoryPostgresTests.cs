@@ -26,20 +26,7 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
     private static readonly CancellationToken Ct = CancellationToken.None;
     private static readonly DateTime Now = new(2026, 11, 23, 12, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("global_role_permissions_history");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("global_role_permissions_history");
 
     private NocturneDbContext Context(Guid tenant, Guid? actor = null) =>
         TestContexts.Context(database.AppConnectionString, tenant)
