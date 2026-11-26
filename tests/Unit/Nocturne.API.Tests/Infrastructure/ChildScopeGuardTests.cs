@@ -114,6 +114,11 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/V4/LoopClosedLoopStamper.cs: LoopClosedLoopStamper.RunAsync",
         "src/API/Nocturne.API/Services/V4/TempBasalRateReresolver.cs: TempBasalRateReresolver.RunAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DemoDataPurgeRepository.cs: DemoDataPurgeRepository.ReportInTenantAsync",
+
+        // Notices a sender outside the tenant puts in members' trays. The operator's request has no
+        // tenant of its own to read as; each returns only the ids of the notices the sender wrote.
+        "src/API/Nocturne.API/Services/Notifications/External/ExternalNotificationService.cs: ExternalNotificationService.SendAsync",
+        "src/API/Nocturne.API/Services/Notifications/External/ExternalNotificationService.cs: ExternalNotificationService.WithdrawAsync",
     ];
 
     private static readonly IReadOnlyList<string> Openers = Scan();

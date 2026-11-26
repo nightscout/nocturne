@@ -47,6 +47,7 @@ using Nocturne.API.Services.Jobs;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.NotificationActionHandlers;
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Notifications.External;
 using Nocturne.API.Services.NotificationTemplates;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
@@ -434,6 +435,10 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IContentContributionService, GitHubContentService>();
 
         services.AddSingleton<IOwnerNoticeLedger, OwnerNoticeLedger>();
+
+        // Notices from the operator and connected apps for members' notification trays
+        services.AddSingleton<IExternalNotificationLedger, ExternalNotificationLedger>();
+        services.AddScoped<IExternalNotificationService, ExternalNotificationService>();
 
         // Release check: notices to tenant owners about new and newly installed releases
         services.Configure<ReleaseCheckOptions>(configuration.GetSection(ReleaseCheckOptions.SectionName));

@@ -301,6 +301,9 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
     {
         ["api/v4/coach-marks/{key} key"] = "names a coach mark in the UI, not a credential",
         ["api/v4/setup-hub/items/{key} key"] = "names a setup hub item, not a credential",
+        ["api/v4/admin/tenants/{tenantId:guid}/notifications/{key} key"] =
+            "names the sender's notice, which the sender chose, not a credential",
+        ["api/v4/notifications/external/{key} key"] = "names the app's notice, which the app chose, not a credential",
     };
 
     private static bool IsMarked(RouteEndpoint endpoint, string parameterName) =>

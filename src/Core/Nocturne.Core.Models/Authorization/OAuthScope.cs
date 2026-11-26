@@ -93,6 +93,9 @@ public enum OAuthScope
     [EnumMember(Value = "device.actuate"), JsonStringEnumMemberName("device.actuate")]
     DeviceActuate,
 
+    [EnumMember(Value = "notifications.send"), JsonStringEnumMemberName("notifications.send")]
+    NotificationsSend,
+
     [EnumMember(Value = "health.read"), JsonStringEnumMemberName("health.read")]
     HealthRead,
 

@@ -2155,6 +2155,77 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("dnd_windows", (string)null);
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ExternalNotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("GrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("grant_id");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<Guid?>("NotificationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("notification_id");
+
+                    b.Property<string>("SenderId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("sender_id");
+
+                    b.Property<string>("SenderKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("sender_kind");
+
+                    b.Property<string>("SenderName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("sender_name");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("SenderKind", "SenderId", "TenantId", "SysCreatedAt")
+                        .HasDatabaseName("ix_external_notifications_sender_tenant_created");
+
+                    b.HasIndex("SenderKind", "SenderId", "TenantId", "SubjectId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_external_notifications_sender_tenant_subject_key");
+
+                    b.ToTable("external_notifications");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.FoodEntity", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -11645,6 +11716,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DndWindowEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ExternalNotificationEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
