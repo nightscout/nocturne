@@ -17,6 +17,16 @@ const SENT = { deliveryId: "delivery-1", tenantSlug: "acme", threadId: THREAD, s
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
 
+const PAYLOAD = {
+  tenantId: "11111111-1111-1111-1111-111111111111",
+  excursionId: "33333333-3333-3333-3333-333333333333",
+  ruleName: "Urgent low",
+  subjectName: "Alex",
+  glucoseValue: 54,
+  readingTimestamp: "2026-11-26T03:00:00Z",
+  severity: "critical",
+};
+
 async function setup() {
   const state = createMemoryState();
   await state.connect();
@@ -27,6 +37,7 @@ async function setup() {
     verifyToken: "not-a-token",
     userName: "nocturne",
     logger,
+    alertTemplate: { name: "nocturne_alert", language: "en" },
   });
   const chat = {
     getState: () => state,
@@ -38,7 +49,10 @@ async function setup() {
 
   const markFailed = vi.fn().mockResolvedValue(undefined);
   const markDelivered = vi.fn().mockResolvedValue(undefined);
-  const scopedApiFactory = vi.fn(() => ({ alerts: { markFailed, markDelivered } }) as unknown as BotApiClient);
+  const getDeliveryPayload = vi.fn().mockResolvedValue(PAYLOAD);
+  const scopedApiFactory = vi.fn(
+    () => ({ alerts: { markFailed, markDelivered, getDeliveryPayload } }) as unknown as BotApiClient,
+  );
   const context = {
     unscopedApi: {} as BotApiClient,
     scopedApiFactory,
@@ -56,7 +70,16 @@ async function setup() {
     return runWithContext(context, () => adapter.handleWebhook(request));
   };
 
-  return { adapter, chat, window: new WhatsAppWindow(state), post, markFailed, markDelivered, scopedApiFactory };
+  return {
+    adapter,
+    chat,
+    window: new WhatsAppWindow(state),
+    post,
+    markFailed,
+    markDelivered,
+    getDeliveryPayload,
+    scopedApiFactory,
+  };
 }
 
 const change = (value: Record<string, unknown>) => ({
@@ -263,16 +286,19 @@ describe("NocturneWhatsAppAdapter", () => {
     });
   });
 
-  it("sends a card Meta failed for the window again as the template, on the same delivery", async () => {
-    const fallback = { name: "nocturne_alert", language: "en" };
+  it("sends a card Meta failed for the window again as the template, built from the payload the API holds", async () => {
     const sendTemplate = vi.fn().mockResolvedValue({ id: "wamid.template", threadId: THREAD, raw: {} });
     bits.adapter.sendTemplate = sendTemplate as never;
-    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback });
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
 
     const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
 
     expect(response.status).toBe(200);
-    expect(sendTemplate).toHaveBeenCalledExactlyOnceWith(THREAD, fallback);
+    expect(bits.getDeliveryPayload).toHaveBeenCalledExactlyOnceWith("delivery-1");
+    expect(sendTemplate).toHaveBeenCalledExactlyOnceWith(
+      THREAD,
+      expect.objectContaining({ name: "nocturne_alert", language: "en" }),
+    );
     expect(bits.markDelivered).toHaveBeenCalledExactlyOnceWith("delivery-1", { platformMessageId: "wamid.template" });
     expect(bits.markFailed).not.toHaveBeenCalled();
     await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
@@ -282,7 +308,7 @@ describe("NocturneWhatsAppAdapter", () => {
   it("marks the alert failed with Meta's reason when Meta refuses the template as well", async () => {
     const refused = Object.assign(new Error("Template name does not exist in the translation"), { status: 400 });
     bits.adapter.sendTemplate = vi.fn().mockRejectedValue(refused) as never;
-    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: { name: "nocturne_alert", language: "en" } });
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
 
     const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
 
@@ -298,7 +324,7 @@ describe("NocturneWhatsAppAdapter", () => {
     const sendTemplate = vi.fn().mockResolvedValue({ id: "wamid.template", threadId: THREAD, raw: {} });
     bits.adapter.sendTemplate = sendTemplate as never;
     bits.markDelivered.mockRejectedValueOnce(new Error("API restarting"));
-    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: { name: "nocturne_alert", language: "en" } });
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
 
     const first = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
     await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
@@ -310,12 +336,55 @@ describe("NocturneWhatsAppAdapter", () => {
   it("marks the alert failed when Meta fails the card for another reason, without sending the template", async () => {
     const sendTemplate = vi.fn();
     bits.adapter.sendTemplate = sendTemplate as never;
-    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: { name: "nocturne_alert", language: "en" } });
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
 
     await bits.post(failedStatus("wamid.alert", 131026, "Message undeliverable"));
 
     expect(sendTemplate).not.toHaveBeenCalled();
     expect(bits.markFailed).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the template to delivery when delivery claimed it first, and reports nothing itself", async () => {
+    const sendTemplate = vi.fn();
+    bits.adapter.sendTemplate = sendTemplate as never;
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
+    await bits.window.claimFallback("wamid.alert");
+
+    const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(response.status).toBe(200);
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(bits.markFailed).not.toHaveBeenCalled();
+    expect(bits.markDelivered).not.toHaveBeenCalled();
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
+  });
+
+  it("sends no template for a notice the template does not carry, and fails the alert for the window", async () => {
+    const sendTemplate = vi.fn();
+    bits.adapter.sendTemplate = sendTemplate as never;
+    bits.getDeliveryPayload.mockResolvedValueOnce({ ...PAYLOAD, kind: "held" });
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
+
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(bits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+      platformMessageId: "wamid.alert",
+    });
+  });
+
+  it("asks for the status again, sending nothing, when the payload cannot be read", async () => {
+    const sendTemplate = vi.fn();
+    bits.adapter.sendTemplate = sendTemplate as never;
+    bits.getDeliveryPayload.mockRejectedValueOnce(new Error("API restarting"));
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
+
+    const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(response.status).toBe(500);
+    expect(sendTemplate).not.toHaveBeenCalled();
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.not.toBeNull();
   });
 
   it("runs the alert action a template's quick reply carries", async () => {

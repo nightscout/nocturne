@@ -1,5 +1,5 @@
 import type { StateAdapter } from "chat";
-import { WhatsAppApiError, type WhatsAppTemplateMessage } from "@chat-adapter/whatsapp";
+import { WhatsAppApiError } from "@chat-adapter/whatsapp";
 
 /**
  * Meta delivers a free-form message only within 24 hours of the user's last message to the
@@ -38,14 +38,19 @@ export interface SentAlert {
   threadId: string;
   /** Epoch milliseconds, taken before the send. */
   sentAt: number;
-  /** The alert as the configured template, sent in its place if Meta fails the card for the window. */
-  fallback?: WhatsAppTemplateMessage;
+  /**
+   * Whether the alert is sent again as the configured template if Meta fails the card for the
+   * window. The template is built from the delivery's payload, read from the API then: the bot's
+   * state holds no health data.
+   */
+  fallback?: boolean;
 }
 
 const inboundKey = (threadId: string) => `nocturne:whatsapp:last-inbound:${threadId}`;
 const sentKey = (messageId: string) => `nocturne:whatsapp:alert-sent:${messageId}`;
 const earlyFailureKey = (messageId: string) => `nocturne:whatsapp:early-failure:${messageId}`;
 const reportAttemptKey = (messageId: string) => `nocturne:whatsapp:report-attempt:${messageId}`;
+const fallbackKey = (cardId: string) => `nocturne:whatsapp:fallback:${cardId}`;
 
 /** A failed status for a message no sent alert was remembered for yet; see {@link WhatsAppWindow.rememberEarlyFailure}. */
 export interface EarlyFailure {
@@ -120,6 +125,15 @@ export class WhatsAppWindow {
   async firstReportAttempt(messageId: string, now: number): Promise<number> {
     await this.state.setIfNotExists(reportAttemptKey(messageId), now, REPORT_ATTEMPT_TTL_MS);
     return (await this.state.get<number>(reportAttemptKey(messageId))) ?? now;
+  }
+
+  /**
+   * Claims sending the template in place of a card Meta failed for the window. Delivery and the
+   * status webhook can each learn of the failure, and a webhook can be delivered again: only the
+   * caller that gets true sends it.
+   */
+  async claimFallback(cardId: string): Promise<boolean> {
+    return await this.state.setIfNotExists(fallbackKey(cardId), true, SENT_TTL_MS);
   }
 
   /** Forgets a sent alert once its outcome is reported, so a repeated status finds nothing. */

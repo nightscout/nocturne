@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AlertConditionType } from "@nocturne/api-client";
+import type { WhatsAppTemplateMessage } from "@chat-adapter/whatsapp";
+import { AlertConditionType, AlertPayloadKind } from "@nocturne/api-client";
 import type { AlertPayload } from "../types.js";
 import { decodeActionValue } from "../lib/action-value.js";
 import { trendArrow } from "../lib/format.js";
@@ -22,8 +23,8 @@ const payload = (overrides: Partial<AlertPayload> = {}): AlertPayload => ({
 
 const TEMPLATE = { name: "nocturne_alert", language: "en_US" };
 
-function bodyOf(message: ReturnType<typeof alertTemplateMessage>): string[] {
-  const body = message.components?.find((c) => c.type === "body");
+function bodyOf(message: WhatsAppTemplateMessage | null): string[] {
+  const body = message?.components?.find((c) => c.type === "body");
   return (body?.parameters ?? []).map((p) => (p.type === "text" ? p.text : ""));
 }
 
@@ -44,15 +45,32 @@ describe("alertTemplateMessage", () => {
     expect(bodyOf(message)[2]).toBe("no reading");
   });
 
-  it("keeps each parameter to what Meta accepts: no newline or tab, at most four spaces in a row, never empty", () => {
-    const message = alertTemplateMessage(TEMPLATE, payload({ subjectName: "Alex\nSmith", ruleName: "Low\t\tat      night" }));
+  it("keeps each parameter to what Meta accepts: no line break or tab, at most four spaces in a row, never empty", () => {
+    const message = alertTemplateMessage(
+      TEMPLATE,
+      payload({ subjectName: "Alex\r\nSmith", ruleName: "Low\t\tat      night" }),
+    );
 
     expect(bodyOf(message).slice(0, 2)).toEqual(["Alex Smith", "Low at    night"]);
     expect(bodyOf(alertTemplateMessage(TEMPLATE, payload({ ruleName: " " })))[1]).toBe("-");
   });
 
+  it("shortens a long parameter to 100 characters", () => {
+    const name = bodyOf(alertTemplateMessage(TEMPLATE, payload({ ruleName: "x".repeat(300) })))[1];
+
+    expect(name).toHaveLength(100);
+    expect(name.endsWith("…")).toBe(true);
+  });
+
+  it.each([AlertPayloadKind.Unevaluable, AlertPayloadKind.Held, AlertPayloadKind.HeldClosed])(
+    "has no template for a %s notice, which has no reading to state or alert to acknowledge",
+    (kind) => {
+      expect(alertTemplateMessage(TEMPLATE, payload({ kind }))).toBeNull();
+    },
+  );
+
   it("gives the quick reply the Acknowledge button's action, for the alert's tenant and excursion", () => {
-    const button = alertTemplateMessage(TEMPLATE, payload()).components?.find((c) => c.type === "button");
+    const button = alertTemplateMessage(TEMPLATE, payload())?.components?.find((c) => c.type === "button");
     const parameter = button?.type === "button" ? button.parameters[0] : undefined;
     const action = parameter?.type === "payload" ? readTemplatePayload(parameter.payload) : null;
 
@@ -69,7 +87,7 @@ describe("readTemplatePayload", () => {
     });
   });
 
-  it.each(["Acknowledge", "", "nocturne|", "nocturne||value"])("reads nothing from %j", (payload) => {
+  it.each(["Acknowledge", "", "nocturne|", "nocturne||value", "nocturne|snooze_alert|abc:def"])("reads nothing from %j", (payload) => {
     expect(readTemplatePayload(payload)).toBeNull();
   });
 });

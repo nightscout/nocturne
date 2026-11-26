@@ -36,7 +36,7 @@ const asMetBy = (value: unknown): MetPoint[] | undefined =>
  * the ids the acknowledge action needs stop delivery. Any other value that is absent or of
  * another type gives a plainer card, and the cards degrade an enum member they do not know.
  */
-function parseAlertPayload(raw: unknown): AlertPayload | undefined {
+export function parseAlertPayload(raw: unknown): AlertPayload | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const excursionId = asString(field(raw, "excursionId"));
   const tenantId = asString(field(raw, "tenantId"));

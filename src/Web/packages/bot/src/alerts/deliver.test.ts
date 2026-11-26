@@ -571,7 +571,7 @@ describe("AlertDeliveryHandler on WhatsApp with an alert template", () => {
     expect(bits.post).toHaveBeenCalledOnce();
     expect(sendTemplate).not.toHaveBeenCalled();
     await expect(window.sentAlert("platform-message-1")).resolves.toMatchObject({
-      fallback: expect.objectContaining({ name: "nocturne_alert" }),
+      fallback: true,
     });
   });
 
@@ -617,6 +617,47 @@ describe("AlertDeliveryHandler on WhatsApp with an alert template", () => {
 
     expect(sendTemplate).toHaveBeenCalledOnce();
     expect(apiBits.markFailed).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the status webhook claimed the template first, and forgets the card", async () => {
+    await window.rememberEarlyFailure("platform-message-1", { reason: WINDOW_CLOSED_REASON, windowClosed: true });
+    await window.claimFallback("platform-message-1");
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).not.toHaveBeenCalled();
+    await expect(window.sentAlert("platform-message-1")).resolves.toBeNull();
+  });
+
+  it("records the template failed when Meta failed it before it was remembered", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    sendTemplate.mockImplementationOnce(async () => {
+      await window.rememberEarlyFailure("wamid.template", { reason: "Message undeliverable", windowClosed: false });
+      return { id: "wamid.template", threadId: THREAD, raw: {} };
+    });
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: "Message undeliverable",
+      platformMessageId: "wamid.template",
+    });
+  });
+
+  it("sends no template for a notice that a rule is on hold, and fails it for the window", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+    const event = createEvent("whatsapp_dm", WA_ID);
+
+    await handler.deliver({ ...event, payload: { ...event.payload, kind: "held" } });
+
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+      platformMessageId: undefined,
+    });
   });
 
   it("records Meta's reason when the template is refused as well", async () => {

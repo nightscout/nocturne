@@ -1,5 +1,5 @@
 import type { WhatsAppTemplateMessage } from "@chat-adapter/whatsapp";
-import { AlertConditionType } from "@nocturne/api-client";
+import { AlertConditionType, AlertPayloadKind } from "@nocturne/api-client";
 import type { AlertPayload } from "../types.js";
 import { encodeActionValue } from "../lib/action-value.js";
 import { formatGlucose, trendArrow } from "../lib/format.js";
@@ -25,9 +25,16 @@ const NO_READING_KINDS: ReadonlySet<string> = new Set<AlertConditionType>([
   AlertConditionType.Staleness,
 ]);
 
-/** Meta refuses a template parameter with a newline, a tab or more than four spaces in a row. */
+/** Keeps the three parameters well inside Meta's limit of 1,024 characters for the whole body. */
+const MAX_PARAMETER_LENGTH = 100;
+
+/**
+ * Meta refuses a template parameter with a line break, a tab or more than four spaces in a row,
+ * and a body over its length limit.
+ */
 function parameter(text: string): string {
-  return text.replace(/[\n\t]+/g, " ").replace(/ {5,}/g, "    ").trim() || "-";
+  const clean = text.replace(/[\r\n\t]+/g, " ").replace(/ {5,}/g, "    ").trim() || "-";
+  return clean.length > MAX_PARAMETER_LENGTH ? `${clean.slice(0, MAX_PARAMETER_LENGTH - 1).trimEnd()}…` : clean;
 }
 
 /** The reading as the alert card shows it: value, unit and trend arrow. */
@@ -41,9 +48,12 @@ function reading(payload: AlertPayload): string {
 
 /**
  * The alert as the configured template: body {{1}} the person, {{2}} the alert's name, {{3}} the
- * reading with its unit and trend, and a quick reply that acknowledges the alert.
+ * reading with its unit and trend, and a quick reply that acknowledges the alert. Null for a
+ * notice that a rule cannot run or is on hold: the template states a reading and offers to
+ * acknowledge, which such a notice has neither of.
  */
-export function alertTemplateMessage(template: AlertTemplate, payload: AlertPayload): WhatsAppTemplateMessage {
+export function alertTemplateMessage(template: AlertTemplate, payload: AlertPayload): WhatsAppTemplateMessage | null {
+  if (payload.kind != null && payload.kind !== AlertPayloadKind.Excursion) return null;
   return {
     name: template.name,
     language: template.language,
@@ -77,11 +87,14 @@ export function templatePayload(actionId: string, value: string): string {
   return `${PAYLOAD_PREFIX}${actionId}|${value}`;
 }
 
-/** The action and value a quick-reply payload the bot wrote carries, or null for any other payload. */
+/**
+ * The action and value a quick-reply payload the bot wrote carries, or null for any other payload.
+ * Only the action a template offers is read back.
+ */
 export function readTemplatePayload(payload: string): { actionId: string; value: string } | null {
   if (!payload.startsWith(PAYLOAD_PREFIX)) return null;
   const rest = payload.slice(PAYLOAD_PREFIX.length);
   const split = rest.indexOf("|");
-  if (split <= 0) return null;
-  return { actionId: rest.slice(0, split), value: rest.slice(split + 1) };
+  if (split <= 0 || rest.slice(0, split) !== ACKNOWLEDGE_ACTION) return null;
+  return { actionId: ACKNOWLEDGE_ACTION, value: rest.slice(split + 1) };
 }

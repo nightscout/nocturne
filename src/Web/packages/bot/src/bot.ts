@@ -55,14 +55,17 @@ function telegramWebhookSecretToken(configured: string | undefined): string {
   return randomBytes(32).toString("hex");
 }
 
+/** Meta's language code a template is taken to be approved in when the settings name none. */
+const DEFAULT_TEMPLATE_LANGUAGE = "en";
+
 /**
  * The approved template alerts are sent as outside the customer service window, from the stored
- * platform settings, else the environment. Without a name there is none, and such alerts fail.
+ * WhatsApp settings. Without a name there is none, and such alerts fail.
  */
 function whatsappAlertTemplate(configured: PlatformCredentials | undefined): AlertTemplate | null {
-  const name = configured?.alertTemplateName || process.env.WHATSAPP_ALERT_TEMPLATE_NAME;
+  const name = configured?.alertTemplateName;
   if (!name) return null;
-  return { name, language: configured?.alertTemplateLanguage || process.env.WHATSAPP_ALERT_TEMPLATE_LANGUAGE || "en" };
+  return { name, language: configured.alertTemplateLanguage || DEFAULT_TEMPLATE_LANGUAGE };
 }
 
 /** A WhatsApp setting from the stored platform settings, else the environment. Refuses to start without one. */

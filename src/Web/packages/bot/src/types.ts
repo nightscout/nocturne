@@ -48,6 +48,8 @@ export interface BotApiClient {
     markDelivered(deliveryId: string, request: MarkDeliveredRequest, signal?: AbortSignal): Promise<void>;
     markFailed(deliveryId: string, request: MarkFailedRequest, signal?: AbortSignal): Promise<void>;
     getPendingDeliveries(channelType?: string[], signal?: AbortSignal): Promise<PendingDeliveryResponse[]>;
+    /** The payload a delivery was dispatched with, read again to send it in another form. */
+    getDeliveryPayload(deliveryId: string, signal?: AbortSignal): Promise<GeneratedAlertPayload>;
   };
   directory: {
     /** Returns ALL candidates for a (platform, platformUserId). Returns null on 404. */

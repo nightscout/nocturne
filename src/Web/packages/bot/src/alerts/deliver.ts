@@ -92,7 +92,7 @@ export class AlertDeliveryHandler {
           tenantSlug: event.tenantSlug,
           threadId,
           sentAt,
-          fallback: template ? alertTemplateMessage(template, payload) : undefined,
+          ...(template && alertTemplateMessage(template, payload) ? { fallback: true } : {}),
         };
         const early = await window
           .rememberSent(sent.id, sentAlert)
@@ -102,6 +102,9 @@ export class AlertDeliveryHandler {
             return null;
           });
         if (early) {
+          await window
+            .forgetSent(sent.id)
+            .catch((e: unknown) => logger.error("Failed to forget a WhatsApp alert:", e));
           if (!early.windowClosed) {
             await this.fail(deliveryId, early.reason, sent.id);
             return;
@@ -156,9 +159,10 @@ export class AlertDeliveryHandler {
   /**
    * Sends the alert as the configured template, which Meta delivers outside the window, or records
    * the delivery failed for the window when no template is configured. `failedCardId` names a card
-   * Meta already failed for the window, so the failure carries it. A template Meta refuses fails
-   * the delivery with Meta's reason. Nothing here throws once the template is sent, so the caller's
-   * error handling cannot send it again or fail a delivery that went out.
+   * Meta already failed for the window, so the failure carries it, and the template is sent only
+   * under the claim on that card (see {@link WhatsAppWindow.claimFallback}). A template Meta refuses
+   * fails the delivery with Meta's reason. Nothing here throws once the template is sent, so the
+   * caller's error handling cannot send it again or fail a delivery that went out.
    */
   private async sendTemplateOrFail(
     event: AlertDispatchEvent,
@@ -167,27 +171,47 @@ export class AlertDeliveryHandler {
     failedCardId?: string,
   ): Promise<void> {
     const adapter = this.whatsapp();
-    if (!adapter?.alertTemplate) {
+    const message = adapter?.alertTemplate ? alertTemplateMessage(adapter.alertTemplate, event.payload) : null;
+    if (!adapter || !message) {
       await this.fail(event.deliveryId, WINDOW_CLOSED_REASON, failedCardId);
       return;
+    }
+    if (failedCardId !== undefined) {
+      const claimed = await window.claimFallback(failedCardId).catch((e: unknown) => {
+        logger.error("Failed to claim the WhatsApp alert template:", e);
+        return null;
+      });
+      if (claimed === false) return;
+      if (claimed === null) {
+        await this.fail(event.deliveryId, WINDOW_CLOSED_REASON, failedCardId);
+        return;
+      }
     }
 
     const sentAt = Date.now();
     let sentId: string;
     try {
-      sentId = (await adapter.sendTemplate(threadId, alertTemplateMessage(adapter.alertTemplate, event.payload))).id;
+      sentId = (await adapter.sendTemplate(threadId, message)).id;
     } catch (err) {
       logger.error(`The alert template failed for ${event.deliveryId}:`, err);
       await this.fail(event.deliveryId, err instanceof Error ? err.message : String(err), failedCardId);
       return;
     }
-    await window
+    const early = await window
       .rememberSent(sentId, { deliveryId: event.deliveryId, tenantSlug: event.tenantSlug, threadId, sentAt })
-      .catch((e: unknown) => logger.error("Failed to remember a sent WhatsApp alert:", e));
+      .then(() => window.takeEarlyFailure(sentId))
+      .catch((e: unknown) => {
+        logger.error("Failed to remember a sent WhatsApp alert:", e);
+        return null;
+      });
+    if (early) {
+      await this.fail(event.deliveryId, early.reason, sentId);
+      return;
+    }
     await this.api.alerts
       .markDelivered(event.deliveryId, { platformMessageId: sentId })
       .catch((e: unknown) => logger.error("Failed to record a WhatsApp alert template as sent:", e));
-    logger.info(`Alert delivered via whatsapp_dm as the template ${adapter.alertTemplate.name}`);
+    logger.info(`Alert delivered via whatsapp_dm as the template ${message.name}`);
   }
 
   private async fail(deliveryId: string, error: string, platformMessageId?: string): Promise<void> {

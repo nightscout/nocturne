@@ -169,7 +169,7 @@ describe("the WhatsApp webhook", () => {
     expect(response.status).toBe(403);
   });
 
-  it("takes the alert template from the WhatsApp settings, else from the environment", () => {
+  it("takes the alert template from the WhatsApp settings alone", () => {
     const adapterWith = (settings: Record<string, string>) =>
       createBot({
         postgresUrl: "postgres://nobody@localhost:5432/not-connected",
@@ -191,8 +191,10 @@ describe("the WhatsApp webhook", () => {
       language: "en_US",
     });
 
-    vi.stubEnv("WHATSAPP_ALERT_TEMPLATE_NAME", "env_alert");
-    expect(adapterWith({}).alertTemplate).toEqual({ name: "env_alert", language: "en" });
+    expect(adapterWith({ alertTemplateName: "nocturne_alert" }).alertTemplate).toEqual({
+      name: "nocturne_alert",
+      language: "en",
+    });
   });
 
   it("checks the environment's verify token when configured from the environment", async () => {

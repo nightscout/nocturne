@@ -205,13 +205,13 @@
                 <Alert.Title>Alerts outside the 24-hour window</Alert.Title>
                 <Alert.Description>
                   <p>
-                    WhatsApp lets the bot send a message only for 24 hours after a person last sent it a message. After that time, it sends only an approved template.
+                    WhatsApp lets the bot send a message only for 24 hours after a person last sent it a message. After that time, WhatsApp delivers only an approved template.
                   </p>
                   <p>
-                    To send alerts after that time, create a utility template in WhatsApp Manager and get approval for it. Its body has three variables: <code>{"{{1}}"}</code> is the person, <code>{"{{2}}"}</code> is the alert name and <code>{"{{3}}"}</code> is the glucose reading. Add one quick reply button, for example Acknowledge. Then enter the template name and language here.
+                    To send alerts after that time, create a utility template in WhatsApp Manager and get approval for it. Its body has three variables: <code>{"{{1}}"}</code> is the person, <code>{"{{2}}"}</code> is the alert name and <code>{"{{3}}"}</code> is the glucose reading. Add one quick reply button, for example Acknowledge. Then enter the template name and language here. If you do not enter a language, the bot uses <code>en</code>.
                   </p>
                   <p>
-                    Meta charges for each template message. If you do not set a template, these alerts fail.
+                    Meta charges for each template message. If you do not set a template, these alerts fail. A notice that a rule cannot run or is on hold is not sent as a template.
                   </p>
                 </Alert.Description>
               </Alert.Root>
