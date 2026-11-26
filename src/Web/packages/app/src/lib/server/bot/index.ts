@@ -66,6 +66,8 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 			appSecret: fields["appSecret"],
 			phoneNumberId: fields["phoneNumberId"],
 			verifyToken: fields["verifyToken"],
+			alertTemplateName: fields["alertTemplateName"],
+			alertTemplateLanguage: fields["alertTemplateLanguage"],
 		}),
 		fromEnv: () =>
 			!!(

@@ -1,5 +1,5 @@
 import type { StateAdapter } from "chat";
-import { WhatsAppApiError } from "@chat-adapter/whatsapp";
+import { WhatsAppApiError, type WhatsAppTemplateMessage } from "@chat-adapter/whatsapp";
 
 /**
  * Meta delivers a free-form message only within 24 hours of the user's last message to the
@@ -38,6 +38,8 @@ export interface SentAlert {
   threadId: string;
   /** Epoch milliseconds, taken before the send. */
   sentAt: number;
+  /** The alert as the configured template, sent in its place if Meta fails the card for the window. */
+  fallback?: WhatsAppTemplateMessage;
 }
 
 const inboundKey = (threadId: string) => `nocturne:whatsapp:last-inbound:${threadId}`;
