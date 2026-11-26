@@ -159,6 +159,28 @@ public class ModelConventionTests
                 && i.IsDescending.SequenceEqual([false, true, true])
                 && i.GetFilter() == "deleted_at IS NULL AND NOT is_duplicate");
 
+    /// <summary>
+    /// A filter on <c>deleted_at</c> would leave the deleted rows these reads take out of the index.
+    /// </summary>
+    [Fact]
+    public void EveryDeletedInclusiveWindowTable_HasAnUnfilteredTenantTimestampIndex()
+    {
+        NocturneDbContext.V4DeletedInclusiveWindowEntities.Should().NotBeEmpty();
+        var model = Model();
+
+        NocturneDbContext.V4DeletedInclusiveWindowEntities.Select(model.FindEntityType)
+            .Where(e => e is null
+                || !e.GetIndexes().Any(i =>
+                    i.GetDatabaseName() == $"ix_{e.GetTableName()}_tenant_{i.Properties[^1].GetColumnName()}"
+                    && Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp)])
+                    && !i.IsUnique
+                    && i.IsDescending is not null
+                    && i.IsDescending.SequenceEqual([false, true])
+                    && i.GetFilter() is null))
+            .Select(e => e?.ShortName() ?? "<unmapped>")
+            .Should().BeEmpty("a window read over deleted rows needs a tenant-led timestamp index that holds them");
+    }
+
     [Fact]
     public void EveryCorrelatedTable_HasACorrelationIdIndex() =>
         AssertFamily(

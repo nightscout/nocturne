@@ -634,6 +634,25 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. Implementing<IDuplicateFlagged>().Where(typeof(IV4TimeSeriesEntity).IsAssignableFrom)];
 
     /// <summary>
+    /// V4 record tables a read ranges over one tenant by timestamp with its soft-deleted rows, which
+    /// the partial list indexes leave out: the legacy treatment window read that includes deleted rows
+    /// (<c>ILegacyKeyedRepository.GetIncludingDeletedAsync</c>, and on profile activations
+    /// <c>LegacyProfileActivationTable.InWindow</c>), and on sensor glucose the dedup unlinked read.
+    /// </summary>
+    internal static readonly Type[] V4DeletedInclusiveWindowEntities =
+    [
+        typeof(SensorGlucoseEntity),
+        typeof(BolusEntity),
+        typeof(CarbIntakeEntity),
+        typeof(TempBasalEntity),
+        typeof(BGCheckEntity),
+        typeof(NoteEntity),
+        typeof(DeviceEventEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ProfileActivationEntity),
+    ];
+
+    /// <summary>
     /// The <see cref="ILegacyIdentified"/> tables, each with the unique legacy-id index and its
     /// user-tombstone companion: <see cref="V4LegacyIdRecordEntities"/> and
     /// <see cref="StateSpanEntity"/>, which carries no decomposition correlation.

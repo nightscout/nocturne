@@ -89,6 +89,19 @@ internal static class ModelConventions
                 .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
         }
 
+        // Not partial on deleted_at, unlike the list indexes above, because these reads take deleted
+        // rows too. Without it a deleted-inclusive window read of the largest tenant walks the
+        // instance-wide ix_<table>_timestamp past every other tenant's rows: on a tenant of 100k
+        // bolus calculations, half the instance, 325 ms and 127k buffers for a 100k-row read against
+        // 84 ms and 2k with it. Named for the column, which is start_timestamp on the span tables.
+        foreach (var entity in V4DeletedInclusiveWindowEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var column = entity.Property(nameof(IObservationTimestamped.Timestamp)).Metadata.GetColumnName();
+            entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_{column}")
+                .IsDescending(false, true);
+        }
+
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.
         foreach (var entity in LegacyIdKeyedEntities.Select(t => modelBuilder.Entity(t)))

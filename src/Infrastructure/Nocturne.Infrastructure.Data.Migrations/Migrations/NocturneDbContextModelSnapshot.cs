@@ -7695,6 +7695,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_bg_checks_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_bg_checks_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
                         .HasDatabaseName("ix_bg_checks_tenant_source_sync_id")
@@ -8150,6 +8154,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_bolus_calculations_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_bolus_calculations_tenant_timestamp");
 
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
@@ -9019,6 +9027,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_device_events_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_device_events_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
                         .HasDatabaseName("ix_device_events_tenant_source_sync_id")
@@ -9374,6 +9386,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_notes_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_notes_tenant_timestamp");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
@@ -9881,8 +9897,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "Timestamp")
                         .IsDescending(false, true)
-                        .HasDatabaseName("ix_profile_activations_tenant_start_timestamp")
-                        .HasFilter("deleted_at IS NULL");
+                        .HasDatabaseName("ix_profile_activations_tenant_start_timestamp");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
