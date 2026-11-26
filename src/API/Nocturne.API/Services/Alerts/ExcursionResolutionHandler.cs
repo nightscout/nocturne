@@ -121,7 +121,7 @@ internal sealed class ExcursionResolutionHandler(
                     await broadcastService.BroadcastAlertResolvedAsync(resolved);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (ProviderFailure.Is(ex))
         {
             logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
         }
@@ -154,10 +154,10 @@ internal sealed class ExcursionResolutionHandler(
         {
             destinations = await repository.GetInAppDestinationsForExcursionAsync(excursionId, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (ProviderFailure.Is(ex))
         {
-            // Bumped to Error: a query-shape failure here would leak toast notifications across
-            // every close — needs to be visible. Per-recipient archive failures stay Warning.
+            // Error, not Warning: a failed load here leaves toast notifications standing after
+            // every close it hits. Per-recipient archive failures stay Warning.
             logger.LogError(ex,
                 "Failed to load InApp destinations for excursion {ExcursionId}; skipping auto-archive",
                 excursionId);
@@ -178,7 +178,7 @@ internal sealed class ExcursionResolutionHandler(
                     NotificationArchiveReason.ConditionMet,
                     ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            catch (Exception ex) when (ProviderFailure.Is(ex))
             {
                 logger.LogWarning(ex,
                     "Failed to archive InApp notification for user {UserId}, excursion {ExcursionId}",

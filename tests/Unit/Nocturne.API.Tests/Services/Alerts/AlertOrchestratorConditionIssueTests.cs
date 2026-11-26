@@ -168,7 +168,7 @@ public class AlertOrchestratorConditionIssueTests
         harness.Validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), WizardUrgentLow, It.IsAny<bool>(),
                 It.IsAny<string?>(), It.IsAny<string?>()))
-            .Throws(new InvalidOperationException("validator failed"));
+            .Throws(new RustAlertEngineException("validator failed"));
         var first = Rule(WizardUrgentLow);
         var second = Rule("""{"direction": "below", "value": 54}""") with
         {
@@ -186,6 +186,21 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
             Times.Once);
         harness.Logger.Entries.Should().Contain(e => e.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task A_defect_in_the_issue_check_is_not_swallowed()
+    {
+        var harness = new Harness();
+        var defect = new InvalidOperationException("a second operation was started on this context");
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Throws(defect);
+
+        var act = () => harness.EvaluateAsync(Rule(WizardUrgentLow));
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(defect);
     }
 
     [Fact]

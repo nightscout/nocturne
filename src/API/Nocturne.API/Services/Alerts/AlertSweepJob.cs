@@ -974,7 +974,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         {
             references = RuleTrees.ReferencesWallClock(rule);
         }
-        catch (Exception ex)
+        catch (RustAlertEngineException ex)
         {
             logger.LogWarning(ex,
                 "The engine could not read the condition trees of rule {AlertRuleId}; it evaluates per reading only",

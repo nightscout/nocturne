@@ -334,6 +334,22 @@ public class CanonicalAlertEvaluatorTests
         await act.Should().NotThrowAsync();
     }
 
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(TimeoutException))]
+    public async Task EvaluateAsync_LogsAFailureOfThePassAtError(Type failure)
+    {
+        LatestIs(Latest(Reading));
+        _orchestrator
+            .Setup(o => o.EvaluateRulesAsync(It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(), It.IsAny<IReadOnlySet<Guid>>(), It.IsAny<SensorContext>(), It.IsAny<long?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync((Exception)Activator.CreateInstance(failure)!);
+        var logger = new ListLogger<CanonicalAlertEvaluator>();
+
+        await Evaluator(Tenant, logger: logger).EvaluateAsync(GlucoseMoved);
+
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception!.GetType() == failure);
+    }
+
     [Fact]
     public async Task EvaluateAsync_LogsATimeoutInsideThePassRatherThanPassingItOnAsACancellation()
     {
@@ -833,6 +849,25 @@ public class CanonicalAlertEvaluatorTests
         await evaluator.Invoking(e => e.EvaluateAsync(GlucoseMoved)).Should().NotThrowAsync();
         await evaluator.EvaluateAsync(GlucoseMoved);
 
+        VerifyPasses(1);
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(TimeoutException))]
+    public async Task EvaluateAsync_ADefectRecordingTheReadingIsContainedAndReportsNoPass(Type defect)
+    {
+        LatestIs(Latest(Reading));
+        _evaluated
+            .Setup(e => e.RecordAsync(It.IsAny<EvaluatedReading>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync((Exception)Activator.CreateInstance(defect)!);
+        var logger = new ListLogger<CanonicalAlertEvaluator>();
+
+        var ran = await Evaluator(Tenant, logger: logger).EvaluateAsync(GlucoseMoved);
+
+        ran.Should().BeFalse();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception!.GetType() == defect);
+        logger.Warnings.Should().BeEmpty("only a failure of the store is a quiet one");
         VerifyPasses(1);
     }
 

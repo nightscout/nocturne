@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Npgsql;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Alerts;
@@ -144,7 +145,7 @@ public class ExcursionResolutionHandlerTests
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
         _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("db down"));
+            .ThrowsAsync(new NpgsqlException("db down"));
 
         var act = async () => await _sut.HandleClosedAsync(
             new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve),
@@ -166,7 +167,7 @@ public class ExcursionResolutionHandlerTests
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
         _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("db down"));
+            .ThrowsAsync(new NpgsqlException("db down"));
         _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(["member"]);
 
@@ -299,7 +300,7 @@ public class ExcursionResolutionHandlerTests
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
         _broadcast.Setup(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()))
-            .ThrowsAsync(new InvalidOperationException("hub down"));
+            .ThrowsAsync(new HttpRequestException("hub down"));
 
         var transition = new ExcursionTransition(
             ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve);
@@ -309,5 +310,95 @@ public class ExcursionResolutionHandlerTests
         await act.Should().NotThrowAsync();
         _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
             _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    public static TheoryData<Exception> Defects => new()
+    {
+        new InvalidOperationException("a second operation was started on this context"),
+        new NullReferenceException(),
+    };
+
+    private ExcursionTransition Closed() =>
+        new(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.Manual);
+
+    [Theory]
+    [MemberData(nameof(Defects))]
+    public async Task HandleClosed_ADefectReadingTheRule_Propagates(Exception defect)
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _sut.HandleClosedAsync(Closed(), _tenantId, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Theory]
+    [MemberData(nameof(Defects))]
+    public async Task HandleClosed_ADefectLoadingTheInAppDestinations_Propagates(Exception defect)
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _sut.HandleClosedAsync(Closed(), _tenantId, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
+    public async Task HandleClosed_AStoreFailureLoadingTheInAppDestinations_StillClears()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("db down"));
+
+        await _sut.HandleClosedAsync(Closed(), _tenantId, CancellationToken.None);
+
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [MemberData(nameof(Defects))]
+    public async Task HandleClosed_ADefectArchivingARecipientsNotification_Propagates(Exception defect)
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["user-a", "user-b"]);
+        _notification
+            .Setup(n => n.ArchiveBySourceAsync(
+                "user-a", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationArchiveReason>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _sut.HandleClosedAsync(Closed(), _tenantId, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
+    public async Task HandleClosed_AStoreFailureArchivingOneRecipient_ArchivesTheNext()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["user-a", "user-b"]);
+        _notification
+            .Setup(n => n.ArchiveBySourceAsync(
+                "user-a", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationArchiveReason>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("db down"));
+
+        await _sut.HandleClosedAsync(Closed(), _tenantId, CancellationToken.None);
+
+        _notification.Verify(n => n.ArchiveBySourceAsync(
+            "user-b", It.IsAny<string>(), _excursionId.ToString(), NotificationArchiveReason.ConditionMet,
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

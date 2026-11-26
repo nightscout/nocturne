@@ -59,8 +59,9 @@ public interface IUnevaluableRuleNotice
     /// <summary>
     /// Sends the notice for each rule in <paramref name="enabled"/> (every enabled rule of the
     /// tenant) whose body cannot be evaluated or that cannot be read at all, unless it was
-    /// dispatched for this version, and resolves every other standing notice of the tenant. A
-    /// failure for one notice is logged and never stops the others.
+    /// dispatched for this version, and resolves every other standing notice of the tenant. A data
+    /// or provider failure (<see cref="ProviderFailure"/>) for one notice is logged and never stops
+    /// the others; a defect reaches the caller.
     /// </summary>
     Task CheckAsync(EnabledAlertRules enabled, CancellationToken ct);
 
@@ -163,7 +164,7 @@ internal sealed class UnevaluableRuleNotice(
         {
             await NotifyAsync(rule, record, tenantId, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (ProviderFailure.Is(ex))
         {
             logger.LogError(ex,
                 "Sending the notice that alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
@@ -186,7 +187,7 @@ internal sealed class UnevaluableRuleNotice(
         {
             await ResolveNoticeAsync(notice.ExcursionId, reason, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (ProviderFailure.Is(ex))
         {
             logger.LogError(ex,
                 "Resolving notice {ExcursionId} that alert rule {AlertRuleId} cannot be evaluated failed",
@@ -210,7 +211,7 @@ internal sealed class UnevaluableRuleNotice(
                     rule.AutoResolveParams, rule.ClientConfiguration),
                 out validated);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (RustAlertEngineException ex)
         {
             logger.LogError(ex, "Checking the conditions of alert rule {AlertRuleId} for tenant {TenantId} failed",
                 rule.Id, tenantId);

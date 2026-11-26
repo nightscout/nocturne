@@ -100,7 +100,6 @@ public class AlertSweepJobRunTests
         await using var services = new ServiceCollection()
             .AddSingleton(_repository.Object)
             .AddSingleton(Mock.Of<IAlertRuleRepository>())
-            .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
             .AddSingleton(Mock.Of<IAlertDeliveryService>())
             .AddSingleton(Mock.Of<ISensorContextEnricher>())
             .AddSingleton(resolution.Object)
@@ -109,9 +108,7 @@ public class AlertSweepJobRunTests
             .AddSingleton(TimeProvider.System)
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>()
-            .AddSingleton(NoHeldRules.Notice())
-            .AddSingleton(Mock.Of<IClockAnomalyNotice>())
-            .AddSingleton(Mock.Of<IAlertChannelNotice>())
+            .AddSweepServices()
             .BuildServiceProvider();
         await new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(services, Tenant, Now, active: true);
 
@@ -130,10 +127,7 @@ public class AlertSweepJobRunTests
             .AddSingleton(_repository.Object)
             .AddSingleton(_notice.Object)
             .AddSingleton(Mock.Of<ICanonicalGlucoseService>())
-            .AddSingleton(NoHeldRules.Notice())
-            .AddSingleton(Mock.Of<IClockAnomalyNotice>())
-            .AddSingleton(Mock.Of<IAlertChannelNotice>())
-            .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
+            .AddSweepServices()
             .BuildServiceProvider();
         return await new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(services, Tenant, Now, active);
     }

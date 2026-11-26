@@ -129,7 +129,7 @@ public class CompositeDataEventSinkTests
     }
 
     [Fact]
-    public async Task SinkFailure_LogsWarning()
+    public async Task SinkFailure_LogsError()
     {
         var entries = new List<Entry> { new() { Id = "1" } };
         _sink1.Setup(s => s.OnCreatedAsync(entries, It.IsAny<CancellationToken>()))
@@ -139,12 +139,44 @@ public class CompositeDataEventSinkTests
 
         _logger.Verify(
             l => l.Log(
-                LogLevel.Warning,
+                LogLevel.Error,
                 It.IsAny<EventId>(),
                 It.IsAny<It.IsAnyType>(),
                 It.IsAny<InvalidOperationException>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task OnCreatedAsync_WhenTheCallerCancels_ReachesTheCallerAndLogsNothing()
+    {
+        var entries = new List<Entry> { new() { Id = "1" } };
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _sink1.Setup(s => s.OnCreatedAsync(entries, It.IsAny<CancellationToken>()))
+              .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        var act = () => _sut.OnCreatedAsync(entries, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _sink2.Verify(s => s.OnCreatedAsync(entries, It.IsAny<CancellationToken>()), Times.Never);
+        _logger.Verify(
+            l => l.Log(
+                It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task OnCreatedAsync_ASinkCancellationThatIsNotTheCallers_IsASinkFailure()
+    {
+        var entries = new List<Entry> { new() { Id = "1" } };
+        _sink1.Setup(s => s.OnCreatedAsync(entries, It.IsAny<CancellationToken>()))
+              .ThrowsAsync(new OperationCanceledException());
+
+        await _sut.OnCreatedAsync(entries);
+
+        _sink2.Verify(s => s.OnCreatedAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

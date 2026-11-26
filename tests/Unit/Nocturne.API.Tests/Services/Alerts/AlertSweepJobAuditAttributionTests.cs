@@ -48,12 +48,7 @@ public class AlertSweepJobAuditAttributionTests
         var services = new ServiceCollection();
         services.AddSingleton(repository.Object);
         services.AddSingleton(Mock.Of<ICanonicalGlucoseService>());
-        services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
-        services.AddSingleton(NoHeldRules.Notice());
-        services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
-        services.AddSingleton(Mock.Of<IAlertChannelNotice>());
-        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
-        services.AddScoped<IAuditContext, AuditContext>();
+        services.AddSweepServices();
         services.AddScoped(sp => new TenantReadContext(null, null, sp.GetRequiredService<IAuditContext>()));
         services.AddScoped<IAlertOrchestrator>(sp =>
         {
