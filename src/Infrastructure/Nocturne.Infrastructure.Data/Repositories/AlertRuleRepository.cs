@@ -393,7 +393,7 @@ public class AlertRuleRepository : IAlertRuleRepository
         entity.AutoResolveEnabled = rule.AutoResolveEnabled;
         entity.AutoResolveParams = rule.AutoResolveParams;
         entity.ClientConfiguration = rule.ClientConfiguration;
-        entity.ReviewReason = rule.ReviewReason;
+        entity.ReviewReason = rule.ReviewReasonToStore;
         entity.OnUnknown = rule.OnUnknown;
         entity.GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes;
     }

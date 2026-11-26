@@ -1575,6 +1575,13 @@ is told again; every query over `alert_excursions` excludes it through `AlertExc
 sweep also evaluates every enabled rule whose hold has lasted `HOLD_BOUND` and is not yet reported,
 so a rule that reads nothing on the wall clock reaches the bound with no reading.
 
+**A rule the host cannot read.** A stored rule whose condition type, severity or scope class names
+no member is not evaluated at all, so no evaluation, auto-resolve or hysteresis close (§6.1) moves
+its open excursion, and the host keeps it alarming. Its hold is counted from its unevaluable notice
+(§1.4) for that version of the row: once the notice has stood for `HOLD_BOUND`, the sweep
+force-closes the excursion (§6.2) with close reason `hold-bound`. A row fixed before then keeps its
+excursion; a row that changes to another unreadable value starts a new notice and a new count.
+
 ---
 
 ## 7. Per-evaluation driver sequence (orchestrator contract)
@@ -1668,7 +1675,8 @@ dispatch stays with its own check.
 
 An acknowledgement is not a cutoff: an acknowledge-all made for another alarm must not consume an
 alert nobody received. An enabled rule whose stored row cannot be read keeps its opening owed,
-taken up again each lease, until one of the two cases applies. An owed `ExcursionClosed` is always
+taken up again each lease, until one of the two cases applies; its excursion closes at the latest
+at the hold bound (§6.4). An owed `ExcursionClosed` is always
 finished. A late alert is built from the context when it is sent, and
 carries that reading's time. The backend records the work owed on the excursion row
 (`opened_owed_at`, `closed_owed_at`), leases it for 2 minutes, and finishes it from the alert

@@ -21,7 +21,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Authorization;
@@ -701,7 +700,7 @@ public class AlertRulesController : ControllerBase
         AllowThroughDnd = record.Rule.AllowThroughDnd,
         ScopeClass = record.Rule.ScopeClass,
         ManagedBy = record.ManagedBy,
-        ReviewReason = AlertRuleMapper.ShownReviewReason(record),
+        ReviewReason = record.ShownReviewReason,
         ConditionIssues = [.. conditionIssues ?? []],
         AutoResolveEnabled = record.Rule.AutoResolveEnabled,
         AutoResolveParams = record.Rule.AutoResolveParams is null
