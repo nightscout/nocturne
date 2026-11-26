@@ -2,11 +2,11 @@ import { randomBytes } from "node:crypto";
 import { Chat } from "chat";
 import type { Adapter } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createResendAdapter } from "@resend/chat-sdk-adapter";
 import { createPostgresState } from "@chat-adapter/state-pg";
 import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
+import { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
 import { createLogger } from "./lib/logger.js";
 
 const logger = createLogger();
@@ -98,25 +98,15 @@ export function createBot(options: BotOptions): Chat {
   const whatsapp = platforms.whatsapp;
   if (whatsapp) {
     logger.info("Enabling WhatsApp adapter");
-    if (typeof whatsapp === "object") {
-      adapters.whatsapp = createWhatsAppAdapter({
-        accessToken: whatsapp.accessToken!,
-        appSecret: whatsapp.appSecret!,
-        phoneNumberId: whatsapp.phoneNumberId!,
-        verifyToken: whatsapp.verifyToken!,
-        userName: "nocturne",
-        logger,
-      });
-    } else {
-      adapters.whatsapp = createWhatsAppAdapter({
-        accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,
-        appSecret: process.env.WHATSAPP_APP_SECRET!,
-        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
-        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
-        userName: "nocturne",
-        logger,
-      });
-    }
+    const configured = typeof whatsapp === "object" ? whatsapp : undefined;
+    adapters.whatsapp = new NocturneWhatsAppAdapter({
+      accessToken: configured ? configured.accessToken! : process.env.WHATSAPP_ACCESS_TOKEN!,
+      appSecret: configured ? configured.appSecret! : process.env.WHATSAPP_APP_SECRET!,
+      phoneNumberId: configured ? configured.phoneNumberId! : process.env.WHATSAPP_PHONE_NUMBER_ID!,
+      verifyToken: configured ? configured.verifyToken! : process.env.WHATSAPP_VERIFY_TOKEN!,
+      userName: "nocturne",
+      logger,
+    });
   }
 
   const resend = platforms.resend;

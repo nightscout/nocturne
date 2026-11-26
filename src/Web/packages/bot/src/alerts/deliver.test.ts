@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Chat } from "chat";
+import { WhatsAppApiError } from "@chat-adapter/whatsapp";
+import { NocturneWhatsAppAdapter } from "../adapters/nocturne-whatsapp.js";
+import { WINDOW_CLOSED_REASON, WhatsAppWindow } from "../whatsapp/window.js";
 import { AlertDeliveryHandler } from "./deliver.js";
 import type { AlertDispatchEvent, BotApiClient } from "../types.js";
 import { cardButtons } from "../cards/card.test-utils.js";
 import { encodeActionValue } from "../lib/action-value.js";
 import { currentAlertAccent } from "../lib/severity.js";
+import { createMemoryState, type MemoryStateAdapter } from "@chat-adapter/state-memory";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -20,6 +24,13 @@ const buttonValue = (node: unknown, id: string) =>
 
 const ADAPTERS_WITH_DM = ["discord", "slack", "telegram", "whatsapp", "resend"];
 
+let state: MemoryStateAdapter;
+
+beforeEach(async () => {
+  state = createMemoryState();
+  await state.connect();
+});
+
 const TENANT = "11111111-1111-1111-1111-111111111111";
 const EXCURSION = "33333333-3333-3333-3333-333333333333";
 
@@ -29,12 +40,12 @@ function createBot(options: { adaptersWithDm?: string[] } = {}) {
   const post = vi.fn().mockResolvedValue({ id: "platform-message-1" });
   const openDM = vi.fn(async (userId: string) => `thread-for-${userId}`);
   const channel = vi.fn(() => ({ post }));
-  const thread = vi.fn(() => ({ post }));
+  const thread = vi.fn((id: string) => ({ id, post }));
   const getAdapter = vi.fn((name: string) =>
     withDm.includes(name) ? { name, openDM } : undefined,
   );
 
-  const bot = { channel, thread, getAdapter } as unknown as Chat;
+  const bot = { channel, thread, getAdapter, getState: () => state } as unknown as Chat;
   return { bot, channel, thread, getAdapter, openDM, post };
 }
 
@@ -343,5 +354,110 @@ describe("AlertDeliveryHandler severity accent", () => {
       });
       expect(apiBits.markFailed).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("AlertDeliveryHandler on WhatsApp", () => {
+  const WA_ID = "61400000000";
+  const THREAD = `thread-for-${WA_ID}`;
+  const HOUR = 60 * 60 * 1000;
+
+  let bits: ReturnType<typeof createBot>;
+  let apiBits: ReturnType<typeof createApi>;
+  let window: WhatsAppWindow;
+  let handler: AlertDeliveryHandler;
+
+  beforeEach(() => {
+    bits = createBot();
+    apiBits = createApi();
+    window = new WhatsAppWindow(state);
+    handler = new AlertDeliveryHandler(bits.bot, apiBits.api);
+  });
+
+  it("opens the DM through the WhatsApp adapter, which addresses it without a network call", async () => {
+    const adapter = new NocturneWhatsAppAdapter({
+      accessToken: "not-a-token",
+      appSecret: "not-a-secret",
+      phoneNumberId: "1000",
+      verifyToken: "not-a-token",
+      userName: "nocturne",
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() },
+    });
+    bits.getAdapter.mockReturnValue(adapter as never);
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.thread).toHaveBeenCalledExactlyOnceWith(`whatsapp:1000:${WA_ID}`);
+    expect(bits.post).toHaveBeenCalledOnce();
+  });
+
+  it("sends the card while the window is open, and remembers the message for a later failed status", async () => {
+    await window.recordInbound(THREAD, Date.now() - HOUR);
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).toHaveBeenCalledOnce();
+    expect(apiBits.markDelivered).toHaveBeenCalledOnce();
+    await expect(window.takeSent("platform-message-1")).resolves.toEqual({
+      deliveryId: "delivery-1",
+      tenantSlug: "acme",
+      threadId: THREAD,
+    });
+  });
+
+  it("sends the card to a user it has never heard from, since only Meta knows that window", async () => {
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).toHaveBeenCalledOnce();
+    expect(apiBits.markDelivered).toHaveBeenCalledOnce();
+  });
+
+  it("does not send into a window known to be closed, and names the window as the reason", async () => {
+    await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(bits.post).not.toHaveBeenCalled();
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+    });
+  });
+
+  it("names the window when Meta refuses the send outright, and skips the next doomed send", async () => {
+    bits.post.mockRejectedValueOnce(
+      new WhatsAppApiError(
+        "WhatsApp API error",
+        400,
+        JSON.stringify({ error: { code: 131047, message: "Re-engagement message" } }),
+      ),
+    );
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+    });
+    await expect(window.isClosed(THREAD, Date.now())).resolves.toBe(true);
+  });
+
+  it("reports any other refusal as Meta gave it", async () => {
+    bits.post.mockRejectedValueOnce(
+      new WhatsAppApiError("WhatsApp API error", 400, JSON.stringify({ error: { code: 131026, message: "Message undeliverable" } })),
+    );
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: expect.stringContaining("Message undeliverable"),
+    });
+    await expect(window.isClosed(THREAD, Date.now())).resolves.toBe(false);
+  });
+
+  it("leaves the other platforms' delivery alone", async () => {
+    await handler.deliver(createEvent("telegram_dm", "123456789"));
+
+    expect(apiBits.markDelivered).toHaveBeenCalledOnce();
+    await expect(window.takeSent("platform-message-1")).resolves.toBeNull();
   });
 });

@@ -3,6 +3,11 @@ import type { BotApiClient, AlertDispatchEvent } from "../types.js";
 import { AlertCard } from "../cards/alert.js";
 import { withAlertAccent } from "../lib/severity.js";
 import { createLogger } from "../lib/logger.js";
+import {
+  WINDOW_CLOSED_REASON,
+  WhatsAppWindow,
+  isWindowClosedError,
+} from "../whatsapp/window.js";
 
 const logger = createLogger();
 
@@ -60,14 +65,28 @@ export class AlertDeliveryHandler {
 
   async deliver(event: AlertDispatchEvent): Promise<void> {
     const { deliveryId, channelType, destination, payload } = event;
+    const window = channelType === "whatsapp_dm" ? new WhatsAppWindow(this.bot.getState()) : null;
+    let threadId: string | undefined;
 
     try {
       const target = await this.target(channelType, destination);
+      threadId = target.id;
+
+      if (window && (await window.isClosed(threadId, Date.now()))) {
+        await this.fail(deliveryId, WINDOW_CLOSED_REASON);
+        return;
+      }
 
       const card = AlertCard({ payload });
       const sent = await withAlertAccent(payload.severity, () =>
         target.post(card),
       );
+
+      if (window && sent?.id) {
+        await window
+          .rememberSent(sent.id, { deliveryId, tenantSlug: event.tenantSlug, threadId })
+          .catch((e: unknown) => logger.error("Failed to remember a sent WhatsApp alert:", e));
+      }
 
       await this.api.alerts.markDelivered(deliveryId, {
         platformMessageId: sent?.id,
@@ -76,9 +95,20 @@ export class AlertDeliveryHandler {
       logger.info(`Alert delivered via ${channelType} to ${destination}`);
     } catch (err) {
       logger.error(`Alert delivery failed for ${deliveryId}:`, err);
-      await this.api.alerts.markFailed(deliveryId, {
-        error: err instanceof Error ? err.message : String(err),
-      }).catch((e) => logger.error("Failed to report delivery failure:", e));
+      if (window && threadId && isWindowClosedError(err)) {
+        await window
+          .recordClosed(threadId)
+          .catch((e: unknown) => logger.error("Failed to record a closed WhatsApp window:", e));
+        await this.fail(deliveryId, WINDOW_CLOSED_REASON);
+        return;
+      }
+      await this.fail(deliveryId, err instanceof Error ? err.message : String(err));
     }
+  }
+
+  private async fail(deliveryId: string, error: string): Promise<void> {
+    await this.api.alerts
+      .markFailed(deliveryId, { error })
+      .catch((e: unknown) => logger.error("Failed to report delivery failure:", e));
   }
 }
