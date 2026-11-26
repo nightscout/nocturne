@@ -50714,3 +50714,28 @@ msgstr ""
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "Alerts outside the 24-hour window"
 msgstr ""
+
+#. 0: formatLongDate(zoom[0]); 1: formatLongDate(zoom[1])
+#: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
+msgid "Showing {0} to {1}"
+msgstr ""
+
+#: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
+msgid "Drag the edges of the strip to zoom in on a period."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Boundary: the lower limit of the range in its color"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "3 months"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "6 months"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "1 year"
+msgstr ""

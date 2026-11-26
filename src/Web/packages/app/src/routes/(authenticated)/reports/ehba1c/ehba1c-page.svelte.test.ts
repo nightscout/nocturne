@@ -75,7 +75,7 @@ vi.mock("#lib/api/generated/labHbA1cs.generated.remote.js", () => ({
 }));
 
 import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
-import { formatLocale } from "#lib/utils/formatting.js";
+import { formatLocale, formatLongDate } from "#lib/utils/formatting.js";
 
 import EHbA1cPage from "./+page.svelte";
 
@@ -86,6 +86,15 @@ describe("eHbA1c chart tooltips", () => {
     render(EHbA1cPage, {});
   });
 
+  it("marks only All as pressed when all presets cover the full short history", async () => {
+    const all = page.getByRole("button", { name: "All", exact: true });
+    await expect.element(all).toHaveAttribute("aria-pressed", "true");
+    for (const name of ["3 months", "6 months", "1 year"]) {
+      await expect.element(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "false");
+      await page.getByRole("button", { name, exact: true }).click();
+      await expect.element(all).toHaveAttribute("aria-pressed", "true");
+    }
+  });
   it("labels a hovered lab marker as Lab result and the curve as eHbA1c", async () => {
     await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
     const chart = page.getByTestId("ehba1c-chart");
@@ -177,8 +186,18 @@ describe("eHbA1c chart tooltips", () => {
     ) as SVGPolygonElement | undefined;
     if (!beforeHistoryMarker) throw new Error("Pre-history lab marker is not rendered");
     const markerBounds = beforeHistoryMarker.getBoundingClientRect();
+    const chart = page.getByTestId("ehba1c-chart");
+    const chartBounds = chart.element().getBoundingClientRect();
 
     expect(screenLineStart.x).toBeGreaterThan(markerBounds.right);
+    expect(markerBounds.x + markerBounds.width / 2).toBeGreaterThan(chartBounds.left);
+    await userEvent.hover(chart, {
+      position: {
+        x: markerBounds.x - chartBounds.x + markerBounds.width / 2,
+        y: markerBounds.y - chartBounds.y + markerBounds.height / 2,
+      },
+    });
+    await expect.element(page.getByTestId("ehba1c-tooltip")).toHaveTextContent("Before glucose history");
   });
 });
 
@@ -297,4 +316,106 @@ describe("lab result day", () => {
       expect(markerTitles.some((title) => title.includes(longDate(2025, 1, 4)))).toBe(true);
     }
   );
+});
+
+describe("lab values outside the estimate range", () => {
+  it("keeps high and low lab markers inside the plot and hoverable", async () => {
+    const original = labResults[0].a1cDisplay;
+    labResults[0].a1cDisplay = { percent: 10, mmolMol: 85.8 };
+    try {
+      applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+      render(EHbA1cPage, {});
+      await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
+      const chart = page.getByTestId("ehba1c-chart");
+      const chartBounds = chart.element().getBoundingClientRect();
+      const markerBounds = page.getByTestId("lab-marker").first().element().getBoundingClientRect();
+      expect(markerBounds.top).toBeGreaterThan(chartBounds.top);
+      expect(markerBounds.bottom).toBeLessThan(chartBounds.bottom);
+      await userEvent.hover(chart, { position: { x: markerBounds.x - chartBounds.x + markerBounds.width / 2, y: markerBounds.y - chartBounds.y + markerBounds.height / 2 } });
+      await expect.element(page.getByTestId("ehba1c-tooltip")).toHaveTextContent("10.0");
+    } finally {
+      labResults[0].a1cDisplay = original;
+    }
+  });
+});
+describe("timeline periods and zones", () => {
+  it("does not show an excluded estimate when hovering near the zoomed plot edge", async () => {
+    labResults.push({ ...labResults[0], id: "late-lab", measuredAt: "2025-08-31" });
+    try {
+      applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+      render(EHbA1cPage, {});
+      await page.getByRole("button", { name: "6 months", exact: true }).click();
+      const chart = page.getByTestId("ehba1c-chart");
+      await userEvent.hover(chart, { position: { x: 41, y: 160 } });
+      await expect.element(page.getByTestId("ehba1c-tooltip")).not.toBeInTheDocument();
+      await expect.element(page.getByTestId("ehba1c-line")).toBeInTheDocument();
+    } finally {
+      labResults.pop();
+    }
+  });
+
+  it("does not snap to a hidden lab just outside the selected period", async () => {
+    timelinePoints.push({ ...timelinePoints[1], date: "2025-02-28" });
+    labResults.push(
+      { ...labResults[1], id: "hidden-lab", measuredAt: "2025-02-27", a1cDisplay: timelinePoints[1].a1cDisplay, note: "Excluded edge lab" },
+      { ...labResults[0], id: "late-lab", measuredAt: "2025-08-31" },
+    );
+    try {
+      applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+      render(EHbA1cPage, {});
+      await page.getByRole("button", { name: "6 months", exact: true }).click();
+      expect(page.getByTestId("lab-marker").elements()).toHaveLength(1);
+      const line = page.getByTestId("ehba1c-line").element() as SVGPathElement;
+      const end = line.getPointAtLength(line.getTotalLength());
+      const matrix = line.getScreenCTM();
+      if (!matrix) throw new Error("eHbA1c curve is not positioned in the chart");
+      const point = new DOMPoint(end.x, end.y).matrixTransform(matrix);
+      const chart = page.getByTestId("ehba1c-chart");
+      const bounds = chart.element().getBoundingClientRect();
+      await userEvent.hover(chart, { position: { x: point.x - bounds.x + 1, y: point.y - bounds.y } });
+      await expect.element(page.getByTestId("ehba1c-tooltip")).toHaveTextContent("eHbA1c");
+      await expect.element(page.getByTestId("ehba1c-tooltip")).not.toHaveTextContent("Excluded edge lab");
+    } finally {
+      timelinePoints.pop();
+      labResults.splice(-2);
+    }
+  });
+
+  it("uses the latest lab date, clamps month ends, prints the period and resets the overview", async () => {
+    labResults.push({ ...labResults[0], id: "late-lab", measuredAt: "2025-08-31" });
+    try {
+      applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+      render(EHbA1cPage, {});
+      await page.getByRole("button", { name: "6 months", exact: true }).click();
+      const shown = page.getByText(`Showing ${formatLongDate(new Date(2025, 1, 28))}`, { exact: false });
+      await expect.element(shown).toBeVisible();
+      await cdp().send("Emulation.setEmulatedMedia", { media: "print" });
+      await expect.element(shown).toBeVisible();
+      await expect.element(page.getByTestId("ehba1c-reset-zoom")).not.toBeVisible();
+      await cdp().send("Emulation.setEmulatedMedia", { media: "screen" });
+      await page.getByTestId("ehba1c-reset-zoom").click();
+      await expect.element(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+      const overview = page.getByTestId("ehba1c-overview");
+      const bounds = overview.element().getBoundingClientRect();
+      await userEvent.dragAndDrop(overview, overview, { sourcePosition: { x: bounds.width / 3, y: bounds.height / 2 }, targetPosition: { x: bounds.width * 0.75, y: bounds.height / 2 } });
+      await expect.element(page.getByTestId("ehba1c-reset-zoom")).toBeVisible();
+      await page.getByRole("button", { name: "All", exact: true }).click();
+      await expect.element(page.getByTestId("ehba1c-reset-zoom")).not.toBeInTheDocument();
+    } finally {
+      await cdp().send("Emulation.setEmulatedMedia", { media: "screen" });
+      labResults.pop();
+    }
+  });
+
+  it.each(["percent", "mmol/mol"] as const)("renders in-domain zone rules and hard gradient transitions in %s", async (units) => {
+    applyPreferences({ a1cName: "HbA1c", a1cUnits: units });
+    render(EHbA1cPage, {});
+    await expect.element(page.getByTestId("ehba1c-line")).toBeVisible();
+    expect(page.getByTestId("ehba1c-boundary").elements()).toHaveLength(2);
+    expect(page.getByTestId("ehba1c-boundary-above").elements()).toHaveLength(2);
+    expect(page.getByTestId("ehba1c-boundary-below").elements()).toHaveLength(2);
+    const stops = [...page.getByTestId("ehba1c-chart").element().querySelectorAll("linearGradient stop")];
+    expect(stops.length).toBeGreaterThanOrEqual(4);
+    expect(stops.some((stop, i) => i > 0 && stop.getAttribute("offset") === stops[i - 1].getAttribute("offset"))).toBe(true);
+  });
 });

@@ -50714,3 +50714,28 @@ msgstr "Meta charges for each template message. If you do not set a template, th
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "Alerts outside the 24-hour window"
 msgstr "Alerts outside the 24-hour window"
+
+#. 0: formatLongDate(zoom[0]); 1: formatLongDate(zoom[1])
+#: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
+msgid "Showing {0} to {1}"
+msgstr "Showing {0} to {1}"
+
+#: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
+msgid "Drag the edges of the strip to zoom in on a period."
+msgstr "Drag the edges of the strip to zoom in on a period."
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Boundary: the lower limit of the range in its color"
+msgstr "Boundary: the lower limit of the range in its color"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "3 months"
+msgstr "3 months"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "6 months"
+msgstr "6 months"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "1 year"
+msgstr "1 year"
