@@ -575,7 +575,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
         var byIdentifier = await client.GetAsync($"/api/v3/treatments/{v3["identifier"]!.GetValue<string>()}");
         byIdentifier.StatusCode.Should().Be(HttpStatusCode.OK, await byIdentifier.Content.ReadAsStringAsync());
         var body = JsonNode.Parse(await byIdentifier.Content.ReadAsStringAsync())!;
-        var v3Get = (body["result"] ?? body).AsObject();
+        var v3Get = body["result"]!.AsObject();
         var served = new[]
         {
             v1,
@@ -1152,7 +1152,7 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
-        var served = (body["result"] ?? body)!;
+        var served = body["result"]!;
         served["eventType"]!.GetValue<string>().Should().Be(eventType);
         served["identifier"]!.GetValue<string>().Should().Be(identifier);
     }

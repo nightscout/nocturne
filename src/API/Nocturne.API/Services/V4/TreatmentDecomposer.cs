@@ -748,7 +748,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             LegacyId = treatment.Id,
             AdditionalProperties = UploadedPreBolus(
                 UploadedEventType(
-                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    BolusUploadedFields.Keep(
+                        TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                        treatment),
                     treatment, keepEventType, TreatmentTypes.CorrectionBolus),
                 treatment, keepEventType),
             Timestamp = treatment.Mills.ToUtcDateTime(),
@@ -759,6 +761,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             Automatic = treatment.Automatic ?? false,
             Duration = treatment.Duration,
             Device = UploadedDevice(treatment),
+            App = UploadedString(treatment, "app"),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,

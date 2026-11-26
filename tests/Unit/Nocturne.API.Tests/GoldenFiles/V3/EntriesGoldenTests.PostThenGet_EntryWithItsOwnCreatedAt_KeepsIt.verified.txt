@@ -1,0 +1,26 @@
+﻿{
+  StatusCode: 200,
+  ContentType: application/json; charset=utf-8,
+  Body: {
+    status: 200,
+    result: {
+      identifier: {Scrubbed},
+      srvModified: {Scrubbed},
+      srvCreated: {Scrubbed},
+      _id: {Scrubbed},
+      date: 1768557600000,
+      mills: 1768557600000,
+      dateString: 2026-01-16T10:00:00.000Z,
+      sysTime: 2026-01-16T10:00:00.000Z,
+      mgdl: 100,
+      sgv: 100,
+      mmol: 5.54994394556615,
+      type: sgv,
+      device: Libre3,
+      utcOffset: 0,
+      created_at: 2026-01-16T10:00:00.000Z,
+      app: AAPS,
+      isValid: true
+    }
+  }
+}

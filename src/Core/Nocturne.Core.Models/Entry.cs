@@ -268,6 +268,14 @@ public class Entry : ProcessableDocumentBase
     [JsonPropertyName("created_at")]
     public override string? CreatedAt { get; set; }
 
+    /// <summary>
+    /// Whether <see cref="CreatedAt"/> is part of the stored document: a v3 write stamps it from
+    /// <c>date</c>, as Nightscout's api3 does, and a stored entry read back carries it. A v1 write
+    /// normalises <see cref="CreatedAt"/> in memory only, and stores none.
+    /// </summary>
+    [JsonIgnore]
+    public bool CreatedAtIsStored { get; set; }
+
     [JsonPropertyName("modified_at")]
     public DateTime? ModifiedAt { get; set; }
 

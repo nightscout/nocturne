@@ -59,11 +59,11 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
     {
         var response = await client.GetAsync(path);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return body.ValueKind == JsonValueKind.Object && body.TryGetProperty("result", out var result)
-            ? result
-            : body;
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
+
+    private static async Task<JsonElement> GetV3Async(HttpClient client, string path) =>
+        (await GetAsync(client, path)).GetProperty("result");
 
     private static string[] StoresOf(JsonElement profile) =>
         profile.GetProperty("store").EnumerateObject().Select(p => p.Name).ToArray();
@@ -142,7 +142,7 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
     {
         var client = await SeedDocumentThenSwitchAsync();
 
-        var listed = await GetAsync(client, "/api/v3/profile?limit=10");
+        var listed = await GetV3Async(client, "/api/v3/profile?limit=10");
 
         var profile = listed.EnumerateArray().Should().ContainSingle().Subject;
         profile.GetProperty("defaultProfile").GetString().Should().Be("Night");
@@ -155,7 +155,7 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
         var client = await SeedDocumentThenSwitchAsync();
 
         await SettleHistoryAsync();
-        var history = await GetAsync(client, "/api/v3/profile/history/0?limit=10");
+        var history = await GetV3Async(client, "/api/v3/profile/history/0?limit=10");
 
         var profile = history.EnumerateArray().Should().ContainSingle().Subject;
         profile.GetProperty("defaultProfile").GetString().Should().Be("Night");
@@ -166,10 +166,10 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
     public async Task V3ById_ServesEveryStoreOfTheDocument()
     {
         var client = await SeedDocumentThenSwitchAsync();
-        var identifier = (await GetAsync(client, "/api/v3/profile?limit=10"))
+        var identifier = (await GetV3Async(client, "/api/v3/profile?limit=10"))
             .EnumerateArray().Single().GetProperty("identifier").GetString();
 
-        var profile = await GetAsync(client, $"/api/v3/profile/{identifier}");
+        var profile = await GetV3Async(client, $"/api/v3/profile/{identifier}");
 
         StoresOf(profile).Should().BeEquivalentTo("Day", "Night");
     }
@@ -226,7 +226,7 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
         await PostAsync(client, "/api/v1/profile", Document(NewerId, "Night", now.AddDays(-1), "Day", "Night"));
 
         var first = await GetAsync(client, "/api/v1/profile?count=1");
-        var second = await GetAsync(client, "/api/v3/profile?limit=1&skip=1&sort$desc=created_at");
+        var second = await GetV3Async(client, "/api/v3/profile?limit=1&skip=1&sort$desc=created_at");
 
         ShouldBeTheSeededDocument(first.EnumerateArray().Should().ContainSingle().Subject);
         var older = second.EnumerateArray().Should().ContainSingle().Subject;

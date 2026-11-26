@@ -423,7 +423,7 @@ public partial class V3HistoryDeletionIntegrationTests : ApiIntegrationTestBase
         var read = await AuthenticatedClient.GetAsync($"/api/v3/treatments/{id}");
         read.Headers.ETag.Should().NotBe(before);
         var body = await read.Content.ReadFromJsonAsync<JsonElement>();
-        (body.TryGetProperty("result", out var result) ? result : body).GetProperty("notes")
+        body.GetProperty("result").GetProperty("notes")
             .GetString().Should().Be("after");
 
         var (next, _) = await HistoryAsync("treatments", cursor);

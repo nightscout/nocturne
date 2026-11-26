@@ -563,6 +563,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             Rssi = entry.Rssi,
             Device = entry.Device,
             App = entry.App,
+            AdditionalProperties = EntryUploadedFields.Keep(entry),
             DataSource = entry.DataSource,
             UtcOffset = entry.UtcOffset,
             CorrelationId = correlationId
@@ -582,6 +583,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             Mgdl = WrittenMgdl(entry),
             Device = entry.Device,
             App = entry.App,
+            AdditionalProperties = EntryUploadedFields.Keep(entry),
             DataSource = entry.DataSource,
             UtcOffset = entry.UtcOffset,
             CorrelationId = correlationId
@@ -603,6 +605,7 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
             Scale = entry.Scale,
             Device = entry.Device,
             App = entry.App,
+            AdditionalProperties = EntryUploadedFields.Keep(entry),
             DataSource = entry.DataSource,
             UtcOffset = entry.UtcOffset,
             CorrelationId = correlationId

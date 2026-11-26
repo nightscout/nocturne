@@ -28,10 +28,9 @@ const isEvent = (colName: string, match: (doc: Doc) => boolean) => (args: unknow
   return event.colName === colName && !!event.doc && match(event.doc);
 };
 
-/** A v3 body is either the record itself or a `{ status, result }` envelope around it. */
-function unwrap<T>(body: unknown): T {
-  const envelope = body as { result?: unknown };
-  return (envelope && typeof envelope === "object" && "result" in envelope ? envelope.result : body) as T;
+/** A v3 read answers a `{ status, result }` envelope around the record or the list. */
+function result<T>(body: unknown): T {
+  return (body as { result: T }).result;
 }
 
 /** Any key besides `_id`/`identifier` that spells the id: a second, unconverted copy of it. */
@@ -91,7 +90,7 @@ describe("one wire identifier for entries and devicestatus", () => {
 
     const [created] = await hub.waitFor("create", isEvent("entries", (d) => d.date === entry!.date), { what: "the entry's create event" });
     expect(storage([created]).doc?._id).toBe(id);
-    expect(unwrap<Doc>(await tenant.api.ok("GET", `/api/v3/entries/${id}`)).identifier).toBe(id);
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/entries/${id}`)).identifier).toBe(id);
 
     const put = await tenant.api.request<Doc>("PUT", `/api/v1/entries/${id}`, { ...entry!, sgv: 181 });
     expect(put.status, put.text).toBe(200);
@@ -127,7 +126,8 @@ describe("one wire identifier for entries and devicestatus", () => {
 
     const put = await tenant.api.request("PUT", `/api/v3/entries/${id}`, { ...body, sgv: 152 });
     expect(put.status, put.text).toBe(200);
-    expect(unwrap<Doc>(put.body).identifier).toBe(id);
+    expect(put.body).toMatchObject({ status: 200 });
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/entries/${id}`)).identifier).toBe(id);
     const [updateEvent] = await hub.waitFor("update", isEvent("entries", (d) => d.date === date && d.sgv === 152), {
       what: "the v3 entry's update event",
     });
@@ -154,7 +154,7 @@ describe("one wire identifier for entries and devicestatus", () => {
 
     const listed = await tenant.api.ok<Doc[]>("GET", "/api/v1/devicestatus.json?count=50");
     expect(listed.filter((s) => s.device === device).map((s) => s._id)).toEqual([id]);
-    expect(unwrap<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).identifier).toBe(id);
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).identifier).toBe(id);
 
     const del = await tenant.api.delete(`/api/v1/devicestatus/${id}`);
     expect(del.status).toBeLessThan(300);
@@ -176,11 +176,12 @@ describe("one wire identifier for entries and devicestatus", () => {
 
     const [createEvent] = await hub.waitFor("create", isEvent("devicestatus", (d) => d.device === device), { what: "the v3 devicestatus create event" });
     expect(storage([createEvent]).doc?._id).toBe(id);
-    expect(unwrap<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).identifier).toBe(id);
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).identifier).toBe(id);
 
     const put = await tenant.api.request("PUT", `/api/v3/devicestatus/${id}`, { device, app: "e2e", created_at: minutesAgo(4), uploader: { battery: 42 }, pump: pump(minutesAgo(4)) });
     expect(put.status).toBe(200);
-    expect(unwrap<Doc>(put.body).identifier).toBe(id);
+    expect(put.body).toMatchObject({ status: 200 });
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).identifier).toBe(id);
     const [updateEvent] = await hub.waitFor("update", isEvent("devicestatus", (d) => d.device === device), { what: "the v3 devicestatus update event" });
     expect(storage([updateEvent]).doc?._id).toBe(id);
     const listed = await tenant.api.ok<Doc[]>("GET", "/api/v1/devicestatus.json?count=50");
@@ -209,7 +210,7 @@ describe("one wire identifier for entries and devicestatus", () => {
     expect(uploaders.status, uploaders.text).toBe(201);
 
     const id = pumpId.replaceAll("-", "").slice(0, 24);
-    expect(unwrap<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).uploader).toBeDefined();
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`)).uploader).toBeDefined();
 
     const put = await tenant.api.request("PUT", `/api/v3/devicestatus/${id}`, {
       device,
@@ -218,7 +219,8 @@ describe("one wire identifier for entries and devicestatus", () => {
       pump: { manufacturer: "Tandem", model: "t:slim X2", reservoir: 95 },
     });
     expect(put.status, put.text).toBe(200);
-    const replaced = unwrap<Doc>(put.body);
+    expect(put.body).toMatchObject({ status: 200 });
+    const replaced = result<Doc>(await tenant.api.ok("GET", `/api/v3/devicestatus/${id}`));
     expect(replaced.identifier).toBe(id);
     expect(replaced.pump).toMatchObject({ reservoir: 95 });
     expect(replaced.uploader).toBeUndefined();
@@ -275,9 +277,9 @@ describe("one wire identifier for entries and devicestatus", () => {
       ["/api/v1/entries.json?count=10", (b) => b as Doc[]],
       ["/api/v1/devicestatus.json?count=10", (b) => b as Doc[]],
       ["/api/v1/treatments.json?count=10", (b) => b as Doc[]],
-      ["/api/v3/entries?limit=10", (b) => unwrap<Doc[]>(b)],
-      ["/api/v3/devicestatus?limit=10", (b) => unwrap<Doc[]>(b)],
-      ["/api/v3/treatments?limit=10", (b) => unwrap<Doc[]>(b)],
+      ["/api/v3/entries?limit=10", (b) => result<Doc[]>(b)],
+      ["/api/v3/devicestatus?limit=10", (b) => result<Doc[]>(b)],
+      ["/api/v3/treatments?limit=10", (b) => result<Doc[]>(b)],
     ];
     for (const [path, docs] of lists) {
       const res = await tenant.api.get(path);
@@ -306,7 +308,7 @@ describe("one wire identifier for entries and devicestatus", () => {
     expect(storage([created]).doc?._id).toBe(_id);
     const listed = await tenant.api.ok<Doc[]>("GET", `/api/v1/entries.json?find[date][$eq]=${entry!.date}`);
     expect(listed.map((e) => e._id)).toEqual([_id]);
-    expect(unwrap<Doc>(await tenant.api.ok("GET", `/api/v3/entries/${_id}`)).identifier).toBe(_id);
+    expect(result<Doc>(await tenant.api.ok("GET", `/api/v3/entries/${_id}`)).identifier).toBe(_id);
   });
 
   it("keeps _id as identity when a v3 devicestatus also carries a different lowercase id", async () => {
@@ -328,7 +330,7 @@ describe("one wire identifier for entries and devicestatus", () => {
     expect(storage([event]).doc?._id).toBe(_id);
     const fetched = await eventually(async () => {
       const res = await tenant.api.get(`/api/v3/devicestatus/${_id}`);
-      return res.status === 200 ? unwrap<Doc>(res.body) : undefined;
+      return res.status === 200 ? result<Doc>(res.body) : undefined;
     }, { timeoutMs: 10_000, what: "the devicestatus by its _id" });
     expect(fetched.identifier).toBe(_id);
   });

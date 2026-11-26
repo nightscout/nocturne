@@ -57,7 +57,7 @@ public static class TempBasalToTreatmentMapper
             RawTimestamp = TreatmentUploadedTimestamp.Of(tempBasal.AdditionalProperties),
         };
 
-        TempBasalUploadedFields.Restore(treatment, tempBasal.AdditionalProperties);
+        TempBasalUploadedFields.Restore(treatment, tempBasal.AdditionalProperties, tempBasal.PumpRecordId);
 
         // TreatmentDecomposer reads the origin and its evidence back when an edit re-decomposes;
         // the rest is for display

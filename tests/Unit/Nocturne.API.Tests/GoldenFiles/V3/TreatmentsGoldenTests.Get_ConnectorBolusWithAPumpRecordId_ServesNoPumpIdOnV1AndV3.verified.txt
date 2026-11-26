@@ -1,0 +1,47 @@
+﻿{
+  V3: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      result: [
+        {
+          _id: {Scrubbed},
+          identifier: {Scrubbed},
+          srvModified: {Scrubbed},
+          srvCreated: {Scrubbed},
+          eventType: Correction Bolus,
+          carbs: null,
+          insulin: 2,
+          mills: {Scrubbed},
+          created_at: {Scrubbed},
+          duration: 0,
+          enteredBy: null,
+          date: {Scrubbed},
+          automatic: false
+        }
+      ]
+    }
+  },
+  V1: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: [
+      {
+        _id: {Scrubbed},
+        identifier: {Scrubbed},
+        srvModified: {Scrubbed},
+        srvCreated: {Scrubbed},
+        eventType: Correction Bolus,
+        carbs: null,
+        insulin: 2,
+        mills: {Scrubbed},
+        created_at: {Scrubbed},
+        duration: 0,
+        enteredBy: null,
+        date: {Scrubbed},
+        automatic: false
+      }
+    ]
+  }
+}

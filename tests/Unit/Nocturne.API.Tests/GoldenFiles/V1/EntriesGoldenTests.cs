@@ -503,6 +503,30 @@ public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGo
     }
 
     [Fact]
+    public async Task PostThenGetById_AapsSgv_StoresNoCreatedAt()
+    {
+        var payload = new
+        {
+            app = "AAPS",
+            date = 1768563315863L,
+            device = "Libre3",
+            sgv = 100,
+            type = "sgv",
+            units = "mg/dl",
+        };
+
+        var posted = await PostJsonAsync("/api/v1/entries", payload);
+        posted.EnsureSuccessStatusCode();
+        using var body = System.Text.Json.JsonDocument.Parse(await posted.Content.ReadAsStringAsync());
+        var id = body.RootElement[0].GetProperty("_id").GetString();
+
+        var v1 = await CaptureResponse(await Client.GetAsync($"/api/v1/entries/{id}"));
+        var v3 = await CaptureResponse(await Client.GetAsync($"/api/v3/entries/{id}"));
+
+        await Verify(new { V1 = v1, V3 = v3 }).DontScrubDateTimes().ScrubMembers("_id", "identifier", "srvModified", "srvCreated");
+    }
+
+    [Fact]
     public async Task PostEntries_Batch_ReturnsCreatedResponseShape()
     {
         var payload = new[]

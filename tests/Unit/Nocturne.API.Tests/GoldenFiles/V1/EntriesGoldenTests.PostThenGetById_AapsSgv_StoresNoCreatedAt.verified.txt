@@ -1,0 +1,50 @@
+﻿{
+  V1: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: [
+      {
+        _id: {Scrubbed},
+        date: 1768563315863,
+        mills: 1768563315863,
+        dateString: 2026-01-16T11:35:15.863Z,
+        sysTime: 2026-01-16T11:35:15.863Z,
+        mgdl: 100,
+        sgv: 100,
+        mmol: 5.54994394556615,
+        type: sgv,
+        device: Libre3,
+        utcOffset: 0,
+        app: AAPS,
+        units: mg/dl,
+        isValid: true
+      }
+    ]
+  },
+  V3: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      result: {
+        identifier: {Scrubbed},
+        srvModified: {Scrubbed},
+        srvCreated: {Scrubbed},
+        _id: {Scrubbed},
+        date: 1768563315863,
+        mills: 1768563315863,
+        dateString: 2026-01-16T11:35:15.863Z,
+        sysTime: 2026-01-16T11:35:15.863Z,
+        mgdl: 100,
+        sgv: 100,
+        mmol: 5.54994394556615,
+        type: sgv,
+        device: Libre3,
+        utcOffset: 0,
+        app: AAPS,
+        units: mg/dl,
+        isValid: true
+      }
+    }
+  }
+}

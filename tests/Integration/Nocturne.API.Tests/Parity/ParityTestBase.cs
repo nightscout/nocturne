@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -367,6 +368,36 @@ public abstract class ParityTestBase : IAsyncLifetime
         var nocResponse = await nocTask;
 
         await AssertResponseParityAsync(nsResponse, nocResponse, $"PUT {path}", options, test, cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates <paramref name="document"/> in a v3 collection on both systems, then asserts that
+    /// each answers its own identifier with an equivalent document.
+    /// </summary>
+    protected async Task AssertReadByIdParityAsync<T>(
+        string collection,
+        T document,
+        ComparisonOptions? options = null,
+        CancellationToken cancellationToken = default,
+        [CallerMemberName] string test = "")
+    {
+        var path = $"/api/v3/{collection}";
+        var nsCreated = await GetNightscoutClientForPath(path).PostAsJsonAsync(path, document, cancellationToken);
+        var nocCreated = await NocturneClient.PostAsJsonAsync(path, document, cancellationToken);
+        var nsIdentifier = await IdentifierOfAsync(nsCreated, cancellationToken);
+        var nocIdentifier = await IdentifierOfAsync(nocCreated, cancellationToken);
+
+        var nsResponse = await GetNightscoutClientForPath(path).GetAsync($"{path}/{nsIdentifier}", cancellationToken);
+        var nocResponse = await NocturneClient.GetAsync($"{path}/{nocIdentifier}", cancellationToken);
+
+        await AssertResponseParityAsync(nsResponse, nocResponse, $"GET {path}/{{id}}", options, test, cancellationToken);
+    }
+
+    private static async Task<string> IdentifierOfAsync(HttpResponseMessage created, CancellationToken cancellationToken)
+    {
+        var body = await created.Content.ReadAsStringAsync(cancellationToken);
+        created.StatusCode.Should().Be(HttpStatusCode.Created, body);
+        return JsonDocument.Parse(body).RootElement.GetProperty("identifier").GetString()!;
     }
 
     /// <summary>
