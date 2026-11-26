@@ -82,6 +82,19 @@ public class ModelConventionTests
                 && !i.IsUnique
                 && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_by_user");
 
+    /// <summary>
+    /// The isValid:false upload paths look up every soft-deleted row under a legacy id, whoever
+    /// deleted it, so the index they probe has to hold system-swept rows as well as user tombstones.
+    /// </summary>
+    [Fact]
+    public void EveryDeletedLegacyIdLookupTable_HasTheDeletedRowLegacyIdIndex() =>
+        AssertFamily(
+            NocturneDbContext.DeletedLegacyIdLookupEntities,
+            "_tenant_legacy_id_deleted",
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)])
+                && !i.IsUnique
+                && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_at IS NOT NULL");
+
     [Fact]
     public void EverySyncDedupedTable_HasTheUserTombstoneSyncKeyIndex() =>
         AssertFamily(

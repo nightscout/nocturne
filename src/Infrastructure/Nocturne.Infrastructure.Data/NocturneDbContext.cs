@@ -641,6 +641,29 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     internal static readonly Type[] LegacyIdKeyedEntities = Implementing<ILegacyIdentified>();
 
     /// <summary>
+    /// The <see cref="LegacyIdKeyedEntities"/> an isValid:false upload asks for deleted rows of
+    /// (<c>ILegacyKeyedRepository.GetDeletedLegacyIdsAsync</c>, <c>DecomposedTreatmentTable.DeletedAsync</c>):
+    /// the entry and device status snapshot tables and the decomposed treatment tables. Notes are left
+    /// out, because their unfiltered <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
+    /// </summary>
+    internal static readonly Type[] DeletedLegacyIdLookupEntities =
+    [
+        typeof(SensorGlucoseEntity),
+        typeof(MeterGlucoseEntity),
+        typeof(CalibrationEntity),
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(BolusEntity),
+        typeof(TempBasalEntity),
+        typeof(CarbIntakeEntity),
+        typeof(BGCheckEntity),
+        typeof(DeviceEventEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ProfileActivationEntity),
+    ];
+
+    /// <summary>
     /// Tables looked up by the decomposition correlation, adding
     /// <see cref="DeviceStatusExtrasEntity"/> — which carries the correlation but no legacy id
     /// (see its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>), so it cannot ride the

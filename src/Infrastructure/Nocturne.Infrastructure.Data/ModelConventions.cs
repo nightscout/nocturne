@@ -114,6 +114,21 @@ internal static class ModelConventions
                 .HasFilter($"{LegacyIdColumn(entity)} IS NOT NULL AND deleted_by_user");
         }
 
+        // Every soft-deleted row, for the isValid:false upload paths, which ask whichever way a row
+        // was deleted (GetDeletedLegacyIdsAsync, DecomposedTreatmentTable.DeletedAsync). Without it
+        // the lookup walks every tenant's deleted rows through ix_<table>_deleted_at: 133 ms and 49k
+        // buffers for 200 ids on a tenant of 1.5M sensor_glucose rows, 4% deleted, on an instance
+        // twice that. The tombstone index above cannot be widened to serve it: EF folds the
+        // tombstone arm of WhereBlocksRecreation to a bare deleted_by_user, which only the
+        // user-tombstone index's filter implies.
+        foreach (var entity in DeletedLegacyIdLookupEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var name = $"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id_deleted";
+            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)], name)
+                .HasDatabaseName(name)
+                .HasFilter($"{LegacyIdColumn(entity)} IS NOT NULL AND deleted_at IS NOT NULL");
+        }
+
         // Matches HistoryPage's (sys_updated_at, id) order under the tenant filter, so a poll reads
         // its page off the index instead of sorting the tenant's whole table. Not partial on
         // deleted_at: a history read returns soft-deleted rows too (HistoryPage.IncludingDeleted).

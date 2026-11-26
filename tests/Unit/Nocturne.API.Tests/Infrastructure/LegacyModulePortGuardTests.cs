@@ -122,6 +122,8 @@ public class LegacyModulePortGuardTests
         InTest("tests/Unit/Nocturne.API.Tests/Services/Analytics/LoopAnalysisTempBasalCancelTests.cs", "TreatmentDecomposer", CallsStaticMapper),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Seeding/DemoLoopAnalysisTests.cs", "TreatmentDecomposer", CallsStaticMapper),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Seeding/DemoLoopHealthTests.cs", "TreatmentDecomposer", CallsStaticMapper),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/DeletedLegacyIdLookupIndexTests.cs", "EntryDecomposer", "reads the legacy-keyed repositories the decomposer takes, to tie the deleted-row index to the tables its lookup reads"),
+        InTest("tests/Unit/Nocturne.API.Tests/Services/V4/DeletedLegacyIdLookupIndexTests.cs", "DeviceStatusDecomposer", "reads the legacy-keyed repositories the decomposer takes, to tie the deleted-row index to the tables its lookup reads"),
     ];
 
     private static bool IsExempt(string path, string member, string name) =>
