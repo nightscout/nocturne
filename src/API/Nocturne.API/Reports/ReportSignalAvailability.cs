@@ -273,7 +273,7 @@ internal sealed class ReportSignalAvailability(
             if (zone is not null)
             {
                 var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(from, zone));
-                var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(to, zone));
+                var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(to.AddTicks(-1), zone));
                 for (var year = first.Year; year <= last.Year; year++)
                 {
                     var timeline = await overview.GetEHbA1cTimelineAsync(year, null, cancellationToken);
