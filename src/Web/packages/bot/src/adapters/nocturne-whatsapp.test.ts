@@ -222,10 +222,24 @@ describe("NocturneWhatsAppAdapter", () => {
     expect(bits.markFailed).not.toHaveBeenCalled();
   });
 
-  it("ignores failed statuses for messages that were not alerts", async () => {
+  it("keeps a failed status that comes before its alert is remembered, for delivery to report", async () => {
     await bits.post(failedStatus("wamid.reply", 131047, "Re-engagement message"));
 
     expect(bits.markFailed).not.toHaveBeenCalled();
+    await expect(bits.window.takeEarlyFailure("wamid.reply")).resolves.toEqual({
+      reason: WINDOW_CLOSED_REASON,
+      windowClosed: true,
+    });
+  });
+
+  it("answers 500 when the API refuses the report for a reason that can pass, such as an auth refusal during a deploy", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    bits.markFailed.mockRejectedValueOnce(Object.assign(new Error("Unauthorized"), { status: 401 }));
+
+    const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(response.status).toBe(500);
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.not.toBeNull();
   });
 
   describe("addressing", () => {

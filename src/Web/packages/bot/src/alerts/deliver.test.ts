@@ -477,6 +477,20 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
     expect(bits.post).toHaveBeenCalledTimes(2);
   });
 
+  it("reports a failure Meta sent before the alert was remembered, in place of the delivery", async () => {
+    await window.recordInbound(THREAD, Date.now() - 23 * HOUR);
+    await window.rememberEarlyFailure("platform-message-1", { reason: WINDOW_CLOSED_REASON, windowClosed: true });
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markDelivered).not.toHaveBeenCalled();
+    expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+      platformMessageId: "platform-message-1",
+    });
+    await expect(window.isClosed(THREAD, Date.now())).resolves.toBe(true);
+  });
+
   it("reports any other refusal as Meta gave it", async () => {
     bits.post.mockRejectedValueOnce(
       new WhatsAppApiError("WhatsApp API error", 400, JSON.stringify({ error: { code: 131026, message: "Message undeliverable" } })),

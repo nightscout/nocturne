@@ -70,10 +70,12 @@ function statusUpdates(body: string): StatusUpdate[] {
     });
 }
 
-/** An API error a retry cannot change: a 4xx other than a timeout or rate limit. */
+/** API answers a retry cannot change. An auth refusal can pass with a deploy, so it is retried. */
+const REFUSALS = new Set([400, 404, 409, 410, 422]);
+
 function isRefusal(error: unknown): boolean {
   const status = field(error, "status");
-  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 429;
+  return typeof status === "number" && REFUSALS.has(status);
 }
 
 function failureReason(errors: StatusError[]): string {
@@ -158,9 +160,14 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
         }
         if (status.status !== "failed") continue;
 
-        const alert = await window.sentAlert(status.id);
-        if (!alert) continue;
-        if (status.errors.some((e) => e.code === WINDOW_CLOSED_ERROR_CODE)) {
+        const windowClosed = status.errors.some((e) => e.code === WINDOW_CLOSED_ERROR_CODE);
+        let alert = await window.sentAlert(status.id);
+        if (!alert) {
+          await window.rememberEarlyFailure(status.id, { reason: failureReason(status.errors), windowClosed });
+          alert = await window.sentAlert(status.id);
+          if (!alert) continue;
+        }
+        if (windowClosed) {
           await window.recordClosed(alert.threadId, alert.sentAt);
         }
         await getScopedApiFactory()(alert.tenantSlug).alerts.markFailed(alert.deliveryId, {
@@ -172,8 +179,11 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
         this.logger.error("Failed to report a WhatsApp alert's status", { messageId: status.id, error });
         if (status.status !== "failed") continue;
         // The API refused the report itself (the delivery or its tenant is gone): no retry can land it.
-        if (isRefusal(error)) await window.forgetSent(status.id).catch(() => undefined);
-        else reported = false;
+        if (!isRefusal(error)) reported = false;
+        else
+          await window
+            .forgetSent(status.id)
+            .catch((e: unknown) => this.logger.warn("Failed to forget a WhatsApp alert", { messageId: status.id, error: e }));
       }
     }
     return reported;

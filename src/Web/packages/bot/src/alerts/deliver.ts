@@ -84,9 +84,23 @@ export class AlertDeliveryHandler {
       );
 
       if (window && sent?.id) {
-        await window
-          .rememberSent(sent.id, { deliveryId, tenantSlug: event.tenantSlug, threadId, sentAt })
-          .catch((e: unknown) => logger.error("Failed to remember a sent WhatsApp alert:", e));
+        const sentAlert = { deliveryId, tenantSlug: event.tenantSlug, threadId, sentAt };
+        const early = await window
+          .rememberSent(sent.id, sentAlert)
+          .then(() => window.takeEarlyFailure(sent.id))
+          .catch((e: unknown) => {
+            logger.error("Failed to remember a sent WhatsApp alert:", e);
+            return null;
+          });
+        if (early) {
+          if (early.windowClosed) {
+            await window
+              .recordClosed(threadId, sentAt)
+              .catch((e: unknown) => logger.error("Failed to record a closed WhatsApp window:", e));
+          }
+          await this.fail(deliveryId, early.reason, sent.id);
+          return;
+        }
       }
 
       await this.api.alerts.markDelivered(deliveryId, {
@@ -123,9 +137,9 @@ export class AlertDeliveryHandler {
     }
   }
 
-  private async fail(deliveryId: string, error: string): Promise<void> {
+  private async fail(deliveryId: string, error: string, platformMessageId?: string): Promise<void> {
     await this.api.alerts
-      .markFailed(deliveryId, { error })
+      .markFailed(deliveryId, { error, platformMessageId })
       .catch((e: unknown) => logger.error("Failed to report delivery failure:", e));
   }
 }

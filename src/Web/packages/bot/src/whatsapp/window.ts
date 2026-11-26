@@ -25,6 +25,9 @@ export const WINDOW_CLOSED_REASON =
   "WhatsApp did not deliver the alert: the recipient has not sent a message to the Nocturne bot in the last 24 hours, " +
   "and outside that window WhatsApp accepts only an approved template message.";
 
+/** Long enough for an alert's send to be remembered after Meta answered it. */
+const EARLY_FAILURE_TTL_MS = 10 * 60 * 1000;
+
 /** The alert delivery a sent WhatsApp message carries, so a later failed status can be reported on it. */
 export interface SentAlert {
   deliveryId: string;
@@ -36,6 +39,13 @@ export interface SentAlert {
 
 const inboundKey = (threadId: string) => `nocturne:whatsapp:last-inbound:${threadId}`;
 const sentKey = (messageId: string) => `nocturne:whatsapp:alert-sent:${messageId}`;
+const earlyFailureKey = (messageId: string) => `nocturne:whatsapp:early-failure:${messageId}`;
+
+/** A failed status for a message no sent alert was remembered for yet; see {@link WhatsAppWindow.rememberEarlyFailure}. */
+export interface EarlyFailure {
+  reason: string;
+  windowClosed: boolean;
+}
 
 /**
  * What the bot knows of each WhatsApp thread's customer service window, kept in the bot's state.
@@ -83,6 +93,21 @@ export class WhatsAppWindow {
 
   async sentAlert(messageId: string): Promise<SentAlert | null> {
     return await this.state.get<SentAlert>(sentKey(messageId));
+  }
+
+  /**
+   * Keeps a failed status that found no sent alert, in case its alert is still being remembered:
+   * delivery takes it after remembering the alert and reports the failure itself. Each side writes
+   * before it reads the other's key, so at least one of them sees both.
+   */
+  async rememberEarlyFailure(messageId: string, failure: EarlyFailure): Promise<void> {
+    await this.state.set(earlyFailureKey(messageId), failure, EARLY_FAILURE_TTL_MS);
+  }
+
+  async takeEarlyFailure(messageId: string): Promise<EarlyFailure | null> {
+    const failure = await this.state.get<EarlyFailure>(earlyFailureKey(messageId));
+    if (failure) await this.state.delete(earlyFailureKey(messageId));
+    return failure;
   }
 
   /** Forgets a sent alert once its outcome is reported, so a repeated status finds nothing. */
