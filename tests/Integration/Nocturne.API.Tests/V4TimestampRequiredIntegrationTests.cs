@@ -7,9 +7,11 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.API.Validators.V4;
+using Nocturne.Core.Models.V4;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -17,7 +19,7 @@ namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
 /// Every V4 endpoint that writes a record answers a missing timestamp with <see cref="TimestampRule.Message"/>,
-/// in the problem shape it answered in before the message was shared.
+/// in the problem shape its route is listed with.
 /// </summary>
 [Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
@@ -41,16 +43,20 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     /// <summary>
-    /// The shape each record write answers a missing timestamp in, as the endpoint answered it before
-    /// the message was shared. A bulk write checks inside the action, so it answers a problem. A write
-    /// whose request has a validator is answered by auto-validation, before the action runs. Basal
-    /// injection has no validator, so its single writes reach the base check, which answers a problem.
+    /// The shape each record write answers a missing timestamp in. A bulk write checks inside the action,
+    /// so it answers a problem. A write whose body has a validator is answered by auto-validation, before
+    /// the action runs.
     /// </summary>
     private static readonly Dictionary<string, Shape> Expected = new()
     {
         ["POST api/v4/device-status/aps"] = Shape.Problem,
         ["POST api/v4/device-status/pump"] = Shape.Problem,
         ["POST api/v4/device-status/uploader"] = Shape.Problem,
+
+        ["POST api/v4/HeartRate"] = Shape.Problem,
+        ["PUT api/v4/HeartRate/{id}"] = Shape.Validation,
+        ["POST api/v4/StepCount"] = Shape.Problem,
+        ["PUT api/v4/StepCount/{id}"] = Shape.Validation,
 
         ["POST api/v4/glucose/calibrations"] = Shape.Validation,
         ["POST api/v4/glucose/calibrations/bulk"] = Shape.Problem,
@@ -62,9 +68,9 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
         ["POST api/v4/glucose/sensor/bulk"] = Shape.Problem,
         ["PUT api/v4/glucose/sensor/{id:guid}"] = Shape.Validation,
 
-        ["POST api/v4/insulin/basal-injections"] = Shape.Problem,
+        ["POST api/v4/insulin/basal-injections"] = Shape.Validation,
         ["POST api/v4/insulin/basal-injections/bulk"] = Shape.Problem,
-        ["PUT api/v4/insulin/basal-injections/{id:guid}"] = Shape.Problem,
+        ["PUT api/v4/insulin/basal-injections/{id:guid}"] = Shape.Validation,
         ["POST api/v4/insulin/boluses"] = Shape.Validation,
         ["POST api/v4/insulin/boluses/bulk"] = Shape.Problem,
         ["PUT api/v4/insulin/boluses/{id:guid}"] = Shape.Validation,
@@ -89,12 +95,17 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
         ["POST api/v4/observations/notes"] = Shape.Validation,
         ["POST api/v4/observations/notes/bulk"] = Shape.Problem,
         ["PUT api/v4/observations/notes/{id:guid}"] = Shape.Validation,
-    };
 
-    /// <summary>Update targets that must exist, because the action reads the stored record before it checks the timestamp.</summary>
-    private static readonly Dictionary<Type, object> SeededBeforeUpdate = new()
-    {
-        [typeof(UpdateBasalInjectionRequest)] = new CreateBasalInjectionRequest { Timestamp = DateTimeOffset.UtcNow, Units = 10 },
+        ["POST api/v4/profile/basal"] = Shape.Validation,
+        ["PUT api/v4/profile/basal/{id:guid}"] = Shape.Validation,
+        ["POST api/v4/profile/carb-ratio"] = Shape.Validation,
+        ["PUT api/v4/profile/carb-ratio/{id:guid}"] = Shape.Validation,
+        ["POST api/v4/profile/sensitivity"] = Shape.Validation,
+        ["PUT api/v4/profile/sensitivity/{id:guid}"] = Shape.Validation,
+        ["POST api/v4/profile/settings"] = Shape.Validation,
+        ["PUT api/v4/profile/settings/{id:guid}"] = Shape.Validation,
+        ["POST api/v4/profile/target-range"] = Shape.Validation,
+        ["PUT api/v4/profile/target-range/{id:guid}"] = Shape.Validation,
     };
 
     [Fact]
@@ -111,7 +122,7 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
             var body = write.IsArray ? new[] { instance } : (object)instance;
             var route = write.Route;
             if (route.Contains("{id", StringComparison.Ordinal))
-                route = System.Text.RegularExpressions.Regex.Replace(route, @"\{id[^}]*\}", (await ExistingIdAsync(client, write)).ToString());
+                route = System.Text.RegularExpressions.Regex.Replace(route, @"\{id[^}]*\}", Guid.NewGuid().ToString());
 
             using var message = new HttpRequestMessage(new HttpMethod(write.Method), "/" + route)
             {
@@ -144,7 +155,7 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
             .Select(o => $"{o.Key}: answered {o.Value}, expected {(Expected.TryGetValue(o.Key, out var e) ? e.ToString() : "nothing")}")
             .Concat(Expected.Keys.Except(observed.Keys).Select(k => $"{k}: expected but no endpoint has it"))
             .ToList();
-        differences.Should().BeEmpty("each write answers in the problem shape it had before the message was shared");
+        differences.Should().BeEmpty("each write answers in the shape its route is listed with");
     }
 
     [Fact]
@@ -174,18 +185,6 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
         };
     }
 
-    private static async Task<Guid> ExistingIdAsync(HttpClient client, RecordWrite write)
-    {
-        if (!SeededBeforeUpdate.TryGetValue(write.RequestType, out var seed))
-            return Guid.NewGuid();
-
-        var collection = System.Text.RegularExpressions.Regex.Replace(write.Route, @"/\{id[^}]*\}$", "");
-        using var created = await client.PostAsync("/" + collection, JsonContent.Create(seed, seed.GetType(), options: JsonOptions));
-        created.StatusCode.Should().Be(HttpStatusCode.Created, "{0} needs a stored record to update", write);
-        using var document = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        return document.RootElement.GetProperty("id").GetGuid();
-    }
-
     private List<RecordWrite> RecordWrites()
     {
         var writes = new List<RecordWrite>();
@@ -203,7 +202,7 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
             var bodyType = body.ParameterType;
             var isArray = bodyType != typeof(string) && typeof(IEnumerable).IsAssignableFrom(bodyType);
             var requestType = isArray ? ElementTypeOf(bodyType, action) : bodyType;
-            if (!typeof(IV4RecordHeader).IsAssignableFrom(requestType))
+            if (!IsRecordBody(requestType, action))
                 continue;
 
             foreach (var method in methods)
@@ -213,6 +212,17 @@ public class V4TimestampRequiredIntegrationTests(ApiIntegrationTestFixture fixtu
         writes.Should().NotBeEmpty();
         return writes;
     }
+
+    /// <summary>
+    /// A request with a record header, a profile model, or a health sample request: the sample requests
+    /// carry the header members but map <c>App</c> onto the sample's <c>EnteredBy</c>, so they do not
+    /// implement <see cref="IV4RecordHeader"/>.
+    /// </summary>
+    private static bool IsRecordBody(Type requestType, ControllerActionDescriptor action) =>
+        typeof(IV4RecordHeader).IsAssignableFrom(requestType)
+        || (typeof(IV4Record).IsAssignableFrom(requestType) && action.ControllerTypeInfo.AsType() == typeof(ProfileController))
+        || requestType == typeof(UpsertHeartRateRequest)
+        || requestType == typeof(UpsertStepCountRequest);
 
     private static Type ElementTypeOf(Type enumerable, ControllerActionDescriptor action)
     {

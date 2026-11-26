@@ -2849,8 +2849,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.Property<string>("DataSource")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("data_source");
 
                     b.Property<bool>("IsPrimary")

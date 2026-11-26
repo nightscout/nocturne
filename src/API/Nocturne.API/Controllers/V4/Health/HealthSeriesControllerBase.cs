@@ -32,11 +32,17 @@ public abstract class HealthSeriesControllerBase<TModel, TUpsertRequest> : Healt
     }
 
     /// <remarks>
-    /// The payload is sized before it is mapped, so an oversized one is not projected first.
+    /// The payload is sized and validated before it is mapped, so an oversized or invalid one is not projected first.
     /// </remarks>
     protected async Task<ActionResult<IEnumerable<TModel>>> CreateResponseAsync(
-        TUpsertRequest[] requests, CancellationToken ct) =>
-        this.ValidateBulkSize(requests, RecordTypeName, $"{RecordTypeNoun} records") is { } invalid
-            ? invalid
-            : await CreateResponseAsync([.. requests.Select(ToModel)], ct);
+        TUpsertRequest[] requests, CancellationToken ct)
+    {
+        if (this.ValidateBulkSize(requests, RecordTypeName, $"{RecordTypeNoun} records") is { } invalid)
+            return invalid;
+
+        if (await this.ValidateEachAsync(requests, RecordTypeName, ct) is { } rejected)
+            return rejected;
+
+        return await CreateResponseAsync([.. requests.Select(ToModel)], ct);
+    }
 }

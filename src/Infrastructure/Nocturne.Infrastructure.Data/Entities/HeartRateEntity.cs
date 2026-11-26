@@ -56,14 +56,14 @@ public class HeartRateEntity
     /// Device identifier that recorded this reading
     /// </summary>
     [Column("device")]
-    [MaxLength(255)]
+    [MaxLength(RecordColumnLengths.HealthSampleLabel)]
     public string? Device { get; set; }
 
     /// <summary>
     /// Who entered this record
     /// </summary>
     [Column("entered_by")]
-    [MaxLength(255)]
+    [MaxLength(RecordColumnLengths.HealthSampleLabel)]
     public string? EnteredBy { get; set; }
 
     /// <summary>

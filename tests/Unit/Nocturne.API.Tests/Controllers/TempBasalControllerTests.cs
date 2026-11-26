@@ -454,15 +454,11 @@ public class TempBasalControllerTests
     }
 
     [Fact]
-    public async Task Update_NoTimestamp_ReturnsBadRequestWithoutWriting()
+    public void UpdateValidator_RejectsAMissingTimestamp()
     {
-        var id = Guid.NewGuid();
-        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new TempBasal { Id = id, StartTimestamp = T0.UtcDateTime });
+        var result = new UpdateTempBasalRequestValidator().Validate(new UpdateTempBasalRequest());
 
-        var result = await _controller.Update(id, new UpdateTempBasalRequest(), CancellationToken.None);
-
-        ((ObjectResult)result.Result!).StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        _repo.Verify(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+        result.Errors.Should().ContainSingle().Which.ErrorMessage.Should().Be("Timestamp is required");
     }
 
     [Fact]

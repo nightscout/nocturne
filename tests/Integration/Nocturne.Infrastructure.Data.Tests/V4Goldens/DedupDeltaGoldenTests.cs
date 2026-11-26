@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
@@ -268,6 +269,27 @@ public class DedupDeltaGoldenTests
         // value and links to it — one group.
         links.Select(l => l.CanonicalId).Distinct().Should()
             .HaveCount(1, "post-commit dedup sees B's upserted value, so C collapses with B into one group (D4)");
+    }
+
+    [Fact]
+    public async Task Bolus_Dedup_LinksRecordsWhoseDataSourceFillsTheColumn()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
+        var longest = new string('a', RecordColumnLengths.Provenance);
+
+        await repo.BulkCreateAsync(new[]
+        {
+            new Bolus { Timestamp = T0, Insulin = 4.0, DataSource = longest, LegacyId = "long-1" },
+            new Bolus { Timestamp = T0, Insulin = 4.0, DataSource = new string('b', 200), LegacyId = "long-2" },
+        }, WriteOrigin.Live, CancellationToken.None);
+
+        var links = await _fx.QueryAsync(tenant, ctx =>
+            ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "bolus").ToListAsync());
+        links.Should().HaveCount(2);
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1, "both records are linked into one duplicate group");
+        links.Select(l => l.DataSource).Should().Contain(longest);
     }
 
     [Fact]
