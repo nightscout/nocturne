@@ -14,12 +14,16 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import Info from "@lucide/svelte/icons/info";
   import Bot from "@lucide/svelte/icons/bot";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
   import type { PlatformSettingsSummary } from "#lib/api/index.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { platformCategoryName } from "#lib/utils/platform-categories.js";
+
+  /** Fields that hold no secret, so their input shows what is typed. */
+  const PLAIN_FIELDS = new Set(["alertTemplateName", "alertTemplateLanguage"]);
 
   const TELEGRAM_SET_WEBHOOK =
     'curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" -d "url=https://<your-instance>/api/v4/webhooks/telegram" -d "secret_token=<WEBHOOK_SECRET_TOKEN>"';
@@ -195,6 +199,23 @@
                 </Alert.Description>
               </Alert.Root>
             {/if}
+            {#if category === "whatsapp"}
+              <Alert.Root>
+                <Info class="h-4 w-4" />
+                <Alert.Title>Alerts outside the 24-hour window</Alert.Title>
+                <Alert.Description>
+                  <p>
+                    WhatsApp lets the bot send a message only for 24 hours after a person last sent it a message. After that time, WhatsApp delivers only an approved template.
+                  </p>
+                  <p>
+                    To send alerts after that time, create a utility template in WhatsApp Manager and get approval for it. Its body has three variables: <code>{"{{1}}"}</code> is the person, <code>{"{{2}}"}</code> is the alert name and <code>{"{{3}}"}</code> is the glucose reading. Add one quick reply button, for example Acknowledge. Then enter the template name and language here. If you do not enter a language, the bot uses <code>en</code>.
+                  </p>
+                  <p>
+                    Meta charges for each template message. If you do not set a template, these alerts fail. A notice that a rule cannot run or is on hold is not sent as a template.
+                  </p>
+                </Alert.Description>
+              </Alert.Root>
+            {/if}
             {#each platform.fields ?? [] as field (field.name)}
               {@const name = field.name ?? ""}
               {@const fieldConfigured = (platform.configuredFields ?? []).includes(name)}
@@ -207,7 +228,7 @@
                 </div>
                 <Input
                   id="field-{category}-{name}"
-                  type={category === "google-health" && name !== "clientSecret" ? "text" : "password"}
+                  type={(category === "google-health" && name !== "clientSecret") || PLAIN_FIELDS.has(name) ? "text" : "password"}
                   autocomplete="off"
                   placeholder={fieldConfigured ? "Leave blank to keep current value" : "Not set"}
                   bind:value={state.fieldValues[name]}
