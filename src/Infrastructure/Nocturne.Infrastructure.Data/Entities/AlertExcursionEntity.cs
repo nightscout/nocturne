@@ -89,13 +89,15 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
     /// (<c>AlertSweepJob.OwedTransitionLease</c>). Null on a row written before the column existed,
     /// so an upgrade owes nothing for it. A notice keeps it when it is resolved, until its dispatch or
     /// the sweep settles it, so a run that dies in the dispatch has its close run again by the sweep.
+    /// A snooze's re-notification sets it while it sends, when it is not set, for the same reason.
     /// </summary>
     [Column("opened_owed_at")]
     public DateTime? OpenedOwedAt { get; set; }
 
     /// <summary>
     /// As <see cref="OpenedOwedAt"/>, for the work the excursion's close calls for
-    /// (<c>IExcursionResolutionHandler</c>), written in the transaction that closes it.
+    /// (<c>IExcursionResolutionHandler</c>), written in the transaction that closes it, or that ends a
+    /// notice.
     /// </summary>
     [Column("closed_owed_at")]
     public DateTime? ClosedOwedAt { get; set; }

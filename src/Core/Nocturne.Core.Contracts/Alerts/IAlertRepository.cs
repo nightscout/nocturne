@@ -115,6 +115,13 @@ public interface IAlertRepository
     /// </summary>
     Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct);
 
+    /// <summary>
+    /// Records that the opening of <paramref name="excursionId"/> owes its work, taken up at
+    /// <paramref name="now"/>, for a re-notification of it (<see cref="IAlertSnoozeService.ResumeAsync"/>).
+    /// False, with nothing written, when the opening already owes work or the excursion does not exist.
+    /// </summary>
+    Task<bool> OweOpeningAsync(Guid excursionId, DateTime now, CancellationToken ct);
+
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
     Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid excursionId, CancellationToken ct);
@@ -196,9 +203,14 @@ public interface IAlertRepository
     /// <summary>
     /// Marks an alert instance as suppressed at fire time without dispatching deliveries.
     /// Writes <paramref name="reason"/> to <c>alert_instances.suppression_reason</c> so Replay
-    /// and History can display "would have fired but suppressed" rows. Currently the only
-    /// reason emitted by the orchestrator is <c>"dnd"</c>.
+    /// and History can display "would have fired but suppressed" rows. The reasons are the Do Not
+    /// Disturb scopes (<c>DndSuppressionGate.SuppressionReason</c>).
     /// </summary>
+    /// <remarks>
+    /// Does nothing to an instance with a delivery row: its dispatch may have reached a channel, and
+    /// a late run of its opening (the sweep finishing an opening or a snooze's re-notification that
+    /// died) that meets a scope begun since must not record it as silenced, nor drop it from the alarm.
+    /// </remarks>
     Task MarkInstanceSuppressedAsync(Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
@@ -230,7 +242,11 @@ public interface IAlertRepository
     /// </summary>
     Task<IReadOnlyList<StandingUnevaluableNotice>> GetStandingUnevaluableNoticesAsync(Guid? ruleId, CancellationToken ct);
 
-    /// <summary>Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved.</summary>
+    /// <summary>
+    /// Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved, and records
+    /// that its close owes its work, which <see cref="GetOwedTransitionsAsync"/> offers once its
+    /// instance is resolved.
+    /// </summary>
     Task EndNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct);
 
     /// <summary>

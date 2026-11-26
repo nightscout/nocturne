@@ -1655,12 +1655,16 @@ sweep's read or by the instance lock, also runs the close again before it settle
 after its sends and before that rerun may have left them standing. Every other send ends the same
 way, through the one rerun (`IExcursionResolutionHandler.CloseAgainIfEndedAsync`): a snooze's
 re-notification, once it is sent, and a notice's dispatch (§1.4, §6.4), whose resolution is its
-close. A notice counts as resolved once its instance is, the step that writes its reason, so the
-rerun never resolves it first and without one; a resolution that dies before that step leaves the
-notice standing, and its check resolves it again. A notice keeps its dispatch owed when it is
-resolved, until its dispatch or the sweep settles it, so the sweep runs its resolution again when
-the run dies first; the sweep finishes owed work of a notice only once it has been resolved, and a
-standing notice's dispatch stays with its own check.
+close. A re-notification owes its excursion's opening from before its send until that rerun is
+done, unless the opening is already owed, so the sweep finishes a run that dies as an owed opening.
+That sends only what the opening still owes: a re-notification the run lost is not sent again. A
+notice counts as resolved once its instance is, the step that writes its reason, so the rerun never
+resolves it first and without one; a resolution that dies before that step leaves the notice
+standing, and its check resolves it again. Ending a notice owes its close, which the sweep finishes
+once its instance is resolved. A notice keeps its dispatch owed when it is resolved, until its
+dispatch or the sweep settles it, so the sweep runs its resolution again when the run dies first;
+the sweep finishes owed work of a notice only once it has been resolved, and a standing notice's
+dispatch stays with its own check.
 
 An acknowledgement is not a cutoff: an acknowledge-all made for another alarm must not consume an
 alert nobody received. An enabled rule whose stored row cannot be read keeps its opening owed,
@@ -1672,7 +1676,8 @@ sweep (`AlertSweepJob`), whose first run after a start is the start's pass.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the
-`do_not_disturb` *leaf* (§3) is in the crate.
+`do_not_disturb` *leaf* (§3) is in the crate. An instance with a delivery row may have reached a
+channel, so a late run of its opening never records it as silenced by a scope begun since.
 
 ---
 

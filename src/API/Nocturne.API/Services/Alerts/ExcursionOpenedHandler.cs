@@ -11,9 +11,12 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// Safe to run again for an opening a run that died left unsettled, which is how
-/// <see cref="AlertSweepJob"/> re-dispatches it: the instance is the one the first run raised
-/// (<see cref="IAlertRepository.EnsureInstanceAsync"/>), an instance that run silenced stays silent
-/// and is not dispatched, the dispatch sends only the channels still owed
+/// <see cref="AlertSweepJob"/> re-dispatches it, and for a snooze's re-notification that died,
+/// which holds the opening owed (<see cref="IAlertSnoozeService.ResumeAsync"/>): the instance is
+/// the one the first run raised (<see cref="IAlertRepository.EnsureInstanceAsync"/>), an instance
+/// that run silenced stays silent and is not dispatched, one that reached a channel is not silenced
+/// by a scope begun since (<see cref="IAlertRepository.MarkInstanceSuppressedAsync"/>), the
+/// dispatch sends only the channels still owed
 /// (<see cref="IAlertDeliveryService.DispatchAsync"/>), and acknowledging an acknowledged excursion
 /// changes nothing. So a re-run of an opening whose dispatch and info acknowledgement both finished
 /// sends nothing, acknowledges nothing new, and settles. The payload is built from the context as
@@ -73,16 +76,12 @@ internal sealed class ExcursionOpenedHandler(
         }
         else
         {
-            // An empty channel list is allowed: the user chose no delivery channels, and the
-            // alert is still tracked.
-            var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
-            var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
-            var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
+            var inputs = await RuleSendInputs.ReadAsync(rule.Id, tenantId, repository, ruleRepository, ct);
             var payload = AlertPayloads.Build(
-                rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now, metBy);
+                rule, context, tenantId, excursionId, instance.Id, inputs.Tenant, inputs.ActiveExcursionCount, now, metBy);
 
             var suppressingScope = await DndGatedDispatch.DispatchAsync(
-                rule, context.ActiveDndScopes, instance.Id, channels, payload, repository, deliveryService, logger, ct);
+                rule, context.ActiveDndScopes, instance.Id, inputs.Channels, payload, repository, deliveryService, logger, ct);
 
             logger.LogInformation(
                 "Alert instance {InstanceId} dispatched for excursion {ExcursionId}, rule {RuleName}",
