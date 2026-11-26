@@ -111,6 +111,27 @@ function buildPlatformConfig(
 	return builder.fromEnv();
 }
 
+/**
+ * The bot's state database. The bot adapter expects a postgresql:// URL, not the .NET-style
+ * ConnectionStrings__nocturne-postgres value (which is Host=...;Port=...;Database=... key/value
+ * format and causes the pg client to resolve literal strings like "base" as hostnames). Aspire
+ * injects NOCTURNE_POSTGRES_URI pointing at the nocturne_web role — a least-privileged role that
+ * owns only its own chat_state_* tables and cannot touch tenant-scoped tables. Fall back to
+ * DATABASE_URL for non-Aspire deployments.
+ */
+function botPostgresUrl(): string {
+	return process.env.NOCTURNE_POSTGRES_URI ?? process.env.DATABASE_URL ?? "";
+}
+
+/** Deletes the thread history the bot kept in its state before it stopped keeping any. */
+export async function purgeKeptThreadHistory(): Promise<void> {
+	const url = botPostgresUrl();
+	if (!url) return;
+	await purgeThreadHistory(url).catch((err: unknown) => {
+		console.warn("[bot] could not delete the kept thread history:", err);
+	});
+}
+
 async function initBot(): Promise<Bot> {
 	const dbCredentials = await fetchDbCredentials();
 
@@ -122,18 +143,7 @@ async function initBot(): Promise<Bot> {
 			whatsapp: buildPlatformConfig("whatsapp", dbCredentials),
 			resend: buildPlatformConfig("resend", dbCredentials),
 		},
-		// The bot adapter expects a postgresql:// URL, not the .NET-style
-		// ConnectionStrings__nocturne-postgres value (which is
-		// Host=...;Port=...;Database=... key/value format and causes the
-		// pg client to resolve literal strings like "base" as hostnames).
-		// Aspire injects NOCTURNE_POSTGRES_URI pointing at the
-		// nocturne_web role — a least-privileged role that owns only its
-		// own chat_state_* tables and cannot touch tenant-scoped tables.
-		// Fall back to DATABASE_URL for non-Aspire deployments.
-		postgresUrl:
-			process.env.NOCTURNE_POSTGRES_URI ??
-			process.env.DATABASE_URL ??
-			"",
+		postgresUrl: botPostgresUrl(),
 	};
 
 	const bot = createBot(options);
@@ -146,10 +156,6 @@ async function initBot(): Promise<Bot> {
 		);
 	}
 	registerAllCommands(bot, baseDomain);
-
-	purgeThreadHistory(bot).catch((err: unknown) => {
-		console.warn("[bot] could not delete the kept thread history:", err);
-	});
 
 	const enabledPlatforms = Object.entries(options.platforms ?? {})
 		.filter(([, val]) => val !== false && val !== undefined)

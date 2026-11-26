@@ -1,26 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Chat } from "chat";
 import { PostgresStateAdapter } from "@chat-adapter/state-pg";
-import { createMemoryState } from "@chat-adapter/state-memory";
 import { purgeThreadHistory } from "./thread-history.js";
 
-const botWith = (state: unknown) => ({ getState: () => state }) as unknown as Chat;
+const query = vi.fn();
+
+vi.mock("@chat-adapter/state-pg", async (original) => {
+  const pg = await original<typeof import("@chat-adapter/state-pg")>();
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    ...pg,
+    createPostgresState: () => new pg.PostgresStateAdapter({ client: { query } as never, logger }),
+  };
+});
 
 describe("purgeThreadHistory", () => {
-  it("deletes every thread history list from the bot's Postgres state", async () => {
-    const query = vi.fn().mockResolvedValue({ rows: [] });
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
-    const state = new PostgresStateAdapter({ client: { query } as never, logger, autoCreateSchema: false });
-    vi.spyOn(state, "connect").mockResolvedValue();
+  it("deletes every thread history list from the bot's state and lets go of the connection", async () => {
+    query.mockResolvedValue({ rows: [] });
+    const disconnect = vi.spyOn(PostgresStateAdapter.prototype, "disconnect");
 
-    await purgeThreadHistory(botWith(state));
+    await purgeThreadHistory("postgres://nobody@localhost/state");
 
-    expect(query).toHaveBeenCalledExactlyOnceWith("DELETE FROM chat_state_lists WHERE list_key LIKE $1", [
-      "msg-history:%",
-    ]);
+    expect(query).toHaveBeenCalledWith("DELETE FROM chat_state_lists WHERE list_key LIKE $1", ["msg-history:%"]);
+    expect(disconnect).toHaveBeenCalledOnce();
   });
 
-  it("does nothing for a state that is not Postgres", async () => {
-    await expect(purgeThreadHistory(botWith(createMemoryState()))).resolves.toBeUndefined();
+  it("lets go of the connection when the delete fails", async () => {
+    query.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("DELETE")) throw new Error("connection reset");
+      return { rows: [] };
+    });
+    const disconnect = vi.spyOn(PostgresStateAdapter.prototype, "disconnect");
+
+    await expect(purgeThreadHistory("postgres://nobody@localhost/state")).rejects.toThrow("connection reset");
+    expect(disconnect).toHaveBeenCalled();
   });
 });
