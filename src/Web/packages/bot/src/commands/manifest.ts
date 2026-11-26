@@ -1,6 +1,7 @@
 /**
- * Discord application command definitions.
- * Shape matches Discord's PUT /applications/{id}/commands schema.
+ * The bot's commands, in the shape of Discord's PUT /applications/{id}/commands schema. The
+ * typed-command router (./typed.ts) reads the names and its help reply lists the descriptions, so
+ * they name no platform.
  * See: https://docs.discord.com/developers/interactions/application-commands
  *
  * Keep this in sync with the handlers registered in ./index.ts. This manifest
@@ -52,7 +53,7 @@ export const DISCORD_COMMAND_MANIFEST: SlashCommandDefinition[] = [
   },
   {
     name: "connect",
-    description: "Link your Discord account to Nocturne",
+    description: "Link this chat account to your Nocturne account",
     options: [
       {
         type: 3,
@@ -65,7 +66,7 @@ export const DISCORD_COMMAND_MANIFEST: SlashCommandDefinition[] = [
   },
   {
     name: "disconnect",
-    description: "Unlink a Nocturne account from your Discord",
+    description: "Unlink a Nocturne account from this chat account",
     options: [
       {
         type: 3,
