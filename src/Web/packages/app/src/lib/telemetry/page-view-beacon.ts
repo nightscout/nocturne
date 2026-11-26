@@ -1,4 +1,4 @@
-import type { AfterNavigate } from "@sveltejs/kit";
+import type { AfterNavigate } from "$app/navigation";
 import { PUBLIC_PAGE_COUNTS_ENABLED } from "$app/env/public";
 import { recordPageView } from "#lib/api/generated/pageViews.generated.remote.js";
 
