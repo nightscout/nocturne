@@ -21,6 +21,7 @@ use proptest::test_runner::TestRunner;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use nocturne_alerts_core::clock_anomaly::ClockAnchor;
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Rule, WireRule, evaluate_rule};
 use nocturne_alerts_core::enums::WireEnum;
@@ -444,12 +445,11 @@ fn the_hold_property_reaches_reports_and_closes() {
 // A stored hold this engine cannot have written (engine-semantics.md §6.4)
 // ---------------------------------------------------------------------------
 
-fn low_rule(hysteresis_minutes: i32) -> Rule {
+fn low_rule() -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE_ID,
         "condition_type": "threshold",
         "condition_params": {"direction": "below", "value": 70},
-        "hysteresis_minutes": hysteresis_minutes,
     }))
     .unwrap();
     Rule::try_from(wire).unwrap()
@@ -467,7 +467,7 @@ fn restored(state: TrackerState) -> EngineState {
 #[test]
 fn an_alert_opened_after_a_stale_hold_waits_its_own_24_hours() {
     let t0 = base();
-    let rule = low_rule(15);
+    let rule = low_rule();
     let mut state = restored(TrackerState {
         state: TrackerStateKind::Active,
         active_excursion: Some(1),
@@ -513,7 +513,7 @@ fn a_hold_written_over_before_its_bound_restarts() {
     });
     let at = t0 + TimeDelta::hours(30);
     let e = evaluate_rule(
-        &low_rule(0),
+        &low_rule(),
         &SensorContext::default(),
         at,
         &mut state,
@@ -523,6 +523,80 @@ fn a_hold_written_over_before_its_bound_restarts() {
     .unwrap();
     assert!(!e.held_too_long);
     assert_eq!(e.tracker.and_then(|t| t.held_since), Some(at));
+}
+
+/// The host's clock went back 30 minutes after a decision, then the data
+/// stopped. The stored decision is ahead of every held evaluation until
+/// `t0 + 30m`, and must not restart the hold at each one.
+#[test]
+fn a_decision_ahead_of_the_clock_starts_the_hold_once_and_is_reported() {
+    let t0 = base();
+    let rule = low_rule();
+    let mut state = restored(TrackerState {
+        state: TrackerStateKind::Active,
+        active_excursion: Some(1),
+        last_excursion: 1,
+        updated_at: t0 + TimeDelta::minutes(30),
+        hysteresis_started_at: None,
+        awaiting_rearm: false,
+        held_since: None,
+    });
+    let held = |state: &mut EngineState, at| {
+        evaluate_rule(&rule, &SensorContext::default(), at, state, false)
+            .evaluation
+            .unwrap()
+    };
+    let updated_ahead = |e: &nocturne_alerts_core::engine::Evaluation| {
+        e.clock_anomaly
+            .iter()
+            .find(|&(anchor, _)| anchor == ClockAnchor::UpdatedAt)
+            .map(|(_, by)| by)
+    };
+
+    let first = held(&mut state, t0);
+    assert_eq!(updated_ahead(&first), Some(TimeDelta::minutes(30)));
+    let tracker = first.tracker.unwrap();
+    assert_eq!(tracker.held_since, Some(t0));
+    assert_eq!(tracker.updated_at, t0);
+
+    for at in [t0 + TimeDelta::minutes(5), t0 + TimeDelta::minutes(40)] {
+        let e = held(&mut state, at);
+        assert_eq!(updated_ahead(&e), None);
+        assert!(!e.held_too_long);
+        assert_eq!(e.tracker.and_then(|t| t.held_since), Some(t0));
+    }
+
+    let bound = held(&mut state, t0 + HOLD_BOUND);
+    assert!(bound.held_too_long);
+    assert_eq!(bound.transition.kind, TransitionType::HysteresisStarted);
+
+    let closed = held(&mut state, t0 + HOLD_BOUND + TimeDelta::minutes(1));
+    assert_eq!(closed.transition.kind, TransitionType::ExcursionClosed);
+    assert_eq!(closed.transition.close_reason, Some(CloseReason::HoldBound));
+}
+
+/// Within the tolerance a decision ahead of the clock is not reported, and the
+/// hold it starts still counts once.
+#[test]
+fn a_decision_ahead_within_the_tolerance_starts_the_hold_once_unreported() {
+    let t0 = base();
+    let rule = low_rule();
+    let mut state = restored(TrackerState {
+        state: TrackerStateKind::Active,
+        active_excursion: Some(1),
+        last_excursion: 1,
+        updated_at: t0 + TimeDelta::minutes(3),
+        hysteresis_started_at: None,
+        awaiting_rearm: false,
+        held_since: None,
+    });
+    for at in [t0, t0 + TimeDelta::minutes(1)] {
+        let e = evaluate_rule(&rule, &SensorContext::default(), at, &mut state, false)
+            .evaluation
+            .unwrap();
+        assert!(e.clock_anomaly.is_empty(), "{at}");
+        assert_eq!(e.tracker.and_then(|t| t.held_since), Some(t0), "{at}");
+    }
 }
 
 /// A stored state an older engine wrote after a hold began: `updated_at`
@@ -559,10 +633,9 @@ proptest! {
     #[test]
     fn a_stale_stored_hold_never_closes_an_alert_early(
         stored in older_engine_state(),
-        hysteresis_minutes in 0i32..=30,
         steps in steps(),
     ) {
-        let rule = low_rule(hysteresis_minutes);
+        let rule = low_rule();
         let mut state = restored(stored);
         let mut now = base();
         let mut held_from: Option<DateTime<Utc>> = None;

@@ -31,7 +31,7 @@ all five pages.
 | **At max basal** | Time when the temp basals of the loop were at the highest rate that it can set. |
 | **At max IOB** | Time when insulin on board was at max IOB, as a percentage of loop time with a recorded reason (AAPS, Trio, iAPS, OpenAPS). |
 | **Automatic boluses a day** | The number and the size of automatic boluses. |
-| **Requested, not done** | Changes that the loop asked for but did not make, for example because the pump did not reply (AAPS, Trio, iAPS, OpenAPS). |
+| **Requested, not done** | Changes that the loop requested but did not make, for example because the pump did not reply (AAPS, Trio, iAPS, OpenAPS). |
 | **Max basal rate setting of the Loop app** and **Max IOB** | The limits that your loop reported. |
 
 ## At max basal and "max basal known"

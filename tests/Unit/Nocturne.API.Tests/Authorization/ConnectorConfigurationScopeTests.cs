@@ -14,8 +14,8 @@ using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Authorization;
 
@@ -464,14 +464,12 @@ public class ConnectorConfigurationScopeTests
     private static CareLinkConnectController NewCareLinkController(
         IReadOnlySet<string> grantedScopes, string[] credentialScopes)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(Guid.CreateVersion7(), "acme", "Acme", IsActive: true, IsDemo: false));
+        var tenantAccessor = SettableTenantAccessor.Resolved(Guid.CreateVersion7(), "acme", "Acme");
 
         return new CareLinkConnectController(
             Mock.Of<IConnectorConfigurationService>(),
             new MemoryCache(new MemoryCacheOptions()),
-            tenantAccessor.Object,
+            tenantAccessor,
             Mock.Of<IJwtService>(),
             NullLoggerFactory.Instance,
             NullLogger<CareLinkConnectController>.Instance)

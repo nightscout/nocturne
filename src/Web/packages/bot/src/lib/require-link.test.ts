@@ -43,10 +43,10 @@ function createContext(candidates: DirectoryCandidate[] | null) {
   return { context, resolve, scopedApiFactory };
 }
 
-function createSlashEvent(text: string) {
+function createSlashEvent(text: string, platform: string) {
   const postEphemeral = vi.fn().mockResolvedValue(null);
   const event = {
-    adapter: { name: "discord" },
+    adapter: { name: platform },
     channel: { post: vi.fn(), postEphemeral },
     command: "/bg",
     text,
@@ -58,9 +58,10 @@ function createSlashEvent(text: string) {
 async function runSlash(
   candidates: DirectoryCandidate[] | null,
   text: string,
+  platform = "discord",
 ) {
   const ctx = createContext(candidates);
-  const { event, postEphemeral } = createSlashEvent(text);
+  const { event, postEphemeral } = createSlashEvent(text, platform);
   const seen: string[] = [];
 
   const result = await runWithContext(ctx.context, () =>
@@ -133,6 +134,26 @@ describe("requireLink", () => {
     expect(run.postEphemeral).toHaveBeenCalledExactlyOnceWith(
       expect.anything(),
       "No linked account named `beach`. Your linked accounts: `home`, `work`.",
+      { fallbackToDM: true },
+    );
+  });
+
+  it("names the platform the command came from to an unlinked user", async () => {
+    const run = await runSlash([], "", "whatsapp");
+
+    expect(run.postEphemeral).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      "Your WhatsApp account isn't linked to a Nocturne account yet. Run `/connect` to get started.",
+      { fallbackToDM: true },
+    );
+  });
+
+  it("points only to the label on a platform with no default-link setting", async () => {
+    const run = await runSlash([HOME, WORK], "", "telegram");
+
+    expect(run.postEphemeral).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      "You have multiple linked Nocturne accounts: `home` (HOME), `work` (WORK). Use `/bg <label>` to pick one.",
       { fallbackToDM: true },
     );
   });

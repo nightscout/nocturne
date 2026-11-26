@@ -17,20 +17,7 @@ public class ConnectorFoodEntryBatchDedupeTests(ConnectorFoodEntryBatchDedupeTes
 {
     private const string Source = "glooko-connector";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("connector_food_batch_dedupe");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("connector_food_batch_dedupe");
 
     private static ConnectorFoodEntryImport Import(string entryId, decimal carbs, string source = Source) => new()
     {
@@ -42,10 +29,7 @@ public class ConnectorFoodEntryBatchDedupeTests(ConnectorFoodEntryBatchDedupeTes
     };
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, o => o.EnableRetryOnFailure())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.Retrying);
 
     private ConnectorFoodEntryRepository Repository(NocturneDbContext context) =>
         new(context.AsFactory(), NullLogger<ConnectorFoodEntryRepository>.Instance);
@@ -134,14 +118,7 @@ public class ConnectorFoodEntryBatchDedupeTests(ConnectorFoodEntryBatchDedupeTes
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'connector-food-batch-dedupe-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"food-batch-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"food-batch-{tenant:N}", "connector-food-batch-dedupe-test");
         return tenant;
     }
 }

@@ -107,8 +107,7 @@ public class DndWindowRepository : IDndWindowRepository
     {
         await using var lease = await OpenAsync(ct);
 
-        var rows = await lease.Context.DndWindows.AsNoTracking()
-            .Where(w => w.StartedAt < to && (w.EndsAt == null || w.EndsAt > from) && (w.ClearedAt == null || w.ClearedAt > from))
+        var rows = await Overlapping(lease.Context.DndWindows.AsNoTracking(), from, to)
             .OrderBy(w => w.StartedAt).Take(limit)
             .ToListAsync(ct);
 
@@ -116,13 +115,16 @@ public class DndWindowRepository : IDndWindowRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> AnyTouchingAsync(DateTime from, DateTime to, CancellationToken ct)
+    public virtual async Task<bool> AnyOverlappingAsync(DateTime from, DateTime to, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
 
-        return await lease.Context.DndWindows.AsNoTracking()
-            .AnyAsync(w => w.StartedAt < to && (w.EndsAt == null || w.EndsAt >= from) && (w.ClearedAt == null || w.ClearedAt >= from), ct);
+        return await Overlapping(lease.Context.DndWindows.AsNoTracking(), from, to).AnyAsync(ct);
     }
+
+    internal static IQueryable<DndWindowEntity> Overlapping(IQueryable<DndWindowEntity> windows, DateTime from, DateTime to) =>
+        windows.OverlapsWindow(w => w.StartedAt, w => w.EndsAt, from, to, OverlapEdges.BothExcluded)
+            .NotEndedBy(w => w.ClearedAt, from);
 
     /// <inheritdoc/>
     public virtual async Task<DndWindowCreateResult> CreateAsync(NewDndWindow window, CancellationToken ct)
@@ -265,17 +267,16 @@ public class DndWindowRepository : IDndWindowRepository
     /// </summary>
     private static IQueryable<DndWindowEntity> CouldBeActive(
         IQueryable<DndWindowEntity> windows, DndScope? scope, DateTime now) =>
-        windows.Where(w => (scope == null || w.Scope == scope)
-                           && w.ClearedAt == null
-                           && (w.EndsAt == null || w.EndsAt > now));
+        windows.Where(w => (scope == null || w.Scope == scope) && w.ClearedAt == null)
+            .NotEndedBy(w => w.EndsAt, now);
 
     internal static bool IsActive(DndWindowEntity w, DateTime now) =>
         new DndWindowSnapshot(w.Scope, w.StartedAt, w.EndsAt, w.ClearedAt, w.CreatedAt).IsActiveAt(now);
 
     private static Task<List<DndWindowEntity>> OverlappingAsync(
         NocturneDbContext db, NewDndWindow window, CancellationToken ct) =>
-        CouldBeActive(db.DndWindows, window.Scope, window.StartedAt)
-            .Where(w => window.EndsAt == null || w.StartedAt < window.EndsAt)
+        db.DndWindows.Where(w => w.Scope == window.Scope && w.ClearedAt == null)
+            .OverlapsWindow(w => w.StartedAt, w => w.EndsAt, window.StartedAt, window.EndsAt, OverlapEdges.BothExcluded)
             .ToListAsync(ct);
 
     private static void SupersedeOverlapping(List<DndWindowEntity> overlapping, DateTime startedAt, DateTime now)

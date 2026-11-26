@@ -126,17 +126,6 @@ public class MigrationSubjectGrantTests
         public HttpClient CreateClient(string name) => new(new NightscoutStub());
     }
 
-    private sealed class FixedTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-
-        public bool IsResolved => Context is not null;
-
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-
-        public void SetTenant(TenantContext? tenant) => Context = tenant;
-    }
-
     private static ServiceProvider BuildProvider()
     {
         // Named once, outside the options lambda: the lambda runs per context, so generating the
@@ -147,7 +136,7 @@ public class MigrationSubjectGrantTests
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
             .AddDataServices()
             .AddSingleton(AccountLinkRoutes.Off)
-            .AddScoped<ITenantAccessor, FixedTenantAccessor>()
+            .AddScoped<ITenantAccessor, SettableTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory, StubHttpClientFactory>()
             .BuildServiceProvider();

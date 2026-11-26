@@ -1,10 +1,9 @@
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.ConnectorPublishing;
-using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Services.DeviceStatuses;
 using Nocturne.API.Tests.Services.Entries;
 using Nocturne.Connectors.Core.Models;
@@ -160,14 +159,15 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         decomposed.Should().Equal("ds-late");
     }
 
-    [Fact]
-    public async Task A_failed_lookup_writes_nothing_and_reports_the_failure()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task A_lookup_that_hits_a_store_failure_writes_nothing_and_reports_the_failure(Exception failure)
     {
         var deviceStatuses = new Mock<IDeviceStatusService>();
         deviceStatuses.Setup(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>())).Returns(true);
         var aps = new Mock<IApsSnapshotRepository>();
         aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("synthetic"));
+            .ThrowsAsync(failure);
         var publisher = DevicePublisher(
             deviceStatuses.Object, aps.Object, Mock.Of<IPumpSnapshotRepository>(), Mock.Of<IUploaderSnapshotRepository>());
 
@@ -179,6 +179,26 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         deviceStatuses.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task A_lookup_that_hits_a_defect_propagates_it(Exception defect)
+    {
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses.Setup(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>())).Returns(true);
+        var aps = new Mock<IApsSnapshotRepository>();
+        aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        var publisher = DevicePublisher(
+            deviceStatuses.Object, aps.Object, Mock.Of<IPumpSnapshotRepository>(), Mock.Of<IUploaderSnapshotRepository>());
+
+        var act = () => publisher.PublishRecentDeviceStatusAsync(
+            [new DeviceStatus { Id = "ds-late" }], Source, WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+        deviceStatuses.Verify(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>()));
+        deviceStatuses.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task A_device_status_that_yields_no_snapshot_is_not_decomposed()
     {
@@ -186,9 +206,8 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         var aps = new Mock<IApsSnapshotRepository>();
         var pump = new Mock<IPumpSnapshotRepository>();
         var uploader = new Mock<IUploaderSnapshotRepository>();
-        var decomposer = new DeviceStatusDecomposer(
-            aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<ISensorStateReportRepository>(), Mock.Of<IStateSpanService>(),
-            new UnresolvedDevices(), Mock.Of<IAuditContext>(), Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+        var decomposer = DeviceStatusDecomposerDoubles.Build(
+            aps.Object, pump.Object, uploader.Object, extras.Object);
         var publisher = DevicePublisher(WritingDeviceStatusService.Over(decomposer), aps.Object, pump.Object, uploader.Object);
 
         var written = await publisher.PublishRecentDeviceStatusAsync(
@@ -212,7 +231,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         IUploaderSnapshotRepository uploader) =>
         new(deviceStatuses, Mock.Of<IDeviceEventRepository>(), Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(),
             aps, Mock.Of<IPatientDeviceRepository>(), pump, uploader, new PublishSkipTally(),
-            Mock.Of<ITenantAccessor>(), NullLogger<DevicePublisher>.Instance);
+            new SettableTenantAccessor(), NullLogger<DevicePublisher>.Instance);
 
     private GlucosePublisher RealGlucosePublisher()
     {
@@ -227,6 +246,6 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
+            audit, new PublishSkipTally(), new SettableTenantAccessor(), NullLogger<GlucosePublisher>.Instance);
     }
 }

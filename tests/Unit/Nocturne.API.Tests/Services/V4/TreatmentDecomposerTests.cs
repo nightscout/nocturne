@@ -43,15 +43,6 @@ public class TreatmentDecomposerTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var mockDedup = new Mock<IDuplicateLinker>();
-        var mockAudit = new Mock<IAuditContext>().Object;
-        var ctxFactory = new TestNocturneDbContextFactory(_context);
-        var bolusRepo = new BolusRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusRepository>.Instance);
-        var carbIntakeRepo = new CarbIntakeRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<CarbIntakeRepository>.Instance);
-        var bgCheckRepo = new BGCheckRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BGCheckRepository>.Instance);
-        var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<NoteRepository>.Instance);
-        var deviceEventRepo = new DeviceEventRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<DeviceEventRepository>.Instance);
-        var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusCalculationRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
         _treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
         _tempBasalRepoMock = new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord();
@@ -64,21 +55,16 @@ public class TreatmentDecomposerTests : IDisposable
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            bolusRepo, _tempBasalRepoMock.Object,
-            carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
-            _stateSpanServiceMock.Object,
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            _treatmentFoodServiceMock.Object,
-            _deviceServiceMock.Object,
-            _stamperMock.Object,
-            _activeProfileResolverMock.Object,
-            _insulinRepoMock.Object,
-            TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
-            Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+        _decomposer = TreatmentDecomposerDoubles.Stored(
+            _context.AsFactory(), Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(),
+            tempBasal: _tempBasalRepoMock.Object,
+            stateSpans: _stateSpanServiceMock.Object,
+            foods: _treatmentFoodServiceMock.Object,
+            devices: _deviceServiceMock.Object,
+            stamper: _stamperMock.Object,
+            activeProfiles: _activeProfileResolverMock.Object,
+            insulin: _insulinRepoMock.Object,
+            relativeTempBasalRates: TempBasalTestDeps.Rates(_basalRateResolverMock.Object));
     }
 
     public void Dispose()
@@ -4073,6 +4059,80 @@ public class TreatmentDecomposerTests : IDisposable
         tempBasal.InsulinContext.Peak.Should().Be(45);
         tempBasal.InsulinContext.Concentration.Should().Be(200);
         tempBasal.InsulinContext.Curve.Should().Be("rapid-acting");
+    }
+
+    #endregion
+
+    #region Upstream fingerprint of a treatment that is not a profile switch
+
+    public static TheoryData<string, Treatment, string> FingerprintsStoredBeforeProfileSwitchFields => new()
+    {
+        {
+            "bolus",
+            new Treatment
+            {
+                EventType = "Correction Bolus", Created_at = "2026-03-01T12:00:00.000Z", EnteredBy = "AndroidAPS",
+                Insulin = 1.5, Notes = "correction",
+            },
+            "3934385349a924b83ae00cfa7164c90dd13c3a50125b0b04a880eb7f618f0849"
+        },
+        {
+            "carbs",
+            new Treatment
+            {
+                EventType = "Carb Correction", Created_at = "2026-03-01T12:00:00.000Z", EnteredBy = "xDrip",
+                Carbs = 30, AbsorptionTime = 180,
+            },
+            "4e6dee4a6d4d3adbfc6ede69afb72618b8dcb606deefdc43ed1698463270043e"
+        },
+        {
+            "temp basal",
+            new Treatment
+            {
+                EventType = "Temp Basal", Created_at = "2026-03-01T12:00:00.000Z", EnteredBy = "AndroidAPS",
+                Duration = 30, Rate = 0.8, Absolute = 0.8,
+            },
+            "f03b4df3308fc5fbbba6d751504feb732918dca59794328afa4695fac8b983c9"
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(FingerprintsStoredBeforeProfileSwitchFields))]
+    public void UpstreamFingerprint_OfATreatmentThatIsNotAProfileSwitch_IsThatItWasStoredUnder(
+        string kind, Treatment treatment, string stored)
+    {
+        TreatmentDecomposer.UpstreamFingerprint(treatment).Should().Be(stored, kind);
+    }
+
+    [Theory]
+    [InlineData("Temp Basal")]
+    [InlineData("Note")]
+    [InlineData("Correction Bolus")]
+    public void UpstreamFingerprint_OfATreatmentThatIsNotAProfileSwitch_IgnoresTheProfileSwitchFields(
+        string eventType)
+    {
+        Treatment Of(double? percentage, double? timeshift, string? profileJson) => new()
+        {
+            EventType = eventType, Created_at = "2026-03-01T12:00:00.000Z", EnteredBy = "AndroidAPS",
+            Duration = 30, Rate = 0.8, Absolute = 0.8,
+            Percentage = percentage, Timeshift = timeshift, ProfileJson = profileJson,
+        };
+
+        TreatmentDecomposer.UpstreamFingerprint(Of(120, 2, "{\"dia\":5}"))
+            .Should().Be(TreatmentDecomposer.UpstreamFingerprint(Of(null, null, null)));
+    }
+
+    [Fact]
+    public void UpstreamFingerprint_OfAnEffectiveProfileSwitch_HashesItsPercentage()
+    {
+        Treatment Of(double? percentage) => new()
+        {
+            EventType = "Note", Created_at = "2026-03-01T12:00:00.000Z", EnteredBy = "AndroidAPS",
+            OriginalProfileName = "Day", Percentage = percentage,
+        };
+
+        TreatmentDecomposer.UpstreamFingerprint(Of(120))
+            .Should().NotBe(TreatmentDecomposer.UpstreamFingerprint(Of(100)));
     }
 
     #endregion

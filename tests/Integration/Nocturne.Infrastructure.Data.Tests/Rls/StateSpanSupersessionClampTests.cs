@@ -16,7 +16,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 /// <summary>
 /// A soft delete undoes the supersession it gave spans the deleting member's 24 hour clamp hides, as the
 /// foreign key's <c>SetNull</c> reached them, and ends them at successors the clamp hides. A restore ends
-/// hidden spans at the restored span again.
+/// hidden spans at the restored span again. An upsert judges a span's end against superseders and
+/// successors the clamp hides.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -135,6 +136,80 @@ public class StateSpanSupersessionClampTests : IAsyncLifetime
         answered.SupersededById.Should().Be(later.ToString());
         (await ReadAsync(restored)).SupersededById.Should().Be(later);
     }
+
+    /// <summary>A re-sync of history sends the span with no end; both spans ended over a day ago.</summary>
+    [Fact]
+    public async Task ClampedWriterUpsert_OfAnOpenSpanTheClampHides_KeepsTheEndAHiddenSpanGave()
+    {
+        var now = DateTime.UtcNow;
+        var older = Guid.NewGuid();
+        var supersessor = Guid.NewGuid();
+        await SeedAsync(
+            Legacy(older, "tt-older", now.AddDays(-5), now.AddDays(-3), supersessor),
+            Legacy(supersessor, "tt-supersessor", now.AddDays(-3), now.AddDays(-2.5), null));
+
+        await using (var scope = _provider.CreateAsyncScope())
+            await ClampedRepository(scope).BulkUpsertAsync([Sent("tt-older", now.AddDays(-5), null)]);
+
+        var row = await ReadAsync(older);
+        row.EndTimestamp.Should().BeCloseTo(now.AddDays(-3), TimeSpan.FromMilliseconds(1));
+        row.SupersededById.Should().Be(supersessor);
+    }
+
+    /// <summary>
+    /// The batch moves the hidden span that ended the older one, so the older span is left open and ended
+    /// after the save at the moved span, which the clamp still hides.
+    /// </summary>
+    [Fact]
+    public async Task ClampedWriterUpsert_ThatMovesAHiddenSupersessor_EndsTheOpenedSpanAtItsNewStart()
+    {
+        var now = DateTime.UtcNow;
+        var older = Guid.NewGuid();
+        var supersessor = Guid.NewGuid();
+        await SeedAsync(
+            Legacy(older, "tt-older", now.AddDays(-5), now.AddDays(-3), supersessor),
+            Legacy(supersessor, "tt-supersessor", now.AddDays(-3), now.AddDays(-2), null));
+
+        await using (var scope = _provider.CreateAsyncScope())
+            await ClampedRepository(scope).BulkUpsertAsync(
+            [
+                Sent("tt-supersessor", now.AddDays(-2.5), now.AddDays(-2)),
+                Sent("tt-older", now.AddDays(-5), null),
+            ]);
+
+        var row = await ReadAsync(older);
+        row.EndTimestamp.Should().BeCloseTo(now.AddDays(-2.5), TimeSpan.FromMilliseconds(1));
+        row.SupersededById.Should().Be(supersessor);
+    }
+
+    /// <summary>A backfill of an open span from five days ago; the span after it ended over two days ago.</summary>
+    [Fact]
+    public async Task ClampedWriterUpsert_OfAnOldOpenSpan_EndsItAtASuccessorTheClampHides()
+    {
+        var now = DateTime.UtcNow;
+        var successor = Guid.NewGuid();
+        await SeedAsync(Legacy(successor, "tt-successor", now.AddDays(-3), now.AddDays(-2.5), null));
+
+        await using (var scope = _provider.CreateAsyncScope())
+            await ClampedRepository(scope).BulkUpsertAsync([Sent("tt-backfill", now.AddDays(-5), null)]);
+
+        await using var read = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);
+        var row = await read.StateSpans.AsNoTracking().SingleAsync(s => s.LegacyId == "tt-backfill");
+        row.EndTimestamp.Should().BeCloseTo(now.AddDays(-3), TimeSpan.FromMilliseconds(1));
+        row.SupersededById.Should().Be(successor);
+    }
+
+    private static StateSpanEntity Legacy(Guid id, string legacyId, DateTime start, DateTime? end, Guid? supersededBy) => new()
+    {
+        Id = id, LegacyId = legacyId, Source = "connector", Category = "TemporaryTarget", State = "Custom",
+        StartTimestamp = start, EndTimestamp = end, SupersededById = supersededBy,
+    };
+
+    private static StateSpan Sent(string originalId, DateTime start, DateTime? end) => new()
+    {
+        OriginalId = originalId, Source = "connector", Category = StateSpanCategory.TemporaryTarget, State = "Custom",
+        StartTimestamp = start, EndTimestamp = end,
+    };
 
     private static string Metadata(string collection, string nameKey, string name) =>
         JsonSerializer.Serialize(new Dictionary<string, object>

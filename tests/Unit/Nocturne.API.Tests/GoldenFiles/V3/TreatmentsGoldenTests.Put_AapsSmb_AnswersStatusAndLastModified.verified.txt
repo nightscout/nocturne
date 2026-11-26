@@ -1,0 +1,8 @@
+﻿{
+  StatusCode: 200,
+  ContentType: application/json; charset=utf-8,
+  Body: {
+    status: 200,
+    lastModified: {Scrubbed}
+  }
+}

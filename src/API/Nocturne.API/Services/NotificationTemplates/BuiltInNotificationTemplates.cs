@@ -1,7 +1,17 @@
+using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Notifications.External;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.API.Services.Platform.Releases;
+using Nocturne.API.Services.Timezones;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.API.Services.Uploads;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.NotificationTemplates;
@@ -20,6 +30,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = "tracker.unconfigured",
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "settings-2",
             Source = "tracker-service"
@@ -29,6 +40,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = "tracker.alert",
             Category = NotificationCategory.Alert,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Warn,
             Icon = "timer",
             Source = "tracker-service"
@@ -38,6 +50,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = "system.statistics_summary",
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "info",
             Source = "system"
@@ -47,6 +60,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = "system.help_response",
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "help-circle",
             Source = "system"
@@ -54,8 +68,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "passkey.anonymous_login_request",
+            Type = NotificationSubjectNaming.AnonymousLoginRequest,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = true,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "user",
             Source = "auth"
@@ -65,6 +80,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = "glucose.predicted_low",
             Category = NotificationCategory.Alert,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Urgent,
             Icon = "trending-down",
             Source = "glucose-engine"
@@ -72,8 +88,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "meal_matching.suggested_match",
+            Type = IMealMatchingService.SuggestedMatchNotificationType,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "utensils",
             Source = "meal-matching"
@@ -81,8 +98,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "glucose.compression_low_review",
+            Type = CompressionLowDetectionService.NotificationType,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "info",
             Source = "compression-low-engine"
@@ -90,8 +108,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "membership.requested",
+            Type = NotificationSubjectNaming.MembershipRequested,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = true,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "user-plus",
             Source = "membership"
@@ -99,8 +118,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "membership.approved",
+            Type = MembershipRequestService.ApprovedNotificationType,
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "check-circle",
             Source = "membership"
@@ -108,8 +128,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "sharing.link_rotated",
+            Type = ShareLinkRotatedNotifier.NotificationType,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "link",
             Source = "sharing"
@@ -119,24 +140,66 @@ public static class BuiltInNotificationTemplates
         {
             Type = TeamRenameAnnouncer.NotificationType,
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "users",
             Source = TeamRenameAnnouncer.Source
         });
 
+        foreach (var (type, source) in new[]
+                 {
+                     (TeamStaffAnnouncer.WaitingType, TeamStaffAnnouncer.WaitingSource),
+                     (TeamStaffAnnouncer.JoinedType, TeamStaffAnnouncer.JoinedSource),
+                 })
+        {
+            registry.Register(new NotificationTemplate
+            {
+                Type = type,
+                Category = NotificationCategory.Informational,
+                NamesSubject = false,
+                DefaultUrgency = NotificationUrgency.Info,
+                Icon = "users",
+                Source = source
+            });
+        }
+
         registry.Register(new NotificationTemplate
         {
-            Type = "membership.denied",
+            Type = RawMmolProfileNotifier.NotificationType,
+            Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "alert-triangle",
+            Source = "profile"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = MembershipRequestService.DeniedNotificationType,
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "x-circle",
             Source = "membership"
         });
 
+        foreach (var type in new[] { ExternalNotificationSender.OperatorType, ExternalNotificationSender.AppType })
+        {
+            registry.Register(new NotificationTemplate
+            {
+                Type = type,
+                Category = NotificationCategory.Informational,
+                NamesSubject = false,
+                DefaultUrgency = NotificationUrgency.Info,
+                Icon = ExternalNotificationService.Icon,
+            });
+        }
+
         registry.Register(new NotificationTemplate
         {
             Type = ReleaseNoticeJob.UpdateAvailableType,
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "refresh-cw",
             Source = ReleaseNoticeJob.Source,
@@ -147,6 +210,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = ReleaseNoticeJob.ReleaseInstalledType,
             Category = NotificationCategory.Informational,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "gift",
             Source = ReleaseNoticeJob.Source,
@@ -157,6 +221,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = InstanceKeyChangeService.TenantNoticeType,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Warn,
             Icon = "key-round",
             Source = InstanceKeyChangeService.Source
@@ -166,6 +231,7 @@ public static class BuiltInNotificationTemplates
         {
             Type = InstanceKeyChangeService.PlatformNoticeType,
             Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Warn,
             Icon = "key-round",
             Source = InstanceKeyChangeService.Source,
@@ -179,6 +245,70 @@ public static class BuiltInNotificationTemplates
                     Variant = "default"
                 }
             ]
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = ApiKeyHandler.RotationNudgeType,
+            Category = NotificationCategory.ActionRequired,
+            NamesSubject = false,
+            Icon = "key"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = NotificationSubjectNaming.AlertChannelNotSending,
+            Category = NotificationCategory.Alert,
+            NamesSubject = true
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = ClockAnomalyNotice.NotificationType,
+            Category = NotificationCategory.Alert,
+            NamesSubject = false
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InAppProvider.NotificationType,
+            Category = NotificationCategory.Alert,
+            NamesSubject = false
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InAppProvider.UnevaluableNotificationType,
+            Category = NotificationCategory.Alert,
+            NamesSubject = false
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InAppProvider.HeldNotificationType,
+            Category = NotificationCategory.Alert,
+            NamesSubject = false
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = DeviceClockService.SegmentNotificationType,
+            Category = NotificationCategory.Informational,
+            NamesSubject = false
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = DeviceClockService.ZoneChangeNotificationType,
+            Category = NotificationCategory.Informational,
+            NamesSubject = false
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = RejectedUploadRecorder.NotificationType,
+            Category = NotificationCategory.Informational,
+            NamesSubject = false
         });
 
         return registry;

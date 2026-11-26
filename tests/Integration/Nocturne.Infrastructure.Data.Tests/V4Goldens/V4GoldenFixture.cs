@@ -21,48 +21,40 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// the duplicate linker against real Postgres, not mocks. These goldens capture current
 /// behaviour and are held identical across the V4RepositoryBase refactor.
 /// </summary>
-public class V4GoldenFixture : IAsyncLifetime
+public class V4GoldenFixture() : MigratedDatabase("v4_goldens")
 {
     private ServiceProvider? _provider;
-    private readonly TestTenantAccessor _accessor = new();
+    private readonly SettableTenantAccessor _accessor = new();
 
-    public string MigratorConnectionString { get; private set; } = string.Empty;
-
-    /// <summary>The runtime role's connection string, which the repositories under test use.</summary>
-    public string AppConnectionString { get; private set; } = string.Empty;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("v4_goldens");
-        MigratorConnectionString = database.MigratorConnectionString;
-        AppConnectionString = database.AppConnectionString;
+        await base.InitializeAsync();
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        // MutationAuditInterceptor resolves IHttpContextAccessor (registered by the API in prod).
-        services.AddHttpContextAccessor();
-        services.AddSingleton<ITenantAccessor>(_accessor);
-        // Scoped, mirroring the API's request-scoped registration, so a golden can attribute its
-        // own scope to a user without leaking that attribution into the next test.
-        services.AddScoped<TestAuditContext>();
-        services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
-        services.AddPostgreSqlInfrastructure(
-            AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
-        services.AddSingleton<BroadcastCapture>();
-        services.AddScoped<IRecordChangeSubscriber, CapturingRecordChangeSubscriber>();
-        services.AddScoped<IRecordChangeSubscriber, CacheInvalidationSubscriber>();
-        // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
-        // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
-        services.AddSingleton<EntryCapture>();
-        services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
-        services.AddSingleton<CacheInvalidationCapture>();
-        services.AddSingleton<Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation>(
-            sp => sp.GetRequiredService<CacheInvalidationCapture>());
-        services.AddSingleton<GlucoseReadingCapture>();
-        services.AddScoped<IGlucoseReadingBroadcaster>(sp =>
-            new CapturingGlucoseReadingBroadcaster(sp.GetRequiredService<GlucoseReadingCapture>()));
-        RegisterV4Repositories(services);
-        _provider = services.BuildServiceProvider();
+        _provider = TestContexts.BuildProvider(
+            AppConnectionString,
+            postgres: c => c.HistoryCommitMarginMilliseconds = 0,
+            configure: services =>
+            {
+                services.AddSingleton<ITenantAccessor>(_accessor);
+                // Scoped, mirroring the API's request-scoped registration, so a golden can attribute its
+                // own scope to a user without leaking that attribution into the next test.
+                services.AddScoped<TestAuditContext>();
+                services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
+                services.AddSingleton<BroadcastCapture>();
+                services.AddScoped<IRecordChangeSubscriber, CapturingRecordChangeSubscriber>();
+                services.AddScoped<IRecordChangeSubscriber, CacheInvalidationSubscriber>();
+                // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
+                // chokepoint's entries projection fires into EntryCapture (additive; non-glucose goldens ignore it).
+                services.AddSingleton<EntryCapture>();
+                services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
+                services.AddSingleton<CacheInvalidationCapture>();
+                services.AddSingleton<Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation>(
+                    sp => sp.GetRequiredService<CacheInvalidationCapture>());
+                services.AddSingleton<GlucoseReadingCapture>();
+                services.AddScoped<IGlucoseReadingBroadcaster>(sp =>
+                    new CapturingGlucoseReadingBroadcaster(sp.GetRequiredService<GlucoseReadingCapture>()));
+                RegisterV4Repositories(services);
+            });
     }
 
     /// <summary>The shared broadcast collector recording every chokepoint fan-out across all V4 repos.</summary>
@@ -109,12 +101,14 @@ public class V4GoldenFixture : IAsyncLifetime
         services.AddScoped<ITargetRangeScheduleRepository, TargetRangeScheduleRepository>();
     }
 
-    public async Task DisposeAsync()
+    public override async Task DisposeAsync()
     {
         if (_provider is not null)
         {
             await _provider.DisposeAsync();
         }
+
+        await base.DisposeAsync();
     }
 
     /// <summary>

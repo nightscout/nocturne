@@ -82,6 +82,19 @@ public class ModelConventionTests
                 && !i.IsUnique
                 && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_by_user");
 
+    /// <summary>
+    /// The isValid:false upload paths look up every soft-deleted row under a legacy id, whoever
+    /// deleted it, so the index they probe has to hold system-swept rows as well as user tombstones.
+    /// </summary>
+    [Fact]
+    public void EveryDeletedLegacyIdLookupTable_HasTheDeletedRowLegacyIdIndex() =>
+        AssertFamily(
+            NocturneDbContext.DeletedLegacyIdLookupEntities,
+            "_tenant_legacy_id_deleted",
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)])
+                && !i.IsUnique
+                && i.GetFilter() == $"{i.Properties[1].GetColumnName()} IS NOT NULL AND deleted_at IS NOT NULL");
+
     [Fact]
     public void EverySyncDedupedTable_HasTheUserTombstoneSyncKeyIndex() =>
         AssertFamily(
@@ -145,6 +158,43 @@ public class ModelConventionTests
                 && i.IsDescending is not null
                 && i.IsDescending.SequenceEqual([false, true, true])
                 && i.GetFilter() == "deleted_at IS NULL AND NOT is_duplicate");
+
+    /// <summary>
+    /// A filter on <c>deleted_at</c> would leave the deleted rows these reads take out of the index.
+    /// </summary>
+    [Fact]
+    public void EveryDeletedInclusiveWindowTable_HasAnUnfilteredTenantTimestampIndex()
+    {
+        NocturneDbContext.V4DeletedInclusiveWindowEntities.Should().NotBeEmpty();
+        var model = Model();
+
+        NocturneDbContext.V4DeletedInclusiveWindowEntities.Select(model.FindEntityType)
+            .Where(e => e is null || !e.GetIndexes().Any(i => IsDeletedInclusiveWindowIndex(e, i)))
+            .Select(e => e?.ShortName() ?? "<unmapped>")
+            .Should().BeEmpty("a window read over deleted rows needs a tenant-led timestamp index that holds them");
+    }
+
+    /// <summary>
+    /// A table with a list index takes that index's columns, so the partial list index stays the
+    /// smaller for a live read; see <see cref="ModelConventions"/>.
+    /// </summary>
+    private static bool IsDeletedInclusiveWindowIndex(IEntityType entity, IIndex index)
+    {
+        var prefix = $"ix_{entity.GetTableName()}_tenant_{entity.FindProperty(nameof(IObservationTimestamped.Timestamp))!.GetColumnName()}";
+        var (name, columns, descending) = NocturneDbContext.V4SortedListEntities.Contains(entity.ClrType)
+            ? ($"{prefix}_id_any",
+                new[] { nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp), nameof(IIdentified.Id) },
+                new[] { false, true, true })
+            : (prefix,
+                new[] { nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp) },
+                new[] { false, true });
+        return index.GetDatabaseName() == name
+            && Columns(index).SequenceEqual(columns)
+            && !index.IsUnique
+            && index.IsDescending is not null
+            && index.IsDescending.SequenceEqual(descending)
+            && index.GetFilter() is null;
+    }
 
     [Fact]
     public void EveryCorrelatedTable_HasACorrelationIdIndex() =>

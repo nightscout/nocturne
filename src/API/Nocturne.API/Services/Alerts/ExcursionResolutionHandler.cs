@@ -13,7 +13,8 @@ namespace Nocturne.API.Services.Alerts;
 /// periodic run): stamps <c>resolution_reason</c> on instances, expires their
 /// pending deliveries, deletes members' mutes of the excursion, broadcasts
 /// <c>alert_resolved</c>, archives the in-app notifications and clears the alarm, then records
-/// that the close owes no more work (<see cref="IAlertRepository.SettleTransitionAsync"/>).
+/// that the close it was handed owes no more work, while its stamp still holds
+/// (<see cref="IAlertRepository.SettleTransitionAsync"/>).
 /// </summary>
 /// <remarks>
 /// The tracker is the single owner of <see cref="Nocturne.Core.Models.AlertTrackerState"/>
@@ -26,6 +27,25 @@ namespace Nocturne.API.Services.Alerts;
 public interface IExcursionResolutionHandler
 {
     Task HandleClosedAsync(ExcursionTransition transition, Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Runs the close of <paramref name="excursionId"/> once more when the excursion has ended or the
+    /// notice was resolved, for what a send raised after the close ran. Every send ends with it: an opening's
+    /// (<see cref="IExcursionOpenedHandler"/>), a snooze's re-notification
+    /// (<see cref="IAlertSnoozeService.ResumeAsync"/>) and a notice's dispatch
+    /// (<see cref="RuleNoticeDispatch"/>). No lock orders a send against a close: the instance lock
+    /// orders only the opening's instance, so a close that lands while a send runs finds only what
+    /// existed before it. The close is owed again first
+    /// (<see cref="IAlertRepository.OweCloseIfEndedAsync"/>), so a run that dies is finished by the
+    /// sweep. False, with nothing run, while the excursion is open or the notice stands.
+    /// </summary>
+    /// <remarks>
+    /// A notice counts as resolved only once its resolution has resolved its instance, the step that
+    /// writes the reason, so this never resolves it first and without one. A resolution that dies
+    /// between ending the notice and that step leaves the notice standing, and its check resolves it
+    /// again with its reason.
+    /// </remarks>
+    Task<bool> CloseAgainIfEndedAsync(Guid excursionId, Guid tenantId, CancellationToken ct);
 }
 
 internal sealed class ExcursionResolutionHandler(
@@ -37,6 +57,19 @@ internal sealed class ExcursionResolutionHandler(
     ILogger<ExcursionResolutionHandler> logger)
     : IExcursionResolutionHandler
 {
+    public async Task<bool> CloseAgainIfEndedAsync(Guid excursionId, Guid tenantId, CancellationToken ct)
+    {
+        var owedAt = timeProvider.GetUtcNow().UtcDateTime;
+        if (!await repository.OweCloseIfEndedAsync(excursionId, owedAt, ct))
+            return false;
+
+        logger.LogInformation(
+            "Excursion {ExcursionId} has ended; its close runs again for what was sent while it closed", excursionId);
+        await HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, OwedAt: owedAt), tenantId, ct);
+        return true;
+    }
+
     public async Task HandleClosedAsync(ExcursionTransition transition, Guid tenantId, CancellationToken ct)
     {
         if (transition.Type != ExcursionTransitionType.ExcursionClosed) return;
@@ -88,7 +121,7 @@ internal sealed class ExcursionResolutionHandler(
                     await broadcastService.BroadcastAlertResolvedAsync(resolved);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
         }
@@ -100,7 +133,8 @@ internal sealed class ExcursionResolutionHandler(
             : [InAppProvider.NotificationTypeFor(rule)];
         await ArchiveInAppNotificationsAsync(excursionId, notificationTypes, ct);
         await alarmRelay.ClearIfQuietAsync([excursionId], ct);
-        await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, ct);
+        if (transition.OwedAt is { } owedAt)
+            await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, owedAt, ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",
@@ -120,7 +154,7 @@ internal sealed class ExcursionResolutionHandler(
         {
             destinations = await repository.GetInAppDestinationsForExcursionAsync(excursionId, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             // Bumped to Error: a query-shape failure here would leak toast notifications across
             // every close — needs to be visible. Per-recipient archive failures stay Warning.
@@ -144,7 +178,7 @@ internal sealed class ExcursionResolutionHandler(
                     NotificationArchiveReason.ConditionMet,
                     ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex,
                     "Failed to archive InApp notification for user {UserId}, excursion {ExcursionId}",

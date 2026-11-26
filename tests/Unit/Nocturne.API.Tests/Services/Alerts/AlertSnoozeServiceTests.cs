@@ -11,7 +11,6 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -61,7 +60,13 @@ public class AlertSnoozeServiceTests
         _repository
             .Setup(r => r.GetTenantAlertContextAsync(Tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAlertContext(Tenant, "Synthetic", "synthetic", "Synthetic", true, null));
+        _repository
+            .Setup(r => r.EndLapsedSnoozeAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, DateTime _, DateTime? renotifyAt, CancellationToken _) =>
+                renotifyAt is null ? LapsedSnoozeEnd.Ended : LapsedSnoozeEnd.EndedHoldingOpening);
     }
+
+    private static readonly DateTime Lapsed = Now.AddMinutes(-1);
 
     private void LatestReading(double minutesAgo, double mgdl, double? trendRate = null) =>
         _canonical
@@ -70,7 +75,7 @@ public class AlertSnoozeServiceTests
 
     private AlertSnoozeService CreateService() => new(
         _factory.AsNocturneFactory(),
-        Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+        SettableTenantAccessor.Resolved(Tenant),
         _repository.Object,
         _rules.Object,
         _delivery.Object,
@@ -78,6 +83,7 @@ public class AlertSnoozeServiceTests
         _canonical.Object,
         _broadcast.Object,
         _alarmRelay.Object,
+        Mock.Of<IExcursionResolutionHandler>(),
         _time,
         NullLogger<AlertSnoozeService>.Instance);
 
@@ -88,6 +94,7 @@ public class AlertSnoozeServiceTests
         AlertRuleSeverity severity = AlertRuleSeverity.Warning,
         bool ruleEnabled = true,
         DateTime? snoozedUntil = null,
+        bool lapsed = false,
         int snoozeCount = 0,
         bool acknowledged = false,
         bool inHysteresis = false,
@@ -122,7 +129,7 @@ public class AlertSnoozeServiceTests
             Status = acknowledged ? "acknowledged" : ended ? "resolved" : "triggered",
             TriggeredAt = excursion.StartedAt,
             ResolvedAt = ended ? Now.AddMinutes(-1) : null,
-            SnoozedUntil = snoozedUntil,
+            SnoozedUntil = snoozedUntil ?? (lapsed ? Lapsed : null),
             SnoozeCount = snoozeCount,
         };
         db.AlertRules.Add(rule);
@@ -286,10 +293,14 @@ public class AlertSnoozeServiceTests
 
     // ---- ResumeAsync ----
 
+    private void ShouldEndTheSnoozeWithoutASend(Seeded seeded) =>
+        _repository.Verify(r => r.EndLapsedSnoozeAsync(
+            seeded.InstanceId, Lapsed, null, It.IsAny<CancellationToken>()), Times.Once);
+
     [Fact]
     public async Task Resume_redispatches_a_lapsed_snooze_whose_alert_still_stands()
     {
-        var seeded = await SeedAsync();
+        var seeded = await SeedAsync(lapsed: true);
 
         var resumed = await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None);
 
@@ -306,9 +317,71 @@ public class AlertSnoozeServiceTests
     }
 
     [Fact]
-    public async Task Resume_carries_the_reading_an_alert_selects_not_one_dated_ahead()
+    public async Task Resume_ends_the_lapsed_snooze_in_the_write_that_starts_the_re_notification_before_it_sends()
+    {
+        var seeded = await SeedAsync(lapsed: true);
+        var order = new List<string>();
+        _repository
+            .Setup(r => r.EndLapsedSnoozeAsync(seeded.InstanceId, Lapsed, Now, It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("ended"))
+            .ReturnsAsync(LapsedSnoozeEnd.EndedHoldingOpening);
+        _delivery
+            .Setup(d => d.RenotifyAsync(seeded.InstanceId, It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(), It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("sent"))
+            .Returns(Task.CompletedTask);
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
+
+        order.Should().Equal("ended", "sent");
+        _repository.Verify(r => r.SettleTransitionAsync(
+            seeded.ExcursionId, ExcursionTransitionType.ExcursionOpened, Now, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Resume_leaves_an_opening_another_run_holds_owed_unsettled()
+    {
+        var seeded = await SeedAsync(lapsed: true);
+        _repository
+            .Setup(r => r.EndLapsedSnoozeAsync(seeded.InstanceId, Lapsed, Now, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LapsedSnoozeEnd.Ended);
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
+
+        _repository.Verify(r => r.SettleTransitionAsync(
+            It.IsAny<Guid>(), It.IsAny<ExcursionTransitionType>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Resume_sends_nothing_when_another_run_ended_the_snooze_first()
+    {
+        var seeded = await SeedAsync(lapsed: true);
+        _repository
+            .Setup(r => r.EndLapsedSnoozeAsync(seeded.InstanceId, Lapsed, Now, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LapsedSnoozeEnd.Lost);
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
+
+        _delivery.VerifyNoOtherCalls();
+        _repository.Verify(r => r.SettleTransitionAsync(
+            It.IsAny<Guid>(), It.IsAny<ExcursionTransitionType>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Resume_does_nothing_for_an_instance_with_no_snooze()
     {
         var seeded = await SeedAsync();
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
+
+        _delivery.VerifyNoOtherCalls();
+        _repository.Verify(r => r.EndLapsedSnoozeAsync(
+            It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Resume_carries_the_reading_an_alert_selects_not_one_dated_ahead()
+    {
+        var seeded = await SeedAsync(lapsed: true);
         _canonical
             .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SensorGlucose { Timestamp = Now.AddHours(1), Mgdl = 300 });
@@ -328,7 +401,7 @@ public class AlertSnoozeServiceTests
     [Fact]
     public async Task Resume_carries_the_rate_derived_from_the_previous_reading()
     {
-        var seeded = await SeedAsync();
+        var seeded = await SeedAsync(lapsed: true);
         LatestReading(minutesAgo: 2, mgdl: 61);
         _canonical
             .Setup(c => c.GetStreamPredecessorAsync(
@@ -347,7 +420,7 @@ public class AlertSnoozeServiceTests
     [Fact]
     public async Task Resume_carries_no_reading_when_the_newest_one_is_stale()
     {
-        var seeded = await SeedAsync();
+        var seeded = await SeedAsync(lapsed: true);
         LatestReading(minutesAgo: 30, mgdl: 61);
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
@@ -366,48 +439,79 @@ public class AlertSnoozeServiceTests
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
         _delivery.VerifyNoOtherCalls();
+        _repository.Verify(r => r.EndLapsedSnoozeAsync(
+            It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Resume_does_nothing_once_acknowledged()
     {
-        var seeded = await SeedAsync(acknowledged: true);
+        var seeded = await SeedAsync(lapsed: true, acknowledged: true);
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
         _delivery.VerifyNoOtherCalls();
+        ShouldEndTheSnoozeWithoutASend(seeded);
     }
 
     [Fact]
     public async Task Resume_does_nothing_when_the_condition_has_cleared_into_hysteresis()
     {
-        var seeded = await SeedAsync(inHysteresis: true);
+        var seeded = await SeedAsync(lapsed: true, inHysteresis: true);
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
         _delivery.VerifyNoOtherCalls();
+        ShouldEndTheSnoozeWithoutASend(seeded);
     }
 
     [Fact]
     public async Task Resume_does_nothing_for_a_closed_excursion()
     {
-        var seeded = await SeedAsync(ended: true);
+        var seeded = await SeedAsync(lapsed: true, ended: true);
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
         _delivery.VerifyNoOtherCalls();
+        ShouldEndTheSnoozeWithoutASend(seeded);
     }
 
     [Fact]
     public async Task Resume_does_nothing_for_a_disabled_rule()
     {
-        var seeded = await SeedAsync(ruleEnabled: false);
+        var seeded = await SeedAsync(lapsed: true, ruleEnabled: false);
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
         _delivery.VerifyNoOtherCalls();
+        ShouldEndTheSnoozeWithoutASend(seeded);
+    }
+
+    [Theory]
+    [InlineData(nameof(AlertRuleEntity.ConditionType))]
+    [InlineData(nameof(AlertRuleEntity.Severity))]
+    [InlineData(nameof(AlertRuleEntity.ScopeClass))]
+    public async Task Resume_does_nothing_for_a_rule_holding_a_value_no_member_has(string column)
+    {
+        var seeded = await SeedAsync(lapsed: true, severity: AlertRuleSeverity.Critical);
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var rule = await db.AlertRules.SingleAsync(r => r.Id == seeded.RuleId);
+            switch (column)
+            {
+                case nameof(AlertRuleEntity.ConditionType): rule.ConditionType = (AlertConditionType)(-1); break;
+                case nameof(AlertRuleEntity.Severity): rule.Severity = (AlertRuleSeverity)(-1); break;
+                default: rule.ScopeClass = (RuleScopeClass)(-1); break;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None))
+            .Should().BeFalse("the rule is not evaluated, so nothing says its alert still stands");
+        _delivery.VerifyNoOtherCalls();
+        ShouldEndTheSnoozeWithoutASend(seeded);
     }
 
     [Fact]
     public async Task Resume_respects_DND_for_a_non_critical_rule()
     {
-        var seeded = await SeedAsync();
+        var seeded = await SeedAsync(lapsed: true);
         _enricher
             .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) =>
@@ -415,12 +519,13 @@ public class AlertSnoozeServiceTests
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeFalse();
         _delivery.VerifyNoOtherCalls();
+        ShouldEndTheSnoozeWithoutASend(seeded);
     }
 
     [Fact]
     public async Task Resume_pierces_DND_for_a_critical_rule()
     {
-        var seeded = await SeedAsync(severity: AlertRuleSeverity.Critical);
+        var seeded = await SeedAsync(lapsed: true, severity: AlertRuleSeverity.Critical);
         _enricher
             .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) =>
@@ -432,7 +537,7 @@ public class AlertSnoozeServiceTests
     [Fact]
     public async Task Resume_still_delivers_when_the_DND_lookup_fails()
     {
-        var seeded = await SeedAsync();
+        var seeded = await SeedAsync(lapsed: true);
         _enricher
             .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("synthetic"));

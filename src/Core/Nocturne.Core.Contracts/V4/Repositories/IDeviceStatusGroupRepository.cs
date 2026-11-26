@@ -23,6 +23,14 @@ public interface IDeviceStatusGroupRepository
     Task<IReadOnlyList<DeviceStatusGroup>> GetAsync(
         DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default);
 
+    /// <summary>
+    /// <see cref="GetAsync"/> over the rows stored deleted as well as the live ones, with the same
+    /// anchor rule as <see cref="GetModifiedSinceAsync"/>: a status is deleted, and flagged, only when
+    /// every row of it is.
+    /// </summary>
+    Task<IReadOnlyList<HistoryRecord<DeviceStatusGroup>>> GetIncludingDeletedAsync(
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default);
+
     /// <summary>The number of statuses <see cref="GetAsync"/> pages through.</summary>
     Task<long> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);
 

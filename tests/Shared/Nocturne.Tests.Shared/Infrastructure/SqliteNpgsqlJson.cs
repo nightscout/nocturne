@@ -11,12 +11,14 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 
 /// <summary>
 /// Translates the PostgreSQL JSON functions the served state-span filter uses into SQLite's
-/// <c>json_type</c> and <c>json_extract</c>, for the constant keys and objects the filter passes, so
-/// a SQLite test database runs the same span queries PostgreSQL does.
+/// <c>json_type</c> and <c>json_extract</c>, for the constant keys and objects the filter passes, and
+/// <see cref="Array.IndexOf{T}(T[], T)"/> over a parameter array into the <c>array_position</c> Npgsql
+/// translates it to, which <see cref="SqliteTestDatabase"/> defines, so a SQLite test database runs
+/// the same queries PostgreSQL does.
 /// </summary>
 public static class SqliteNpgsqlJson
 {
-    /// <summary>Pass to <see cref="TestDbContextFactory.CreateSqliteWithTenant(Guid, Action{DbContextOptionsBuilder{NocturneDbContext}}, IInterceptor[])"/>.</summary>
+    /// <summary>Every <see cref="SqliteTestDatabase"/> applies it.</summary>
     public static void Translate(DbContextOptionsBuilder<NocturneDbContext> options) =>
         options.ReplaceService<IMethodCallTranslatorProvider, TranslatingProvider>();
 
@@ -25,9 +27,28 @@ public static class SqliteNpgsqlJson
     {
         public TranslatingProvider(RelationalMethodCallTranslatorProviderDependencies dependencies)
             : base(dependencies) =>
-            AddTranslators([new NpgsqlJsonTranslator(dependencies.SqlExpressionFactory)]);
+            AddTranslators(
+            [
+                new NpgsqlJsonTranslator(dependencies.SqlExpressionFactory),
+                new ArrayIndexOfTranslator(dependencies.SqlExpressionFactory),
+            ]);
     }
 #pragma warning restore EF1001
+
+    private sealed class ArrayIndexOfTranslator(ISqlExpressionFactory sql) : IMethodCallTranslator
+    {
+        public SqlExpression? Translate(
+            SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
+            IDiagnosticsLogger<DbLoggerCategory.Query> logger)
+        {
+            if (method.DeclaringType != typeof(Array) || method.Name != nameof(Array.IndexOf) || arguments.Count != 2)
+                return null;
+
+            var position = sql.Function(SqliteTestDatabase.ArrayPositionFunction, arguments, nullable: true,
+                argumentsPropagateNullability: [true, true], typeof(int));
+            return sql.Coalesce(sql.Subtract(position, sql.Constant(1)), sql.Constant(-1));
+        }
+    }
 
     private sealed class NpgsqlJsonTranslator(ISqlExpressionFactory sql) : IMethodCallTranslator
     {

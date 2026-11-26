@@ -9,7 +9,6 @@ using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Tests.Services.Alerts.Webhooks;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -89,7 +88,7 @@ public class AlertDeliveryWebhookSigningTests
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
-        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant))
+        var channels = (await new AlertRuleRepository(factory.AsNocturneFactory(Tenant), TimeProvider.System)
             .GetChannelsAsync([ruleId], CancellationToken.None))[ruleId];
 
         var provider = new WebhookProvider(
@@ -100,7 +99,7 @@ public class AlertDeliveryWebhookSigningTests
         var service = new AlertDeliveryService(
             factory.AsNocturneFactory(),
             new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),
             services.BuildServiceProvider(),

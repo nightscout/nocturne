@@ -64,7 +64,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 .ParseDeviceStatus(
                     ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                         ?? ConvertV3FilterToV1Find(parameters.Filter))
-                .WithFieldRenamed("identifier", "_id");
+                .WithFieldRenamed("identifier", "_id")
+                .OnlyValid();
 
             var deviceStatusList = (
                 await _deviceStatuses.GetDeviceStatusesAsync(
@@ -117,7 +118,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>Single device status record in V3 format</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(typeof(DeviceStatus), 200)]
+    [ProducesResponseType(typeof(V3Envelope<object>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
@@ -209,16 +210,19 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             // For single record POSTs, check for deduplication (AAPS expects isDeduplication response)
             var recordsList = deviceStatusRecords.ToList();
+            DeviceStatus? existing = null;
             if (recordsList.Count == 1)
             {
                 var single = recordsList[0];
                 if (!string.IsNullOrEmpty(single.Id))
                 {
-                    var existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
+                    existing = await _deviceStatuses.GetDeviceStatusByIdAsync(
                         single.Id,
                         cancellationToken
                     );
-                    if (existing != null)
+                    // A create with isValid: false is not a duplicate of the status its id names: it
+                    // deletes it, when the write names it (InvalidUploads in Services/V4).
+                    if (existing != null && single.IsValid != false)
                     {
                         return V3Deduplicated(existing.Id, existing.SrvModified);
                     }
@@ -227,6 +231,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             var projectedResults = await _deviceStatuses.CreateDeviceStatusesAsync(
                 recordsList, cancellationToken: cancellationToken);
+
+            if (existing != null && projectedResults.Invalidated.Count > 0)
+                return V3Deduplicated(existing.Id, srvModified: null);
 
             if (deviceStatusData.ValueKind == JsonValueKind.Array)
             {
@@ -253,12 +260,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <param name="id">Device status ID to update</param>
     /// <param name="request">Updated device status data</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated device status record</returns>
+    /// <returns><c>{"status": 200, "lastModified": ...}</c> on success</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
-    [ProducesResponseType(typeof(Dictionary<string, object>), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ErrorEnvelope]
@@ -295,6 +302,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             );
         }
 
+        if (deviceStatus.IsValid == false)
+            return IsValidImmutable();
+
         // Ensure ID matches
         if (deviceStatus.Id != null && deviceStatus.Id != id)
         {
@@ -312,13 +322,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             return CreateV3ErrorResponse(404, "Device status not found");
         }
 
-        return Ok(
-            new Dictionary<string, object>
-            {
-                ["status"] = 200,
-                ["result"] = ToDocument(updated),
-            }
-        );
+        return V3Replaced();
     }
 
     /// <summary>

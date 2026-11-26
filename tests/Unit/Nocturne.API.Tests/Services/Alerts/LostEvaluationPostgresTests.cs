@@ -48,20 +48,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     private const string FirstRecord = "no evaluation was recorded for the tenant before";
     private const string Low = """{"direction":"below","value":70}""";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("lost_evaluation");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("lost_evaluation");
 
     /// <summary>
     /// An engine that can fail the next evaluation, or hold every evaluation until released, as a
@@ -214,8 +201,8 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             var opened = new Mock<IExcursionOpenedHandler>();
             opened
                 .Setup(h => h.HandleOpenedAsync(
-                    It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<SensorContext>(), It.IsAny<Guid>(),
-                    It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<SensorContext>(), It.IsAny<Guid>(),
+                    It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .Callback(() => Interlocked.Increment(ref tenant.Openings))
                 .Returns(Task.CompletedTask);
             var enricher = new Mock<ISensorContextEnricher>();
@@ -265,7 +252,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             var context = new TenantContext(_tenant.Id, "slug", "Slug", true, IsDemo: false);
             await using var scope = TenantJobScope.Open(_services, context, AlertFactEvaluationScheduler.AuditEndpoint);
             await scope.ServiceProvider.GetRequiredService<ICanonicalAlertEvaluator>()
-                .EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }), ct);
+                .EvaluateAsync(new MovedFacts(new HashSet<string> { ContextFactWrites.Glucose }), ct: ct);
         }
 
         public Task SweepAsync(DateTime at)
@@ -276,10 +263,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Tenant> SeedAsync(
         bool withRule = true, AlertConditionType condition = AlertConditionType.Threshold, string conditionParams = Low)
@@ -288,14 +272,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'lost-evaluation', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"lost-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"lost-{tenant:N}", "lost-evaluation");
         }
 
         var rule = Guid.CreateVersion7();
@@ -465,7 +442,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         await WaitForPassAsync(tenant, low);
         tenant.Hold = null;
         await abandon.CancelAsync();
-        await write;
+        await write.Awaiting(t => t).Should().ThrowAsync<OperationCanceledException>("the shutdown stops the pass");
         (await tenant.RecordedAsync()).Should().BeNull();
 
         await process.SweepAsync(Stored + PastGrace);
@@ -732,14 +709,44 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         Warnings(tenant).Should().Be(0, "a tenant with no record has lost nothing it can name");
     }
 
-    private static async Task WaitForPassAsync(Tenant tenant, SensorGlucose reading)
+    [NativeTheory]
+    [InlineData("condition_type", "threshold_low", "threshold")]
+    [InlineData("severity", "normal", "critical")]
+    [InlineData("scope_class", "sideways", "undirected")]
+    public async Task A_rule_holding_a_value_no_member_has_never_fires_until_it_holds_a_readable_one(
+        string column, string unreadable, string readable)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (tenant.PassesOf(reading) == 0)
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The write's pass never began.");
-            await Task.Delay(10);
-        }
+        var tenant = await SeedAsync();
+        await SetRuleColumnAsync(tenant, column, unreadable);
+        tenant.Store(mgdl: 55);
+        var process = tenant.Process();
+
+        await process.WriteEvaluationAsync();
+        await process.SweepAsync(Stored + PastGrace);
+
+        tenant.Openings.Should().Be(0);
+        (await tenant.ExcursionsAsync()).Should().Be(0);
+
+        await SetRuleColumnAsync(tenant, column, readable);
+        tenant.Store(mgdl: 54, storedAt: Stored + PastGrace);
+        await process.WriteEvaluationAsync();
+
+        tenant.Openings.Should().Be(1, "the same rule fires once its value is readable");
     }
+
+    private async Task SetRuleColumnAsync(Tenant tenant, string column, string value)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await conn.PinTenantAsync(tenant.Id);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE alert_rules SET {column} = @value WHERE id = '{tenant.RuleId}';
+            """;
+        cmd.Parameters.Add(new NpgsqlParameter("@value", value));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static Task WaitForPassAsync(Tenant tenant, SensorGlucose reading) =>
+        Eventually.UntilAsync("the write's pass to begin", () => tenant.PassesOf(reading) > 0);
 }

@@ -96,3 +96,139 @@ describe("NotificationItem team rename notice", () => {
     expect(page.getByText(/is now named/).elements()).toHaveLength(0);
   });
 });
+
+describe("NotificationItem team staff notice", () => {
+  const TEAM = "0199a1b2-0000-7000-8000-0000000000bb";
+
+  function staffNotice(type: string, title: string, metadata: Record<string, unknown>): InAppNotificationDto {
+    return {
+      id: "n3",
+      type,
+      urgency: NotificationUrgency.Info,
+      title,
+      createdAt: new Date().toISOString(),
+      metadata,
+    } as InAppNotificationDto;
+  }
+
+  const waiting = (metadata: Record<string, unknown>) =>
+    staffNotice("team.staff_waiting", "team_staff_waiting", metadata);
+
+  it("says that one staff member waits", async () => {
+    render(NotificationItem, { notification: waiting({ team: "Ward 4", teamId: TEAM, count: 1 }) });
+
+    await expect.element(page.getByText("Team staff are waiting for your approval")).toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "1 staff member of the team Ward 4 is waiting for your approval. They cannot see this site's data until an owner approves them.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "Open the team" }))
+      .toHaveAttribute("href", expect.stringMatching(new RegExp(`/settings/members\\?team=${TEAM}$`)));
+  });
+
+  it("says how many staff members wait", async () => {
+    render(NotificationItem, { notification: waiting({ team: "Ward 4", teamId: TEAM, count: 11 }) });
+
+    await expect
+      .element(
+        page.getByText(
+          "11 staff members of the team Ward 4 are waiting for your approval. They cannot see this site's data until an owner approves them.",
+        ),
+      )
+      .toBeVisible();
+  });
+
+  it("says that the team has new staff who can see the site", async () => {
+    render(NotificationItem, {
+      notification: staffNotice("team.staff_joined", "team_staff_joined", { team: "Ward 4", teamId: TEAM }),
+    });
+
+    await expect.element(page.getByText("A team has new staff")).toBeVisible();
+    await expect
+      .element(page.getByText("The team Ward 4 has new staff who can now see this site's data."))
+      .toBeVisible();
+    await expect.element(page.getByRole("link", { name: "Open the team" })).toBeVisible();
+  });
+
+  it("shows the title alone, never the raw key, when the metadata names no team", async () => {
+    render(NotificationItem, { notification: waiting({ count: 3 }) });
+
+    await expect.element(page.getByText("Team staff are waiting for your approval")).toBeVisible();
+    expect(page.getByText("team_staff_waiting").elements()).toHaveLength(0);
+    expect(page.getByText(/waiting for your approval\./).elements()).toHaveLength(0);
+    expect(page.getByRole("link", { name: "Open the team" }).elements()).toHaveLength(0);
+  });
+});
+
+describe("NotificationItem external notice", () => {
+  function external(
+    type: "external.operator" | "external.app",
+    metadata: Record<string, unknown>,
+  ): InAppNotificationDto {
+    return {
+      id: "n4",
+      type,
+      urgency: NotificationUrgency.Info,
+      title: "update_available",
+      subtitle: "Your plan renews on 1 December.\n<b>Not bold</b>",
+      createdAt: new Date().toISOString(),
+      metadata,
+    } as InAppNotificationDto;
+  }
+
+  it("shows the operator's text as written, under the operator's name", async () => {
+    render(NotificationItem, {
+      notification: external("external.operator", { senderKind: "operator", senderName: "Nocturne.run" }),
+    });
+
+    await expect.element(page.getByText("update_available")).toBeVisible();
+    await expect.element(page.getByText("From Nocturne.run", { exact: true })).toBeVisible();
+    await expect.element(page.getByText(/<b>Not bold<\/b>/)).toBeVisible();
+    expect(page.getByText(/connected app/).elements()).toHaveLength(0);
+  });
+
+  it("marks an app's notice as from a connected app", async () => {
+    render(NotificationItem, {
+      notification: external("external.app", { senderKind: "app", senderName: "Sugarmate" }),
+    });
+
+    await expect.element(page.getByText("From Sugarmate · connected app")).toBeVisible();
+  });
+
+  it("opens the link in a new tab and archives the notice", async () => {
+    const actions: string[] = [];
+    render(NotificationItem, {
+      notification: external("external.app", {
+        senderName: "Sugarmate",
+        linkUrl: "https://app.sugarmate.io/plan",
+        linkLabel: "See your plan",
+      }),
+      onAction: (id: string) => actions.push(id),
+    });
+
+    const link = page.getByRole("link", { name: "See your plan" });
+    await expect.element(link).toHaveAttribute("href", "https://app.sugarmate.io/plan");
+    await expect.element(link).toHaveAttribute("target", "_blank");
+    await expect.element(link).toHaveAttribute("rel", "noopener noreferrer");
+
+    await page.getByRole("button", { name: "Dismiss" }).click();
+    expect(actions).toEqual(["dismiss"]);
+  });
+
+  it("offers no link that is not https", async () => {
+    render(NotificationItem, {
+      notification: external("external.operator", {
+        senderName: "Nocturne.run",
+        linkUrl: "javascript:alert(1)",
+        linkLabel: "Open",
+      }),
+    });
+
+    await expect.element(page.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    expect(page.getByRole("link", { name: "Open" }).elements()).toHaveLength(0);
+  });
+});

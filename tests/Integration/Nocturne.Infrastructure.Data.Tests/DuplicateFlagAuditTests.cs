@@ -23,21 +23,21 @@ namespace Nocturne.Infrastructure.Data.Tests;
 public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
     : IClassFixture<DuplicateFlagAuditTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("duplicate_flag_audit")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
         public ServiceProvider Provider { get; private set; } = null!;
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("duplicate_flag_audit");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
+            await base.InitializeAsync();
             Provider = TenantReaderData.BuildProvider(AppConnectionString);
         }
 
-        public async Task DisposeAsync() => await Provider.DisposeAsync();
+        public override async Task DisposeAsync()
+        {
+            await Provider.DisposeAsync();
+            await base.DisposeAsync();
+        }
     }
 
     private static readonly string[] Tables =
@@ -179,7 +179,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, audit);
 
         await transaction.CommitAsync();
-        var drift = await audit.WaitAsync(TimeSpan.FromSeconds(30));
+        var drift = await audit.WaitAsync(Eventually.DefaultPatience);
 
         drift.Should().BeEquivalentTo(new[] { new DuplicateFlagDrift(RecordType.CarbIntake, 0, 1, 0) });
         (await FlaggedAsync(tenant, "carb_intakes")).Should().Equal(primary.Id);
@@ -269,10 +269,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         scope.ServiceProvider.GetRequiredService<DuplicateReconciler>();
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>Every row, soft-deleted included, whose flag disagrees with the anti-join.</summary>
     private Task<List<string>> MismatchesAsync(Guid tenant) => QueryAsync(tenant, string.Join("\nUNION ALL\n",
@@ -291,7 +288,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await using var conn = new NpgsqlConnection(database.AppConnectionString);
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant, local: true);
         await using var cmd = new NpgsqlCommand(sql, conn);
         await using var reader = await cmd.ExecuteReaderAsync();
         var rows = new List<string>();
@@ -305,17 +302,9 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         await using var conn = new NpgsqlConnection(database.AppConnectionString);
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
-        await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant, local: true);
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = new NpgsqlCommand("SELECT set_config('app.current_tenant_id', @t, true)", conn);
-        cmd.Parameters.AddWithValue("t", tenant.ToString());
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task<Guid> SeedTenantAsync()
@@ -323,13 +312,7 @@ public class DuplicateFlagAuditTests(DuplicateFlagAuditTests.Database database)
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand("""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'duplicate-flag-audit', true, now(), now())
-            """, conn);
-        cmd.Parameters.AddWithValue("id", tenant);
-        cmd.Parameters.AddWithValue("slug", $"dup-audit-{tenant:N}");
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"dup-audit-{tenant:N}", "duplicate-flag-audit");
         return tenant;
     }
 }

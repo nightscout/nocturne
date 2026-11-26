@@ -58,7 +58,6 @@ public class NotTrueRecordingFloorTests
             ConditionType = AlertConditionType.Sustained,
             ConditionParams =
                 """{"minutes":30,"child":{"type":"override_active","override_active":{"is_active":true}}}""",
-            HysteresisMinutes = 0,
         };
         var trackerRepo = new InMemoryTrackerRepository([rule]);
         await trackerRepo.Timers.SetNotTrueAsync(RuleId, "sustained", Noon.AddDays(-1), CancellationToken.None);
@@ -76,7 +75,7 @@ public class NotTrueRecordingFloorTests
             LatestTimestamp = Noon,
             TrendRate = null,
             LastReadingAt = Noon,
-            ActiveOverride = new OverrideSnapshot(Noon.AddMinutes(-40), null, null, null),
+            ActiveOverride = new OverrideSnapshot(Noon.AddMinutes(-40)),
         };
 
         var evaluation = await engine.EvaluateRuleAsync(snapshot, context, AlertEngineOptions.Default, CancellationToken.None);

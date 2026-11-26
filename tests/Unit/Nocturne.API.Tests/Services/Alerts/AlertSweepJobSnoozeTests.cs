@@ -20,21 +20,23 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
 /// Drives <see cref="AlertSweepJob"/>'s snooze pass end to end over mocked
-/// persistence and glucose, with the real engine evaluating snooze conditions. Every clear must
-/// hand the instance to <see cref="IAlertSnoozeService.ResumeAsync"/> and no extension may, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check
-/// that too.
+/// persistence and glucose, with the real engine evaluating snooze conditions. A snooze that is not
+/// extended is handed to <see cref="IAlertSnoozeService.ResumeAsync"/>, which ends it, and no
+/// extension may be, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check that too.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertSweepJobSnoozeTests
 {
     private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
     private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly DateTime Lapsed = Now.AddMinutes(-1);
 
     private const string LowRule = """{"direction":"below","value":70}""";
     private const string HighRule = """{"direction":"above","value":180}""";
@@ -42,7 +44,8 @@ public class AlertSweepJobSnoozeTests
     private readonly Mock<IAlertRepository> _repository = AlertSweepRuns.Repository(Tenant, () => Now.AddMinutes(-1));
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
     private readonly Mock<IAlertOrchestrator> _orchestrator = new();
-    private readonly List<UpdateAlertInstanceRequest> _updates = [];
+    private readonly List<Extension> _updates = [];
+    private Func<Guid, bool> _extendLostFor = _ => false;
     private readonly List<SensorContext> _enricherInputs = [];
     private readonly List<(Guid InstanceId, Guid TenantId, string? AuditEndpoint)> _resumed = [];
     private Func<Guid, bool> _resumeThrowsFor = _ => false;
@@ -51,9 +54,14 @@ public class AlertSweepJobSnoozeTests
     public AlertSweepJobSnoozeTests()
     {
         _repository
-            .Setup(r => r.UpdateInstanceAsync(It.IsAny<UpdateAlertInstanceRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<UpdateAlertInstanceRequest, CancellationToken>((u, _) => _updates.Add(u))
-            .Returns(Task.CompletedTask);
+            .Setup(r => r.ExtendLapsedSnoozeAsync(
+                It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, DateTime lapsed, DateTime until, int count, CancellationToken _) =>
+            {
+                if (_extendLostFor(id)) return false;
+                _updates.Add(new Extension(id, lapsed, until, count));
+                return true;
+            });
         _canonical
             .Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _readings.OrderByDescending(r => r.Timestamp).ToList());
@@ -76,7 +84,7 @@ public class AlertSweepJobSnoozeTests
         int snoozeCount = 1,
         AlertConditionType type = AlertConditionType.Threshold,
         string conditionParams = LowRule)
-        => new(Guid.NewGuid(), Tenant, Guid.NewGuid(), "triggered", snoozeCount,
+        => new(Guid.NewGuid(), Tenant, Guid.NewGuid(), "triggered", Lapsed, snoozeCount,
             Guid.NewGuid(), type, conditionParams, clientConfiguration);
 
     private static SensorGlucose Reading(double minutesAgo, double mgdl, double? trendRate = null) => new()
@@ -130,7 +138,7 @@ public class AlertSweepJobSnoozeTests
             })));
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<ExcursionTracker>();
-        services.AddScoped<ITenantAccessor, TenantAccessorStub>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped<IAlertSnoozeService>(sp =>
         {
             var snooze = new Mock<IAlertSnoozeService>();
@@ -157,12 +165,15 @@ public class AlertSweepJobSnoozeTests
         await new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(provider, Tenant, clock.GetUtcNow());
     }
 
-    private UpdateAlertInstanceRequest UpdateFor(SnoozedInstanceSnapshot instance)
+    private sealed record Extension(Guid Id, DateTime LapsedUntil, DateTime SnoozedUntil, int SnoozeCount);
+
+    private Extension UpdateFor(SnoozedInstanceSnapshot instance)
         => _updates.Should().ContainSingle(u => u.Id == instance.InstanceId).Subject;
 
     private void ShouldBeExtended(SnoozedInstanceSnapshot instance, int minutes = SmartSnoozeConfig.DefaultExtendMinutes)
     {
         var update = UpdateFor(instance);
+        update.LapsedUntil.Should().Be(instance.SnoozedUntil, "the extension is conditioned on the lapse the sweep read");
         update.SnoozedUntil.Should().Be(Now.AddMinutes(minutes));
         update.SnoozeCount.Should().Be(instance.SnoozeCount + 1);
         _resumed.Should().NotContain(r => r.InstanceId == instance.InstanceId, "an extension keeps the alert silent");
@@ -170,10 +181,8 @@ public class AlertSweepJobSnoozeTests
 
     private void ShouldBeCleared(SnoozedInstanceSnapshot instance)
     {
-        var update = UpdateFor(instance);
-        update.SnoozedUntil.Should().Be(DateTime.MinValue);
-        update.SnoozeCount.Should().BeNull();
-        _resumed.Should().ContainSingle(r => r.InstanceId == instance.InstanceId, "a cleared snooze re-notifies")
+        _updates.Should().NotContain(u => u.Id == instance.InstanceId, "the resume ends the snooze in its own write");
+        _resumed.Should().ContainSingle(r => r.InstanceId == instance.InstanceId, "a lapsed snooze is resumed")
             .Which.TenantId.Should().Be(instance.TenantId);
     }
 
@@ -201,6 +210,20 @@ public class AlertSweepJobSnoozeTests
         await SweepAsync(instance);
 
         ShouldBeExtended(instance, minutes: 7);
+    }
+
+    [NativeFact]
+    public async Task AnExtensionThatLostItsLapse_DoesNotResumeTheInstance()
+    {
+        FiveMinuteReadings(58, 60, 65);
+        var instance = Instance(SmartOn);
+        _extendLostFor = id => id == instance.InstanceId;
+
+        await SweepAsync(instance);
+
+        _repository.Verify(r => r.ExtendLapsedSnoozeAsync(
+            instance.InstanceId, Lapsed, It.IsAny<DateTime>(), instance.SnoozeCount + 1, It.IsAny<CancellationToken>()), Times.Once);
+        _resumed.Should().NotContain(r => r.InstanceId == instance.InstanceId, "the writer that replaced the lapse owns the instance");
     }
 
     [NativeFact]
@@ -528,15 +551,7 @@ public class AlertSweepJobSnoozeTests
 
         await SweepAsync(failing, next);
 
-        UpdateFor(failing).SnoozedUntil.Should().Be(DateTime.MinValue);
+        _updates.Should().NotContain(u => u.Id == failing.InstanceId, "a resume that fails leaves the snooze lapsed for the next run");
         ShouldBeCleared(next);
-    }
-
-    private sealed class TenantAccessorStub : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

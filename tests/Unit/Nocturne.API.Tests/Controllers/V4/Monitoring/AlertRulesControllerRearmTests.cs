@@ -13,7 +13,6 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -73,8 +72,8 @@ public class AlertRulesControllerRearmTests
             new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
-            new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
-            MockTenantAccessor.Create(db.TenantId).Object,
+            new AlertRuleRepository(new TestNocturneDbContextFactory(db), TimeProvider.System),
+            SettableTenantAccessor.Resolved(db.TenantId),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
@@ -225,7 +224,7 @@ public class AlertRulesControllerRearmTests
         (await AwaitingRearm(db)).Should().BeTrue();
 
         evaluation.Dispose();
-        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+        await toggle.WaitAsync(Eventually.DefaultPatience);
         (await AwaitingRearm(db)).Should().BeFalse();
     }
 
@@ -241,7 +240,7 @@ public class AlertRulesControllerRearmTests
         await Task.Delay(100);
         await SetHold(db, true);
         evaluation.Dispose();
-        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+        await toggle.WaitAsync(Eventually.DefaultPatience);
 
         (await AwaitingRearm(db)).Should().BeFalse();
     }
@@ -259,7 +258,7 @@ public class AlertRulesControllerRearmTests
         await request.CancelAsync();
         evaluation.Dispose();
 
-        await toggle.Invoking(t => t.WaitAsync(TimeSpan.FromSeconds(5)))
+        await toggle.Invoking(t => t.WaitAsync(Eventually.DefaultPatience))
             .Should().ThrowAsync<OperationCanceledException>();
         (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId)).IsEnabled.Should().BeTrue();
         (await AwaitingRearm(db)).Should().BeTrue();

@@ -63,18 +63,17 @@ public partial class TeamAccessEndPostgresTests
             new NewTenantRole(site.Tenant, "Night", $"night-{Guid.NewGuid():N}", null, [Scope.GlucoseRead, Scope.TreatmentsRead], IsSystem: false),
             Ct)).Id;
 
-    private static TeamAccessGrant Gives(Site site, IReadOnlyList<Guid> roles, bool teamManagesStaff = true, bool limit = false, DateTime? end = null) =>
-        new(site.Tenant, roles, limit, end, teamManagesStaff);
+    private static TeamAccessGrant Gives(Site site, IReadOnlyList<Guid> roles, string staffRule = TeamStaffRule.TeamDecides, bool limit = false, DateTime? end = null) =>
+        new(site.Tenant, roles, limit, end, staffRule);
 
     private async Task ApproveSiteRowsAsync(Site site) =>
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE team_site_staff SET status = 'approved'
              WHERE team_tenant_access_id IN (SELECT id FROM team_tenant_access WHERE tenant_id = '{site.Tenant}');
             """);
 
     private static Task BothAsync(Func<Task> first, Func<Task> second) =>
-        Task.WhenAll(Task.Run(first), Task.Run(second)).WaitAsync(TimeSpan.FromSeconds(60));
+        Task.WhenAll(Task.Run(first), Task.Run(second)).WaitAsync(Eventually.DefaultPatience);
 
     [Fact]
     public async Task Joining_gives_a_team_reason_where_the_team_decides_its_staff_and_none_where_the_site_does()
@@ -83,7 +82,7 @@ public partial class TeamAccessEndPostgresTests
         var waits = await SiteAsync("join-waits");
         var team = await TeamAsync("Clinic");
         var access = await FollowAsync(team, decides);
-        var pending = await FollowAsync(team, waits, Gives(waits, [waits.ViewerRole], teamManagesStaff: false));
+        var pending = await FollowAsync(team, waits, Gives(waits, [waits.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await NewSubjectAsync("staff");
 
         (await JoinAsync(team, staff, new TeamStaffNarrowing(null, false, null))).Refusal.Should().BeNull();
@@ -103,20 +102,21 @@ public partial class TeamAccessEndPostgresTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Approving_gives_every_staff_member_the_team_approves_a_reason(bool teamManagesStaff)
+    [InlineData(TeamStaffRule.OwnerApproves)]
+    [InlineData(TeamStaffRule.TeamDecides)]
+    [InlineData(TeamStaffRule.TeamTrusted)]
+    public async Task Approving_gives_every_staff_member_the_team_approves_a_reason(string staffRule)
     {
-        var site = await SiteAsync($"approve-{teamManagesStaff}");
+        var site = await SiteAsync($"approve-{staffRule.Replace('_', '-')}");
         var team = await TeamAsync("Clinic");
         var first = await JoinStaffAsync(team);
         var second = await JoinStaffAsync(team);
 
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule));
 
         foreach (var staff in new[] { first, second })
         {
-            if (teamManagesStaff)
+            if (staffRule != TeamStaffRule.OwnerApproves)
                 await HoldsTeamReasonAsync(site, staff, access);
             else
                 (await Members(site.Tenant).FindMemberAsync(site.Tenant, staff, Ct)).Should().BeNull();
@@ -172,7 +172,8 @@ public partial class TeamAccessEndPostgresTests
     {
         var (site, _, access, staff) = await StaffWithReasonAsync("unknown-ceiling");
         var made = await MadeByAsync(site, staff);
-        await ExecuteAsync($"UPDATE team_members SET role_ceiling_slug = 'retired' WHERE subject_id = '{staff}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_members SET role_ceiling_slug = 'retired' WHERE subject_id = '{staff}'");
 
         await ReconcileAsync();
 
@@ -202,7 +203,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("widen");
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await NewSubjectAsync("staff");
         await JoinAsync(team, staff, new TeamStaffNarrowing(RoleSeeds.Viewer, false, null));
         await ApproveSiteRowsAsync(site);
@@ -264,7 +265,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync("backfill");
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await JoinStaffAsync(team);
         await ApproveSiteRowsAsync(site);
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, staff, Ct)).Should().BeNull();
@@ -328,7 +329,7 @@ public partial class TeamAccessEndPostgresTests
         {
             var site = await SiteAsync($"race-backfill-stop-{run}");
             var team = await TeamAsync("Clinic");
-            var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+            var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
             var staff = await JoinStaffAsync(team);
             await ApproveSiteRowsAsync(site);
 

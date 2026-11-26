@@ -239,17 +239,6 @@ public class V4CrudControllerBaseTests
     }
 
     [Fact]
-    public async Task Create_DefaultTimestamp_ReturnsBadRequest()
-    {
-        var request = new TestCreateRequest { Timestamp = default };
-
-        var result = await _controller.Create(request);
-
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
     public async Task Update_Valid_ReturnsOk()
     {
         var id = Guid.NewGuid();
@@ -279,46 +268,6 @@ public class V4CrudControllerBaseTests
         var result = await _controller.Update(id, request);
 
         result.Result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
-    public async Task Update_DefaultTimestamp_ReturnsBadRequest()
-    {
-        var id = Guid.NewGuid();
-        var existing = new TestRecord { Id = id, Timestamp = DateTime.UtcNow };
-        var request = new TestUpdateRequest { Timestamp = default };
-        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existing);
-
-        var result = await _controller.Update(id, request);
-
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task Create_DefaultTimestamp_IsRejectedBeforeTheBeforeCreateHookRuns()
-    {
-        var controller = Rejecting();
-
-        var result = await controller.Create(new TestCreateRequest { Timestamp = default });
-
-        Detail(result.Result).Should().Be("Timestamp is required");
-        controller.BeforeCreateCalls.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Update_DefaultTimestamp_IsRejectedBeforeTheBeforeUpdateHookRuns()
-    {
-        var id = Guid.NewGuid();
-        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TestRecord { Id = id, Timestamp = DateTime.UtcNow });
-        var controller = Rejecting();
-
-        var result = await controller.Update(id, new TestUpdateRequest { Timestamp = default });
-
-        Detail(result.Result).Should().Be("Timestamp is required");
-        controller.BeforeUpdateCalls.Should().Be(0);
     }
 
     [Fact]

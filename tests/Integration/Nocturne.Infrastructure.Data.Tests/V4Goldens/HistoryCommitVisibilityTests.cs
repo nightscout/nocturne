@@ -57,7 +57,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         cursor = HistoryCursor(duringDelete, cursor);
 
         await held.CommitAsync();
-        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(3);
+        (await delete.WaitAsync(Eventually.DefaultPatience)).Should().Be(3);
 
         var afterDelete = await history.GetModifiedSinceAsync(cursor, 100);
         var delivered = duringDelete.Concat(afterDelete).ToList();
@@ -80,6 +80,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
             await command.ExecuteScalarAsync();
 
         var written = await CreateAsync(scope, T0, "xdrip");
+        await HistorySettle.UntilHorizonPassesAsync(scope.ServiceProvider);
 
         (await history.GetModifiedSinceAsync(0, 100)).Select(h => h.Record.Id).Should().Contain(written.Id);
     }
@@ -109,7 +110,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         cursor = HistoryCursor(duringDelete, cursor);
 
         await held.DisposeAsync();
-        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(3);
+        (await delete.WaitAsync(Eventually.DefaultPatience)).Should().Be(3);
 
         var delivered = duringDelete.Concat(await history.GetModifiedSinceAsync(cursor, 100)).ToList();
         delivered.Where(h => h.Deleted).Select(h => h.Record.Id).Should().BeEquivalentTo(doomed);
@@ -138,7 +139,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         finally
         {
             await held.DisposeAsync();
-            await delete.WaitAsync(TimeSpan.FromSeconds(30));
+            await delete.WaitAsync(Eventually.DefaultPatience);
         }
 
         own.Should().BeOnOrBefore(deleteStart);
@@ -201,7 +202,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         DateTime started, own, others;
         try
         {
-            started = await written.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            started = await written.Task.WaitAsync(Eventually.DefaultPatience);
             await PauseDatabaseClockAsync();
             own = await HorizonForAsync(scope, tenant);
             others = await HorizonForAsync(scope, other);
@@ -209,7 +210,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         finally
         {
             release.TrySetResult();
-            await importing.WaitAsync(TimeSpan.FromSeconds(30));
+            await importing.WaitAsync(Eventually.DefaultPatience);
         }
 
         own.Should().BeOnOrBefore(started);
@@ -221,10 +222,8 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
     {
         var tenant = Guid.NewGuid();
         using (await fixture.BeginTenantScopeAsync(tenant)) { }
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(new NpgsqlConnectionStringBuilder(fixture.AppConnectionString) { MaxPoolSize = 1 }.ConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(
+            new NpgsqlConnectionStringBuilder(fixture.AppConnectionString) { MaxPoolSize = 1 }.ConnectionString);
 
         await using (var pinned = new NocturneDbContext(options) { TenantId = tenant })
             (await ApplicationNameAsync(pinned)).Should().Be(HistoryHorizon.SessionTag(tenant));
@@ -239,10 +238,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         var tenant = Guid.NewGuid();
         using (await fixture.BeginTenantScopeAsync(tenant)) { }
         var pool = new SlowPool();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(fixture.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor(), pool)
-            .Options;
+        var options = TestContexts.Options(fixture.AppConnectionString, [pool]);
         var reading = new SensorGlucoseEntity
         {
             Id = Guid.CreateVersion7(), TenantId = tenant, Timestamp = T0, Mgdl = 120, DataSource = "xdrip",
@@ -262,20 +258,15 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
     {
         var tenant = Guid.NewGuid();
         using var scope = await fixture.BeginTenantScopeAsync(tenant);
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(fixture.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(fixture.AppConnectionString);
         var written = await CreateAsync(scope, T0, "xdrip");
 
         var first = await ProductionHistoryAsync(options, tenant);
-        var deadline = DateTime.UtcNow.AddSeconds(30);
         var delivered = first;
-        while (!delivered.Contains(written.Id) && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(100);
-            delivered = await ProductionHistoryAsync(options, tenant);
-        }
+        await Eventually.UntilAsync(
+            "the write to reach history",
+            async () => (delivered = await ProductionHistoryAsync(options, tenant)).Contains(written.Id),
+            step: TimeSpan.FromMilliseconds(100));
 
         first.Should().NotContain(written.Id, "the read came within the margin of the write");
         delivered.Should().Contain(written.Id);
@@ -308,7 +299,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         public override Task ConnectionOpenedAsync(
             DbConnection connection, ConnectionEndEventData eventData, CancellationToken ct = default)
         {
-            OpenedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+            OpenedAt = NocturneDbContext.AtStoredPrecision(DateTime.UtcNow);
             return Task.CompletedTask;
         }
     }
@@ -418,13 +409,10 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
     private static async Task<NpgsqlTransaction> HoldRowAsync(NpgsqlConnection connection, Guid tenant, Guid id)
     {
         var transaction = await connection.BeginTransactionAsync();
+        await connection.PinTenantAsync(tenant, local: true);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            SELECT 1 FROM sensor_glucose WHERE id = @id FOR UPDATE;
-            """;
-        command.Parameters.AddWithValue("tenant", tenant.ToString());
+        command.CommandText = "SELECT 1 FROM sensor_glucose WHERE id = @id FOR UPDATE;";
         command.Parameters.AddWithValue("id", id);
         await command.ExecuteNonQueryAsync();
         return transaction;

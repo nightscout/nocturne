@@ -29,6 +29,7 @@
     setMemberLimitTo24Hours,
     setMemberAccessEnd,
     getTeamAccess,
+    getTeamStaffBlocks,
     stopTeamAccess,
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
@@ -41,6 +42,7 @@
   import PendingRequestsList from "#lib/components/members/PendingRequestsList.svelte";
   import MemberCard, { type MemberChanges } from "#lib/components/members/MemberCard.svelte";
   import TeamAccessList from "#lib/components/members/TeamAccessList.svelte";
+  import TeamStaffBlocksSection from "#lib/components/members/TeamStaffBlocksSection.svelte";
   import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
   import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
@@ -49,6 +51,7 @@
   import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { MemberReasonKind } from "@nocturne/api-client";
 
   const granted = $derived(page.data.effectivePermissions ?? []);
   const canInvite = $derived(satisfiesScope(granted, "members.invite"));
@@ -84,12 +87,14 @@
   const invitesQuery = $derived(canInvite ? listInvites() : null);
   const rolesQuery = $derived(canListRoles ? getRoles() : null);
   const teamAccessQuery = $derived(canListMembers ? getTeamAccess() : null);
+  const staffBlocksQuery = $derived(canListMembers ? getTeamStaffBlocks() : null);
   const pendingRequestsQuery = $derived(canReviewRequests ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
   retainQuery(() => membersQuery);
   retainQuery(() => invitesQuery);
   retainQuery(() => rolesQuery);
   retainQuery(() => teamAccessQuery);
+  retainQuery(() => staffBlocksQuery);
   retainQuery(() => pendingRequestsQuery);
   retainQuery(() => shareQuery);
 
@@ -102,9 +107,16 @@
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
 
-  const callerAccessEndsAt = $derived(
-    allMembers.find((m) => m.subjectId === page.data.user?.subjectId)?.accessEndsAt,
+  const callerRow = $derived(allMembers.find((m) => m.subjectId === page.data.user?.subjectId));
+  const callerAccessEndsAt = $derived(callerRow?.accessEndsAt);
+
+  const callerDirect = $derived(
+    (callerRow?.reasons ?? []).find((r) => r.kind === MemberReasonKind.Direct && !r.hasEnded),
   );
+  /** The owner role is held only directly; the server checks it again on every decision. */
+  const callerIsOwner = $derived((callerDirect?.roles ?? []).some((role) => role.slug === "owner"));
+  /** A team's access is bounded by the caller's direct reason alone, not by their summed end. */
+  const callerDirectEndsAt = $derived(callerDirect?.accessEndsAt ?? undefined);
 
   // Header status chips
   const memberCount = $derived(allMembers.filter((m) => !m.isSystemSubject).length);
@@ -119,6 +131,8 @@
   const memberProblemMessages: ProblemCodeMessages = {
     member_access_from_team:
       "This member has access only through a team. To change it, stop the team's access to this site.",
+    caller_access_from_team:
+      "You have access to this site only through a team, so you cannot give access to anyone.",
     membership_request_own: "You cannot approve your own request. Ask another member to approve it.",
   };
 
@@ -412,8 +426,29 @@
     <TeamAccessList
       teams={teamsWithAccess}
       canStop={canEditMemberRoles}
+      canDecide={canEditMemberRoles && callerIsOwner}
+      roles={rolesQuery?.current}
+      rolesFailed={rolesQuery?.current == null && !!rolesQuery?.error}
+      onRetryRoles={() => void rolesQuery?.refresh()}
+      limitForced={page.data.limitTo24Hours === true}
+      callerAccessEndsAt={callerDirectEndsAt}
+      currentSubjectId={page.data.user?.subjectId}
+      linkedTeamId={page.url.searchParams.get("team")}
       stoppingId={stoppingTeamId}
       onStop={handleStopTeamAccess}
+      onStale={() => void teamAccessQuery?.refresh()}
+      onSuccess={(text) => {
+        successMessage = { text, wash: false };
+        clearMessages();
+      }}
+    />
+    <TeamStaffBlocksSection
+      blocks={staffBlocksQuery?.current ?? []}
+      canDecide={canEditMemberRoles && callerIsOwner}
+      onSuccess={(text) => {
+        successMessage = { text, wash: false };
+        clearMessages();
+      }}
     />
   {/if}
 

@@ -57,6 +57,30 @@ public class OperatorConfiguration
         || (Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps));
 
     public OperatorSupportConfiguration Support { get; set; } = new();
+
+    /// <summary>
+    /// The domains a notice the operator sends to a tenant may link to; a subdomain of one is
+    /// allowed too. Empty means the domains of <see cref="OperatorSupportConfiguration.AccountBilling"/>
+    /// and <see cref="OperatorSupportConfiguration.AccountPortal"/>.
+    /// </summary>
+    public List<string> NotificationLinkDomains { get; set; } = [];
+
+    /// <summary>
+    /// The domains an operator notice may link to: <see cref="NotificationLinkDomains"/>, or when it is
+    /// empty the hosts of the support URLs. Empty when neither is configured, so no link is allowed.
+    /// </summary>
+    public IReadOnlyList<string> ResolveNotificationLinkDomains()
+    {
+        if (NotificationLinkDomains.Any(d => !string.IsNullOrWhiteSpace(d)))
+            return NotificationLinkDomains.Where(d => !string.IsNullOrWhiteSpace(d)).Select(d => d.Trim()).ToList();
+
+        return new[] { Support.AccountBilling?.Url, Support.AccountPortal?.Url }
+            .Select(url => Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : null)
+            .OfType<string>()
+            .Where(host => host.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 }
 
 public class OperatorSupportConfiguration

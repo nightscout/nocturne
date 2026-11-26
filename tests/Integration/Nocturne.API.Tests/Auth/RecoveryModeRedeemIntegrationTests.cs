@@ -5,6 +5,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -46,8 +47,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
     [InlineData(Refusal.DemoSubject, "OperatorRecovery")]
     public async Task A_refused_redemption_leaves_the_code_unspent(Refusal refusal, string purpose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = refusal == Refusal.MemberCanStillSignIn
@@ -58,19 +58,19 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
         switch (refusal)
         {
             case Refusal.NoLongerAMember:
-                await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+                await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
                 break;
             case Refusal.Deactivated:
-                await ExecuteAsync(conn, "UPDATE subjects SET is_active = false WHERE id = @id;", ("id", memberId));
+                await conn.ExecuteAsync("UPDATE subjects SET is_active = false WHERE id = @id;", ("id", memberId));
                 break;
             case Refusal.AdministratorCodeForAnOperatorOnlyMember:
-                await ExecuteAsync(conn, "UPDATE subjects SET is_platform_admin = true WHERE id = @id;", ("id", memberId));
+                await conn.ExecuteAsync("UPDATE subjects SET is_platform_admin = true WHERE id = @id;", ("id", memberId));
                 break;
             case Refusal.SystemSubject:
-                await ExecuteAsync(conn, "UPDATE subjects SET is_system_subject = true WHERE id = @id;", ("id", memberId));
+                await conn.ExecuteAsync("UPDATE subjects SET is_system_subject = true WHERE id = @id;", ("id", memberId));
                 break;
             case Refusal.DemoSubject:
-                await ExecuteAsync(conn, "UPDATE subjects SET is_demo_subject = true WHERE id = @id;", ("id", memberId));
+                await conn.ExecuteAsync("UPDATE subjects SET is_demo_subject = true WHERE id = @id;", ("id", memberId));
                 break;
         }
 
@@ -86,25 +86,23 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
                 .Should().Be(Detail(await unknown.Content.ReadAsStringAsync()));
             RecoveryCookies(refused).Should().BeEmpty("no recovery session may start");
 
-            (await ScalarAsync<bool>(conn, "SELECT consumed_at IS NULL FROM login_codes WHERE id = @id;", ("id", codeId)))
+            (await conn.ScalarAsync<bool>("SELECT consumed_at IS NULL FROM login_codes WHERE id = @id;", ("id", codeId)))
                 .Should().BeTrue("a refused redemption does not spend the code");
-            (await ScalarAsync<long>(conn,
-                    "SELECT count(*) FROM auth_audit_log WHERE event_type = 'login_handoff' AND target_subject_id = @id;",
+            (await conn.ScalarAsync<long>("SELECT count(*) FROM auth_audit_log WHERE event_type = 'login_handoff' AND target_subject_id = @id;",
                     ("id", memberId)))
                 .Should().Be(0, "a refused redemption is not recorded as one that succeeded");
         }
         finally
         {
             // A locked-out member left behind would show on the shared tenant's recovery list.
-            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }
 
     [Fact]
     public async Task An_operators_code_redeems_for_a_member_who_still_has_a_passkey()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Recovering Member");
@@ -121,15 +119,14 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
         }
         finally
         {
-            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }
 
     [Fact]
     public async Task A_code_presented_twice_at_once_redeems_once()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Recovering Member");
@@ -148,12 +145,12 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
                 .BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.BadRequest]);
             RecoveryCookies(responses.Single(r => r.StatusCode == HttpStatusCode.OK)).Should().ContainSingle();
             // Starting the recovery session issues a code, which prunes spent ones, so the row may be gone.
-            (await ScalarAsync<long>(conn, "SELECT count(*) FROM login_codes WHERE id = @id AND consumed_at IS NULL;", ("id", codeId)))
+            (await conn.ScalarAsync<long>("SELECT count(*) FROM login_codes WHERE id = @id AND consumed_at IS NULL;", ("id", codeId)))
                 .Should().Be(0);
         }
         finally
         {
-            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+            await conn.ExecuteAsync("DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }
 
@@ -162,7 +159,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
     {
         var id = Guid.CreateVersion7();
         var code = $"recovery-{Guid.NewGuid():N}";
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
             VALUES (@id, @tenantId, @subjectId, @hash, @purpose, now() + interval '1 hour', now());
             """,
@@ -177,24 +174,4 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
 
     private static string? Detail(string problemJson) =>
         JsonDocument.Parse(problemJson).RootElement.GetProperty("detail").GetString();
-
-    private static async Task<T> ScalarAsync<T>(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        return (T)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
 }

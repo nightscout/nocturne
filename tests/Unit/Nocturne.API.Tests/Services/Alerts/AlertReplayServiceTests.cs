@@ -22,6 +22,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -33,7 +34,7 @@ public class AlertReplayServiceTests
     private readonly Mock<IDndWindowRepository> _dndWindows = new();
     private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly ITenantAccessor _tenantAccessor;
     // Looping-fact mocks plumbed through the real SensorContextEnricher so replay walks
     // the same code path as the live engine. Default-empty Moq returns mean cold-start
     // semantics by default; individual tests override what they care about.
@@ -56,7 +57,7 @@ public class AlertReplayServiceTests
 
     public AlertReplayServiceTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
         _glucoseRepository
             .Setup(r => r.GetHiddenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
@@ -94,7 +95,7 @@ public class AlertReplayServiceTests
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
-            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(),
             Options.Create(new AlertEvaluationOptions()));
         _enricher = new SensorContextEnricher(
             enricherDeps,
@@ -107,7 +108,7 @@ public class AlertReplayServiceTests
             _dndWindows.Object,
             _glucoseRepository.Object,
             _enricher,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             Options.Create(new AlertEvaluationOptions()),
             new RustAlertReplayEngine(new AlertEngineErrors(
                 new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
@@ -195,7 +196,7 @@ public class AlertReplayServiceTests
         var engine = new CapturingReplayEngine();
         var sut = new AlertReplayService(
             _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
-            _tenantAccessor.Object, Options.Create(new AlertEvaluationOptions()), engine,
+            _tenantAccessor, Options.Create(new AlertEvaluationOptions()), engine,
             new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()), TimeProvider.System);
 
         await sut.ReplayAsync(null, null, windowStart, windowEnd, CancellationToken.None);
@@ -233,7 +234,7 @@ public class AlertReplayServiceTests
         var engine = new CapturingReplayEngine();
         var sut = new AlertReplayService(
             _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
-            _tenantAccessor.Object, Options.Create(new AlertEvaluationOptions()), engine,
+            _tenantAccessor, Options.Create(new AlertEvaluationOptions()), engine,
             new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()), TimeProvider.System);
 
         await sut.ReplayAsync(null, null, windowStart, windowStart.AddMinutes(25), CancellationToken.None);
@@ -362,9 +363,15 @@ public class AlertReplayServiceTests
     [NativeFact]
     public async Task EmptyTenantId_ReturnsEmpty()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(Guid.Empty);
+        var sut = new AlertReplayService(
+            _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
+            new SettableTenantAccessor(), Options.Create(new AlertEvaluationOptions()),
+            new RustAlertReplayEngine(new AlertEngineErrors(
+                new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()),
+            TimeProvider.System);
 
-        var result = await _sut.ReplayAsync(null, null, null, null, CancellationToken.None);
+        var result = await sut.ReplayAsync(null, null, null, null, CancellationToken.None);
 
         result.Events.Should().BeEmpty();
     }
@@ -704,18 +711,19 @@ public class AlertReplayServiceTests
             .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
                 asOf is null ? null : new PumpSnapshot { Timestamp = asOf.Value.AddMinutes(-1), BatteryPercent = 80 });
 
-        _stateSpanService.Setup(s => s.GetActiveAtAsync(
-                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
-                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((StateSpanCategory _, string? _, DateTime at, CancellationToken _) =>
-                at >= spanStart
-                    ? new StateSpan
-                    {
-                        Category = StateSpanCategory.PumpMode,
-                        State = PumpModeState.Suspended.ToString(),
-                        StartTimestamp = spanStart,
-                    }
-                    : null);
+        var suspension = new StateSpan
+        {
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = spanStart,
+        };
+        _stateSpanService.Setup(s => s.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpanCategory? _, string? _, DateTime? _, DateTime? to, string? _, bool? _,
+                    int _, int _, bool _, CancellationToken _) =>
+                to is null || suspension.StartTimestamp <= to ? [suspension] : Array.Empty<StateSpan>());
 
         var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
@@ -940,7 +948,7 @@ public class AlertReplayServiceTests
             _dndWindows.Object,
             _glucoseRepository.Object,
             _enricher,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             Options.Create(options ?? new AlertEvaluationOptions()),
             new RustAlertReplayEngine(new AlertEngineErrors(
                 new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),

@@ -99,6 +99,17 @@ public interface ISensorGlucoseRepository
         CancellationToken ct = default, GlucoseStreams streams = GlucoseStreams.All);
 
     /// <summary>
+    /// <see cref="GetForEntriesAsync"/>, or with <paramref name="orderByValue"/>
+    /// <see cref="GetForEntriesByValueAsync"/>, over the rows stored deleted as well as the live ones, a
+    /// deleted one flagged. A deleted reading is listed whichever stream it was, as
+    /// <see cref="GetCanonicalModifiedSinceAsync"/> lists it; a deleted copy another copy stands in for
+    /// is not.
+    /// </summary>
+    Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> GetForEntriesIncludingDeletedAsync(
+        DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending, bool orderByValue,
+        GlucoseStreams streams, CancellationToken ct = default);
+
+    /// <summary>
     /// The visible readings in [<paramref name="from"/>, <paramref name="to"/>] of every stream, counted
     /// per registered device, a null device counting the unattributed ones.
     /// </summary>

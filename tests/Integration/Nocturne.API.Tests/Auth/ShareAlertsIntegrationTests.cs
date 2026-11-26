@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -31,8 +32,7 @@ public class ShareAlertsIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (adminId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Share Admin");
         _admin = AuthTestHelpers.CreateBearerClient(
             Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, adminId));
@@ -41,9 +41,8 @@ public class ShareAlertsIntegrationTests : ApiIntegrationTestBase
         // is clamped by overlap rather than by when it started.
         var ruleId = Guid.CreateVersion7();
         _excursionId = Guid.CreateVersion7();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT set_config('app.current_tenant_id', '{Fixture.TenantId}', false);
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync($"""
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
                                      sort_order, created_at, updated_at)
@@ -52,8 +51,7 @@ public class ShareAlertsIntegrationTests : ApiIntegrationTestBase
             INSERT INTO alert_excursions (id, tenant_id, alert_rule_id, started_at, acknowledged_at, acknowledged_by)
             VALUES ('{_excursionId}', '{Fixture.TenantId}', '{ruleId}', now() - interval '3 days',
                     now() - interval '1 hour', '{Acknowledger}');
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 
     public override async Task DisposeAsync()
@@ -133,13 +131,8 @@ public class ShareAlertsIntegrationTests : ApiIntegrationTestBase
         (await ReceiptsAsync(guest)).Select(r => r["actorKind"]!.GetValue<string>())
             .Should().Equal(["guest"], "a guest sees its own receipt and nobody else's");
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using (var pin = conn.CreateCommand())
-        {
-            pin.CommandText = $"SELECT set_config('app.current_tenant_id', '{Fixture.TenantId}', false);";
-            await pin.ExecuteNonQueryAsync();
-        }
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
 
         await using var count = conn.CreateCommand();
         count.CommandText = $"SELECT count(*) FROM alert_excursion_mutes WHERE alert_excursion_id = '{_excursionId}';";
@@ -213,21 +206,21 @@ public class ShareAlertsIntegrationTests : ApiIntegrationTestBase
         _share = Fixture.CreateApexClient();
         _share.DefaultRequestHeaders.Host = new Uri(url).Authority;
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (true)
-        {
-            using var probe = await _share.GetAsync("/api/v1/entries.json?count=1");
-            if (probe.StatusCode == HttpStatusCode.OK)
-                return _share;
-
-            if (DateTime.UtcNow > deadline)
+        var share = _share;
+        var last = "no response";
+        await Eventually.UntilAsync(
+            "the share host to serve glucose",
+            async () =>
             {
-                throw new InvalidOperationException(
-                    $"The share host never served glucose: {(int)probe.StatusCode} "
-                    + await probe.Content.ReadAsStringAsync());
-            }
+                using var probe = await share.GetAsync("/api/v1/entries.json?count=1");
+                if (probe.StatusCode == HttpStatusCode.OK)
+                    return true;
 
-            await Task.Delay(250);
-        }
+                last = $"{(int)probe.StatusCode} {await probe.Content.ReadAsStringAsync()}";
+                return false;
+            },
+            step: TimeSpan.FromMilliseconds(250),
+            lastSeen: () => last);
+        return share;
     }
 }

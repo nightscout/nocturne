@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -35,9 +36,7 @@ public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the refresh token tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Refresh Token Test User");
@@ -101,21 +100,16 @@ public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
     /// </summary>
     private async Task AgeRotationsAsync(string clientId)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, false);
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(_tenantId);
+        await conn.ExecuteAsync("""
             UPDATE oauth_refresh_tokens
             SET revoked_at = revoked_at - interval '1 minute'
             WHERE revoked_at IS NOT NULL
               AND grant_id IN (SELECT g.id FROM oauth_grants g
                                JOIN oauth_clients c ON c.id = g.client_id
                                WHERE c.client_id = @client);
-            """;
-        cmd.Parameters.AddWithValue("tenant", _tenantId.ToString());
-        cmd.Parameters.AddWithValue("client", clientId);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("client", clientId));
     }
 
     [Fact]

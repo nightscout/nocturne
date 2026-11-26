@@ -16,21 +16,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class SpentPasskeyChallengeRepositoryPostgresTests(SpentPasskeyChallengeRepositoryPostgresTests.Database database)
     : IClassFixture<SpentPasskeyChallengeRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync() =>
-            AppConnectionString = (await SharedPostgres.CreateMigratedDatabaseAsync("spent_passkey_challenges")).AppConnectionString;
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("spent_passkey_challenges");
 
     private NocturneDbContext Context() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        TestContexts.Context(database.AppConnectionString);
 
     private SuppliedContextFactory Contexts() => new(Context);
 

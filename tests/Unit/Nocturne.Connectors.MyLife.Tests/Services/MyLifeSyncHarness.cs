@@ -7,7 +7,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Services;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.MyLife.Tests.Services;
 
@@ -29,9 +29,7 @@ internal static class MyLifeSyncHarness
     {
         var resolver = new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId);
 
         var soapClient = new MyLifeSoapClient(http, NullLogger<MyLifeSoapClient>.Instance);
         var sessionCache = new MyLifeSessionCache();
@@ -39,7 +37,7 @@ internal static class MyLifeSyncHarness
             http,
             new ConnectorTokenCache(clock),
             resolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             soapClient,
             sessionCache,
             NullLogger<MyLifeAuthTokenProvider>.Instance,
@@ -56,7 +54,7 @@ internal static class MyLifeSyncHarness
             tokenProvider,
             new MyLifeEventProcessor(),
             sessionCache,
-            tenantAccessor.Object,
+            tenantAccessor,
             syncService,
             publisher,
             clock);

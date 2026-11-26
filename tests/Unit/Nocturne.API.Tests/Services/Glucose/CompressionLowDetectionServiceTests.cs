@@ -201,8 +201,7 @@ public class CompressionLowDetectionServiceTests
                     },
                 },
             });
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
         var services = new ServiceCollection();
         services.AddScoped(_ => settings.Object);
         services.AddScoped(_ => _repository.Object);
@@ -213,7 +212,7 @@ public class CompressionLowDetectionServiceTests
         services.AddScoped(_ => TestIobCobReader.Empty());
         services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
         services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
-        services.AddScoped(_ => tenantAccessor.Object);
+        services.AddScoped<ITenantAccessor>(_ => tenantAccessor);
         services.AddScoped(_ => Mock.Of<Nocturne.Core.Contracts.Identity.ITenantOwnerResolver>());
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -683,7 +682,7 @@ public class CompressionLowDetectionServiceTests
                     });
 
             var services = new ServiceCollection();
-            services.AddScoped<ITenantAccessor, RecordingTenantAccessor>();
+            services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
             services.AddScoped(sp =>
             {
                 var tenantId = sp.GetRequiredService<ITenantAccessor>().TenantId;
@@ -742,15 +741,6 @@ public class CompressionLowDetectionServiceTests
         public void Dispose() => _provider.Dispose();
     }
 
-    private sealed class RecordingTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     /// <summary>
     /// A provider whose <see cref="IUISettingsService"/> is the real one over a database that can no
     /// longer be read, which is what a failed read looks like from inside the scope.
@@ -779,8 +769,7 @@ public class CompressionLowDetectionServiceTests
         );
         await context.DisposeAsync();
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
 
         var services = new ServiceCollection();
         services.AddScoped<IUISettingsService>(_ => settingsService);
@@ -792,7 +781,7 @@ public class CompressionLowDetectionServiceTests
         services.AddScoped(_ => Mock.Of<ITherapySettingsResolver>());
         services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
         services.AddLogging();
-        services.AddScoped(_ => tenantAccessor.Object);
+        services.AddScoped<ITenantAccessor>(_ => tenantAccessor);
 
         return services.BuildServiceProvider();
     }

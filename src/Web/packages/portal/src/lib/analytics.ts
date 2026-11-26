@@ -23,6 +23,7 @@ export const PLAUSIBLE_EVENT_API = `${PLAUSIBLE_HOST}/api/event`;
 /** Sidebar sections, as reported by `Docs Nav`. `docs-nav.ts` is the source of these ids. */
 export const DOCS_SECTION_IDS = [
   'getting-started',
+  'managed-service',
   'installation',
   'authentication',
   'sharing',

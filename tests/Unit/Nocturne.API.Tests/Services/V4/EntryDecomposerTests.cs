@@ -5,7 +5,6 @@ using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
@@ -16,6 +15,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.API.Services.Entries;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -41,7 +41,8 @@ public class EntryDecomposerTests : IDisposable
             .ReturnsAsync((GlucoseProcessing?)null);
         var glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
 
-        _decomposer = new EntryDecomposer(sgRepo, mgRepo, calRepo, glucoseResolver, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), NullLogger<EntryDecomposer>.Instance);
+        _decomposer = EntryDecomposerDoubles.Build(
+            sensorGlucose: sgRepo, meterGlucose: mgRepo, calibration: calRepo, glucoseResolver: glucoseResolver);
     }
 
     public void Dispose()

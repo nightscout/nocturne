@@ -139,6 +139,16 @@ public static class PreBolusSplit
     public static string WriteBackCarbsId(string legacyId) => Derived(WriteBackCarbsIdPrefix, legacyId);
 
     /// <summary>
+    /// Whether <paramref name="name"/> is an id the carbs <see cref="ForWriteBack"/> splits off the
+    /// meal <paramref name="legacyId"/> names go upstream or come back under: <see cref="WriteBackCarbsId"/>
+    /// of it, or that id's <see cref="MongoObjectId.Coerce"/>.
+    /// </summary>
+    public static bool NamesWriteBackCarbs(string name, string legacyId)
+    {
+        var carbsId = WriteBackCarbsId(legacyId);
+        return name == carbsId || name == MongoObjectId.Coerce(carbsId);
+    }
+
     /// The key a carb intake keeps <see cref="Treatment.PreBolusMealId"/> under in its additional
     /// properties, so the carbs record is announced with it when read back.
     /// </summary>

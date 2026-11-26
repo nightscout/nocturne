@@ -108,15 +108,7 @@ public sealed class HealthRecordTombstoneTests(HealthRecordTombstoneFixture fixt
     }
 
     private NocturneDbContext Context() => new(new DbContextOptionsBuilder<NocturneDbContext>()
-        .UseNpgsql(fixture.Database.SuperuserConnectionString).Options);
+        .UseNpgsql(fixture.SuperuserConnectionString).Options);
 }
 
-public sealed class HealthRecordTombstoneFixture : IAsyncLifetime
-{
-    public TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync() =>
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("health_tombstones");
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class HealthRecordTombstoneFixture() : MigratedDatabase("health_tombstones");

@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Mappers;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -70,10 +70,7 @@ public class RetireStateSpansOutsideCategoriesFixture : IAsyncLifetime
 
     private async Task MigrateToAsync(string? targetMigration)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(_migratorConnectionString);
 
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(targetMigration);
@@ -143,12 +140,7 @@ public class RetireStateSpansOutsideCategoriesFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT id, category, deleted_at, deleted_by_user, updated_at FROM state_spans;";
@@ -167,13 +159,11 @@ public class RetireStateSpansOutsideCategoriesFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'Tenant B', true, now(), now());
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
 
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO state_spans
               (id, tenant_id, category, state, start_timestamp, source, created_at, updated_at, deleted_at, deleted_by_user)
             VALUES
@@ -185,8 +175,10 @@ public class RetireStateSpansOutsideCategoriesFixture : IAsyncLifetime
                now(), '{{SeededAt:O}}', NULL, false),
               ('{{UserDeletedTempBasalInA}}', '{{TenantA}}', 'TempBasal', 'Active', '2026-01-02T08:00:00Z', 'Loop',
                now(), '{{SeededAt:O}}', '{{SeededAt:O}}', true);
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO state_spans
               (id, tenant_id, category, state, start_timestamp, source, created_at, updated_at, deleted_at, deleted_by_user)
             VALUES
@@ -194,10 +186,7 @@ public class RetireStateSpansOutsideCategoriesFixture : IAsyncLifetime
                now(), '{{SeededAt:O}}', NULL, false),
               ('{{OverrideInB}}', '{{TenantB}}', 'Override', 'Custom', '2026-01-01T09:00:00Z', 'AAPS',
                now(), '{{SeededAt:O}}', NULL, false);
-
-            SELECT set_config('app.current_tenant_id', '', false);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 

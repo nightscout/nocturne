@@ -1,11 +1,5 @@
 using System.Text.Json;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
@@ -22,8 +16,7 @@ namespace Nocturne.API.Tests.Integration.Migration;
 public class MigrationTestFixture : IAsyncLifetime
 {
     private readonly MongoDbContainer _mongoContainer;
-    private WebApplication? _mockNightscoutApp;
-    private string? _mockNightscoutUrl;
+    private FakeNightscout? _mockNightscout;
     private TaskCompletionSource? _entriesGate;
 
     public const string DatabaseName = "nightscout_test";
@@ -38,7 +31,7 @@ public class MigrationTestFixture : IAsyncLifetime
     /// URL of the mock Nightscout API server
     /// </summary>
     public string MockNightscoutUrl =>
-        _mockNightscoutUrl ?? throw new InvalidOperationException("Mock server not started");
+        _mockNightscout?.Url ?? throw new InvalidOperationException("Mock server not started");
 
     /// <summary>
     /// Number of entries loaded from fixtures
@@ -93,11 +86,8 @@ public class MigrationTestFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_mockNightscoutApp != null)
-        {
-            await _mockNightscoutApp.StopAsync();
-            await _mockNightscoutApp.DisposeAsync();
-        }
+        if (_mockNightscout != null)
+            await _mockNightscout.DisposeAsync();
 
         await _mongoContainer.DisposeAsync();
     }
@@ -170,39 +160,16 @@ public class MigrationTestFixture : IAsyncLifetime
         var entriesApiJson = ConvertEjsonToNightscoutApiJson(entriesJson);
         var treatmentsApiJson = ConvertEjsonToNightscoutApiJson(treatmentsJson);
 
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Logging.SetMinimumLevel(LogLevel.Warning);
-
-        _mockNightscoutApp = builder.Build();
-
-        _mockNightscoutApp.MapGet("/api/v1/status", () => Results.Json(new
+        _mockNightscout = await FakeNightscout.StartAsync(new Dictionary<string, Func<HttpContext, Task<string>>>
         {
-            status = "ok",
-            name = "Nightscout",
-            version = "15.0.0",
-            apiEnabled = true
-        }));
-
-        _mockNightscoutApp.MapGet("/api/v1/entries.json", async (HttpContext ctx) =>
-        {
-            if (Volatile.Read(ref _entriesGate) is { } gate)
-                await gate.Task.WaitAsync(ctx.RequestAborted);
-            return Results.Content(entriesApiJson, "application/json");
+            ["/api/v1/entries.json"] = async context =>
+            {
+                if (Volatile.Read(ref _entriesGate) is { } gate)
+                    await gate.Task.WaitAsync(context.RequestAborted);
+                return entriesApiJson;
+            },
+            ["/api/v1/treatments.json"] = FakeNightscout.Body(treatmentsApiJson),
         });
-
-        _mockNightscoutApp.MapGet("/api/v1/treatments.json", (HttpContext ctx) =>
-        {
-            return Results.Content(treatmentsApiJson, "application/json");
-        });
-
-        await _mockNightscoutApp.StartAsync();
-
-        // Get the actual bound address (port 0 was resolved to a real port)
-        var server = _mockNightscoutApp.Services.GetRequiredService<IServer>();
-        var addressFeature = server.Features.Get<IServerAddressesFeature>();
-        _mockNightscoutUrl = addressFeature?.Addresses.First()
-            ?? throw new InvalidOperationException("Could not determine mock server address");
     }
 
     /// <summary>

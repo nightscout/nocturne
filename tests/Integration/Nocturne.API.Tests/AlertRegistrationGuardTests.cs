@@ -10,8 +10,8 @@ namespace Nocturne.API.Tests.Integration;
 /// a decision listed here with its reason.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertRegistrationGuardTests(ServiceProviderValidationTests.MigratedDatabase fixture)
-    : IClassFixture<ServiceProviderValidationTests.MigratedDatabase>
+public class AlertRegistrationGuardTests(ServiceProviderValidationTests.Database fixture)
+    : IClassFixture<ServiceProviderValidationTests.Database>
 {
     /// <summary>Service types that several registrations share on purpose, each implementation distinct.</summary>
     private static readonly Dictionary<Type, string> SharedByDesign = new()

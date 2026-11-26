@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Configuration;
@@ -36,23 +35,16 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
             ApplicationName = ApplicationName,
         }.ConnectionString;
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(connectionString, configuration: null, c =>
+        _provider = TestContexts.BuildProvider(connectionString, c =>
         {
             c.MaxPoolSize = 1;
             c.MaxAutoPrepare = 10;
         });
-        _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
         _tenant = await TenantReaderData.SeedTenantAsync(_fx, _provider);
     }
 
-    public async Task DisposeAsync()
-    {
-        await _provider.GetRequiredService<ContextDataSource>().Source.DisposeAsync();
-        await _provider.DisposeAsync();
-    }
+    public async Task DisposeAsync() => await _provider.DisposeAsync();
 
     [Theory]
     [InlineData(false)]
@@ -79,7 +71,7 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
 
             // Not RLS state: a marker that only Npgsql's reset would clear, so the leases below
             // show that their isolation comes from the interceptor's overwrite and not the reset.
-            await ScalarAsync(connection, "SELECT set_config('nocturne_test.marker', 'left', false)");
+            await connection.ScalarAsync<object?>("SELECT set_config('nocturne_test.marker', 'left', false)");
             await share.Database.CloseConnectionAsync();
         }
 
@@ -107,7 +99,7 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
             (await TenantReaderData.CountAsync(unpinned, _tenant)).Should().Be(ReaderCounts.Nothing,
                 "an empty tenant must match no tenant's rows, as an unset one does");
 
-            var insert = () => ScalarAsync(connection,
+            var insert = () => connection.ScalarAsync<object?>(
                 $"INSERT INTO foods (id, tenant_id, name) VALUES ('{Guid.NewGuid()}', '{_tenant}', 'stray')");
             (await insert.Should().ThrowAsync<PostgresException>())
                 .Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege,
@@ -207,17 +199,17 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
     private async Task<NocturneDbContext> NewContextAsync() =>
         await _provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync();
 
-    private static async Task<DbConnection> OpenAsync(NocturneDbContext context, bool synchronous)
+    private static async Task<NpgsqlConnection> OpenAsync(NocturneDbContext context, bool synchronous)
     {
         if (synchronous)
             context.Database.OpenConnection();
         else
             await context.Database.OpenConnectionAsync();
 
-        return context.Database.GetDbConnection();
+        return (NpgsqlConnection)context.Database.GetDbConnection();
     }
 
-    private static async Task AssertSessionAsync(DbConnection connection, string tenant, string applicationName)
+    private static async Task AssertSessionAsync(NpgsqlConnection connection, string tenant, string applicationName)
     {
         (await SettingAsync(connection, "app.current_tenant_id")).Should().Be(tenant);
         (await SettingAsync(connection, "app.current_subject_id")).Should().BeEmpty(
@@ -237,17 +229,9 @@ public class PooledLeaseSessionIsolationTests : IAsyncLifetime
         return count;
     }
 
-    private static async Task<int> PidAsync(DbConnection connection) =>
-        Convert.ToInt32(await ScalarAsync(connection, "SELECT pg_backend_pid()"));
+    private static async Task<int> PidAsync(NpgsqlConnection connection) =>
+        Convert.ToInt32(await connection.ScalarAsync<object?>("SELECT pg_backend_pid()"));
 
-    private static async Task<string?> SettingAsync(DbConnection connection, string name) =>
-        (string?)await ScalarAsync(connection, $"SELECT current_setting('{name}', true)");
-
-    private static async Task<object?> ScalarAsync(DbConnection connection, string sql)
-    {
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = sql;
-        var value = await cmd.ExecuteScalarAsync();
-        return value is DBNull ? null : value;
-    }
+    private static async Task<string?> SettingAsync(NpgsqlConnection connection, string name) =>
+        (string?)await connection.ScalarAsync<object?>($"SELECT current_setting('{name}', true)");
 }

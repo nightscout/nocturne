@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -21,7 +22,6 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
@@ -258,7 +258,7 @@ public class MealMatchingServiceTests
         _notificationRepository
             .Setup(r => r.FindBySourceAsync(
                 UserId, "meal_matching.suggested_match", id.ToString(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new InAppNotificationEntity { SourceId = id.ToString() });
+            .ReturnsAsync(new InAppNotification { SourceId = id.ToString() });
 
         await NewService().ProcessNewFoodEntriesAsync(UserId, [id]);
 

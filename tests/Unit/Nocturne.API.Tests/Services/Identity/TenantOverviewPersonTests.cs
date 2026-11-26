@@ -113,6 +113,7 @@ public class TenantOverviewPersonTests
 
         var person = await harness.Service.GetPersonAsync(
             subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie);
+        harness.Reads.Should().Contain((tenantId, "scope"));
         var overview = await harness.Service.GetOverviewAsync(
             subjectId, FullTokenScopes, AuthType.SessionCookie);
 
@@ -388,19 +389,6 @@ public class TenantOverviewPersonTests
         public IReadOnlyList<CarbIntake>? Intakes { get; init; }
     }
 
-    private sealed class PinRecordingTenantAccessor(List<(Guid Tenant, string Kind)> reads) : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public TenantContext? Context { get; private set; }
-
-        public void SetTenant(TenantContext context)
-        {
-            Context = context;
-            reads.Add((context.TenantId, "scope"));
-        }
-    }
-
     private sealed class Harness
     {
         public Dictionary<Guid, TenantData> Data { get; } = [];
@@ -416,7 +404,7 @@ public class TenantOverviewPersonTests
         public Harness(DbContextOptions<NocturneDbContext> options)
         {
             var services = new ServiceCollection();
-            services.AddScoped<ITenantAccessor>(_ => new PinRecordingTenantAccessor(Reads));
+            services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor(onSet: context => Reads.Add((context.TenantId, "scope"))));
             services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
             services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
                 options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));

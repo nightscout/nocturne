@@ -81,6 +81,7 @@ public static class SecuritySchemeDefinitions
             [Scope.SharingReadWrite] = "Manage sharing settings",
             [Scope.DeviceNotify] = "Send alert notifications to a registered client device",
             [Scope.DeviceActuate] = "Start an alert action on a registered client device",
+            [Scope.NotificationsSend] = "Put an informational notice in the notification tray of the member who granted it (or of the owners or members, when an owner or an administrator granted it)",
         };
 
     /// <summary>

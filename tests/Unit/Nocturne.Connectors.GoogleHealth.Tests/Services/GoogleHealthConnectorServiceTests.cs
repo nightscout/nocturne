@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
@@ -15,9 +16,9 @@ using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Health;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
@@ -553,10 +554,10 @@ public class GoogleHealthConnectorServiceTests
         config.HistoryDays = 7;
 
         var sync = fixture.Service.SyncDataAsync(config, CancellationToken.None);
-        var cleanupToken = await saveStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var cleanupToken = await saveStarted.Task.WaitAsync(Eventually.DefaultPatience);
         Assert.False(cleanupToken.IsCancellationRequested);
         clock.Advance(TimeSpan.FromSeconds(30));
-        var result = await sync.WaitAsync(TimeSpan.FromSeconds(10));
+        var result = await sync.WaitAsync(Eventually.DefaultPatience);
 
         Assert.True(cleanupToken.IsCancellationRequested);
         Assert.False(result.Success);
@@ -581,7 +582,7 @@ public class GoogleHealthConnectorServiceTests
         {
             fixture!.State.WriteHook = _ => defect
                 ? throw new InvalidCastException("defect")
-                : throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException());
+                : throw new ConnectorStoreUnavailableException("connection refused", new InvalidOperationException());
             return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
         }
         var config = fixture.Configuration();
@@ -623,14 +624,104 @@ public class GoogleHealthConnectorServiceTests
         var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
         var sync = fixture.Service.SyncDataAsync(
             new SyncRequest { From = from, To = from.AddDays(1) }, fixture.Configuration(), CancellationToken.None);
-        var cleanupToken = await abandonStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var cleanupToken = await abandonStarted.Task.WaitAsync(Eventually.DefaultPatience);
         Assert.False(cleanupToken.IsCancellationRequested);
         clock.Advance(TimeSpan.FromSeconds(30));
-        var result = await sync.WaitAsync(TimeSpan.FromSeconds(10));
+        var result = await sync.WaitAsync(Eventually.DefaultPatience);
 
         Assert.True(cleanupToken.IsCancellationRequested);
         Assert.False(result.Success);
         Assert.Equal("internal_sync_native_write:weight", result.Message);
+    }
+
+    private static Fixture FixtureWhoseWriteFails(Exception? cleanupFailure, Exception? writeFailure = null)
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json(
+                """{"dataPoints":[{"name":"weight-1","weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"weightGrams":70000}}]}"""),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        fixture.Writer
+            .Setup(value => value.WriteAsync(
+                It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
+                It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(writeFailure ?? new InvalidOperationException("the write failed"));
+        if (cleanupFailure is not null)
+            fixture.Writer
+                .Setup(value => value.AbandonReconciliationAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(cleanupFailure);
+        return fixture;
+    }
+
+    private static Task<SyncResult> SyncOneDay(Fixture fixture)
+    {
+        var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        return fixture.Service.SyncDataAsync(
+            new SyncRequest { From = from, To = from.AddDays(1) }, fixture.Configuration(), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_reconciliation_cleanup_that_the_store_refuses_is_logged_and_the_sync_fails_for_its_own_reason()
+    {
+        var down = new ConnectorStoreUnavailableException("connection refused", new InvalidOperationException());
+        var fixture = FixtureWhoseWriteFails(down);
+
+        var result = await SyncOneDay(fixture);
+
+        Assert.False(result.Success);
+        Assert.Equal("internal_sync_native_write:weight", result.Message);
+        var logged = Assert.Single(fixture.Log.Entries, entry => entry.Message.StartsWith("Could not discard", StringComparison.Ordinal));
+        Assert.Equal(LogLevel.Warning, logged.Level);
+        Assert.Same(down, logged.Exception);
+    }
+
+    private sealed class StoreProbeException(string message) : Exception(message);
+
+    [Fact]
+    public async Task A_store_failure_in_a_write_reports_the_type_of_the_failure_the_store_raised()
+    {
+        var down = new ConnectorStoreUnavailableException("connection refused", new StoreProbeException("save failed"));
+        var fixture = FixtureWhoseWriteFails(cleanupFailure: null, writeFailure: down);
+
+        var result = await SyncOneDay(fixture);
+
+        Assert.False(result.Success);
+        Assert.Equal("internal_sync_native_write:weight", result.Message);
+        var failure = Assert.Single(fixture.Log.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.EndsWith("provider reason StoreProbeException", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_cancellation_in_the_reconciliation_cleanup_that_its_token_did_not_raise_is_a_defect()
+    {
+        var fixture = FixtureWhoseWriteFails(new OperationCanceledException("not the cleanup's expiry"));
+
+        var result = await SyncOneDay(fixture);
+
+        Assert.False(result.Success);
+        Assert.Equal("internal_sync", result.Errors.Single());
+        var unexpected = Assert.Single(fixture.Log.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.IsType<OperationCanceledException>(unexpected.Exception);
+        Assert.DoesNotContain(fixture.Log.Entries, entry => entry.Message.StartsWith("Could not discard", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_defect_in_the_reconciliation_cleanup_fails_the_sync_in_place_of_the_failure_that_sent_it_there()
+    {
+        var fixture = FixtureWhoseWriteFails(new NullReferenceException("a defect in the cleanup"));
+
+        var result = await SyncOneDay(fixture);
+
+        Assert.False(result.Success);
+        Assert.Equal("internal_sync", result.Errors.Single());
+        var unexpected = Assert.Single(fixture.Log.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.IsType<NullReferenceException>(unexpected.Exception);
+        Assert.DoesNotContain(fixture.Log.Entries, entry => entry.Message.StartsWith("Could not discard", StringComparison.Ordinal));
+        var original = Assert.Single(fixture.Log.Entries, entry => entry.Message.Contains("discarding reconciliation run", StringComparison.Ordinal));
+        Assert.Equal("the write failed", original.Exception!.Message);
     }
 
     [Fact]
@@ -1107,6 +1198,20 @@ public class GoogleHealthConnectorServiceTests
         Assert.False(fixture.ImportFromWasConsumed);
     }
 
+    private sealed class CapturingLogger : ILogger<GoogleHealthConnectorService>
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception), exception));
+    }
+
     private sealed class Fixture
     {
         private readonly Guid tenantId = Guid.NewGuid();
@@ -1120,9 +1225,7 @@ public class GoogleHealthConnectorServiceTests
 
         public Fixture(Func<HttpRequestMessage, HttpResponseMessage> responder, TimeProvider? timeProvider = null)
         {
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.SetupGet(value => value.IsResolved).Returns(true);
-            tenant.SetupGet(value => value.TenantId).Returns(tenantId);
+            var tenant = SettableTenantAccessor.Resolved(tenantId);
             var configurations = new Mock<IConnectorConfigurationService>();
             configurations.Setup(value => value.GetSecretsAsync(
                     "GoogleHealth", It.IsAny<CancellationToken>()))
@@ -1190,7 +1293,7 @@ public class GoogleHealthConnectorServiceTests
                 new HttpClient(handler, false),
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-                tenant.Object,
+                tenant,
                 TestPlatform.Options(),
                 NullLogger<GoogleHealthAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>());
@@ -1199,20 +1302,21 @@ public class GoogleHealthConnectorServiceTests
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 new GoogleHealthClient(new HttpClient(handler, false)),
                 new GoogleHealthSessionStore(configurations.Object, oauth,
-                    Mock.Of<IGoogleHealthGrantHolders>(), tenant.Object, TestPlatform.Options(),
+                    Mock.Of<IGoogleHealthGrantHolders>(), tenant, TestPlatform.Options(),
                     NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,
-                tenant.Object,
+                tenant,
                 loader.Object,
-                NullLogger<GoogleHealthConnectorService>.Instance,
+                Log,
                 Mock.Of<IRetryDelayStrategy>(),
                 publisher: new StoringConnectorPublisher(State),
                 timeProvider: timeProvider);
         }
 
         public GoogleHealthConnectorService Service { get; }
+        public CapturingLogger Log { get; } = new();
         public HookedStateStore State { get; } = new();
         public SemaphoreSlim Gate { get; } = new(1);
         public Mock<IGoogleHealthSyncCoordinator> Coordinator { get; } = new();

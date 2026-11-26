@@ -22,26 +22,10 @@ public class SubjectUnclaimedTeamRowsPostgresTests(SubjectUnclaimedTeamRowsPostg
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("unclaimed_team_rows");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("unclaimed_team_rows");
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private static string Issuer(Guid provider) => $"https://{provider:N}.example";
 

@@ -13,6 +13,7 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -362,9 +363,7 @@ public class HubCredentialKindTests
         var dataHub = new Mock<IHubContext<DataHub>>();
         dataHub.SetupGet(h => h.Clients).Returns(clients.Object);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false));
+        var tenantAccessor = SettableTenantAccessor.Resolved(Tenant, "default", "Default");
 
         var service = new SignalRBroadcastService(
             dataHub.Object,
@@ -373,7 +372,7 @@ public class HubCredentialKindTests
             Mock.Of<IHubContext<AlertHub>>(),
             Mock.Of<IHubContext<HomeAssistantHub>>(),
             Mock.Of<IHubContext<OverviewHub>>(),
-            tenantAccessor.Object,
+            tenantAccessor,
             Options.Create(new JsonHubProtocolOptions()),
             Mock.Of<ILogger<SignalRBroadcastService>>());
 

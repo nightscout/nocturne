@@ -46,7 +46,7 @@ public class EmailConfirmationTests : IDisposable
         _tenant = new TenantContext(_tenantId, "alpha", "Alpha household", true, false);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
         _contexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
 
         using var seed = _db.CreateContext(Guid.Empty);

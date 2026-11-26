@@ -30,20 +30,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     private static readonly DateTime Now = new(2026, 11, 30, 12, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Ends = new(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("membership_team_reason");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("membership_team_reason");
 
     private sealed record Site(
         Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
@@ -61,18 +48,12 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-reason', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, $"{slug}-{tenant:N}", "team-reason");
         var factory = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, Ct);
@@ -93,7 +74,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     {
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
-        await ExecuteAsync(TeamReasonSql.Access(tenant, team, access, name));
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, TeamReasonSql.Access(tenant, team, access, name));
         return (team, access);
     }
 
@@ -124,8 +105,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var reason = Guid.CreateVersion7();
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var limit = limitTo24Hours ? "true" : "false";
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             {(member is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, access_ends_at, sys_created_at, sys_updated_at)
                 VALUES ('{memberId}', '{site.Tenant}', '{subject}', {limit}, {ends}, now(), now());
@@ -312,7 +292,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var (subject, member, access) = await MixedAsync(site, "remove-direct-mixed", ["treatments.read"]);
         var before = (await RowsAsync(site, subject)).Count;
 
-        (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var rows = (await RowsAsync(site, subject)).Skip(before).ToList();
@@ -336,10 +316,10 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var state = await RowStateAsync(member);
         var audit = await AuditCountAsync(site);
 
-        (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.FromTeam);
-        (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.FromTeam);
         (await site.Members.ReplaceRolesAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct)).Should().BeFalse();
         (await site.Members.SetDirectPermissionsAsync(site.Tenant, member, ["glucose.read"], Now, Ct)).Should().BeFalse();
@@ -356,10 +336,10 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("roles-mixed");
         var (_, member, _) = await MixedAsync(site, "roles-mixed-member");
 
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.ViewerRole], [site.CaretakerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.ViewerRole], [site.CaretakerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
-        (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
+        (await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
 
@@ -390,7 +370,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("end-mixed");
         var (_, member, _) = await MixedAsync(site, "end-mixed-member");
 
-        (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
         await RowIsTheSumAsync(site, member);
 
         var record = (await site.Members.GetMemberAsync(site.Tenant, member, Ct))!;
@@ -426,13 +406,12 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("fk");
         var (_, member, access) = await MixedAsync(site, "fk-mixed");
 
-        var deleteAccess = () => ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        var deleteAccess = () => NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             DELETE FROM team_tenant_access WHERE id = '{access}';
             """);
         (await deleteAccess.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
 
-        await ExecuteAsync($"DELETE FROM tenants WHERE id = '{site.Tenant}';");
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"DELETE FROM tenants WHERE id = '{site.Tenant}';");
 
         (await RowStateAsync(member)).Should().Be("absent");
         (await ReadAsync($"SELECT count(*)::text FROM tenant_member_reasons WHERE tenant_member_id = '{member}'")).Should().Equal("0");
@@ -520,23 +499,14 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var (reset, resetMember, _) = await MixedAsync(site, "remove-all-reset");
         var (deleted, deletedMember, _) = await TeamOnlyAsync(site, "remove-all-deleted");
 
-        (await site.Members.RemoveMembershipsOfSubjectAsync(reset, Ct)).Removed.Should().Be(1);
-        await new SubjectRepository(site.Factory, AccountLinkRoutes.Off).DeleteAsync(deleted, Ct);
+        (await SubjectDeletions.DeleteEvenLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, reset, Ct)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
+        await SubjectDeletions.DeleteAsync(site.Factory, AccountLinkRoutes.Off, deleted, Ct);
 
         (await RowStateAsync(resetMember)).Should().Be("absent");
         (await RowStateAsync(deletedMember)).Should().Be("absent");
         (await ReadAsync($"SELECT count(*)::text FROM tenant_member_reasons WHERE tenant_member_id IN ('{resetMember}', '{deletedMember}')"))
             .Should().Equal("0");
-    }
-
-    private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task<List<string>> ReadAsync(string sql)

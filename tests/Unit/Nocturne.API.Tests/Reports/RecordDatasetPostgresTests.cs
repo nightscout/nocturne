@@ -35,33 +35,23 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
     private static readonly string[] Scopes =
         [Scope.GlucoseRead, Scope.AlertsRead, Scope.SleepRead, Scope.TherapyRead, Scope.HeartRateRead];
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_records")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
         /// <summary>Two tenants seeded alike, so a read that crossed tenants would count each row twice.</summary>
         public Guid Tenant { get; private set; }
         public Guid Other { get; private set; }
         public DateTimeOffset Now { get; private set; }
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_records");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
+            await base.InitializeAsync();
             Now = DateTimeOffset.UtcNow;
             Tenant = await SeedTenantAsync();
             Other = await SeedTenantAsync();
         }
 
-        public Task DisposeAsync() => Task.CompletedTask;
-
         public DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString);
 
         private async Task<Guid> SeedTenantAsync()
         {
@@ -69,14 +59,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
             await using (var conn = new NpgsqlConnection(MigratorConnectionString))
             {
                 await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                    VALUES (@id, @slug, 'report-records-test', true, now(), now())
-                    """;
-                cmd.Parameters.AddWithValue("id", tenant);
-                cmd.Parameters.AddWithValue("slug", $"report-records-{tenant:N}");
-                await cmd.ExecuteNonQueryAsync();
+                await conn.SeedTenantAsync(tenant, $"report-records-{tenant:N}", "report-records-test");
             }
 
             var now = Now.UtcDateTime;
@@ -276,14 +259,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'report-records-more', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("id", tenant);
-            cmd.Parameters.AddWithValue("slug", $"report-records-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"report-records-{tenant:N}", "report-records-more");
         }
         if (seed is not null)
         {
@@ -435,14 +411,7 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'report-records-empty', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("id", empty);
-            cmd.Parameters.AddWithValue("slug", $"report-records-{empty:N}");
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(empty, $"report-records-{empty:N}", "report-records-empty");
         }
 
         foreach (var name in Names)

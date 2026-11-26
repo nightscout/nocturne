@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -46,9 +47,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         // Provision tenant A (the default test tenant)
         using var provisionClient = CreateAuthenticatedClient();
@@ -79,20 +78,15 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     public async Task TenantA_CannotReview_TenantB_CompressionLowSuggestions()
     {
         var suggestionId = Guid.NewGuid();
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                INSERT INTO compression_low_suggestions
-                    (id, tenant_id, start_mills, end_mills, confidence, status, night_of, created_at)
-                VALUES (@id, @tenant::uuid, 1760000000000, 1760000900000, 0.8, 'Pending', '2026-03-03', 1760000900000);
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantBId.ToString());
-            cmd.Parameters.AddWithValue("id", suggestionId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(_tenantBId);
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO compression_low_suggestions
+                (id, tenant_id, start_mills, end_mills, confidence, status, night_of, created_at)
+            VALUES (@id, @tenant, 1760000000000, 1760000900000, 0.8, 'Pending', '2026-03-03', 1760000900000);
+            """,
+            ("tenant", _tenantBId), ("id", suggestionId));
 
         async Task<string?> StatusAsync()
         {
@@ -509,14 +503,9 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     /// </summary>
     private async Task DeactivateTenantBAsync()
     {
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE tenants SET is_active = false WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", _tenantBId);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("UPDATE tenants SET is_active = false WHERE id = @id;", ("id", _tenantBId));
 
         TenantResolutionMiddleware.EvictTenant(Fixture.Services.GetRequiredService<IMemoryCache>(), _slugB);
     }
@@ -679,10 +668,8 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 
         // Remove subject A's membership in tenant A the way RemoveMemberAsync does, directly on the
         // database so the removal does not depend on the member-management endpoints.
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using (var conn = new NpgsqlConnection(connStr))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "DELETE FROM tenant_members WHERE subject_id = @s AND tenant_id = @t;";
             cmd.Parameters.AddWithValue("s", _subjectAId);

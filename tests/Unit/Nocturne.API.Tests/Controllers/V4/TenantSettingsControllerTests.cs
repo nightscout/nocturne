@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -258,14 +259,13 @@ public class TenantSettingsControllerTests
         var records = new Mock<IPatientRecordRepository>(MockBehavior.Strict);
         var units = new Mock<IUnitsAndTimezoneService>(MockBehavior.Strict);
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var accessor = SettableTenantAccessor.Resolved(TenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
         var controller = new TenantSettingsController(
-            tenants.Object, accessor.Object, records.Object, units.Object, PolicyAllowing(false).Object,
+            tenants.Object, accessor, records.Object, units.Object, PolicyAllowing(false).Object,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
@@ -288,15 +288,14 @@ public class TenantSettingsControllerTests
         var tenants = new Mock<ITenantService>();
         tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantSettingsDto(false, "old", "Old", DateTime.UtcNow));
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var accessor = SettableTenantAccessor.Resolved(TenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
         httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, IsPlatformAdmin = isPlatformAdmin };
 
         var controller = new TenantSettingsController(
-            tenants.Object, accessor.Object, Mock.Of<IPatientRecordRepository>(), Mock.Of<IUnitsAndTimezoneService>(),
+            tenants.Object, accessor, Mock.Of<IPatientRecordRepository>(), Mock.Of<IUnitsAndTimezoneService>(),
             PolicyAllowing(policyAllows).Object, Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

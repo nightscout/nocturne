@@ -9,6 +9,8 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
+using static Nocturne.API.Tests.Migration.MigrationJobHarness;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -29,14 +31,6 @@ public class MigrationFailureReportingTests
 
     private const string ServerErrorMessage =
         "Nightscout answered with a server error (500). It may be down or restarting; try again shortly.";
-
-    /// <summary>Answers each request from <paramref name="respond"/>, keyed on the path alone.</summary>
-    private sealed class RoutedNightscout(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(respond(request.RequestUri!.AbsolutePath));
-    }
 
     private sealed class ThrowingHost(Func<Exception> fail) : HttpMessageHandler
     {
@@ -89,9 +83,6 @@ public class MigrationFailureReportingTests
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body = "[]") =>
-        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
         MigrationJobHarness.CreateService(provider);
@@ -456,7 +447,7 @@ public class MigrationFailureReportingTests
             Timeout = TimeSpan.FromMilliseconds(200),
         };
 
-        using var job = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var job = new CancellationTokenSource(Eventually.DefaultPatience);
         var read = () => MigrationJob.ReadPageFromSourceAsync<Treatment>(
             client, "/api/v1/treatments.json", "treatments", job.Token);
 

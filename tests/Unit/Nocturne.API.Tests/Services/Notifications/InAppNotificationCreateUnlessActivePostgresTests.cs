@@ -20,25 +20,10 @@ namespace Nocturne.API.Tests.Services.Notifications;
 public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationCreateUnlessActivePostgresTests.Database database)
     : IClassFixture<InAppNotificationCreateUnlessActivePostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("notification_create_unless_active")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("notification_create_unless_active");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-
         private DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(AppConnectionString, o => o.EnableRetryOnFailure())
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString, npgsql: TestContexts.Retrying);
 
         public async Task<(InAppNotificationRepository Repository, NocturneDbContext Reader)> TenantAsync()
         {
@@ -46,21 +31,14 @@ public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationC
             await using (var conn = new NpgsqlConnection(MigratorConnectionString))
             {
                 await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                    VALUES (@id, @slug, 'notification-test', true, now(), now())
-                    """;
-                cmd.Parameters.AddWithValue("id", tenant);
-                cmd.Parameters.AddWithValue("slug", $"notification-{tenant:N}");
-                await cmd.ExecuteNonQueryAsync();
+                await conn.SeedTenantAsync(tenant, $"notification-{tenant:N}", "notification-test");
             }
             return (new InAppNotificationRepository(new NocturneDbContext(Options) { TenantId = tenant }.AsFactory()),
                 new NocturneDbContext(Options) { TenantId = tenant });
         }
     }
 
-    private static InAppNotificationEntity Notice() => new()
+    private static InAppNotification Notice() => new()
     {
         UserId = "owner",
         Type = "alerts.deviceClockAhead",
@@ -91,7 +69,7 @@ public class InAppNotificationCreateUnlessActivePostgresTests(InAppNotificationC
         var created = await repository.CreateUnlessActiveAsync(Notice());
 
         (await repository.ReplaceMetadataBySourceAsync("owner", "alerts.deviceClockAhead", "last_reading_at",
-            """{"aheadUntil":"2026-06-10T12:11:00.0000000Z"}""")).Should().BeTrue();
+            new Dictionary<string, object> { ["aheadUntil"] = "2026-06-10T12:11:00.0000000Z" })).Should().BeTrue();
 
         var rows = await reader.InAppNotifications.Where(n => n.SourceId == "last_reading_at").ToListAsync();
         rows.Should().ContainSingle().Which.Id.Should().Be(created!.Id);

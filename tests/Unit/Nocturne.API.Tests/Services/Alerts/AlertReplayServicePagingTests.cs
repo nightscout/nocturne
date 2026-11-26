@@ -22,6 +22,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -38,7 +39,7 @@ public class AlertReplayServicePagingTests
     private readonly Mock<IDndWindowRepository> _dndWindows = new();
     private readonly Mock<ITenantAlertSettingsRepository> _alertSettings = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly Mock<IIobCalculator> _iobCalculator = new();
     private readonly Mock<ICobCalculator> _cobCalculator = new();
     private readonly Mock<ITreatmentService> _treatmentService = new();
@@ -57,7 +58,7 @@ public class AlertReplayServicePagingTests
 
     public AlertReplayServicePagingTests()
     {
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
         SetupHidden([]);
         _dndWindows
             .Setup(r => r.GetReceivedByAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -92,7 +93,7 @@ public class AlertReplayServicePagingTests
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
-            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,
@@ -108,7 +109,7 @@ public class AlertReplayServicePagingTests
             _dndWindows.Object,
             _glucoseRepository.Object,
             enricher,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             Options.Create(options),
             new RustAlertReplayEngine(new AlertEngineErrors(new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
             new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()),
@@ -284,13 +285,13 @@ public class AlertReplayServicePagingTests
     /// </summary>
     /// <remarks>
     /// The replay runs under an expiring token so a regression that removes the guard surfaces as
-    /// the wrong exception type within seconds. <c>[Fact(Timeout)]</c> is not enough on its own:
+    /// the wrong exception type within the hang guard. <c>[Fact(Timeout)]</c> is not enough on its own:
     /// xUnit reports the timeout but does not abandon the runaway loop, which wedges the run.
     /// </remarks>
-    [Fact(Timeout = 30000)]
+    [Fact(Timeout = 120000)]
     public async Task AFetchThatIgnoresTheKeysetCursor_Fails_RatherThanSpinning()
     {
-        using var spinGuard = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var spinGuard = new CancellationTokenSource(Eventually.DefaultPatience);
 
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { ThresholdBelow(Guid.NewGuid(), 70m) });

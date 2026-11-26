@@ -16,11 +16,11 @@ from the messaging apps they already use. Four platforms are supported:
 - [Telegram](/docs/bots/telegram)
 - [WhatsApp](/docs/bots/whatsapp)
 
-Email delivery is handled by a separate provider; see [Email Alerts (Resend)](/docs/alerts/email).
+Email delivery is handled by a separate provider. See [Email Alerts (Resend)](/docs/alerts/email).
 
 All four platforms follow the same shape: create an app on the platform, collect its
 credentials, point its webhook at your Nocturne instance, and enter the credentials in
-Nocturne. The per-platform pages cover the steps unique to each one; this page covers the
+Nocturne. The per-platform pages cover the steps unique to each one. This page covers the
 parts they share.
 
 ## What the bot can do
@@ -41,19 +41,19 @@ The bot can also **deliver alerts**. Add the platform as a delivery channel on a
 ## Linking accounts
 
 A chat account has to be linked to a Nocturne account before it can see any glucose data.
-PHI is never stored on the chat platform; every reading is fetched over HTTPS through the
+PHI is never stored on the chat platform. Every reading is fetched over HTTPS through the
 Nocturne API at request time, scoped to the linked account.
 
 To link, a user runs `/connect` in the chat app. The bot replies with a one-time
-authorization link on your instance; signing in there ties their chat user ID to a Nocturne
-account. One chat user can link **several** accounts (e.g. a parent following two children),
+authorization link on your instance. Signing in there ties their chat user ID to a Nocturne
+account. One chat user can link **several** accounts (for example, a parent following two children),
 each given a short **label** used to disambiguate: `/bg lily`. One link is the **default**
 and is used when no label is given.
 
 <Callout type="info" title="BASE_DOMAIN is required">
 
   The bot builds <code>/connect</code> authorization links from your instance's
-  <code>BASE_DOMAIN</code>. This is already set on any working Nocturne deployment; if links
+  <code>BASE_DOMAIN</code>. This is already set on any working Nocturne deployment. If links
   point at the wrong host, check that value first.
 
 </Callout>
@@ -66,10 +66,10 @@ Every platform's credentials can be supplied two ways. Pick whichever fits your 
 
 1. Sign in to your Nocturne instance as an admin.
 2. Go to **Platform > Administration > Integrations**.
-3. Find the platform's card, fill in its fields, turn the **Enabled** switch on, and click **Save**.
+3. Find the platform's card, fill in its fields, turn the **Enabled** switch on, and select **Save**.
 
 Credentials entered here are **encrypted at rest** and stored per-instance. The fields are
-write-only: once saved, a field shows a **Set** badge and the input stays blank; leave it
+write-only: once saved, a field shows a **Set** badge and the input stays blank. Leave it
 blank on a later save to keep the existing value.
 
 <Callout type="warning" title="Restart after saving">
@@ -120,7 +120,7 @@ To push alerts to a connected platform:
 
 1. Go to **Alerts**.
 2. Create or edit an alert rule.
-3. Under **Delivery channels**, add the platform.
+3. Under **Channels**, select **Add channel**, then select the platform.
 4. Save the rule.
 
 The recipient must have a linked account on that platform. When the rule fires, the alert is

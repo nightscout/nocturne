@@ -262,7 +262,7 @@ public static class HttpContextExtensions
     /// before anything is written.
     /// </summary>
     public static ObjectResult CallerAccessFromTeamProblem(this ControllerBase controller) =>
-        controller.ProblemWithCode(MemberAccessFromTeam.Code, MemberAccessFromTeam.CallerDetail, StatusCodes.Status409Conflict);
+        controller.ProblemWithCode(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail, StatusCodes.Status409Conflict);
 
     /// <summary>
     /// Clamps every read on the request's services to the last 24 hours, through
@@ -350,6 +350,18 @@ public static class HttpContextExtensions
         && (await context.RequestServices.GetRequiredService<ISubjectRepository>()
                 .GetSignInStateAsync(subjectId, ct) is not { IsActive: true }
             || await HasSessionEndedAsync(context, auth, ct));
+
+    /// <summary>
+    /// Whether the caller signed in with a session that an action minting a credential would refuse:
+    /// <see cref="IsCallerInactiveAsync"/> when the request resolved a tenant, otherwise
+    /// <see cref="IsCallerSubjectInactiveAsync"/>. Every other credential answers false.
+    /// </summary>
+    public static async Task<bool> IsSessionCallerInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { } auth
+        && CallerSessionLiveness.IsSessionCaller(auth)
+        && (auth.TenantId is not null
+            ? await context.IsCallerInactiveAsync(ct)
+            : await context.IsCallerSubjectInactiveAsync(ct));
 
     private static async Task<bool> HasSessionEndedAsync(HttpContext context, AuthContext auth, CancellationToken ct) =>
         CallerSessionLiveness.IsSessionCaller(auth)

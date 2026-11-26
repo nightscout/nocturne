@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -23,13 +25,13 @@ public static class DecomposedTreatmentTables
 {
     public static IReadOnlyList<DecomposedTreatmentTable> All { get; } =
     [
-        Table<Bolus, BolusEntity>(db => db.Boluses, InWindow, BolusMapper.ToEntity),
-        Table<TempBasal, TempBasalEntity>(db => db.TempBasals, InWindow, TempBasalMapper.ToEntity),
-        Table<CarbIntake, CarbIntakeEntity>(db => db.CarbIntakes, InWindow, CarbIntakeMapper.ToEntity),
-        Table<BGCheck, BGCheckEntity>(db => db.BGChecks, InWindow, BGCheckMapper.ToEntity),
-        Table<Note, NoteEntity>(db => db.Notes, InWindow, NoteMapper.ToEntity),
-        Table<DeviceEvent, DeviceEventEntity>(db => db.DeviceEvents, InWindow, DeviceEventMapper.ToEntity),
-        Table<BolusCalculation, BolusCalculationEntity>(db => db.BolusCalculations, InWindow, BolusCalculationMapper.ToEntity),
+        Table<Bolus, BolusEntity>(db => db.Boluses, ObservationWindow.InWindow, BolusMapper.ToEntity),
+        Table<TempBasal, TempBasalEntity>(db => db.TempBasals, ObservationWindow.InWindow, TempBasalMapper.ToEntity),
+        Table<CarbIntake, CarbIntakeEntity>(db => db.CarbIntakes, ObservationWindow.InWindow, CarbIntakeMapper.ToEntity),
+        Table<BGCheck, BGCheckEntity>(db => db.BGChecks, ObservationWindow.InWindow, BGCheckMapper.ToEntity),
+        Table<Note, NoteEntity>(db => db.Notes, ObservationWindow.InWindow, NoteMapper.ToEntity),
+        Table<DeviceEvent, DeviceEventEntity>(db => db.DeviceEvents, ObservationWindow.InWindow, DeviceEventMapper.ToEntity),
+        Table<BolusCalculation, BolusCalculationEntity>(db => db.BolusCalculations, ObservationWindow.InWindow, BolusCalculationMapper.ToEntity),
         Table<ProfileActivation, ProfileActivationEntity>(db => db.ProfileActivations, ServedInWindow, ProfileActivationMapper.ToEntity),
     ];
 
@@ -38,7 +40,7 @@ public static class DecomposedTreatmentTables
         Func<IQueryable<TEntity>, DateTime?, DateTime?, IQueryable<TEntity>> inWindow,
         Func<TModel, TEntity> toEntity)
         where TModel : IV4Record
-        where TEntity : class, IV4TimeSeriesEntity, IAuditable, IUpstreamFingerprinted
+        where TEntity : class, IV4TimeSeriesEntity, IAuditable, IUpstreamFingerprinted, IWriteBackSent
         => new(typeof(TModel), rowsOf, inWindow, record => toEntity((TModel)record));
 
     /// <summary>The table whose rows <paramref name="record"/> is stored as.</summary>
@@ -46,28 +48,20 @@ public static class DecomposedTreatmentTables
         All.FirstOrDefault(t => t.Model.IsInstanceOfType(record))
         ?? throw new ArgumentException($"{record.GetType().Name} is not a decomposed treatment record", nameof(record));
 
-    /// <summary>The rows of <paramref name="rows"/> whose event time is inside the window, bounds inclusive.</summary>
-    public static IQueryable<T> InWindow<T>(IQueryable<T> rows, DateTime? from, DateTime? to)
-        where T : IV4TimeSeriesEntity
-    {
-        if (from.HasValue)
-            rows = rows.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            rows = rows.Where(e => e.Timestamp <= to.Value);
-        return rows;
-    }
-
     /// <summary>
     /// The activations a window delete takes: those decomposed from a treatment, which every window
     /// read serves. A connector's are not treatments.
     /// </summary>
     private static IQueryable<ProfileActivationEntity> ServedInWindow(
         IQueryable<ProfileActivationEntity> rows, DateTime? from, DateTime? to) =>
-        InWindow(rows, from, to).Where(a => a.LegacyId != null);
+        rows.InWindow(from, to).Where(a => a.LegacyId != null);
 }
 
 /// <summary>A legacy id one of <see cref="DecomposedTreatmentTables"/> stores, and its row's event time.</summary>
 public sealed record StoredLegacyId(string LegacyId, DateTime At);
+
+/// <summary>A live row of a record write-back sends, the documents of that send, and what the row stores of earlier ones.</summary>
+internal sealed record SentRow(Guid Id, IReadOnlyList<string> Documents, string? Stored);
 
 /// <summary>One of <see cref="DecomposedTreatmentTables"/>.</summary>
 public abstract class DecomposedTreatmentTable(Type model)
@@ -114,9 +108,33 @@ public abstract class DecomposedTreatmentTable(Type model)
     internal abstract Task<List<(string LegacyId, string? Fingerprint)>> FingerprintsFromSourceAsync(
         NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct);
 
-    /// <summary>Stamps this source's rows that carry no fingerprint yet.</summary>
+    /// <summary>
+    /// Stamps this source's rows under <paramref name="legacyIds"/> that carry no fingerprint yet, each
+    /// with the fingerprint at its id's index in <paramref name="fingerprints"/>, in one statement.
+    /// </summary>
     internal abstract Task StampUnfingerprintedAsync(
-        NocturneDbContext db, string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct);
+        NocturneDbContext db, string source, string[] legacyIds, string[] fingerprints, CancellationToken ct);
+
+    /// <summary>The correlation id of each row of this table among <paramref name="ids"/> that has one.</summary>
+    internal abstract Task<List<(Guid Id, Guid CorrelationId)>> CorrelationsAsync(NocturneDbContext db, Guid[] ids, CancellationToken ct);
+
+    /// <summary>
+    /// The live rows of a record of <paramref name="byRow"/>, <paramref name="byLegacyId"/> or, unkeyed,
+    /// <paramref name="byCorrelation"/>, matched in that order, each with its record's documents and
+    /// what it stores (<see cref="WriteBackFingerprint"/>).
+    /// </summary>
+    internal abstract Task<List<SentRow>> SentRowsAsync(
+        NocturneDbContext db,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> byLegacyId,
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>> byRow,
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>> byCorrelation,
+        CancellationToken ct);
+
+    /// <summary>Sets what each row of <paramref name="stored"/> stores of write-back, in one statement.</summary>
+    internal abstract Task StampSentAsync(NocturneDbContext db, IReadOnlyDictionary<Guid, string> stored, CancellationToken ct);
+
+    /// <summary>The ids of <paramref name="legacyIds"/> a row of this table holds a sent fingerprint under.</summary>
+    internal abstract Task<List<string>> SentUpstreamAsync(NocturneDbContext db, string[] legacyIds, CancellationToken ct);
 
     /// <summary>This source's live rows and user tombstones under <paramref name="legacyIds"/>.</summary>
     internal abstract Task<List<(StoredLegacyId Row, bool Live)>> ClientIdRowsAsync(
@@ -136,7 +154,7 @@ internal sealed class DecomposedTreatmentTable<T>(
     Func<NocturneDbContext, DbSet<T>> rowsOf,
     Func<IQueryable<T>, DateTime?, DateTime?, IQueryable<T>> inWindow,
     Func<IV4Record, T> toEntity) : DecomposedTreatmentTable(model)
-    where T : class, IV4TimeSeriesEntity, IAuditable, IUpstreamFingerprinted
+    where T : class, IV4TimeSeriesEntity, IAuditable, IUpstreamFingerprinted, IWriteBackSent
 {
     public override Task<AuditedSoftDeleteResult<Guid>> SoftDeleteAsync(
         NocturneDbContext db, string[] legacyIds, string? source, IAuditContext audit, string scope,
@@ -189,16 +207,70 @@ internal sealed class DecomposedTreatmentTable<T>(
             .Select(e => (e.LegacyId, e.UpstreamFingerprint))
             .ToList();
 
-    internal override async Task StampUnfingerprintedAsync(
-        NocturneDbContext db, string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct)
+    internal override Task StampUnfingerprintedAsync(
+        NocturneDbContext db, string source, string[] legacyIds, string[] fingerprints, CancellationToken ct)
+        => FromSource(rowsOf(db), source, legacyIds)
+            .Where(e => e.UpstreamFingerprint == null)
+            .ExecuteUpdateAsync(u => u.SetProperty(
+                e => e.UpstreamFingerprint, e => fingerprints[Array.IndexOf(legacyIds, e.LegacyId!)]), ct);
+
+    internal override async Task<List<(Guid Id, Guid CorrelationId)>> CorrelationsAsync(
+        NocturneDbContext db, Guid[] ids, CancellationToken ct)
+        => (await rowsOf(db).AsNoTracking()
+                .Where(e => ids.Contains(e.Id) && e.CorrelationId != null && e.CorrelationId != Guid.Empty)
+                .Select(e => new { e.Id, CorrelationId = e.CorrelationId!.Value })
+                .ToListAsync(ct))
+            .Select(e => (e.Id, e.CorrelationId))
+            .ToList();
+
+    internal override async Task<List<SentRow>> SentRowsAsync(
+        NocturneDbContext db,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> byLegacyId,
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>> byRow,
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>> byCorrelation,
+        CancellationToken ct)
     {
-        foreach (var (legacyId, fingerprint) in fingerprints)
+        string[] ids = [.. byLegacyId.Keys];
+        Guid[] rowIds = [.. byRow.Keys];
+        Guid[] groups = [.. byCorrelation.Keys];
+        var rows = await rowsOf(db).AsNoTracking()
+            .Where(e => (e.LegacyId != null && ids.Contains(e.LegacyId))
+                || rowIds.Contains(e.Id)
+                || (e.LegacyId == null && e.CorrelationId != null && groups.Contains(e.CorrelationId.Value)))
+            .Select(e => new { e.Id, e.LegacyId, e.CorrelationId, e.WriteBackSentFingerprint })
+            .ToListAsync(ct);
+
+        var sent = new List<SentRow>(rows.Count);
+        foreach (var row in rows)
         {
-            await FromSource(rowsOf(db), source, [legacyId])
-                .Where(e => e.UpstreamFingerprint == null)
-                .ExecuteUpdateAsync(u => u.SetProperty(e => e.UpstreamFingerprint, fingerprint), ct);
+            if (byRow.TryGetValue(row.Id, out var documents)
+                || (row.LegacyId is { } legacyId && byLegacyId.TryGetValue(legacyId, out documents))
+                || (row.LegacyId is null && row.CorrelationId is { } group && byCorrelation.TryGetValue(group, out documents)))
+                sent.Add(new SentRow(row.Id, documents, row.WriteBackSentFingerprint));
         }
+
+        return sent;
     }
+
+    internal override async Task StampSentAsync(NocturneDbContext db, IReadOnlyDictionary<Guid, string> stored, CancellationToken ct)
+    {
+        if (stored.Count == 0)
+            return;
+
+        Guid[] rowIds = [.. stored.Keys];
+        string[] values = [.. stored.Values];
+        await rowsOf(db)
+            .Where(e => rowIds.Contains(e.Id))
+            .ExecuteUpdateAsync(u => u.SetProperty(
+                e => e.WriteBackSentFingerprint, e => values[Array.IndexOf(rowIds, e.Id)]), ct);
+    }
+
+    internal override Task<List<string>> SentUpstreamAsync(NocturneDbContext db, string[] legacyIds, CancellationToken ct)
+        => rowsOf(db).IncludingDeleted().AsNoTracking()
+            .Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId) && e.WriteBackSentFingerprint != null)
+            .Select(e => e.LegacyId!)
+            .Distinct()
+            .ToListAsync(ct);
 
     internal override async Task<List<(StoredLegacyId Row, bool Live)>> ClientIdRowsAsync(
         NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct)

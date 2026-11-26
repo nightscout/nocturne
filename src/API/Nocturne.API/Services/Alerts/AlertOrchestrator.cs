@@ -85,7 +85,7 @@ internal sealed class AlertOrchestrator(
             {
                 // The rule is skipped; IUnevaluableRuleNotice has reported why.
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 outcome = AlertPassOutcome.Failed;
                 logger.LogError(ex, "Error evaluating alert rule {AlertRuleId} for tenant {TenantId}",
@@ -137,9 +137,20 @@ internal sealed class AlertOrchestrator(
 
         switch (evaluation.Transition.Type)
         {
-            case ExcursionTransitionType.ExcursionOpened when evaluation.Transition.ExcursionId is { } opened:
+            case ExcursionTransitionType.ExcursionOpened
+                when evaluation.Transition is { ExcursionId: { } opened, OwedAt: { } owedAt }:
                 await openedHandler.HandleOpenedAsync(
-                    rule, opened, context, tenantId, late: false, evaluation.MetBy, ct);
+                    rule, opened, owedAt, context, tenantId, late: false, evaluation.MetBy,
+                    callerCloses: evaluation.AutoResolveTransition is { Type: ExcursionTransitionType.ExcursionClosed } closing
+                        && closing.ExcursionId == opened,
+                    ct);
+                break;
+
+            case ExcursionTransitionType.ExcursionOpened
+                when evaluation.Transition is { ExcursionId: { } stampless }:
+                logger.LogWarning(
+                    "Excursion {ExcursionId} of rule {AlertRuleId} opened without the stamp its dispatch settles; the alert sweep sends it",
+                    stampless, rule.Id);
                 break;
 
             case ExcursionTransitionType.ExcursionClosed:

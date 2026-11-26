@@ -39,7 +39,6 @@ public static class ScenarioConversions
             Name = rule.Name,
             ConditionType = conditionType,
             ConditionParams = rule.ConditionParams.GetRawText(),
-            HysteresisMinutes = rule.HysteresisMinutes,
             AutoResolveEnabled = rule.AutoResolveEnabled,
             AutoResolveParams = rule.AutoResolveParams?.GetRawText(),
             OnUnknown = rule.OnUnknown ?? AlertRuleOnUnknown.Hold,
@@ -93,7 +92,7 @@ public static class ScenarioConversions
             TransmitterResistance = ctx.TransmitterResistance,
             TransmitterDays = ctx.TransmitterDays,
             ActiveOverride = ctx.ActiveOverride is { } ov
-                ? new OverrideSnapshot(Utc(ov.StartedAt)!.Value, null, null, null)
+                ? new OverrideSnapshot(Utc(ov.StartedAt)!.Value)
                 : null,
             ActivePumpSuspension = ctx.ActivePumpSuspension is { } ps
                 ? new PumpSuspensionSnapshot(Utc(ps.StartedAt)!.Value)

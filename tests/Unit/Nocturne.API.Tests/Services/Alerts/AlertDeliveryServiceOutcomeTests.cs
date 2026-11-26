@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,10 +8,11 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Realtime;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.ClientDevices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -51,13 +53,16 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         foreach (var provider in _providers) provider.Dispose();
     }
 
-    private AlertDeliveryService CreateService()
+    private AlertDeliveryService CreateService(ILogger<AlertDeliveryService>? logger = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(_broadcast.Object);
         services.AddSingleton(_inApp.Object);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<InAppProvider>();
+        services.AddSingleton(new DeviceActionProvider(
+            _broadcast.Object, new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<DeviceActionProvider>.Instance, TimeProvider.System));
 
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
@@ -65,11 +70,11 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         return new AlertDeliveryService(
             _factory.AsNocturneFactory(),
             new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             _broadcast.Object,
             Mock.Of<IEngineAlarmRelay>(),
             provider,
-            NullLogger<AlertDeliveryService>.Instance,
+            logger ?? NullLogger<AlertDeliveryService>.Instance,
             TimeProvider.System);
     }
 
@@ -221,6 +226,49 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_fire_cancelled_during_a_send_logs_no_error_and_tries_no_further_channel()
+    {
+        await AddMemberAsync(Tenant, Member);
+        using var shutdown = new CancellationTokenSource();
+        _broadcast.Setup(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()))
+            .Returns(async () =>
+            {
+                await shutdown.CancelAsync();
+                shutdown.Token.ThrowIfCancellationRequested();
+            });
+        var logger = new ListLogger<AlertDeliveryService>();
+        var instanceId = await SeedInstanceAsync();
+
+        var fire = () => CreateService(logger).DispatchAsync(
+            instanceId,
+            [Channel(ChannelType.DeviceAction, DeviceKinds.Companion), Channel(ChannelType.InApp, Member.ToString())],
+            Payload(instanceId),
+            shutdown.Token);
+
+        await fire.Should().ThrowAsync<OperationCanceledException>();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Error);
+        _inApp.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_channel_that_times_out_on_its_own_is_recorded_failed_and_the_next_channel_is_still_sent()
+    {
+        await AddMemberAsync(Tenant, Member);
+        _broadcast.Setup(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()))
+            .ThrowsAsync(new TaskCanceledException("The request timed out"));
+        var device = Channel(ChannelType.DeviceAction, DeviceKinds.Companion);
+        var inApp = Channel(ChannelType.InApp, Member.ToString());
+        var instanceId = await SeedInstanceAsync();
+
+        await CreateService().DispatchAsync(instanceId, [device, inApp], Payload(instanceId), CancellationToken.None);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var rows = await db.AlertDeliveries.IgnoreQueryFilters().ToDictionaryAsync(d => d.AlertRuleChannelId!.Value);
+        rows[device.Id].Status.Should().Be("failed");
+        rows[inApp.Id].Status.Should().Be("delivered");
+    }
+
+    [Fact]
     public async Task A_channel_type_with_no_provider_is_recorded_failed_rather_than_left_pending()
     {
         var delivery = await DispatchOneAsync(Channel(ChannelType.Telegram, "12345"));
@@ -334,5 +382,100 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         notSent.Should().Equal(new AlertChannelNotSent(1, ChannelType.DiscordDm, AlertChannelState.NoRecipient));
         await using var db = await _factory.CreateDbContextAsync();
         (await db.AlertDeliveries.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_reports_the_channel_it_did_not_send_and_still_sends_to_the_rest()
+    {
+        await AddMemberAsync(Tenant, Member);
+        var stopped = Channel(ChannelType.DiscordChannel, "1234567890123456789") with
+        {
+            AddedBySubjectId = Member,
+            StopsAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+
+        var fired = await CreateService().TestFireAsync(
+            Guid.NewGuid(), [Channel(ChannelType.InApp, Member.ToString()), stopped], Payload(Guid.Empty), CancellationToken.None);
+
+        fired.NotSent.Should().Equal(new AlertChannelNotSent(1, ChannelType.DiscordChannel, AlertChannelState.Stopped));
+        await using var db = await _factory.CreateDbContextAsync();
+        var rows = await db.AlertDeliveries.IgnoreQueryFilters().Where(d => d.AlertInstanceId == fired.InstanceId).ToListAsync();
+        rows.Single(d => d.ChannelType == ChannelType.InApp).Status.Should().Be("delivered");
+        rows.Single(d => d.ChannelType == ChannelType.DiscordChannel).Status.Should().Be("failed");
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_whose_channels_all_deliver_reports_none_not_sent()
+    {
+        await AddMemberAsync(Tenant, Member);
+
+        var fired = await CreateService().TestFireAsync(
+            Guid.NewGuid(), [Channel(ChannelType.InApp, Member.ToString())], Payload(Guid.Empty), CancellationToken.None);
+
+        fired.NotSent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_test_fire_of_a_saved_rule_and_a_dry_run_report_the_same_channels_not_sent()
+    {
+        var channels = new[]
+        {
+            Channel(ChannelType.WebPush, string.Empty),
+            Channel(ChannelType.DiscordDm, "1234567890123456789"),
+        };
+
+        var fired = await CreateService().TestFireAsync(Guid.NewGuid(), channels, Payload(Guid.Empty), CancellationToken.None);
+        var dryRun = await CreateService().TestFireDryRunAsync(channels, Payload(Guid.Empty), CancellationToken.None);
+
+        fired.NotSent.Should().Equal(dryRun).And.ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("pending", null, "delivered")]
+    [InlineData("failed", "wamid.1", "failed")]
+    [InlineData("failed", "wamid.0", "delivered")]
+    [InlineData("failed", null, "delivered")]
+    public async Task A_report_of_the_send_keeps_only_a_failure_reported_for_the_same_message(
+        string before, string? failedMessageId, string after)
+    {
+        var deliveryId = await SeedWhatsAppDeliveryAsync(before, failedMessageId);
+
+        await CreateService().MarkDeliveredAsync(deliveryId, "wamid.1", null, CancellationToken.None);
+
+        await using var read = await _factory.CreateDbContextAsync();
+        var row = await read.AlertDeliveries.SingleAsync(d => d.Id == deliveryId);
+        row.Status.Should().Be(after);
+    }
+
+    [Fact]
+    public async Task A_failure_of_a_sent_message_records_the_message_with_the_error()
+    {
+        var deliveryId = await SeedWhatsAppDeliveryAsync("delivered", "wamid.1");
+
+        await CreateService().MarkSentMessageFailedAsync(deliveryId, "wamid.1", "the window is closed", CancellationToken.None);
+
+        await using var read = await _factory.CreateDbContextAsync();
+        var row = await read.AlertDeliveries.SingleAsync(d => d.Id == deliveryId);
+        row.Status.Should().Be("failed");
+        row.LastError.Should().Be("the window is closed");
+        row.PlatformMessageId.Should().Be("wamid.1");
+        row.RetryCount.Should().Be(1);
+    }
+
+    private async Task<Guid> SeedWhatsAppDeliveryAsync(string status, string? platformMessageId)
+    {
+        var instanceId = await SeedInstanceAsync();
+        var deliveryId = Guid.CreateVersion7();
+        await using var db = await _factory.CreateDbContextAsync();
+        db.AlertDeliveries.Add(new AlertDeliveryEntity
+        {
+            Id = deliveryId, TenantId = Tenant, AlertInstanceId = instanceId,
+            ChannelType = ChannelType.WhatsAppDm, Destination = "61400000000", Payload = "{}",
+            Status = status, LastError = status == "failed" ? "a failure" : null,
+            PlatformMessageId = platformMessageId,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return deliveryId;
     }
 }

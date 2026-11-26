@@ -13,18 +13,21 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
 /// Deleting a subject on PostgreSQL under the runtime role and Row Level Security stops what they
-/// made in every tenant they belong to before the row goes: the guest links and device credentials
-/// they made, the member invites they made, and the alert channels they added.
+/// made in every tenant they belong to, in the commit that removes the row: the guest links and
+/// device credentials they made, the member invites they made, the alert channels they added and the
+/// imports they started. A refused delete stops none of it.
 /// </summary>
 [Trait("Category", "Integration")]
 public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database database)
@@ -32,20 +35,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("subject_deletion");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("subject_deletion");
 
     private sealed record Site(Guid Tenant, Guid Owner, Guid CaretakerRole);
 
@@ -54,10 +44,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
     private readonly GuestSessionCacheService _sessions = new(new MemoryCache(new MemoryCacheOptions()));
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private SuppliedContextFactory Contexts(Guid tenant) => new(() => Context(tenant));
 
@@ -70,14 +57,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'subject-deletion-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"{slug}-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"{slug}-{tenant:N}", "subject-deletion-test");
         }
 
         var members = new TenantMembershipRepository(Contexts(tenant), AccountLinkRoutes.Off);
@@ -177,12 +157,14 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
         return new SubjectDeletion(
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
-            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            AccountLinkRoutes.Off,
             new GrantRevocationService(_sessions),
             new AuthAuditService(
                 contexts, new HttpContextAccessor { HttpContext = new DefaultHttpContext() }, new AuditContext(),
                 NullLogger<AuthAuditService>.Instance),
             TimeProvider.System,
+            InertTeamStaff.Announcer(),
+            InertTeamStaff.Sites(),
             NullLogger<SubjectDeletion>.Instance);
     }
 
@@ -198,6 +180,184 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
         return await db.AuthAuditLog.AsNoTracking()
             .Where(a => a.TenantId == site.Tenant && a.EventType == eventType && a.TargetSubjectId == target)
             .ToListAsync();
+    }
+
+    /// <summary>A live import of Nightscout data into <paramref name="site"/> that <paramref name="starter"/> started.</summary>
+    private async Task<Guid> StartImportAsync(Site site, Guid starter)
+    {
+        var source = Guid.CreateVersion7();
+        var run = Guid.CreateVersion7();
+        await using var db = Context(site.Tenant);
+        db.MigrationSources.Add(new MigrationSourceEntity
+        {
+            Id = source, TenantId = site.Tenant, SourceIdentifier = $"https://{source:N}.example.invalid",
+        });
+        db.MigrationRuns.Add(new MigrationRunEntity
+        {
+            Id = run, SourceId = source, TenantId = site.Tenant, CreatedAt = UtcNow, StartedAt = UtcNow, State = "Running",
+            StartedBySubjectId = starter,
+        });
+        await db.SaveChangesAsync();
+        return run;
+    }
+
+    /// <summary>
+    /// What <paramref name="maker"/> made on <paramref name="site"/> is as they left it: no link revoked
+    /// or session evicted, no credential, channel or import capped, no invite revoked, and none of it audited.
+    /// </summary>
+    private async Task ShouldStopNothingAsync(Site site, Guid maker, Made made, Guid import)
+    {
+        var link = await GrantAsync(site, made.GuestLink);
+        link.RevokedAt.Should().BeNull();
+        link.CreatedBySubjectId.Should().Be(maker);
+        _sessions.TryGet(site.Tenant, made.GuestLink, out _).Should().BeTrue("no session is evicted");
+        (await GuestLinks(site).ValidateSessionAsync(made.GuestLink, Ct)).Should().NotBeNull();
+        (await GrantAsync(site, made.DeviceCredential)).ExpiresAt.Should().BeNull();
+
+        await using var db = Context(site.Tenant);
+        (await db.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.AlertRuleId == made.Rule)).StopsAt.Should().BeNull();
+        (await db.MemberInvites.AsNoTracking().SingleAsync(i => i.Id == made.Invite)).RevokedAt.Should().BeNull();
+        (await db.MigrationRuns.AsNoTracking().SingleAsync(r => r.Id == import)).StarterAccessEndsAt.Should().BeNull();
+        string[] stops =
+        [
+            AuthAuditEventType.GuestLinkRevoked, AuthAuditEventType.DeviceCredentialCapped,
+            AuthAuditEventType.MemberInviteRevoked, AuthAuditEventType.MemberRemoved,
+        ];
+        (await db.AuthAuditLog.AsNoTracking()
+                .AnyAsync(a => a.TenantId == site.Tenant && a.TargetSubjectId == maker && stops.Contains(a.EventType)))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ADeletionRefusedForTheLastOwnerStopsNothingTheyMadeInAnyTenant()
+    {
+        var home = await SeedSiteAsync("refused-owner-home");
+        var owned = await SeedSiteAsync("refused-owner-owned");
+        var maker = owned.Owner;
+        (await new TenantMembershipRepository(Contexts(home.Tenant), AccountLinkRoutes.Off).AddMemberAsync(
+                new NewTenantMember(home.Tenant, maker, [home.CaretakerRole]) { How = MembershipJoinHow.Direct, By = home.Owner }, Ct))
+            .Should().BeTrue();
+        var madeAtHome = await MakeAsync(home, maker);
+        var madeOwned = await MakeAsync(owned, maker);
+        var importAtHome = await StartImportAsync(home, maker);
+        var importOwned = await StartImportAsync(owned, maker);
+
+        (await Deletion().DeleteAsync(maker, evenLastOwner: false, Ct)).Change.Should().BeOfType<SubjectChange.LastOwnerOf>()
+            .Which.OwnedTenants.Select(t => t.TenantId).Should().Equal(owned.Tenant);
+
+        await ShouldStopNothingAsync(home, maker, madeAtHome, importAtHome);
+        await ShouldStopNothingAsync(owned, maker, madeOwned, importOwned);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ADeletionRefusedForTheLastManagerOfATeamStopsAndRemovesNothing(bool evenLastOwner)
+    {
+        var site = await SeedSiteAsync($"refused-manager-{evenLastOwner}");
+        var maker = await SeedMakerAsync($"refused-manager-{evenLastOwner}", site);
+        var made = await MakeAsync(site, maker);
+        var import = await StartImportAsync(site, maker);
+        var team = Guid.CreateVersion7();
+        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO teams (id, name) VALUES (@team, 'Clinic');
+                INSERT INTO team_members (id, team_id, subject_id, kind, limit_to_24_hours)
+                VALUES (gen_random_uuid(), @team, @manager, 'manager', false), (gen_random_uuid(), @team, @staff, 'staff', false);
+                """;
+            cmd.Parameters.Add(new NpgsqlParameter("@team", team));
+            cmd.Parameters.Add(new NpgsqlParameter("@manager", maker));
+            cmd.Parameters.Add(new NpgsqlParameter("@staff", site.Owner));
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        (await Deletion().DeleteAsync(maker, evenLastOwner, Ct)).Change.Should().BeOfType<SubjectChange.LastManagerOf>()
+            .Which.ManagedTeams.Select(t => t.TeamId).Should().Equal(team);
+
+        await ShouldStopNothingAsync(site, maker, made, import);
+        (await new TenantMembershipRepository(Contexts(site.Tenant), AccountLinkRoutes.Off).FindMemberAsync(site.Tenant, maker, Ct))
+            .Should().NotBeNull("a refused delete removes no membership");
+    }
+
+    /// <summary>
+    /// The delete is held at the subject's membership row, which it removes after it has saved the stop.
+    /// Another connection then finds the channel's row written but not committed, and reads it running
+    /// beside the subject, so no reader can see the channel stopped while the subject exists.
+    /// </summary>
+    [Fact]
+    public async Task WhatADeletionStopsIsNeverSeenStoppedWhileTheSubjectExists()
+    {
+        var site = await SeedSiteAsync("one-commit");
+        var maker = await SeedMakerAsync("one-commit", site);
+        var made = await MakeAsync(site, maker);
+
+        await using var holder = Context(site.Tenant);
+        await using var held = await holder.Database.BeginTransactionAsync();
+        await holder.Database.ExecuteSqlAsync(
+            $"SELECT 1 FROM tenant_members WHERE tenant_id = {site.Tenant} AND subject_id = {maker} FOR UPDATE", Ct);
+        var deletion = Task.Run(() => Deletion().DeleteAsync(maker, evenLastOwner: false, Ct));
+        await PostgresLockWaits.UntilBlockedByAsync(
+            database.AppConnectionString, ((NpgsqlConnection)holder.Database.GetDbConnection()).ProcessID, deletion);
+
+        await using (var reader = Context(site.Tenant))
+        {
+            await using var reading = await reader.Database.BeginTransactionAsync();
+            var claim = () => reader.Database.ExecuteSqlAsync(
+                $"SELECT 1 FROM alert_rule_channels WHERE alert_rule_id = {made.Rule} FOR UPDATE NOWAIT");
+            (await claim.Should().ThrowAsync<PostgresException>())
+                .Which.SqlState.Should().Be(PostgresErrorCodes.LockNotAvailable, "the delete has written the channel's stop");
+        }
+
+        await using (var reader = Context(site.Tenant))
+        {
+            (await reader.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.AlertRuleId == made.Rule)).StopsAt.Should().BeNull();
+            (await reader.Subjects.AsNoTracking().AnyAsync(s => s.Id == maker)).Should().BeTrue();
+        }
+
+        _sessions.TryGet(site.Tenant, made.GuestLink, out _).Should().BeTrue("a session is evicted only once the delete commits");
+
+        await held.RollbackAsync();
+        (await deletion).Change.Should().BeOfType<SubjectChange.Changed>();
+        await using var after = Context(site.Tenant);
+        (await after.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.AlertRuleId == made.Rule)).StopsAt.Should().NotBeNull();
+        (await after.Subjects.AsNoTracking().AnyAsync(s => s.Id == maker)).Should().BeFalse();
+        _sessions.TryGet(site.Tenant, made.GuestLink, out _).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A write that caps what a member made does so under their membership lock, so the delete must not
+    /// hold a row of theirs while it waits for that lock: held there, it has written none.
+    /// </summary>
+    [Fact]
+    public async Task ADeletionWaitingForAMembershipLockHoldsNoRowItStops()
+    {
+        var site = await SeedSiteAsync("stop-after-locks");
+        var maker = await SeedMakerAsync("stop-after-locks", site);
+        var made = await MakeAsync(site, maker);
+
+        await using var holder = Context(site.Tenant);
+        await using var held = await holder.Database.BeginTransactionAsync();
+        await holder.LockMembershipAsync(site.Tenant, maker, Ct);
+        var deletion = Task.Run(() => Deletion().DeleteAsync(maker, evenLastOwner: false, Ct));
+        await PostgresLockWaits.UntilBlockedByAsync(
+            database.AppConnectionString, ((NpgsqlConnection)holder.Database.GetDbConnection()).ProcessID, deletion);
+
+        await using (var reader = Context(site.Tenant))
+        {
+            await using var reading = await reader.Database.BeginTransactionAsync();
+            await reader.Database.ExecuteSqlAsync(
+                $"SELECT 1 FROM alert_rule_channels WHERE alert_rule_id = {made.Rule} FOR UPDATE NOWAIT", Ct);
+            await reader.Database.ExecuteSqlAsync(
+                $"SELECT 1 FROM oauth_grants WHERE id IN ({made.GuestLink}, {made.DeviceCredential}) FOR UPDATE NOWAIT", Ct);
+            await reader.Database.ExecuteSqlAsync(
+                $"SELECT 1 FROM member_invites WHERE id = {made.Invite} FOR UPDATE NOWAIT", Ct);
+        }
+
+        await held.RollbackAsync();
+        (await deletion).Change.Should().BeOfType<SubjectChange.Changed>();
     }
 
     [Fact]
@@ -223,11 +383,12 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
     }
 
     [Fact]
-    public async Task DeletingASubjectEndsTheDeviceCredentialsTheyMadeAndStopsTheAlertChannelsTheyAdded()
+    public async Task DeletingASubjectEndsTheDeviceCredentialsTheyMadeAndStopsTheAlertChannelsAndImportsTheyAdded()
     {
         var site = await SeedSiteAsync("del-made");
         var maker = await SeedMakerAsync("del-made", site);
         var made = await MakeAsync(site, maker);
+        var import = await StartImportAsync(site, maker);
         var before = UtcNow;
 
         (await Deletion().DeleteAsync(maker, evenLastOwner: false, Ct)).Change.Should().BeOfType<SubjectChange.Changed>();
@@ -237,6 +398,8 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
         await using var db = Context(site.Tenant);
         var channel = await db.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.AlertRuleId == made.Rule);
         channel.StopsAt.Should().NotBeNull().And.BeOnOrBefore(UtcNow).And.BeOnOrAfter(before);
+        (await db.MigrationRuns.AsNoTracking().SingleAsync(r => r.Id == import)).StarterAccessEndsAt
+            .Should().NotBeNull().And.BeOnOrBefore(UtcNow).And.BeOnOrAfter(before);
     }
 
     [Fact]

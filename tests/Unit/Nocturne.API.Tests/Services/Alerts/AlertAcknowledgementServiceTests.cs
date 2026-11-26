@@ -14,7 +14,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -46,9 +45,9 @@ public class AlertAcknowledgementServiceTests
         }
         _factory = new TestDbContextFactory(_options) { TenantOverride = _tenantId };
 
-        var tenantAccessor = MockTenantAccessor.Create(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
-        _tenantAccessor = tenantAccessor.Object;
+        _tenantAccessor = tenantAccessor;
 
         _service = new AlertAcknowledgementService(
             _factory,

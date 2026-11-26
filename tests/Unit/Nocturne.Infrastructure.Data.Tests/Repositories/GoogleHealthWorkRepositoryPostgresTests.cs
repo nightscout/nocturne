@@ -19,26 +19,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class GoogleHealthWorkRepositoryPostgresTests(GoogleHealthWorkRepositoryPostgresTests.Database database)
     : IClassFixture<GoogleHealthWorkRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health_work_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("google_health_work_repo");
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private GoogleHealthWorkRepository Work(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
 
@@ -47,14 +31,7 @@ public class GoogleHealthWorkRepositoryPostgresTests(GoogleHealthWorkRepositoryP
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'google-health-work-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"ghwork-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"ghwork-{tenant:N}", "google-health-work-test");
         return tenant;
     }
 

@@ -10,7 +10,6 @@
       "condition_params": {
         "timeout_minutes": 0
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -20,7 +19,6 @@
       "condition_params": {
         "timeout_minutes": -5
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -28,7 +26,6 @@
       "name": "rule-3",
       "condition_type": "signal_loss",
       "condition_params": {},
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -18,6 +19,9 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 [Trait("Category", "Integration")]
 public class AlertHubIntegrationTests : ApiIntegrationTestBase
 {
+    // A broadcast that must not arrive is awaited this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan NoBroadcastWithin = TimeSpan.FromSeconds(2);
+
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
@@ -37,9 +41,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
         // Seed a subject for the alert hub tests
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "AlertHub Test User");
@@ -114,9 +116,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task Acknowledge_BroadcastsToSubscribers()
     {
         // Arrange — seed an alert rule and excursion
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -134,8 +134,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/alerts/acknowledge", new { acknowledgedBy = "test-user" });
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Assert — should receive the broadcast within 5 seconds
-        var received = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5))) == tcs.Task;
+        var received = await Task.WhenAny(tcs.Task, Task.Delay(Eventually.DefaultPatience)) == tcs.Task;
         received.Should().BeTrue("subscriber should receive alert_acknowledged broadcast");
     }
 
@@ -155,8 +154,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/alerts/acknowledge", new { acknowledgedBy = "test-user" });
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Assert — no broadcast should be received (wait 1 second)
-        var received = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(1))) == tcs.Task;
+        var received = await Task.WhenAny(tcs.Task, Task.Delay(NoBroadcastWithin)) == tcs.Task;
         received.Should().BeFalse("no broadcast should occur when there are no active excursions");
     }
 
@@ -164,9 +162,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task Acknowledge_ViaHub_BroadcastsToSubscribers()
     {
         // Arrange — seed an alert rule and excursion
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -182,8 +178,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         // Act — acknowledge via the hub's Acknowledge method
         await connection.InvokeAsync("Acknowledge", "hub-test-user");
 
-        // Assert — should receive the broadcast within 5 seconds
-        var received = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5))) == tcs.Task;
+        var received = await Task.WhenAny(tcs.Task, Task.Delay(Eventually.DefaultPatience)) == tcs.Task;
         received.Should().BeTrue("subscriber should receive alert_acknowledged broadcast when acknowledging via hub");
     }
 
@@ -191,9 +186,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task MultipleSubscribers_AllReceiveBroadcast()
     {
         // Arrange — seed data
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
@@ -218,8 +211,8 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Assert — both should receive the broadcast
-        var received1 = await Task.WhenAny(tcs1.Task, Task.Delay(TimeSpan.FromSeconds(5))) == tcs1.Task;
-        var received2 = await Task.WhenAny(tcs2.Task, Task.Delay(TimeSpan.FromSeconds(5))) == tcs2.Task;
+        var received1 = await Task.WhenAny(tcs1.Task, Task.Delay(Eventually.DefaultPatience)) == tcs1.Task;
+        var received2 = await Task.WhenAny(tcs2.Task, Task.Delay(Eventually.DefaultPatience)) == tcs2.Task;
 
         received1.Should().BeTrue("first subscriber should receive alert_acknowledged broadcast");
         received2.Should().BeTrue("second subscriber should receive alert_acknowledged broadcast");
@@ -229,9 +222,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task TenantIsolation_AlertsNotCrossLeaked()
     {
         // Arrange — seed tenant B with its own subject, rule, and excursion
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var tenantBSlug = $"alert-hub-b-{Guid.NewGuid():N}"[..24];
         var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Alert Hub Tenant B");
@@ -255,8 +246,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         var response = await clientB.PostAsJsonAsync("/api/v4/alerts/acknowledge", new { acknowledgedBy = "tenant-b-user" });
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Assert — tenant A should NOT receive the broadcast (wait 2 seconds)
-        var receivedByA = await Task.WhenAny(tcsA.Task, Task.Delay(TimeSpan.FromSeconds(2))) == tcsA.Task;
+        var receivedByA = await Task.WhenAny(tcsA.Task, Task.Delay(NoBroadcastWithin)) == tcsA.Task;
         receivedByA.Should().BeFalse("tenant A should not receive alert_acknowledged from tenant B");
     }
 
@@ -264,9 +254,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
     public async Task Snooze_Returns204_ForValidInstance()
     {
         // Arrange — seed rule + excursion (which creates an instance)
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
         var (_, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);

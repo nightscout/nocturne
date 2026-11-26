@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -76,35 +77,20 @@ public class OnboardingCompletionScopeIntegrationTests : ApiIntegrationTestBase
     /// </summary>
     private async Task<(object CompletedAt, object EnrolledAt)> ClearOnboardingAsync()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var read = conn.CreateCommand();
-        read.CommandText = "SELECT onboarding_completed_at, setup_hub_enrolled_at FROM tenants WHERE id = @id";
-        read.Parameters.AddWithValue("id", Fixture.TenantId);
-        (object, object) before;
-        await using (var reader = await read.ExecuteReaderAsync())
-        {
-            (await reader.ReadAsync()).Should().BeTrue();
-            before = (reader.GetValue(0), reader.GetValue(1));
-        }
+        await using var conn = await OpenPostgresAsync();
+        var before = (await conn.QueryAsync(
+            "SELECT onboarding_completed_at, setup_hub_enrolled_at FROM tenants WHERE id = @id",
+            reader => (reader.GetValue(0), reader.GetValue(1)), ("id", Fixture.TenantId))).Should().ContainSingle().Subject;
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE tenants SET onboarding_completed_at = NULL WHERE id = @id";
-        cmd.Parameters.AddWithValue("id", Fixture.TenantId);
-        (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
+        (await conn.ExecuteAsync("UPDATE tenants SET onboarding_completed_at = NULL WHERE id = @id", ("id", Fixture.TenantId))).Should().Be(1);
         return before;
     }
 
     private async Task RestoreOnboardingAsync(object completedAt, object enrolledAt)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            "UPDATE tenants SET onboarding_completed_at = @completed, setup_hub_enrolled_at = @enrolled WHERE id = @id";
-        cmd.Parameters.Add(new NpgsqlParameter("completed", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = completedAt });
-        cmd.Parameters.Add(new NpgsqlParameter("enrolled", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = enrolledAt });
-        cmd.Parameters.AddWithValue("id", Fixture.TenantId);
-        await cmd.ExecuteNonQueryAsync();
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync(
+            "UPDATE tenants SET onboarding_completed_at = @completed, setup_hub_enrolled_at = @enrolled WHERE id = @id",
+            ("completed", completedAt), ("enrolled", enrolledAt), ("id", Fixture.TenantId));
     }
 }

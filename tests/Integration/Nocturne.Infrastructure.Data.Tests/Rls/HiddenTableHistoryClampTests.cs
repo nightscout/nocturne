@@ -4,6 +4,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -161,16 +162,7 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
     {
         var tenant = Guid.NewGuid();
         await using (var migrator = await fx.OpenMigratorConnectionAsync())
-        await using (var cmd = migrator.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'hidden-clamp-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"hidden-clamp-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+            await migrator.SeedTenantAsync(tenant, $"hidden-clamp-{tenant:N}", "hidden-clamp-test");
 
         var rows = new Dictionary<string, List<Row>>(StringComparer.Ordinal);
         Guid Track(string table, bool visibleWhenClamped)
@@ -369,14 +361,13 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
         NpgsqlConnection conn, Guid tenant, bool isShare, string visibleCategories = "", bool fullHistory = false,
         string? historyClamped = null)
     {
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
-            "SELECT set_config('app.current_tenant_id', @tid, false), " +
-            "set_config('app.is_share', @share, false), " +
+            "SELECT set_config('app.is_share', @share, false), " +
             "set_config('app.visible_categories', @cats, false), " +
             "set_config('app.share_full_history', @full, false)" +
             (historyClamped is null ? "" : ", set_config('app.history_clamped', @clamped, false)");
-        cmd.Parameters.AddWithValue("tid", tenant.ToString());
         cmd.Parameters.AddWithValue("share", isShare ? "true" : "false");
         cmd.Parameters.AddWithValue("cats", visibleCategories);
         cmd.Parameters.AddWithValue("full", fullHistory ? "true" : "false");

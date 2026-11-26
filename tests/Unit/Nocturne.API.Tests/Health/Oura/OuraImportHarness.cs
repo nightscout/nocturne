@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.Oura;
@@ -27,19 +28,11 @@ internal sealed class OuraImportHarness
     public Func<IEnumerable<HeartRate>, IEnumerable<HeartRate>> StoreHeartRates = batch => batch;
     public Func<SleepSession, Task> StoreSession = _ => Task.CompletedTask;
 
-    public sealed class Accessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     public (OuraImportJobService Jobs, ServiceProvider Root) Build()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped<ITenantAccessor, Accessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(sp =>
         {
@@ -75,15 +68,9 @@ internal sealed class OuraImportHarness
 
     public static byte[] Export() => OuraImportServiceTests.Export().ToArray();
 
-    public static async Task<OuraImportStatus> EndOf(OuraImportJobService jobs)
-    {
-        for (var waited = 0; waited < 10_000; waited += 20)
-        {
-            if (jobs.GetLatest(Tenant.TenantId) is { State: not OuraImportState.Running } ended)
-                return ended;
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException("The import did not end.");
-    }
+    public static Task<OuraImportStatus> EndOf(OuraImportJobService jobs) =>
+        Eventually.ValueAsync(
+            "the import to end",
+            () => Task.FromResult(jobs.GetLatest(Tenant.TenantId) is { State: not OuraImportState.Running } ended ? ended : null),
+            step: TimeSpan.FromMilliseconds(20));
 }

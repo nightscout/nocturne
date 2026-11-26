@@ -165,8 +165,11 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
-        enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, ct);
-        enriched = await EnrichPhase2FactsAsync(enriched, needs, now, ct);
+        var pumpModeSpans = new Lazy<Task<PumpModeSpans>>(() => ReadPumpModeSpansAsync(now, isReplay, ct));
+        enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, pumpModeSpans, ct);
+        enriched = await EnrichPhase2FactsAsync(enriched, needs, now, pumpModeSpans, ct);
+        if (!isReplay && pumpModeSpans.IsValueCreated)
+            enriched = enriched with { PumpModesRead = (await pumpModeSpans.Value).Read };
 
         // DND state is fetched unconditionally — engine-level suppression in the orchestrator
         // applies to every rule regardless of whether its tree references the do_not_disturb
@@ -189,7 +192,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                     var tz = await _deps.TherapySettings.GetTimezoneAsync(ct: ct);
                     enriched = enriched with { TenantTimeZoneId = tz };
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
                     _logger.LogWarning(ex, "Failed to resolve tenant timezone for DND scheduling; scheduled window will fall back to UTC");
                 }
@@ -223,7 +226,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// pump-mode and generic state-span snapshots) when their corresponding needs flags are set.
     /// </summary>
     private async Task<SensorContext> EnrichPhase2FactsAsync(
-        SensorContext baseCtx, DataNeedsSet needs, DateTime now, CancellationToken ct)
+        SensorContext baseCtx, DataNeedsSet needs, DateTime now,
+        Lazy<Task<PumpModeSpans>> pumpModeSpans, CancellationToken ct)
     {
         var enriched = baseCtx;
 
@@ -239,7 +243,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 var tz = await _deps.TherapySettings.GetTimezoneAsync(ct: ct);
                 enriched = enriched with { TenantTimeZoneId = tz };
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 _logger.LogWarning(ex, "Failed to resolve tenant timezone; time-of-day/day-of-week/glucose-bucket evaluators will fall back to UTC");
             }
@@ -278,7 +282,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsPumpModes)
         {
-            enriched = enriched with { ActivePumpModes = await ActivePumpModesAsync(now, ct) };
+            enriched = enriched with { ActivePumpModes = ActivePumpModes((await pumpModeSpans.Value).Sent) };
         }
 
         if (needs.ReferencedStateSpans.Count > 0)
@@ -329,7 +333,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             var sessions = await _deps.Sleep.GetSessionsAsync(from: now, to: now, limit: 1, cancellationToken: ct);
             return sessions.Any();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to resolve active sleep session for alert evaluation; treating as inactive");
             return false;
@@ -390,7 +394,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// and freshness gating landed.
     /// </summary>
     private async Task<SensorContext> EnrichLoopingFactsAsync(
-        SensorContext baseCtx, DataNeedsSet needs, DateTime now, bool isReplay, CancellationToken ct)
+        SensorContext baseCtx, DataNeedsSet needs, DateTime now, bool isReplay,
+        Lazy<Task<PumpModeSpans>> pumpModeSpans, CancellationToken ct)
     {
         var enriched = baseCtx;
 
@@ -447,11 +452,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 var pumpFresh = (now - pump.Timestamp) < _deps.Options.Value.PumpFreshnessThreshold;
                 if (pumpFresh)
                 {
-                    var span = await _deps.StateSpans.GetActiveAtAsync(
-                        StateSpanCategory.PumpMode,
-                        state: PumpModeState.Suspended.ToString(),
-                        at: now,
-                        ct);
+                    var span = OpenSuspension((await pumpModeSpans.Value).Sent);
                     if (span is not null)
                     {
                         enriched = enriched with
@@ -504,16 +505,17 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             var span = await _deps.StateSpans.GetActiveAtAsync(
                 StateSpanCategory.Override, state: null, at: now, ct);
-            if (span is not null)
+            if (!isReplay)
             {
-                var multiplier = span.Metadata.TryReadDecimal("insulinNeedsScaleFactor");
-                var name = span.Metadata.TryReadString("reasonDisplay");
+                var deviceStatus = await DeviceStatusOverridesAsync(now, ct);
+                span ??= StartingAhead(deviceStatus, now).MinBy(s => s.StartTimestamp);
                 enriched = enriched with
                 {
-                    ActiveOverride = new OverrideSnapshot(
-                        span.StartTimestamp, span.EndTimestamp, multiplier, name)
+                    OverridesRead = new SpansRead(now, deviceStatus.Select(s => (DateTime?)s.StartTimestamp).Max()),
                 };
             }
+            if (span is not null)
+                enriched = enriched with { ActiveOverride = new OverrideSnapshot(span.StartTimestamp) };
         }
 
         if (needs.NeedsSensorState)
@@ -523,7 +525,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     }
 
     /// <summary>
-    /// The sensor state a recent <see cref="Nocturne.Core.Models.V4.SensorStateReport"/> of the newest reading's source states
+    /// The sensor state the newest recent <see cref="Nocturne.Core.Models.V4.SensorStateReport"/> of the newest reading's source states
     /// (<see cref="SensorStateReports"/>), with the instant the engine stops counting it. A state other
     /// than ok replaces the <see cref="SensorState.NoValue"/> the base context may carry for a newest
     /// reading with no value, since it says why; an ok one does not. A context whose reading source
@@ -534,9 +536,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         if (context.LatestSource is not { Device: { Length: > 0 } device, DataSource: { Length: > 0 } dataSource })
             return context;
-        var reports = await _deps.SensorStates.GetReportedAsync(
+        var newest = await _deps.SensorStates.GetNewestAsync(
             device, dataSource, now - SensorStateReports.MaxAge, now, AlertReadings.Bound(now), ct);
-        return SensorStateReports.Newest(reports, now, context.LatestSource) is var (reported, until)
+        return SensorStateReports.StateOf(newest) is var (reported, until)
                && (reported != SensorState.Ok || context.SensorState is null)
             ? context with { SensorState = new SensorStateSnapshot(reported, Since: null, until) }
             : context;
@@ -570,7 +572,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             return await _deps.IobCob.ReadInputsAsync(now.ToMills(), ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to read treatments for IOB and COB for alert evaluation; leaving both null");
             return null;
@@ -590,7 +592,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 now, inputs.Boluses.Count, inputs.TempBasals.Count, result.Iob, result.Source ?? "(none)");
             return result.Iob.ToDecimal();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to compute IOB for alert evaluation; leaving null");
             return null;
@@ -608,7 +610,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 now, inputs.CarbIntakes.Count, result.Cob, result.Source ?? "(none)");
             return result.Cob.ToDecimal();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Failed to compute COB for alert evaluation; leaving null");
             return null;
@@ -642,7 +644,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             _logger.LogWarning(ex, "Prediction service had insufficient data; returning empty predictions");
             return NoPredictions;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Prediction service failed; returning empty predictions");
             return NoPredictions;
@@ -705,23 +707,80 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     }
 
     /// <summary>
-    /// Every pump-mode span active at <paramref name="now"/>, its state as written. Spans of
-    /// different modes overlap (a Suspended span runs on top of an Automatic or Manual one), so none is chosen over another; the
+    /// The pump-mode spans the facts read at <paramref name="now"/>: those open at it, and live, per mode with
+    /// none open, the soonest open span starting no later than <see cref="AlertReadings.Bound"/> after it, as
+    /// the engine-semantics.md section 5.4 Host paragraph states. The ahead spans are a separate, bounded read,
+    /// so no span beyond the bound can use up the cap of the current one or push the one sent out of its page.
+    /// Read once for every pump-mode fact. A live read also learns the newest start among the spans not ended
+    /// before <paramref name="now"/>, open or closed, sent or not, from a third read of that span alone.
+    /// </summary>
+    private async Task<PumpModeSpans> ReadPumpModeSpansAsync(DateTime now, bool isReplay, CancellationToken ct)
+    {
+        var current = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct))
+            .Where(s => s.EndTimestamp is null || s.EndTimestamp > now)
+            .ToList();
+        if (isReplay)
+            return new PumpModeSpans(current, null);
+
+        var ahead = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, to: AlertReadings.Bound(now), active: true, cancellationToken: ct))
+            .ToList();
+        var newestStored = (await _deps.StateSpans.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, from: now, count: 1, cancellationToken: ct))
+            .ToList();
+        var covered = current.Select(s => s.State).ToHashSet(StringComparer.Ordinal);
+        var sent = (IReadOnlyList<StateSpan>)
+        [
+            .. current,
+            .. StartingAhead(ahead, now)
+                .Where(s => !covered.Contains(s.State))
+                .GroupBy(s => s.State, StringComparer.Ordinal)
+                .Select(g => g.MinBy(s => s.StartTimestamp)!),
+        ];
+        var newest = newestStored.FirstOrDefault()?.StartTimestamp;
+        return new PumpModeSpans(sent, new SpansRead(now, newest));
+    }
+
+    /// <summary>
+    /// The overrides a device status wrote that have not ended before <paramref name="now"/>, open or with an
+    /// end after their start. A fast uploader clock dates one ahead: the soonest no later than
+    /// <see cref="AlertReadings.Bound"/> after <paramref name="now"/> is sent, and one further ahead is reported.
+    /// An override written any other way is a plan, and stays held back until its time. Read with the copies
+    /// deduplication hides, since Loop reports one override as a treatment and as a device status, and the
+    /// treatment copy can be the group's primary. A device status exists only when the uploader reports the
+    /// override running, so its copy being hidden does not make the override a plan.
+    /// </summary>
+    private async Task<IReadOnlyList<StateSpan>> DeviceStatusOverridesAsync(DateTime now, CancellationToken ct) =>
+        [
+            .. (await _deps.StateSpans.GetAllCopiesAsync(StateSpanCategory.Override, from: now, to: null, cancellationToken: ct))
+                .Where(s => s.Metadata.IsFromDeviceStatus() && (s.EndTimestamp is null || s.EndTimestamp > s.StartTimestamp)),
+        ];
+
+    private static IEnumerable<StateSpan> StartingAhead(IEnumerable<StateSpan> spans, DateTime now) =>
+        spans.Where(s => s.StartTimestamp > now && s.StartTimestamp <= AlertReadings.Bound(now));
+
+    /// <param name="Sent">The spans the facts read.</param>
+    /// <param name="Read">What a live read saw of the stored spans; null for a replay read.</param>
+    private sealed record PumpModeSpans(IReadOnlyList<StateSpan> Sent, SpansRead? Read);
+
+    /// <summary>
+    /// Every span <see cref="ReadPumpModeSpansAsync"/> sent, its state as written. Spans of different modes
+    /// overlap (a Suspended span runs on top of an Automatic or Manual one), so none is chosen over another; the
     /// engine reads the entry for the mode each leaf names.
     /// </summary>
-    private async Task<IReadOnlyList<PumpModeSnapshot>> ActivePumpModesAsync(DateTime now, CancellationToken ct)
-    {
-        var active = await _deps.StateSpans.GetStateSpansAsync(
-            StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct);
-        return active
-            .Where(s => s.State is { Length: > 0 }
-                        && s.StartTimestamp <= now
-                        && (s.EndTimestamp is null || s.EndTimestamp > now))
+    private static IReadOnlyList<PumpModeSnapshot> ActivePumpModes(IReadOnlyList<StateSpan> spans) =>
+        spans
+            .Where(s => s.State is { Length: > 0 })
             .OrderBy(s => s.StartTimestamp)
             .ThenBy(s => s.State, StringComparer.Ordinal)
             .Select(s => new PumpModeSnapshot(s.State!, s.StartTimestamp))
             .ToList();
-    }
+
+    private static StateSpan? OpenSuspension(IReadOnlyList<StateSpan> spans) =>
+        spans
+            .Where(s => string.Equals(s.State, nameof(PumpModeState.Suspended), StringComparison.Ordinal))
+            .MaxBy(s => s.StartTimestamp);
 
     /// <summary>
     /// When the profile activation in force at <paramref name="now"/> started, for a

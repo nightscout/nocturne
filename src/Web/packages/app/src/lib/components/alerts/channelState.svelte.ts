@@ -1,5 +1,5 @@
 import { AlertChannelState, ChannelType } from "@nocturne/api-client";
-import type { AlertChannelNotSent } from "@nocturne/api-client";
+import type { AlertChannelNotSent, CreateAlertRuleChannelRequest } from "@nocturne/api-client";
 import { formatMediumDate } from "#lib/utils/formatting.js";
 import { isStringEnumMember, type ChannelState } from "./types";
 import { channelLabel } from "./channelText.svelte";
@@ -62,13 +62,10 @@ function isChannelKind(value: unknown): value is ChannelKind {
   return isStringEnumMember(ChannelType, value);
 }
 
-/** A channel as the dry run's request listed it, by its place in that list. */
-export interface DryRunChannel {
-  channelType?: ChannelType;
-  destinationLabel?: string | null;
-}
-
-function dryRunChannelName(notSent: AlertChannelNotSent, requested: DryRunChannel[]): string | null {
+function testFireChannelName(
+  notSent: AlertChannelNotSent,
+  requested: Pick<CreateAlertRuleChannelRequest, "channelType" | "destinationLabel">[]
+): string | null {
   const asked = notSent.index === undefined ? undefined : requested[notSent.index];
   if (asked?.destinationLabel) return asked.destinationLabel;
   const type = notSent.channelType;
@@ -76,20 +73,23 @@ function dryRunChannelName(notSent: AlertChannelNotSent, requested: DryRunChanne
   return `${channelLabel(type)} (channel ${(notSent.index ?? 0) + 1})`;
 }
 
-/** What a dry run says of a channel it did not send, in the words of the state when it knows them. */
+/**
+ * What a test fire says of a channel it did not send, in the words of the state when it knows
+ * them. `requested` is the channel list the fire went through, by position.
+ */
 export function channelNotSentMessage(
   notSent: AlertChannelNotSent,
-  requested: DryRunChannel[]
+  requested: Pick<CreateAlertRuleChannelRequest, "channelType" | "destinationLabel">[]
 ): string {
-  const name = dryRunChannelName(notSent, requested);
-  if (!name) return "A channel would not send.";
+  const name = testFireChannelName(notSent, requested);
+  if (!name) return "A channel did not get the test alert.";
   if (notSent.state === AlertChannelState.NoRecipient) {
-    return `${name} would not send: it has no recipient.`;
+    return `${name} did not get the test alert. This channel has no recipient.`;
   }
   if (notSent.state === AlertChannelState.Stopped) {
-    return `${name} would not send: it has stopped.`;
+    return `${name} did not get the test alert. This channel has stopped.`;
   }
-  return `${name} would not send.`;
+  return `${name} did not get the test alert.`;
 }
 
 function metadataText(metadata: Record<string, unknown> | undefined, key: string): string | undefined {

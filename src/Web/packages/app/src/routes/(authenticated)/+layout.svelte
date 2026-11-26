@@ -44,7 +44,8 @@
   import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
-  import { getEngineHost } from "water-ui";
+  import { getEngineHost, WARM_IDLE_TIMEOUT_MS } from "water-ui";
+  import { whenIdle } from "#lib/utils/when-idle.js";
   import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
   import { CoachMarkProvider, coachmark } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
@@ -218,6 +219,7 @@
   onDestroy(() => {
     realtimeStore.destroy();
     titleFaviconService.destroy();
+    authStore.destroy();
     if (browser) {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("keydown", handleCommandPaletteKeydown);
@@ -236,12 +238,14 @@
    */
   const engineWarmDeferral = deferredWatercolour();
   let engineWarmScheduled = false;
+  let cancelEngineWarm: (() => void) | undefined;
   $effect(() => {
     if (engineWarmScheduled || !engineWarmDeferral.due) return;
     if (data.canViewRealtimeData && !realtimeStore.currentReadingLoaded) return;
     engineWarmScheduled = true;
-    void getEngineHost().warmWhenIdle();
+    cancelEngineWarm = whenIdle(() => void getEngineHost().warm(), { timeout: WARM_IDLE_TIMEOUT_MS });
   });
+  onDestroy(() => cancelEngineWarm?.());
 
   // Track current time for stale calculation - use shared store
   const now = $derived(realtimeStore.now);

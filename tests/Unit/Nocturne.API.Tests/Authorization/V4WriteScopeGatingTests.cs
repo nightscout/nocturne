@@ -181,6 +181,7 @@ public class V4WriteScopeGatingTests
             ["SubjectAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["TenantCreationInviteAdminController"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["PlatformPolicyController"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["TenantNotificationsController"] = V4ScopeGuardExemptions.PlatformAdminRole,
 
             ["DeduplicationController"] = NotDataCategory.SuperuserAttribute,
             ["MigrationController"] = NotDataCategory.SuperuserAttribute,
@@ -345,6 +346,14 @@ public class V4WriteScopeGatingTests
             ["TeamsController.UpdateStaff"] = NotDataCategory.OwnTeams,
             // A manager removes any staff member, and a staff member only their own row, which is leaving.
             ["TeamsController.RemoveStaff"] = NotDataCategory.OwnTeams,
+            ["TeamsController.CreateGroup"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RenameGroup"] = NotDataCategory.OwnTeams,
+            ["TeamsController.DeleteGroup"] = NotDataCategory.OwnTeams,
+            ["TeamsController.AddGroupPerson"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RemoveGroupPerson"] = NotDataCategory.OwnTeams,
+            ["TeamsController.AddGroupStaff"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RemoveGroupStaff"] = NotDataCategory.OwnTeams,
+            ["TeamsController.SetStaffReach"] = NotDataCategory.OwnTeams,
             // The invite token is what admits the caller to the team.
             ["TeamsController.AcceptInvite"] = NotDataCategory.CapabilityToken,
             ["TeamsController.AcceptStaffInvite"] = NotDataCategory.CapabilityToken,
@@ -522,6 +531,11 @@ public class V4WriteScopeGatingTests
             // only the connector_food_entries status, which is the food category.
             ["MealMatchingController.AcceptMatch"] = Scope.TreatmentsReadWrite,
             ["MealMatchingController.DismissMatch"] = Scope.FoodReadWrite,
+
+            // A connected app's notices for members' trays: no data category, a capability scope
+            // of their own. The handler also refuses any credential but an app's access token.
+            ["ExternalNotificationsController.Send"] = Scope.NotificationsSend,
+            ["ExternalNotificationsController.Withdraw"] = Scope.NotificationsSend,
 
             // Setup is the owner's: entering or confirming therapy settings takes full access as
             // well as the therapy.readwrite the controller declares.

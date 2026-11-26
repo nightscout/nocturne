@@ -968,25 +968,24 @@ public class MemberScopeMiddlewareTests
         }
 
         detached.Release();
-        var writer = await detached.Created.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var writer = await detached.Created.Task.WaitAsync(Eventually.DefaultPatience);
 
         writer.TenantId.Should().Be(TestDatabaseSeeder.TenantId);
         writer.HistoryClamped.Should().BeFalse();
         writer.IsShareContext.Should().BeFalse();
         writer.AuditContext.Should().BeNull();
 
-        DateTime? lastUsed = null;
-        for (var attempt = 0; attempt < 100 && lastUsed is null; attempt++)
-        {
-            await Task.Delay(20);
-            using var read = db.CreateContext();
-            lastUsed = await read.TenantMembers.AsNoTracking()
-                .Where(tm => tm.SubjectId == subjectId)
-                .Select(tm => tm.LastUsedAt)
-                .SingleAsync();
-        }
-
-        lastUsed.Should().NotBeNull("the write lands after the request's scope is gone");
+        await Eventually.UntilAsync(
+            "the write to land after the request's scope is gone",
+            async () =>
+            {
+                using var read = db.CreateContext();
+                return await read.TenantMembers.AsNoTracking()
+                    .Where(tm => tm.SubjectId == subjectId)
+                    .Select(tm => tm.LastUsedAt)
+                    .SingleAsync() is not null;
+            },
+            step: TimeSpan.FromMilliseconds(20));
     }
 
     /// <summary>

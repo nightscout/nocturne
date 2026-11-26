@@ -8,7 +8,6 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -22,6 +21,9 @@ namespace Nocturne.Infrastructure.Data.Tests;
 [Collection("RLS completeness")]
 public class AlertTrackerTransitionLockTests
 {
+    // A lock on another rule must not wait on a held one; this is how long it has, part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
     private readonly RlsCompletenessFixture _fx;
 
     public AlertTrackerTransitionLockTests(RlsCompletenessFixture fx) => _fx = fx;
@@ -31,7 +33,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var ruleId = await SeedRuleAsync(provider, tenant);
 
         await using var first = await ContextAsync(provider, tenant);
@@ -49,7 +51,7 @@ public class AlertTrackerTransitionLockTests
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var contender = secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
@@ -60,8 +62,8 @@ public class AlertTrackerTransitionLockTests
         contender.IsCompleted.Should().BeFalse("the first transaction holds the rule's lock");
 
         release.SetResult();
-        await holder.WaitAsync(TimeSpan.FromSeconds(30));
-        (await contender.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be("active",
+        await holder.WaitAsync(Eventually.DefaultPatience);
+        (await contender.WaitAsync(Eventually.DefaultPatience)).Should().Be("active",
             "the lock is granted after the holder's commit, so the contender reads what it wrote");
     }
 
@@ -70,7 +72,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var ruleA = await SeedRuleAsync(provider, tenant);
         var ruleB = await SeedRuleAsync(provider, tenant);
 
@@ -88,13 +90,13 @@ public class AlertTrackerTransitionLockTests
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         await secondRepo.ExecuteInTransactionAsync(async (tx, ct) =>
         {
             await tx.LockRuleAsync(ruleB, ct);
             return true;
-        }).WaitAsync(TimeSpan.FromSeconds(10));
+        }).WaitAsync(MustNotWaitLongerThan);
 
         release.SetResult();
         await holder;
@@ -105,7 +107,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         await using var context = await ContextAsync(provider, tenant);
 
         var act = () => new AlertTrackerRepository(DbUnitOfWork.Own(context)).LockRuleAsync(Guid.NewGuid());
@@ -118,7 +120,7 @@ public class AlertTrackerTransitionLockTests
     {
         var tenant = Guid.NewGuid();
         await SeedTenantAsync(tenant);
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var ruleId = await SeedRuleAsync(provider, tenant);
 
         await using var context = await ContextAsync(provider, tenant);
@@ -143,15 +145,6 @@ public class AlertTrackerTransitionLockTests
         State = state,
         UpdatedAt = DateTime.UtcNow,
     };
-
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
-    }
 
     private static async Task<NocturneDbContext> ContextAsync(ServiceProvider provider, Guid tenantId)
     {
@@ -184,13 +177,6 @@ public class AlertTrackerTransitionLockTests
     private async Task SeedTenantAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'transition-lock-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenantId));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"lock-{tenantId:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenantId, $"lock-{tenantId:N}", "transition-lock-test");
     }
 }

@@ -27,12 +27,12 @@ public class DecomposedTreatmentKeysTests : IDisposable
 
     public DecomposedTreatmentKeysTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, "site").SeedTenant(_otherTenant, "other");
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant).SeedTenant(_otherTenant, "other");
     }
 
     public void Dispose() => _db.Dispose();
 
-    private DecomposedTreatmentKeys Keys(Guid tenant) => new(new TestNocturneDbContextFactory(_db.CreateContext(tenant)));
+    private DecomposedTreatmentKeys Keys(Guid tenant) => new(new TestNocturneDbContextFactory(_db.CreateContext(tenant)), TimeProvider.System);
 
     private static BolusEntity Bolus(string legacyId, string source, string? fingerprint = null) => new()
     {
@@ -204,7 +204,8 @@ public class DecomposedTreatmentKeysTests : IDisposable
         await StoreAsync(_otherTenant, Bolus("id", Connector));
         var keys = Keys(_tenant);
 
-        (await keys.GetFingerprintsFromSourceAsync(Connector, ["id"]))["id"].Should().BeEquivalentTo(["old", null]);
+        (await keys.GetFingerprintsFromSourceAsync(Connector, ["id"]))["id"].Select(f => f.Fingerprint)
+            .Should().BeEquivalentTo(["old", null]);
 
         await keys.StampUnfingerprintedAsync(Connector, new Dictionary<string, string> { ["id"] = "new" });
 

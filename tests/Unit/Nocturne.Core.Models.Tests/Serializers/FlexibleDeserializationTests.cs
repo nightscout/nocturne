@@ -193,6 +193,77 @@ public class FlexibleDeserializationTests
         result.Should().Be(expected);
     }
 
+    private static readonly JsonSerializerOptions BooleanOptions = new()
+    {
+        Converters = { new FlexibleBooleanJsonConverter(), new FlexibleNonNullableBooleanJsonConverter() },
+    };
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    [InlineData("2", null)]
+    [InlineData("1.5", null)]
+    [InlineData("1e12", null)]
+    [InlineData("\"false\"", false)]
+    [InlineData("\"on\"", true)]
+    [InlineData("\"maybe\"", null)]
+    [InlineData("null", null)]
+    [InlineData("{}", null)]
+    [InlineData("[]", null)]
+    public void NullableBool_CoercesEveryWireForm(string jsonValue, bool? expected)
+    {
+        var result = JsonSerializer.Deserialize<bool?>(jsonValue, BooleanOptions);
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    [InlineData("2", false)]
+    [InlineData("1.5", false)]
+    [InlineData("\"yes\"", true)]
+    [InlineData("null", false)]
+    [InlineData("{\"a\": 1}", false)]
+    [InlineData("[1]", false)]
+    public void Bool_CoercesEveryWireForm(string jsonValue, bool expected)
+    {
+        var result = JsonSerializer.Deserialize<bool>(jsonValue, BooleanOptions);
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(16)]
+    public async Task A_stream_read_skips_an_object_or_array_wherever_the_buffer_splits(int bufferSize)
+    {
+        var options = new JsonSerializerOptions(BooleanOptions) { DefaultBufferSize = bufferSize, PropertyNameCaseInsensitive = true };
+        foreach (var converter in NumberOptions.Converters)
+            options.Converters.Add(converter);
+        var json = """{"flag": {"nested": [true, {"deep": 1}]}, "count": [1, 2, 3], "after": "true", "n": "5"}""";
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+
+        var result = await JsonSerializer.DeserializeAsync<StreamRead>(stream, options);
+
+        result.Should().Be(new StreamRead(null, null, true, 5));
+    }
+
+    private sealed record StreamRead(bool? Flag, int? Count, bool? After, int? N);
+
+    [Fact]
+    public void Bool_ReadsTheFieldsAfterAnObjectItSkipped()
+    {
+        var result = JsonSerializer.Deserialize<Dictionary<string, bool?>>(
+            """{"a": {"nested": true}, "b": "true"}""", BooleanOptions);
+
+        result.Should().Equal(new Dictionary<string, bool?> { ["a"] = null, ["b"] = true });
+    }
+
     /// <summary>
     /// <see cref="Math.Round(double)"/> is half-to-even, matching the write side's
     /// <c>RoundedNullableDoubleConverter</c>, so a midpoint does not always round up.

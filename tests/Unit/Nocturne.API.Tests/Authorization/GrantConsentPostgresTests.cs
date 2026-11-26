@@ -32,24 +32,12 @@ namespace Nocturne.API.Tests.Authorization;
 public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database database)
     : IClassFixture<GrantConsentPostgresTests.Database>
 {
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+    // A statement that must stay blocked is watched for LockWait, or for DeadlockDetection where PostgreSQL
+    // would otherwise break a deadlock; both are part of the assertion, not hang guards.
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DeadlockDetection = TimeSpan.FromSeconds(3);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("grant_consent");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("grant_consent");
 
     /// <summary>Runs <paramref name="before"/> once, just before the first statement <paramref name="when"/> accepts.</summary>
     private sealed class BeforeStatement(Func<DbCommand, bool> when, Func<Task> before) : DbCommandInterceptor
@@ -110,10 +98,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] staged) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, staged);
 
     private sealed record Seeded(Guid Tenant, Guid Client, Guid Subject, SuppliedContextFactory Contexts);
 
@@ -123,14 +108,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'grant-consent-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"consent-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"consent-{tenant:N}", "grant-consent-test");
         }
 
         var subject = Guid.CreateVersion7();
@@ -200,17 +178,17 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
             () => Context(seeded.Tenant, new BeforeStatement(WritesGrant, () =>
             {
                 firstIsAboutToCreate.SetResult();
-                return releaseFirst.Task.WaitAsync(Patience);
+                return releaseFirst.Task.WaitAsync(Eventually.DefaultPatience);
             })));
 
         var firstConsent = Task.Run(() => ConsentAsync(first, seeded, "glucose.read"));
-        await firstIsAboutToCreate.Task.WaitAsync(Patience);
+        await firstIsAboutToCreate.Task.WaitAsync(Eventually.DefaultPatience);
         var secondConsent = Task.Run(() => ConsentAsync(seeded.Contexts, seeded, "treatments.read"));
 
         var finishedAhead = await Task.WhenAny(secondConsent, Task.Delay(LockWait));
         finishedAhead.Should().NotBe(secondConsent, "the second consent waits for the first to commit");
         releaseFirst.SetResult();
-        var staged = await Task.WhenAll(firstConsent, secondConsent).WaitAsync(Patience);
+        var staged = await Task.WhenAll(firstConsent, secondConsent).WaitAsync(Eventually.DefaultPatience);
 
         var active = (await GrantsAsync(seeded)).Where(g => g.RevokedAt is null).ToList();
         active.Should().ContainSingle();
@@ -305,16 +283,16 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
             () => Context(seeded.Tenant, new BeforeStatement(WritesGrant, () =>
             {
                 consentIsAboutToCreate.SetResult();
-                return releaseConsent.Task.WaitAsync(Patience);
+                return releaseConsent.Task.WaitAsync(Eventually.DefaultPatience);
             })));
 
         var consent = Task.Run(() => ConsentAsync(consenting, seeded, "glucose.read"));
-        await consentIsAboutToCreate.Task.WaitAsync(Patience);
+        await consentIsAboutToCreate.Task.WaitAsync(Eventually.DefaultPatience);
         var removal = Task.Run(() => RemoveMembershipAsync(seeded.Contexts, seeded));
 
         await Task.WhenAny(removal, Task.Delay(LockWait));
         releaseConsent.SetResult();
-        await Task.WhenAll(consent, removal).WaitAsync(Patience);
+        await Task.WhenAll(consent, removal).WaitAsync(Eventually.DefaultPatience);
 
         (await GrantsAsync(seeded)).Where(g => g.RevokedAt is null).Should().BeEmpty();
         await using var db = Context(seeded.Tenant);
@@ -332,19 +310,19 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
             () => Context(seeded.Tenant, failures, new BeforeStatement(WritesGrant, () =>
             {
                 consentIsAboutToCreate.SetResult();
-                return releaseConsent.Task.WaitAsync(Patience);
+                return releaseConsent.Task.WaitAsync(Eventually.DefaultPatience);
             })));
         var deleting = new SuppliedContextFactory(() => Context(seeded.Tenant, failures));
 
         var consent = Task.Run(() => ConsentAsync(consenting, seeded, "glucose.read"));
-        await consentIsAboutToCreate.Task.WaitAsync(Patience);
+        await consentIsAboutToCreate.Task.WaitAsync(Eventually.DefaultPatience);
         var deletion = Task.Run(() =>
-            new SubjectRepository(deleting, AccountLinkRoutes.Off).DeleteAsync(seeded.Subject, CancellationToken.None));
+            SubjectDeletions.DeleteAsync(deleting, AccountLinkRoutes.Off, seeded.Subject, CancellationToken.None));
 
         var finishedAhead = await Task.WhenAny(deletion, Task.Delay(DeadlockDetection));
         finishedAhead.Should().NotBe(deletion, "the deletion waits for the consent to commit");
         releaseConsent.SetResult();
-        await Task.WhenAll(consent, deletion).WaitAsync(Patience);
+        await Task.WhenAll(consent, deletion).WaitAsync(Eventually.DefaultPatience);
 
         failures.Failures.Should().BeEmpty("neither side is aborted as a deadlock victim, and none is retried");
         (await consent)!.Created.Should().BeTrue();

@@ -31,22 +31,14 @@ namespace Nocturne.API.Tests.Services.Jobs;
 public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database database)
     : IClassFixture<JobSchedulerPostgresTests.Database>, IAsyncLifetime
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public TestDatabase Created { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Created = await SharedPostgres.CreateMigratedDatabaseAsync("job_scheduler");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("job_scheduler");
 
     private static readonly DateTimeOffset Start = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
     private readonly FakeTimeProvider _clock = new(Start);
     private readonly List<ServiceProvider> _providers = [];
-    private readonly string _app = database.Created.AppConnectionString;
-    private readonly string _migrator = database.Created.MigratorConnectionString;
+    private readonly string _app = database.AppConnectionString;
+    private readonly string _migrator = database.MigratorConnectionString;
 
     public async Task InitializeAsync()
     {
@@ -103,7 +95,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         await a.EnrolAsync(default);
 
         var claimed = await Task.WhenAll(a.PollAsync(default), b.PollAsync(default));
-        await job.AllStarted(6).WaitAsync(TimeSpan.FromSeconds(30));
+        await job.AllStarted(6);
         job.Release();
         await Task.WhenAll(a.DrainAsync(), b.DrainAsync());
 
@@ -214,7 +206,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         using var shutdown = new CancellationTokenSource();
 
         (await stopping.PollAsync(shutdown.Token)).Should().Be(1);
-        await job.AllStarted(1).WaitAsync(TimeSpan.FromSeconds(30));
+        await job.AllStarted(1);
         await shutdown.CancelAsync();
         await stopping.DrainAsync();
 
@@ -274,11 +266,13 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var running = Scheduler(job);
         await running.EnrolAsync(default);
         await running.PollAsync(default);
-        await job.AllStarted(1).WaitAsync(TimeSpan.FromSeconds(30));
+        await job.AllStarted(1);
 
         _clock.Advance(JobScheduler.HeartbeatInterval);
-        await WaitForAsync(async () =>
-            (await RowAsync(GatedJob.JobName, tenant)).LeaseUntil == Start + JobScheduler.HeartbeatInterval + JobScheduler.LeaseLength);
+        await Eventually.UntilAsync(
+            "the heartbeat to extend the lease",
+            async () => (await RowAsync(GatedJob.JobName, tenant)).LeaseUntil == Start + JobScheduler.HeartbeatInterval + JobScheduler.LeaseLength,
+            step: TimeSpan.FromMilliseconds(20));
         _clock.Advance(JobScheduler.LeaseLength - JobScheduler.HeartbeatInterval + TimeSpan.FromSeconds(10));
 
         (await RunDueAsync(Scheduler(job))).Should().Be(0, "the heartbeat extended the lease past its first expiry");
@@ -295,7 +289,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var running = Scheduler(job);
         await running.EnrolAsync(default);
         await running.PollAsync(default);
-        await job.AllStarted(1).WaitAsync(TimeSpan.FromSeconds(30));
+        await job.AllStarted(1);
         await using (var conn = new NpgsqlConnection(_migrator))
         {
             await conn.OpenAsync();
@@ -304,7 +298,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         }
 
         _clock.Advance(JobScheduler.HeartbeatInterval);
-        await running.DrainAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await running.DrainAsync().WaitAsync(Eventually.DefaultPatience);
 
         job.Cancelled.Should().Be(1);
         job.Runs.Should().BeEmpty();
@@ -325,7 +319,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var scheduler = Scheduler(job);
 
         await scheduler.PollAsync(default);
-        await job.AllStarted(1).WaitAsync(TimeSpan.FromSeconds(30));
+        await job.AllStarted(1);
         _clock.Advance(TimeSpan.FromMinutes(1));
         await ledger.RequestAsync(GatedJob.JobName, tenant, default);
         job.Release();
@@ -350,7 +344,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var scheduler = Scheduler(job);
 
         await scheduler.PollAsync(default);
-        await job.AllStarted(1).WaitAsync(TimeSpan.FromSeconds(30));
+        await job.AllStarted(1);
         _clock.Advance(TimeSpan.FromSeconds(30));
         await ledger.RequestAsync(GatedJob.JobName, tenant, default);
         job.Release();
@@ -580,12 +574,15 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var scheduler = Scheduler(new JobSchedulerOptions { Parallelism = 4 }, stuck, daily);
         await scheduler.EnrolAsync(default);
 
-        await WaitForAsync(async () =>
-        {
-            await scheduler.PollAsync(default);
-            await Task.Delay(20);
-            return daily.Runs == 6 && stuck.Started >= 2;
-        });
+        await Eventually.UntilAsync(
+            "the daily job to run for every tenant and the stuck job to reach its cap",
+            async () =>
+            {
+                await scheduler.PollAsync(default);
+                await Task.Delay(20);
+                return daily.Runs == 6 && stuck.Started >= 2;
+            },
+            step: TimeSpan.FromMilliseconds(20));
 
         stuck.Started.Should().Be(2, "the stuck job never holds more than its cap");
         stuck.Release();
@@ -595,17 +592,6 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
     private static IReadOnlyDictionary<string, int> Only(string job) => new Dictionary<string, int> { [job] = int.MaxValue };
 
     private static readonly IReadOnlyDictionary<string, string> NoGroups = new Dictionary<string, string>();
-
-    private static async Task WaitForAsync(Func<Task<bool>> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (!await condition())
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The condition did not hold within 30 seconds.");
-            await Task.Delay(20);
-        }
-    }
 
     private async Task<int> RunDueAsync(JobScheduler scheduler)
     {
@@ -652,11 +638,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var insert = new NpgsqlCommand(
-            "INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES (@id, @slug, 'T', true, now(), now())", conn);
-        insert.Parameters.AddWithValue("id", tenant);
-        insert.Parameters.AddWithValue("slug", tenant.ToString("N"));
-        await insert.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, tenant.ToString("N"), "T");
         return tenant;
     }
 
@@ -716,11 +698,8 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
 
         public void Release() => _gate.TrySetResult();
 
-        public async Task AllStarted(int count)
-        {
-            while (Volatile.Read(ref _started) < count)
-                await Task.Delay(10);
-        }
+        public Task AllStarted(int count) =>
+            Eventually.UntilAsync($"{count} runs to start", () => Volatile.Read(ref _started) >= count);
 
         public async Task<JobOutcome> RunAsync(JobRun run, CancellationToken ct)
         {

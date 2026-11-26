@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -27,6 +28,7 @@ internal sealed class AlertSnoozeService(
     ICanonicalGlucoseService canonicalGlucose,
     ISignalRBroadcastService broadcastService,
     IEngineAlarmRelay alarmRelay,
+    IExcursionResolutionHandler resolutionHandler,
     TimeProvider timeProvider,
     ILogger<AlertSnoozeService> logger)
     : IAlertSnoozeService
@@ -63,20 +65,13 @@ internal sealed class AlertSnoozeService(
         // mid-snooze; the resume dispatch creates fresh rows.
         await repository.ExpirePendingDeliveriesAsync([instanceId], ct);
 
-        try
+        await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_snoozed", new
-            {
-                tenantId,
-                excursionId = instance.AlertExcursionId,
-                instanceId,
-                snoozedUntil = until,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_snoozed for instance {InstanceId}", instanceId);
-        }
+            tenantId,
+            excursionId = instance.AlertExcursionId,
+            instanceId,
+            snoozedUntil = until,
+        });
 
         await alarmRelay.ClearIfQuietAsync([instance.AlertExcursionId], ct);
 
@@ -103,17 +98,21 @@ internal sealed class AlertSnoozeService(
                 .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
         }
 
-        var excursion = instance?.AlertExcursion;
-        var ruleEntity = excursion?.AlertRule;
-        if (instance is null || excursion is null || ruleEntity is null) return false;
+        if (instance?.SnoozedUntil is not { } lapsed || AlertSnooze.IsSnoozed(lapsed, now))
+            return false;
 
-        if (instance.ResolvedAt is not null
+        var excursion = instance.AlertExcursion;
+        var ruleEntity = excursion?.AlertRule;
+        if (excursion is null
+            || ruleEntity is null
+            || instance.ResolvedAt is not null
             || excursion.EndedAt is not null
             || excursion.HysteresisStartedAt is not null
             || excursion.AcknowledgedAt is not null
             || !ruleEntity.IsEnabled
-            || AlertSnooze.IsSnoozed(instance.SnoozedUntil, now))
+            || !AlertRuleMapper.IsReadable(ruleEntity))
         {
+            await repository.EndLapsedSnoozeAsync(instance.Id, lapsed, renotifyAt: null, ct);
             return false;
         }
 
@@ -133,11 +132,7 @@ internal sealed class AlertSnoozeService(
             LastReadingAt = latest?.Timestamp,
         };
 
-        var rule = new AlertRuleSnapshot(
-            ruleEntity.Id, tenantId, ruleEntity.Name, ruleEntity.ConditionType,
-            ruleEntity.ConditionParams, ruleEntity.Severity, ruleEntity.ClientConfiguration,
-            ruleEntity.SortOrder, ruleEntity.AutoResolveEnabled, ruleEntity.AutoResolveParams,
-            ruleEntity.AllowThroughDnd, ruleEntity.ScopeClass);
+        var rule = AlertRuleMapper.ToSnapshot(ruleEntity);
 
         // The enricher is only consulted for the active DND scopes. If it fails the alert is
         // delivered: missing a still-standing alert is the worse error.
@@ -146,7 +141,7 @@ internal sealed class AlertSnoozeService(
         {
             context = await contextEnricher.EnrichAsync(baseContext, [rule], ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Failed to enrich context for snooze resume of instance {InstanceId}; delivering without DND check",
@@ -158,17 +153,27 @@ internal sealed class AlertSnoozeService(
             logger.LogInformation(
                 "Snooze on alert instance {InstanceId} lapsed while DND (scope {Scope}) covers rule {RuleName}; not re-notifying",
                 instanceId, scope, rule.Name);
+            await repository.EndLapsedSnoozeAsync(instance.Id, lapsed, renotifyAt: null, ct);
             return false;
         }
 
-        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
-        var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
-
+        var inputs = await RuleSendInputs.ReadAsync(rule.Id, tenantId, repository, ruleRepository, ct);
         var payload = AlertPayloads.Build(
-            rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
+            rule, baseContext, tenantId, excursion.Id, instance.Id, inputs.Tenant, inputs.ActiveExcursionCount, now);
 
-        await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
+        var end = await repository.EndLapsedSnoozeAsync(instance.Id, lapsed, now, ct);
+        if (end == LapsedSnoozeEnd.Lost)
+        {
+            logger.LogInformation(
+                "The lapsed snooze on alert instance {InstanceId} was ended or replaced by another run or a new snooze; not re-notifying",
+                instanceId);
+            return false;
+        }
+
+        await deliveryService.RenotifyAsync(instance.Id, inputs.Channels, payload, ct);
+        await resolutionHandler.CloseAgainIfEndedAsync(excursion.Id, tenantId, ct);
+        if (end == LapsedSnoozeEnd.EndedHoldingOpening)
+            await repository.SettleTransitionAsync(excursion.Id, ExcursionTransitionType.ExcursionOpened, now, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",

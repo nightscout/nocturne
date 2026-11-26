@@ -47,20 +47,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         RemoveStaff,
     }
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("team_access_end");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("team_access_end");
 
     private sealed record Site(Guid Tenant, Guid Owner, Guid ViewerRole, Guid CaretakerRole);
 
@@ -94,10 +81,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
 
     private NocturneDbContext Context(Guid tenant, Guid? actor)
     {
-        var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
+        var context = TestContexts.Context(database.AppConnectionString)
             .ActingAs(actor is { } subject ? new TestAuditActor { SubjectId = subject } : null);
         context.TenantId = tenant;
         return context;
@@ -117,11 +101,30 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         return new TeamAccessService(
             new TeamRepository(contexts),
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
-            Mock.Of<ITenantRoleService>(),
+            RolesThatMayBeGiven(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
             contexts,
-            new GrantRevocationService(sessions ?? NewSessions()));
+            new GrantRevocationService(sessions ?? NewSessions()),
+            Announcer(contexts));
     }
+
+    private readonly RecordingNotices _notices = new();
+
+    private static ITenantRoleService RolesThatMayBeGiven()
+    {
+        var roles = new Mock<ITenantRoleService>();
+        roles.Setup(r => r.ValidateRoleGrantAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(RoleGrantValidation.Valid);
+        return roles.Object;
+    }
+
+    private TeamStaffAnnouncer Announcer(INocturneDbContextFactory contexts) => new(
+        new TeamRepository(contexts),
+        new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+        new SiteNotices(new TenantRepository(contexts), _notices.Services()),
+        new FakeTimeProvider(new DateTimeOffset(Now)),
+        NullLogger<TeamStaffAnnouncer>.Instance);
 
     private SubjectDeletion Deletion(Guid actor)
     {
@@ -129,10 +132,12 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         return new SubjectDeletion(
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
-            new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+            AccountLinkRoutes.Off,
             new GrantRevocationService(NewSessions()),
             Mock.Of<IAuthAuditService>(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
+            Announcer(contexts),
+            InertTeamStaff.Sites(),
             NullLogger<SubjectDeletion>.Instance);
     }
 
@@ -142,10 +147,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-access-end', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, $"{slug}-{tenant:N}", "team-access-end");
         var members = Members(tenant);
         await members.SeedRolesAsync(tenant, Ct);
         var ownerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, Ct))!.Value;
@@ -165,7 +167,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
 
     /// <summary>Gives the team access to the site, approved by its owner, the team deciding its staff; returns the access.</summary>
     private Task<Guid> FollowAsync(Team team, Site site) =>
-        FollowAsync(team, site, new TeamAccessGrant(site.Tenant, [site.ViewerRole], false, null, TeamManagesStaff: true));
+        FollowAsync(team, site, new TeamAccessGrant(site.Tenant, [site.ViewerRole], false, null, StaffRule: TeamStaffRule.TeamDecides));
 
     /// <summary>Gives the team the access <paramref name="grant"/> describes, approved by the site's owner; returns the access.</summary>
     private async Task<Guid> FollowAsync(Team team, Site site, TeamAccessGrant grant)
@@ -184,13 +186,10 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
     }
 
     private Task<TeamAccessApproval> ApproveAsync(Site site, string token, TeamAccessGrant grant) =>
-        TeamReasonWrites.ApproveAccessAsync(
-            Contexts(Guid.Empty, site.Owner),
-            new GrantRevocationService(NewSessions()),
+        Service(Guid.Empty, site.Owner).ApproveAsync(
             token,
             new TeamAccessApproverCredential(site.Owner, AuthType.SessionCookie, new HashSet<string>(), false),
             grant,
-            Now,
             Ct);
 
     private async Task<Guid> JoinStaffAsync(Team team, Guid? subject = null)
@@ -580,16 +579,8 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, ahead, behind);
         await held.RollbackAsync(Ct);
 
-        await ahead.WaitAsync(TimeSpan.FromSeconds(30));
-        await behind.WaitAsync(TimeSpan.FromSeconds(30));
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
+        await ahead.WaitAsync(Eventually.DefaultPatience);
+        await behind.WaitAsync(Eventually.DefaultPatience);
     }
 
     private async Task<List<string>> ReadAsync(string sql)

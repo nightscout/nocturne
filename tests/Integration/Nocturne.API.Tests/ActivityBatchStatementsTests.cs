@@ -43,15 +43,10 @@ public class ActivityBatchStatementsTests(ApiIntegrationTestFixture fixture, ITe
 
     private async Task<List<string>> StatementsAsync(int size, bool resend)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, ["heart_rates", "step_counts"]);
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", Fixture.TenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync("SELECT set_config('app.is_share', 'false', false)");
 
         var recorder = new StatementRecorder();
         await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()

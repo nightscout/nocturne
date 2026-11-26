@@ -14,6 +14,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -39,8 +40,6 @@ namespace Nocturne.API.Tests.Integration.Auth;
 [Trait("Category", "Integration")]
 public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
 {
-    private static readonly TimeSpan HoldTimeout = TimeSpan.FromSeconds(30);
-
     private readonly string _issuer = $"https://setup-once-{Guid.NewGuid():N}.example";
     private readonly List<Guid> _deactivated = [];
     private Guid _providerId;
@@ -54,7 +53,7 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -75,7 +74,7 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
         }
 
         _providerId = Guid.CreateVersion7();
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             DELETE FROM passkey_credentials WHERE subject_id IN
                 (SELECT subject_id FROM tenant_members WHERE tenant_id = @tenant);
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
@@ -87,9 +86,9 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 DELETE FROM passkey_credentials WHERE subject_id = @owner;
                 DELETE FROM refresh_tokens WHERE subject_id = @owner;
                 DELETE FROM recovery_codes WHERE subject_id = @owner;
@@ -133,12 +132,12 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
 
         var hold = new Hold();
         var first = Task.Run(() => CompleteAsync(held, heldStep, "held-sub", hold));
-        (await Task.WhenAny(first, hold.Reached.Task.WaitAsync(HoldTimeout)))
+        (await Task.WhenAny(first, hold.Reached.Task.WaitAsync(Eventually.DefaultPatience)))
             .Should().NotBeSameAs(first, "the held caller stops between its setup-open check and its store");
 
         var second = await CompleteAsync(other, otherStep, "other-sub", hold: null);
         hold.Release();
-        var firstAnswer = await first.WaitAsync(HoldTimeout);
+        var firstAnswer = await first.WaitAsync(Eventually.DefaultPatience);
 
         Output.WriteLine($"held ({held}): {firstAnswer}");
         Output.WriteLine($"other ({other}): {second}");
@@ -162,9 +161,9 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
         _owner = (await OwnerSubjectIdsAsync()).Should().ContainSingle().Subject;
 
         var trigger = $"refuse_store_{_owner:N}";
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, $"""
+            await conn.ExecuteAsync($"""
                 CREATE FUNCTION {trigger}() RETURNS trigger LANGUAGE plpgsql AS
                     $$ BEGIN RAISE EXCEPTION 'store refused'; END $$;
                 CREATE TRIGGER {trigger} BEFORE INSERT ON {table} FOR EACH ROW
@@ -180,8 +179,8 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
         }
         finally
         {
-            await using var conn = await OpenAsync();
-            await ExecuteAsync(conn, $"""
+            await using var conn = await OpenPostgresAsync();
+            await conn.ExecuteAsync($"""
                 DROP TRIGGER {trigger} ON {table};
                 DROP FUNCTION {trigger}();
                 """);
@@ -211,9 +210,9 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
     {
         var step = await OwnerStepAsync("The Operator");
         _owner = (await OwnerSubjectIdsAsync()).Should().ContainSingle().Subject;
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, "UPDATE tenants SET setup_owner_subject_id = @other WHERE id = @tenant",
+            await conn.ExecuteAsync("UPDATE tenants SET setup_owner_subject_id = @other WHERE id = @tenant",
                 ("other", Fixture.OwnerSubjectId), ("tenant", Fixture.TenantId));
         }
 
@@ -246,7 +245,7 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
         public async Task PassAsync()
         {
             Reached.TrySetResult();
-            await _released.Task.WaitAsync(HoldTimeout);
+            await _released.Task.WaitAsync(Eventually.DefaultPatience);
         }
 
         public void Release() => _released.TrySetResult();
@@ -413,76 +412,53 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
 
     private async Task<long> CredentialCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("""
             SELECT (SELECT count(*) FROM passkey_credentials WHERE subject_id = @subject)
                  + (SELECT count(*) FROM subject_oidc_identities WHERE subject_id = @subject);
-            """;
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+            """, ("subject", subjectId));
     }
 
     private async Task<long> LinkedIdentityCountAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM subject_oidc_identities WHERE provider_id = @provider";
-        cmd.Parameters.AddWithValue("provider", _providerId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM subject_oidc_identities WHERE provider_id = @provider", ("provider", _providerId));
     }
 
     private async Task<long> RecoveryCodeCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM recovery_codes WHERE subject_id = @subject";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM recovery_codes WHERE subject_id = @subject", ("subject", subjectId));
     }
 
     private async Task<long> LoginRowCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM auth_audit_log WHERE target_subject_id = @subject AND event_type = @login";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        cmd.Parameters.AddWithValue("login", AuthAuditEventType.Login);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM auth_audit_log WHERE target_subject_id = @subject AND event_type = @login", ("subject", subjectId), ("login", AuthAuditEventType.Login));
     }
 
     private async Task<Guid?> RecordAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT setup_owner_subject_id FROM tenants WHERE id = @tenant";
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        return await cmd.ExecuteScalarAsync() is Guid recorded ? recorded : null;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<Guid?>("SELECT setup_owner_subject_id FROM tenants WHERE id = @tenant", ("tenant", Fixture.TenantId));
     }
 
     private async Task<long> LiveSessionCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM refresh_tokens WHERE subject_id = @subject AND revoked_at IS NULL AND expires_at > now()";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM refresh_tokens WHERE subject_id = @subject AND revoked_at IS NULL AND expires_at > now()", ("subject", subjectId));
     }
 
     private async Task<bool> IsPlatformAdminAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT is_platform_admin FROM subjects WHERE id = @subject";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (bool)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<bool>("SELECT is_platform_admin FROM subjects WHERE id = @subject", ("subject", subjectId));
     }
 
     private async Task<List<Guid>> OwnerSubjectIdsAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync("""
             SELECT m.subject_id
             FROM tenant_members m
             JOIN tenant_member_roles mr ON mr.tenant_member_id = m.id
@@ -490,29 +466,6 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
             JOIN subjects s ON s.id = m.subject_id
             WHERE m.tenant_id = @tenant AND r.slug = 'owner' AND s.is_active
             ORDER BY m.subject_id;
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        var ids = new List<Guid>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetGuid(0));
-        return ids;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+            """, reader => reader.GetGuid(0), ("tenant", Fixture.TenantId));
     }
 }

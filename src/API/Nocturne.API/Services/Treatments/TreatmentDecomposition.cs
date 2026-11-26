@@ -12,6 +12,7 @@ internal sealed class TreatmentDecomposition : GroupedDecomposition
     private readonly HashSet<int> _wroteNothing = [];
     private readonly HashSet<int> _invalidated = [];
     private readonly HashSet<Treatment> _keyedToServed = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<int> _upstreamEdits = [];
 
     /// <summary>
     /// The treatments refused for their data, by batch index, with the refusal: a
@@ -37,6 +38,12 @@ internal sealed class TreatmentDecomposition : GroupedDecomposition
     /// basal, or one uploaded with <c>isValid: false</c>, which leaves nothing live.
     /// </summary>
     internal void WritesNothing(int index) => _wroteNothing.Add(index);
+
+    /// <summary>Marks a pulled treatment applied as an upstream edit of a record write-back sent.</summary>
+    internal void AppliesUpstreamEdit(int index) => _upstreamEdits.Add(index);
+
+    /// <summary>Whether the treatment at <paramref name="index"/> was applied as an upstream edit of a record write-back sent.</summary>
+    public bool IsUpstreamEdit(int index) => _upstreamEdits.Contains(index) && !_rejected.ContainsKey(index);
 
     /// <summary>
     /// The treatments, by batch index, uploaded with <c>isValid: false</c> under the id of a live

@@ -752,7 +752,9 @@ public class OidcController : ControllerBase
     /// <returns>A <see cref="SessionInfo"/> describing the current session state.</returns>
     /// <remarks>
     /// Returns <c>IsAuthenticated = false</c> for unauthenticated requests (does not return 401).
-    /// This allows the frontend to check auth status without triggering redirect logic.
+    /// This allows the frontend to check auth status without triggering redirect logic. A session
+    /// caller that a mint would refuse (<see cref="HttpContextExtensions.IsSessionCallerInactiveAsync"/>)
+    /// reads as not authenticated, so the web offers it the sign-in that the refusal asks for.
     /// </remarks>
     /// <response code="200">Session information (always returns 200).</response>
     [HttpGet("session")]
@@ -763,7 +765,8 @@ public class OidcController : ControllerBase
         [FromServices] ITenantService tenants, CancellationToken ct = default)
     {
         var authContext = HttpContext.GetAuthContext();
-        if (authContext == null || !authContext.IsAuthenticated)
+        if (authContext == null || !authContext.IsAuthenticated
+            || await HttpContext.IsSessionCallerInactiveAsync(ct))
         {
             return Ok(new SessionInfo { IsAuthenticated = false });
         }

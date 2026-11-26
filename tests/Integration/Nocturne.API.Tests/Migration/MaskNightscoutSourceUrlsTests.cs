@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Migration;
+using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -30,6 +31,7 @@ namespace Nocturne.API.Tests.Integration.Migration;
 public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
 {
     private const string PriorMigration = "20261124082620_RekeyConnectorResumeState";
+    private const string ThisMigration = "20261124161251_MaskNightscoutSourceUrls";
 
     internal const string Secret = "AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI";
     internal const string CurrentUrl = $"https://ns.example.com/{Secret}";
@@ -92,10 +94,7 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
         _migrator = database.MigratorConnectionString;
 
         foreach (var tenant in new[] { TenantA, TenantB, TenantC })
-            await ExecuteAsync($"""
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES ('{tenant}', 'mask-{tenant:N}', 'mask', true, now(), now());
-                """);
+            await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"mask-{tenant:N}", "mask");
 
         await InsertSourceAsync(Current, TenantA, "Api", CurrentUrl, CurrentUrl,
             createdAt: "2026-01-01", lastMigrationAt: "2026-02-01", lastData: "2026-01-31");
@@ -131,13 +130,16 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             await InsertRunAsync(Guid.Parse(id), TenantC, "Api", "recorded before the rewrite");
 
         await using (var context = new NocturneDbContext(Options(_migrator)))
-            await context.GetService<IMigrator>().MigrateAsync();
+            await context.GetService<IMigrator>().MigrateAsync(ThisMigration);
 
         Sources = await ReadSourcesAsync();
         Runs = await ReadRunsAsync();
-        await ExecuteAsync(MaskNightscoutSourceUrls.RewriteSql);
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, MaskNightscoutSourceUrls.RewriteSql);
         SourcesAfterSecondRun = await ReadSourcesAsync();
         RunsAfterSecondRun = await ReadRunsAsync();
+
+        await using (var context = new NocturneDbContext(Options(_migrator)))
+            await context.GetService<IMigrator>().MigrateAsync();
 
         _reader = new NocturneDbContext(Options(database.AppConnectionString)) { TenantId = TenantA };
         var service = new MigrationJobService(
@@ -149,7 +151,8 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             TimeProvider.System);
         var job = await service.StartMigrationAsync(
             new StartMigrationRequest { Mode = MigrationMode.Api, NightscoutUrl = ReimportUrl },
-            new TenantContext(TenantA, "mask", "mask", true, IsDemo: false));
+            new TenantContext(TenantA, "mask", "mask", true, IsDemo: false),
+            starter: null);
 
         var runs = await ReadRunsAsync();
         var reimport = runs.Single(r => r.Id == job.Id);
@@ -165,15 +168,12 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
     }
 
     private static DbContextOptions<NocturneDbContext> Options(string connectionString) =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(connectionString);
 
     private Task InsertSourceAsync(
         Guid id, Guid tenant, string mode, string identifier, string? url, string createdAt,
         string? lastMigrationAt = null, string? lastData = null, string? secretHash = null) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO migration_sources (id, tenant_id, mode, source_identifier, nightscout_url, nightscout_api_secret_hash,
                 created_at, last_migration_at, last_migrated_data_timestamp)
             VALUES ('{id}', '{tenant}', '{mode}', {Literal(identifier)}, {Literal(url)}, {Literal(secretHash)},
@@ -181,7 +181,7 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             """);
 
     private Task InsertRunAsync(Guid source, Guid tenant, string mode, string description) =>
-        ExecuteAsync($"""
+        NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO migration_runs (id, source_id, tenant_id, mode, state, started_at, created_at,
                 entries_migrated, treatments_migrated, revision, source_description)
             VALUES ('{Guid.CreateVersion7()}', '{source}', '{tenant}', '{mode}', 'Completed', now(), now(), 0, 0, 0,
@@ -194,44 +194,28 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand("""
+        return await conn.QueryAsync("""
             SELECT id, tenant_id, mode, source_identifier, nightscout_url, nightscout_api_secret_hash,
                    created_at, last_migration_at, last_migrated_data_timestamp
             FROM migration_sources
-            """, conn);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var rows = new List<SourceRow>();
-        while (await reader.ReadAsync())
-            rows.Add(new SourceRow(
+            """,
+            reader => new SourceRow(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.GetDateTime(6),
                 reader.IsDBNull(7) ? null : reader.GetDateTime(7),
                 reader.IsDBNull(8) ? null : reader.GetDateTime(8)));
-        return rows;
     }
 
     private async Task<IReadOnlyList<RunRow>> ReadRunsAsync()
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "SELECT id, source_id, tenant_id, source_description FROM migration_runs", conn);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var rows = new List<RunRow>();
-        while (await reader.ReadAsync())
-            rows.Add(new RunRow(
+        return await conn.QueryAsync(
+            "SELECT id, source_id, tenant_id, source_description FROM migration_runs",
+            reader => new RunRow(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.IsDBNull(3) ? null : reader.GetString(3)));
-        return rows;
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 }
 
@@ -252,7 +236,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
         var winner = Source(MaskNightscoutSourceUrlsFixture.Current);
 
         winner.Identifier.Should().Be(MigrationJob.ApiSourceIdentifier(url));
-        winner.Url.Should().Be(NightscoutAddress.Masked(url)).And.Be(MaskedUrl);
+        winner.Url.Should().Be(MaskedUrl);
     }
 
     [Fact]
@@ -286,8 +270,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
         var source = Source(MaskNightscoutSourceUrlsFixture.Schemeless);
 
         source.Identifier.Should().Be(MigrationJob.ApiSourceIdentifier(MaskNightscoutSourceUrlsFixture.SchemelessLegacyUrl));
-        source.Url.Should().Be("ns.other.example:8443/nightscout/Long…")
-            .And.Be(NightscoutAddress.Masked(MaskNightscoutSourceUrlsFixture.SchemelessLegacyUrl));
+        source.Url.Should().Be("ns.other.example:8443/nightscout/Long…");
         fixture.Runs.Single(r => r.SourceId == MaskNightscoutSourceUrlsFixture.Schemeless).Description.Should().Be(source.Url);
     }
 
@@ -331,7 +314,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
     {
         var source = fixture.Sources.Single(s => s.Identifier == MigrationJob.ApiSourceIdentifier(url));
 
-        source.Url.Should().Be(NightscoutAddress.Masked(url)).And.Be(masked);
+        source.Url.Should().Be(masked);
         fixture.Runs.Single(r => r.SourceId == source.Id).Description.Should().Be(masked);
     }
 
@@ -366,7 +349,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
     public void A_later_import_of_the_same_site_attaches_to_the_rewritten_row()
     {
         fixture.ReimportSource.Should().Be(MaskNightscoutSourceUrlsFixture.Current);
-        fixture.ReimportDescription.Should().Be(MaskedUrl);
+        fixture.ReimportDescription.Should().Be(NightscoutAddress.Shown(MaskNightscoutSourceUrlsFixture.ReimportUrl));
         fixture.ApiSourcesOfTenantAAfterReimport.Should().Be(2, "the site and the scheme-less one, and no new row");
     }
 }

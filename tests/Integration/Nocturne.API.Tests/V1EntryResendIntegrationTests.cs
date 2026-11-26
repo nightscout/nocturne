@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -179,18 +180,11 @@ public class V1EntryResendIntegrationTests : ApiIntegrationTestBase
 
     private async Task<string> RowVersionAsync()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);"
-            + "SELECT xmin::text FROM sensor_glucose WHERE device = @device AND deleted_at IS NULL;";
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("device", Device);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        (await reader.ReadAsync()).Should().BeTrue();
-        var version = reader.GetString(0);
-        (await reader.ReadAsync()).Should().BeFalse();
-        return version;
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
+        var versions = await conn.QueryAsync(
+            "SELECT xmin::text FROM sensor_glucose WHERE device = @device AND deleted_at IS NULL;",
+            reader => reader.GetString(0), ("device", Device));
+        return versions.Should().ContainSingle().Subject;
     }
 }

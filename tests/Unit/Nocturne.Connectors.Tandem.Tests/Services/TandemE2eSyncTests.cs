@@ -1001,7 +1001,7 @@ public class TandemE2eSyncTests
     {
         var fixture = new Fixture(
             PumperWithSettings(basalRate: 1000),
-            stateOnRead: _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()));
+            stateOnRead: _ => throw new ConnectorStoreUnavailableException("connection refused", new InvalidOperationException()));
 
         var result = await fixture.RunAsync(ProfilesOnly);
 

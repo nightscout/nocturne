@@ -46,9 +46,8 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "backfill_member_reasons");
         _migrator = database.MigratorConnectionString;
 
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'backfill-reasons', 'backfill-reasons', true, now(), now());
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, Tenant, "backfill-reasons", "backfill-reasons");
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
             VALUES ('{OwnerRole}', '{Tenant}', 'Owner', 'owner', '["*"]', true, now(), now()),
                    ('{ViewerRole}', '{Tenant}', 'Viewer', 'viewer', '["glucose.read"]', true, now(), now()),
@@ -56,14 +55,13 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
             """);
         foreach (var subject in new[] { Owner, Public, Device, Invited })
         {
-            await ExecuteAsync($"""
+            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
                 INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
                 VALUES ('{subject}', 'backfill-{subject:N}', true, {(subject == Public || subject == Device ? "true" : "false")}, now(), now(), 'Approved');
                 """);
         }
 
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(_migrator, Tenant, $"""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES ('{Invite}', '{Tenant}', '{Owner}', '{Invite:N}', true, now() + interval '1 day', 1, now());
             """);
@@ -80,7 +78,7 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
 
         RowsAfter = await ReadRowsAsync();
         Reasons = await ReadReasonsAsync();
-        RowsInsertedBySecondRun = await ExecuteAsync(BackfillTenantMemberReasons.BackfillSql);
+        RowsInsertedBySecondRun = await NpgsqlTestCommands.ExecuteAsync(_migrator, BackfillTenantMemberReasons.BackfillSql);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -88,7 +86,7 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
     private async Task InsertMemberAsync(
         Guid member, string permissions, bool limit, string accessEndsAt, string invite, params Guid[] roles)
     {
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, limit_to_24_hours, access_ends_at,
                                         created_from_invite_id, sys_created_at, sys_updated_at)
             VALUES ('{member}', '{Tenant}', '{member}', {permissions}, {(limit ? "true" : "false")}, {accessEndsAt},
@@ -96,7 +94,7 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
             """);
         foreach (var role in roles)
         {
-            await ExecuteAsync($"""
+            await NpgsqlTestCommands.ExecuteAsync(_migrator, $"""
                 INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id, sys_created_at)
                 VALUES ('{Guid.CreateVersion7()}', '{member}', '{role}', now());
                 """);
@@ -104,10 +102,7 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
     }
 
     private DbContextOptions<NocturneDbContext> Options() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migrator, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(_migrator);
 
     private async Task<List<string>> ReadRowsAsync()
     {
@@ -155,14 +150,6 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
         }
 
         return reasons;
-    }
-
-    private async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
     }
 }
 

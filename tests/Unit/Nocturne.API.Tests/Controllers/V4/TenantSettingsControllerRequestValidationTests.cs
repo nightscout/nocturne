@@ -210,8 +210,7 @@ public class TenantSettingsControllerRequestValidationTests
                 context.Response.StatusCode = StatusCodes.Status403Forbidden)
             .Returns(Task.CompletedTask);
 
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(a => a.TenantId).Returns(tenantId);
+        var accessor = SettableTenantAccessor.Resolved(tenantId);
 
         return new HostBuilder()
             .ConfigureWebHost(web =>
@@ -221,7 +220,7 @@ public class TenantSettingsControllerRequestValidationTests
                 {
                     services.AddSingleton(tenants.Object);
                     services.AddSingleton(records.Object);
-                    services.AddSingleton(accessor.Object);
+                    services.AddSingleton<ITenantAccessor>(accessor);
                     services.AddSingleton(units.Object);
                     services.AddSingleton(Mock.Of<IPlatformPolicyRepository>());
                     services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BaseDomainOptions()));

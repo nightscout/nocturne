@@ -65,9 +65,9 @@ public class SyncKeyLookupPlanTests(RlsCompletenessFixture fx)
         await PlanTestSupport.SeedAsync(fx, tenant, table, columns, values, Rows);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
-        var capture = new PlanTestSupport.LastReaderCapture();
+        var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
             .AddInterceptors(capture)
@@ -75,7 +75,7 @@ public class SyncKeyLookupPlanTests(RlsCompletenessFixture fx)
 
         (await lookup(new TestNocturneDbContextFactory(ctx), "sync-7777")).Should().NotBeNull();
 
-        var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);
+        var plan = await QueryPlans.ExplainAsync(conn, capture.Command!);
         plan.Descendants("Node Type").Should().NotContain("Seq Scan", plan.ToString());
         plan.Descendants("Index Name").Should().Equal(
             [$"ix_{table}_tenant_source_sync_id"], $"the sync key has a partial unique index to probe; plan: {plan}");

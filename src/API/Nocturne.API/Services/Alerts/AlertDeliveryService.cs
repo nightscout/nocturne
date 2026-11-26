@@ -46,14 +46,8 @@ internal sealed class AlertDeliveryService(
 
     /// <inheritdoc/>
     /// <remarks>
-    /// A call for an instance some earlier call already dispatched sends only what that call left
-    /// owed: a channel with no delivery row, or one whose row is still <c>pending</c> (written, and
-    /// the process died before its provider answered). A row <c>delivered</c>, <c>failed</c> (the
-    /// provider answered and refused, which is not retried) or <c>expired</c> is done. With nothing
-    /// owed it sends nothing, not even the broadcast; otherwise the broadcast and the alarm go out
-    /// again with the sends. A chat-bot row stays <c>pending</c> until the bot reports it, so such a
-    /// call can send a chat message twice: the safe way to fail. An instance already resolved, by a
-    /// close that ran while its opening was still owed, is not dispatched.
+    /// <inheritdoc/>
+    /// The start of the latest send is <see cref="AlertInstanceEntity.RenotifiedAt"/>.
     /// </remarks>
     public Task DispatchAsync(
         Guid alertInstanceId,
@@ -84,7 +78,7 @@ internal sealed class AlertDeliveryService(
         var instance = await db.AlertInstances
             .AsNoTracking()
             .Where(i => i.Id == alertInstanceId)
-            .Select(i => new { i.SnoozedUntil, i.ResolvedAt })
+            .Select(i => new { i.SnoozedUntil, i.ResolvedAt, i.RenotifiedAt })
             .FirstOrDefaultAsync(ct);
         if (owedOnly && instance?.ResolvedAt is not null)
         {
@@ -102,9 +96,11 @@ internal sealed class AlertDeliveryService(
             return;
         }
 
+        var latestSend = instance?.RenotifiedAt;
         var earlier = owedOnly
             ? await db.AlertDeliveries
-                .Where(d => d.AlertInstanceId == alertInstanceId && !d.IsTest)
+                .Where(d => d.AlertInstanceId == alertInstanceId && !d.IsTest
+                            && (latestSend == null || d.CreatedAt >= latestSend))
                 .ToListAsync(ct)
             : [];
 
@@ -131,14 +127,7 @@ internal sealed class AlertDeliveryService(
         // the hub's subscribers are not its recipients.
         if (!notice)
         {
-            try
-            {
-                await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
-            }
+            await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
         }
 
         await alarmRelay.RaiseAsync(payload, ct);
@@ -189,7 +178,7 @@ internal sealed class AlertDeliveryService(
             {
                 await DispatchToProviderAsync(delivery, channel, states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Failed to dispatch delivery {DeliveryId} via {ChannelType}",
                     delivery.Id, delivery.ChannelType);
@@ -242,11 +231,11 @@ internal sealed class AlertDeliveryService(
 
             return ChannelDestinations.ResolvesFromLinkedIdentity(channel.ChannelType)
                    && ChannelDestinations.PlatformOf(channel.ChannelType) is { } platform
-                   && ChatIdentities.Contains((platform, channel.Destination));
+                   && ChatIdentities.Contains((platform, ChannelDestinations.LinkKey(channel.ChannelType, channel.Destination)));
         }
     }
 
-    public async Task<Guid> TestFireAsync(
+    public async Task<AlertTestFire> TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
@@ -297,20 +286,13 @@ internal sealed class AlertDeliveryService(
 
         // Broadcast so the firing toast renders for SignalR-connected web clients —
         // mirrors the real-fire UX so users learn what a real fire feels like.
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_test_fire for rule {RuleId}", alertRuleId);
-        }
+        await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
 
         if (channels.Count == 0)
         {
             db.AlertDeliveries.Add(NoChannelAnchor(tenantId, instance.Id, JsonSerializer.Serialize(payload), now, isTest: true));
             await db.SaveChangesAsync(ct);
-            return instance.Id;
+            return new AlertTestFire(instance.Id, []);
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);
@@ -336,6 +318,7 @@ internal sealed class AlertDeliveryService(
         await db.SaveChangesAsync(ct);
 
         var states = await StatesAsync(channels, ct);
+        var notSent = NotSent(channels, states);
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
@@ -343,7 +326,7 @@ internal sealed class AlertDeliveryService(
             {
                 await DispatchToProviderAsync(delivery, channels[i], states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Test-fire delivery {DeliveryId} via {ChannelType} failed",
                     delivery.Id, delivery.ChannelType);
@@ -351,7 +334,7 @@ internal sealed class AlertDeliveryService(
             }
         }
 
-        return instance.Id;
+        return new AlertTestFire(instance.Id, notSent);
     }
 
     public async Task<IReadOnlyList<AlertChannelNotSent>> TestFireDryRunAsync(
@@ -359,28 +342,20 @@ internal sealed class AlertDeliveryService(
         AlertPayload payload,
         CancellationToken ct)
     {
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_test_fire (dry-run)");
-        }
+        await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
 
         // Push directly to providers without persisting delivery rows. Failures are logged
         // but not retryable — there's no row to mark failed. Dry-run callers know this is
         // an editor preview, not an audit-tracked send.
         var states = await StatesAsync(channels, ct);
-        var notSent = new List<AlertChannelNotSent>();
-        foreach (var (channel, index) in channels.Select((c, i) => (c, i)))
+        var notSent = NotSent(channels, states);
+        var skipped = notSent.Select(n => n.Index).ToHashSet();
+        for (var i = 0; i < channels.Count; i++)
         {
-            if (states.Of(channel) is { IsActive: false } verdict)
-            {
-                notSent.Add(new AlertChannelNotSent(index, channel.ChannelType, verdict.State));
+            if (skipped.Contains(i))
                 continue;
-            }
 
+            var channel = channels[i];
             try
             {
                 var fauxDelivery = new AlertDeliveryEntity
@@ -391,12 +366,28 @@ internal sealed class AlertDeliveryService(
                 };
                 await DispatchToProviderAsync(fauxDelivery, channel, states, payload, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Test-fire dry-run dispatch via {ChannelType} failed", channel.ChannelType);
             }
         }
 
+        return notSent;
+    }
+
+    /// <summary>
+    /// The channels a test fire does not send to, by position in <paramref name="channels"/>: those
+    /// <see cref="DispatchToProviderAsync"/> skips for their state.
+    /// </summary>
+    private static List<AlertChannelNotSent> NotSent(
+        IReadOnlyList<AlertRuleChannelSnapshot> channels, AlertChannelStates states)
+    {
+        var notSent = new List<AlertChannelNotSent>();
+        for (var i = 0; i < channels.Count; i++)
+        {
+            if (states.Of(channels[i]) is { IsActive: false } verdict)
+                notSent.Add(new AlertChannelNotSent(i, channels[i].ChannelType, verdict.State));
+        }
         return notSent;
     }
 
@@ -428,6 +419,9 @@ internal sealed class AlertDeliveryService(
         await using var db = await contextFactory.CreateAsync(ct);
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
+        // The platform's failure of this same message can land first; see MarkSentMessageFailedAsync.
+        if (delivery.Status == "failed" && platformMessageId is not null
+                                        && delivery.PlatformMessageId == platformMessageId) return;
 
         delivery.Status = "delivered";
         delivery.DeliveredAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -445,6 +439,19 @@ internal sealed class AlertDeliveryService(
         delivery.Status = "failed";
         delivery.RetryCount++;
         delivery.LastError = error;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkSentMessageFailedAsync(Guid deliveryId, string platformMessageId, string error, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateAsync(ct);
+        var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
+        if (delivery is null) return;
+
+        delivery.Status = "failed";
+        delivery.RetryCount++;
+        delivery.LastError = error;
+        delivery.PlatformMessageId = platformMessageId;
         await db.SaveChangesAsync(ct);
     }
 

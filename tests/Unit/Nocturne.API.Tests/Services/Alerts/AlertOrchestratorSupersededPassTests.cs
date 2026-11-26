@@ -4,10 +4,10 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -22,8 +22,6 @@ public sealed class AlertOrchestratorSupersededPassTests
 {
     private static readonly Guid Tenant = Guid.Parse("36263626-0000-7000-8000-0000000000aa");
     private static readonly DateTime At = new(2026, 11, 22, 9, 0, 0, DateTimeKind.Utc);
-    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(10);
-
     private static readonly AlertRuleSnapshot First = Rule("first");
     private static readonly AlertRuleSnapshot Second = Rule("second");
     private static readonly AlertRuleSnapshot Third = Rule("third");
@@ -60,14 +58,14 @@ public sealed class AlertOrchestratorSupersededPassTests
                 _evaluated.Enqueue((rule.Id, context.LatestValue));
                 return new AlertEngineEvaluation
                 {
-                    Transition = new ExcursionTransition(ExcursionTransitionType.ExcursionOpened, Guid.NewGuid()),
+                    Transition = new ExcursionTransition(ExcursionTransitionType.ExcursionOpened, Guid.NewGuid(), OwedAt: DateTime.UtcNow),
                 };
             });
 
         var opened = new Mock<IExcursionOpenedHandler>();
         opened
-            .Setup(h => h.HandleOpenedAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<SensorContext>(),
-                It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<CancellationToken>()))
+            .Setup(h => h.HandleOpenedAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<SensorContext>(),
+                It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 if (Interlocked.Increment(ref _deliveries) != 1) return;
@@ -85,7 +83,7 @@ public sealed class AlertOrchestratorSupersededPassTests
             engine.Object,
             new AlertRuleEvaluationGate(),
             _decisions,
-            Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
+            SettableTenantAccessor.Resolved(Tenant),
             enricher.Object,
             opened.Object,
             Mock.Of<IExcursionResolutionHandler>(),
@@ -103,14 +101,14 @@ public sealed class AlertOrchestratorSupersededPassTests
     private async Task<Task<AlertPassOutcome>> HoldPassAAsync(AlertOrchestrator orchestrator, SensorGlucose older)
     {
         var passA = PassAsync(orchestrator, older, _decisions.BeginRead().Sequence, First, Second, Third);
-        await _firstDeliveryEntered.Task.WaitAsync(Guard);
+        await _firstDeliveryEntered.Task.WaitAsync(Eventually.DefaultPatience);
         return passA;
     }
 
     private async Task ReleaseAsync(Task passA)
     {
         _firstDeliveryReleased.SetResult();
-        await passA.WaitAsync(Guard);
+        await passA.WaitAsync(Eventually.DefaultPatience);
     }
 
     [Fact]
@@ -119,7 +117,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var orchestrator = Orchestrator();
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
 
-        (await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second).WaitAsync(Guard))
+        (await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second).WaitAsync(Eventually.DefaultPatience))
             .Should().Be(AlertPassOutcome.Decided);
         await ReleaseAsync(passA);
 
@@ -149,7 +147,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
         _engineFailsFor = (Second.Id, 52m);
 
-        (await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second, Third).WaitAsync(Guard))
+        (await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second, Third).WaitAsync(Eventually.DefaultPatience))
             .Should().Be(AlertPassOutcome.Failed);
         await ReleaseAsync(passA);
 
@@ -164,7 +162,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
         _engineFailsFor = (Third.Id, 80m);
 
-        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Guard);
+        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Eventually.DefaultPatience);
         await ReleaseAsync(passA);
 
         _evaluated.Should().Equal((First.Id, 80m), (Second.Id, 52m));
@@ -178,7 +176,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
         _engineFailsFor = (Second.Id, 80m);
 
-        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Third).WaitAsync(Guard);
+        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Third).WaitAsync(Eventually.DefaultPatience);
         await ReleaseAsync(passA);
 
         _evaluated.Should().Equal((First.Id, 80m), (Third.Id, 52m));
@@ -220,7 +218,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var pumpRule = Rule("reservoir");
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
 
-        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, pumpRule).WaitAsync(Guard);
+        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, pumpRule).WaitAsync(Eventually.DefaultPatience);
         await ReleaseAsync(passA);
 
         _evaluated.Should().Equal((First.Id, 80m), (pumpRule.Id, 52m), (Second.Id, 80m), (Third.Id, 80m));
@@ -232,7 +230,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var orchestrator = Orchestrator();
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
 
-        await PassAsync(orchestrator, Reading(0, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Guard);
+        await PassAsync(orchestrator, Reading(0, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Eventually.DefaultPatience);
         await ReleaseAsync(passA);
 
         _evaluated.Should().Equal((First.Id, 80m), (Second.Id, 52m), (Third.Id, 80m));
@@ -245,8 +243,8 @@ public sealed class AlertOrchestratorSupersededPassTests
         var reading = Reading(0, 80);
         _firstDeliveryReleased.SetResult();
 
-        await PassAsync(orchestrator, reading, _decisions.BeginRead().Sequence, First, Second).WaitAsync(Guard);
-        await PassAsync(orchestrator, reading, _decisions.BeginRead().Sequence, First, Second).WaitAsync(Guard);
+        await PassAsync(orchestrator, reading, _decisions.BeginRead().Sequence, First, Second).WaitAsync(Eventually.DefaultPatience);
+        await PassAsync(orchestrator, reading, _decisions.BeginRead().Sequence, First, Second).WaitAsync(Eventually.DefaultPatience);
 
         _evaluated.Should().HaveCount(4);
     }
@@ -281,12 +279,12 @@ public sealed class AlertOrchestratorSupersededPassTests
         var orchestrator = Orchestrator();
         _firstDeliveryReleased.SetResult();
         var readByWrite = _decisions.BeginRead().Sequence;
-        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Guard);
+        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Eventually.DefaultPatience);
 
         await orchestrator.EvaluateRulesAsync(
             [Second], new HashSet<Guid> { Second.Id }, CanonicalAlertEvaluator.ContextFor(Reading(0, 80), default),
-            readAt: null, CancellationToken.None).WaitAsync(Guard);
-        await PassAsync(orchestrator, Reading(5, 52), readByWrite, Second).WaitAsync(Guard);
+            readAt: null, CancellationToken.None).WaitAsync(Eventually.DefaultPatience);
+        await PassAsync(orchestrator, Reading(5, 52), readByWrite, Second).WaitAsync(Eventually.DefaultPatience);
 
         _evaluated.Should().Equal((Second.Id, 52m), (Second.Id, 80m), (Second.Id, 52m));
     }

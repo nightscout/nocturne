@@ -17,12 +17,17 @@ public interface IProfileDecomposer
     /// of one.
     /// </summary>
     /// <param name="profiles">The legacy Profiles to decompose</param>
+    /// <remarks>
+    /// A document sent with <c>isValid: false</c> writes nothing live: under the id of a live document
+    /// it deletes that document, and otherwise it is stored deleted, so only v3 history serves it. A
+    /// later decomposition of the same document without <c>isValid</c> writes it again.
+    /// </remarks>
     /// <returns>
-    /// A single <see cref="DecompositionResult"/> containing every created or updated V4 record; its
+    /// A single <see cref="InvalidatingDecomposition{TRecord}"/> containing every created or updated V4 record; its
     /// <see cref="DecompositionResult.CorrelationId"/> is the id minted for the first profile that has
     /// a store entry.
     /// </returns>
-    Task<DecompositionResult> DecomposeBatchAsync(
+    Task<InvalidatingDecomposition<Profile>> DecomposeBatchAsync(
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>

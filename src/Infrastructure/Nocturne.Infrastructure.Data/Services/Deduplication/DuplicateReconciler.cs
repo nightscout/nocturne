@@ -245,14 +245,14 @@ public sealed class DuplicateReconciler(
     /// </summary>
     /// <param name="recordType">The record type whose canonical groups are reconciled.</param>
     /// <param name="candidateCanonicalIds">
-    /// When non-null, only canonical groups in this set plus their event-window neighbours are
-    /// considered; when null, all primaries of the type are considered.
+    /// Only canonical groups in this set plus their event-window neighbours are considered.
+    /// <see cref="MergeAllAsync"/> considers every primary of the type.
     /// </param>
     /// <param name="ct">A token to cancel the operation.</param>
     /// <returns>The number of duplicate groups collapsed (merges that reduced group count).</returns>
     internal async Task<int> MergeDuplicateGroupsAsync(
         RecordType recordType,
-        IReadOnlySet<Guid>? candidateCanonicalIds,
+        IReadOnlySet<Guid> candidateCanonicalIds,
         CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
@@ -264,6 +264,15 @@ public sealed class DuplicateReconciler(
     /// reconcile batch it waits for the tenant's merge lock: a skipped pass would leave the splits
     /// unhealed until the run is made again.
     /// </summary>
+    /// <remarks>
+    /// Its lists are as long as the type's data, so its transaction is planned for their values
+    /// (<see cref="ArrayFilterPlans"/>). The call is sized by the primaries before the group members
+    /// are read, since the canonical ids passed there are no more than that, and again by the record
+    /// ids <see cref="MergePrimariesAsync"/> reads info for, which with members are more than the
+    /// primaries. The setting lasts the transaction, so whichever call is first to reach
+    /// <see cref="ArrayFilterPlans.HashedArrayLength"/> covers the rest. A reconcile batch and the state
+    /// span repair pass lists bounded by a run of candidates or by a day of spans, and are not planned.
+    /// </remarks>
     internal async Task<int> MergeAllAsync(RecordType recordType, CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
@@ -274,7 +283,7 @@ public sealed class DuplicateReconciler(
         }, ct: ct);
     }
 
-    /// <inheritdoc cref="MergeDuplicateGroupsAsync(RecordType, IReadOnlySet{Guid}?, CancellationToken)"/>
+    /// <inheritdoc cref="MergeDuplicateGroupsAsync(RecordType, IReadOnlySet{Guid}, CancellationToken)"/>
     private async Task<int> MergeDuplicateGroupsAsync(
         NocturneDbContext db,
         RecordType recordType,
@@ -295,6 +304,7 @@ public sealed class DuplicateReconciler(
                 .ToListAsync(ct);
 
             var all = WithUnlinked(allPrimaries, await UnlinkedAsync(db, recordType, null, null, ct));
+            await db.PlanForEachArrayAsync(all.Primaries.Count, ct);
             return await MergePrimariesAsync(db, recordType, all.Primaries, all.Unlinked, null, null, null, ct);
         }
 
@@ -466,9 +476,21 @@ public sealed class DuplicateReconciler(
         if (primaries.Count < 2)
             return 0;
 
-        // 2. Load criteria + deleted status for the primary record ids.
-        var primaryIds = primaries.Select(p => p.RecordId).ToHashSet();
-        var info = await LoadRecordInfoAsync(db, recordType, primaryIds, ct);
+        // The source guards read whole roots, so a chain through a connector copy cannot carry two
+        // records of one uploader into one group. Keyed by root and merged on each union.
+        var rootMembers = wideEligible || TracksTightSources(recordType)
+            ? await LoadGroupMembersAsync(
+                db, recordTypeStr, primaries.Select(p => p.CanonicalId).Distinct().ToList(), unlinked, ct)
+            : null;
+
+        // 2. Load criteria + deleted status for the primary record ids, and for every member the
+        //    source guards read.
+        var infoIds = primaries.Select(p => p.RecordId).ToHashSet();
+        if (rootMembers is not null)
+            infoIds.UnionWith(rootMembers.Values.SelectMany(members => members).Select(m => m.RecordId));
+        if (candidateCanonicalIds is null)
+            await db.PlanForEachArrayAsync(infoIds.Count, ct);
+        var info = await LoadRecordInfoAsync(db, recordType, infoIds, ct);
 
         // 3. Sorted sliding-window union-find over primaries by canonical id.
         var parent = new Dictionary<Guid, Guid>();
@@ -487,35 +509,29 @@ public sealed class DuplicateReconciler(
         {
             var ra = Find(a);
             var rb = Find(b);
-            if (!ra.Equals(rb))
-                parent[ra] = rb;
+            if (ra.Equals(rb))
+                return;
+            parent[ra] = rb;
+            if (rootMembers is not null && rootMembers.Remove(ra, out var moved))
+            {
+                if (rootMembers.TryGetValue(rb, out var kept))
+                    kept.AddRange(moved);
+                else
+                    rootMembers[rb] = moved;
+            }
         }
 
         foreach (var p in primaries)
             parent[p.CanonicalId] = p.CanonicalId;
 
-        // The tight pass applies RefusesTightJoin to whole roots, so a chain through a connector
-        // copy cannot carry two records of one uploader into one group. Keyed by root and merged on
-        // each union.
-        Dictionary<Guid, HashSet<string>>? tightRootSources = null;
-        if (TracksTightSources(recordType))
+        bool TightUnionRefused(Guid ra, Guid rb)
         {
-            tightRootSources = await LoadGroupSourcesAsync(
-                db,
-                recordTypeStr, primaries.Select(p => p.CanonicalId).Distinct().ToList(), unlinked, ct);
-        }
-
-        bool TightUnionRefused(Guid a, Guid b)
-        {
-            if (tightRootSources is null)
+            if (rootMembers?.GetValueOrDefault(ra) is not { } membersA
+                || rootMembers.GetValueOrDefault(rb) is not { } membersB)
                 return false;
-            var sourcesA = tightRootSources.GetValueOrDefault(Find(a));
-            var sourcesB = tightRootSources.GetValueOrDefault(Find(b));
-            if (sourcesA is null || sourcesB is null)
-                return false;
-            foreach (var source in sourcesA)
+            foreach (var b in membersB)
             {
-                if (RefusesTightJoin(recordType, source, sourcesB))
+                if (RefusesTightJoin(recordType, b, membersA, info))
                     return true;
             }
 
@@ -526,16 +542,8 @@ public sealed class DuplicateReconciler(
         {
             var ra = Find(a);
             var rb = Find(b);
-            if (ra.Equals(rb) || TightUnionRefused(ra, rb))
-                return;
-            Union(ra, rb);
-            if (tightRootSources is not null && tightRootSources.Remove(ra, out var moved))
-            {
-                if (tightRootSources.TryGetValue(rb, out var kept))
-                    kept.UnionWith(moved);
-                else
-                    tightRootSources[rb] = moved;
-            }
+            if (!ra.Equals(rb) && !TightUnionRefused(ra, rb))
+                Union(ra, rb);
         }
 
         for (int i = 0; i < primaries.Count; i++)
@@ -554,8 +562,9 @@ public sealed class DuplicateReconciler(
 
         // 3b. Wide pass, mirroring the insert path: groups the tight pass left apart may still be
         // one event once two connectors' clocks have drifted. A pair merges only on exact values,
-        // only when each group's sole wide candidate is the other, and only when the two groups
-        // share no data source. Anything ambiguous is left as separate groups.
+        // only when each group's sole wide candidate is the other, and only when no member of either
+        // group holds its source against the other (HoldsSourceAgainst). Anything ambiguous is left
+        // as separate groups.
         if (wideEligible)
         {
             var widePartners = new Dictionary<Guid, WidePartner>();
@@ -651,34 +660,14 @@ public sealed class DuplicateReconciler(
 
             if (widePartners.Count > 0)
             {
-                // Only roots that actually have a wide partner need their sources; the rest of the
-                // loaded primaries were read as evidence for the ambiguity count, nothing more.
-                // Roots holding a candidate canonical are tracked at the same time: a candidate-
-                // bounded pass may only merge pairs it owns.
-                var partneredPrimaries = primaries
-                    .Where(p => widePartners.ContainsKey(Find(p.CanonicalId)))
-                    .ToList();
+                // A candidate-bounded pass may only merge pairs it owns.
+                var candidateRoots = primaries
+                    .Where(p => candidateCanonicalIds?.Contains(p.CanonicalId) == true)
+                    .Select(p => Find(p.CanonicalId))
+                    .ToHashSet();
 
-                var sourcesByCanonical = await LoadGroupSourcesAsync(
-                    db,
-                    recordTypeStr, partneredPrimaries.Select(p => p.CanonicalId).Distinct().ToList(), unlinked, ct);
-                var sourcesByRoot = new Dictionary<Guid, HashSet<string>>();
-                var candidateRoots = new HashSet<Guid>();
-                foreach (var p in partneredPrimaries)
-                {
-                    var root = Find(p.CanonicalId);
-                    if (!sourcesByRoot.TryGetValue(root, out var rootSources))
-                    {
-                        rootSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        sourcesByRoot[root] = rootSources;
-                    }
-
-                    if (sourcesByCanonical.TryGetValue(p.CanonicalId, out var canonicalSources))
-                        rootSources.UnionWith(canonicalSources);
-
-                    if (candidateCanonicalIds?.Contains(p.CanonicalId) == true)
-                        candidateRoots.Add(root);
-                }
+                bool HoldsASourceAgainst(List<GroupMember> members, List<GroupMember> others) =>
+                    members.Any(m => HoldsSourceAgainst(others, m, info));
 
                 var mergedOffsets = new List<long>();
                 foreach (var (root, known) in widePartners)
@@ -713,11 +702,18 @@ public sealed class DuplicateReconciler(
                     if (boundaryRoots.Contains(root) || boundaryRoots.Contains(partner))
                         continue;
 
-                    if (!sourcesByRoot.TryGetValue(root, out var rootSources)
-                        || !sourcesByRoot.TryGetValue(partner, out var partnerSources)
-                        || !CanEstablishCrossSource(rootSources)
+                    if (rootMembers is null
+                        || !rootMembers.TryGetValue(root, out var membersOfRoot)
+                        || !rootMembers.TryGetValue(partner, out var membersOfPartner))
+                    {
+                        continue;
+                    }
+
+                    var rootSources = membersOfRoot.Select(m => m.DataSource).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var partnerSources = membersOfPartner.Select(m => m.DataSource).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    if (!CanEstablishCrossSource(rootSources)
                         || !CanEstablishCrossSource(partnerSources)
-                        || rootSources.Overlaps(partnerSources))
+                        || HoldsASourceAgainst(membersOfRoot, membersOfPartner))
                     {
                         continue;
                     }

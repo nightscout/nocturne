@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -51,7 +52,7 @@ public class LinkedRecordEntity : ITenantScoped, ISystemCreated
     /// Data source identifier (e.g., "glooko-connector", "mylife-connector")
     /// </summary>
     [Column("data_source")]
-    [MaxLength(100)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     public string DataSource { get; set; } = string.Empty;
 
     /// <summary>

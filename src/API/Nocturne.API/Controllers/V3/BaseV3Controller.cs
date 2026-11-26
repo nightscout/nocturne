@@ -516,6 +516,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// The V3 answer to a PATCH that changed a stored document: <c>{"status": 200}</c> with no result,
+    /// and <c>Last-Modified</c> as the server's write time.
+    /// </summary>
+    protected ActionResult V3Patched()
+    {
+        Response.Headers["Last-Modified"] = FormatHttpDate(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        return Ok(new { status = 200 });
+    }
+
+    /// <summary>
     /// Validates common V3 fields as per Nightscout API behavior.
     /// Nightscout validates these fields before checking if the document exists.
     /// </summary>
@@ -550,6 +560,21 @@ public abstract class BaseV3Controller<T> : ControllerBase
 
         return null; // Validation passed
     }
+
+    /// <summary>
+    /// Nightscout's answer to an update that sets <c>isValid: false</c>: a client deletes a document
+    /// with DELETE, never by an edit.
+    /// </summary>
+    protected ActionResult IsValidImmutable() =>
+        CreateV3ErrorResponse(400, "Field isValid cannot be modified by the client");
+
+    /// <summary>
+    /// Whether a v3 patch body sets <c>isValid: false</c>, which <see cref="IsValidImmutable"/> refuses.
+    /// </summary>
+    protected static bool PatchSetsInvalid(JsonElement patch) =>
+        patch.ValueKind == JsonValueKind.Object
+        && patch.TryGetProperty("isValid", out var isValid)
+        && isValid.ValueKind == JsonValueKind.False;
 
     /// <summary>
     /// The V3 answer to a create that matched a document already stored: 200 with

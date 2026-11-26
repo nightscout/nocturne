@@ -10,6 +10,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Tests.TestSupport;
 using Nocturne.Core.Constants;
 using Xunit;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -131,6 +132,8 @@ public class NightscoutWithoutSecretTests
             NullLogger<NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
+            new NightscoutLookups(),
+            SettableTenantAccessor.Resolved(),
             publisher: null);
     }
 }

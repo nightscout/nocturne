@@ -13,7 +13,6 @@
           "fact": "target_low"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -26,7 +25,6 @@
           "fact": "target_high"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -40,7 +38,6 @@
           "fact": "latest_glucose"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -53,7 +50,6 @@
           "fact": "target_low"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

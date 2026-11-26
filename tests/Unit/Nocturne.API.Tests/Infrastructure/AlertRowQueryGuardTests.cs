@@ -34,6 +34,7 @@ public class AlertRowQueryGuardTests
     [
         nameof(AlertExcursionQueries.OfCondition),
         nameof(AlertExcursionQueries.StandingNotices),
+        nameof(AlertExcursionQueries.ResolvedNotices),
         nameof(AlertExcursionQueries.OfStandingNotices),
     ];
 
@@ -70,8 +71,6 @@ public class AlertRowQueryGuardTests
             "reads a named excursion's rule and whether it is a notice",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.ResolveInstancesForExcursionAsync"] =
             "the resolution of a named excursion, which resolves a notice as it resolves an excursion",
-        ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.UpdateInstanceAsync"] =
-            "writes a named instance",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.DestinationsForExcursion"] =
             "the recipients a named excursion was delivered to, which a notice's resolution clears too",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.MarkInstanceSuppressedAsync"] =

@@ -1,8 +1,8 @@
 using System.Net;
-using System.Text;
 using FluentAssertions;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Models.V4;
+using static Nocturne.API.Tests.Migration.MigrationJobHarness;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -12,16 +12,6 @@ namespace Nocturne.API.Tests.Migration;
 /// </summary>
 public class MigrationSkippedRecordsTests
 {
-    private sealed class RoutedNightscout(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(respond(request.RequestUri!.AbsolutePath));
-    }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body = "[]") =>
-        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
-
     private static RoutedNightscout ThreeDocuments(string collection) => new(path =>
         path == $"/api/v1/{collection}.json"
             ? Json(HttpStatusCode.OK,

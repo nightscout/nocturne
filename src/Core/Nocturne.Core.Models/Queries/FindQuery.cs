@@ -167,12 +167,33 @@ public sealed class FindQuery
         EnumerateAll(_root).Where(cond => cond.Op != UnsupportedOp).Select(cond => cond.Path).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
+    /// Whether a condition names <c>isValid</c>. Nightscout answers such a find with exactly the
+    /// documents it asks for, so its read takes the rows stored deleted, each served with
+    /// <c>isValid: false</c>, and the condition decides which come back.
+    /// </summary>
+    public bool NamesIsValid => Fields.Contains("isValid");
+
+    /// <summary>
+    /// Whether a read of the query takes the rows stored deleted where it <see cref="NamesIsValid"/>, as
+    /// Nightscout's v1 does. Its v3 search reads only valid documents, whatever the filter names
+    /// (<see cref="OnlyValid"/>).
+    /// </summary>
+    public bool IncludesDeletedWhenNamed { get; private init; } = true;
+
+    /// <summary>Whether a read of the query takes the rows stored deleted.</summary>
+    public bool ReadsDeleted => IncludesDeletedWhenNamed && NamesIsValid;
+
+    /// <summary>The query read as Nightscout's v3 search reads it: never the rows stored deleted.</summary>
+    public FindQuery OnlyValid() =>
+        new(_root, _boundFields, FromMills, ToMills) { IncludesDeletedWhenNamed = false };
+
+    /// <summary>
     /// The query with every condition on field <paramref name="from"/> naming <paramref name="to"/>
     /// instead, at any depth. Conditions already on <paramref name="to"/> are kept, so a record must
     /// satisfy both.
     /// </summary>
     public FindQuery WithFieldRenamed(string from, string to) =>
-        new(RenameField(_root, from, to), _boundFields, FromMills, ToMills);
+        new(RenameField(_root, from, to), _boundFields, FromMills, ToMills) { IncludesDeletedWhenNamed = IncludesDeletedWhenNamed };
 
     private static Group RenameField(Group group, string from, string to) =>
         group with

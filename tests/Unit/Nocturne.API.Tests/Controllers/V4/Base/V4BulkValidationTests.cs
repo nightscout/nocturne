@@ -463,15 +463,71 @@ public class V4BulkValidationTests
     }
 
     [Fact]
-    public async Task ApsSnapshotBulk_HasNoValidator_SoNothingNewRejectsIt()
+    public async Task ApsSnapshotBulk_RejectsADataSourceLongerThanItsColumn()
     {
-        Validators.GetService<IValidator<UpsertApsSnapshotRequest>>().Should().BeNull();
-        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
+        var requests = Snapshots(2);
+        requests[1].DataSource = new string('a', 257);
 
-        var result = await WithValidators(ApsController()).CreateApsSnapshots(Snapshots(3));
+        var result = await WithValidators(ApsController()).CreateApsSnapshots(requests);
 
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(201);
+        Rejected(result.Result, "APS snapshot at index 1 is invalid: DataSource: The length of 'Data Source' must be 256 characters or fewer. You entered 257 characters.");
+        NothingPersisted();
+    }
+
+    [Fact]
+    public async Task HeartRateBulk_RejectsAnItemTheValidatorRefuses()
+    {
+        var service = new Mock<IHeartRateService>();
+
+        var result = await WithValidators(HeartRates(service)).CreateHeartRates(
+            [new UpsertHeartRateRequest { Timestamp = T0, SyncIdentifier = new string('a', 257) }]);
+
+        Rejected(result.Result, "Heart rate at index 0 is invalid: SyncIdentifier: The length of 'Sync Identifier' must be 256 characters or fewer. You entered 257 characters.");
+        service.Verify(
+            s => s.CreateHeartRatesAsync(It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task StepCountBulk_RejectsAnItemTheValidatorRefuses()
+    {
+        var service = new Mock<IStepCountService>();
+
+        var result = await WithValidators(StepCounts(service)).CreateStepCounts(
+            [new UpsertStepCountRequest { Timestamp = T0, DataSource = new string('a', 257) }]);
+
+        Rejected(result.Result, "Step count at index 0 is invalid: DataSource: The length of 'Data Source' must be 256 characters or fewer. You entered 257 characters.");
+        service.Verify(
+            s => s.CreateStepCountsAsync(It.IsAny<IEnumerable<StepCount>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task BodyWeightBatch_RejectsAnItemTheValidatorRefuses()
+    {
+        var service = new Mock<IBodyWeightService>();
+
+        var result = await WithValidators(BodyWeights(service)).CreateBodyWeights(
+            [new BodyWeight { SyncIdentifier = new string('a', 257) }]);
+
+        Rejected(result.Result, "Body weight at index 0 is invalid: SyncIdentifier: The length of 'Sync Identifier' must be 256 characters or fewer. You entered 257 characters.");
+        service.Verify(
+            s => s.CreateBodyWeightsAsync(It.IsAny<IEnumerable<BodyWeight>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ActivityBulk_RejectsAnItemTheValidatorRefuses()
+    {
+        var service = new Mock<IActivityService>();
+
+        var result = await WithValidators(Activities(service)).CreateActivities(
+            [new UpsertActivityRequest { Type = new string('a', 101) }]);
+
+        Rejected(result.Result, "Activity at index 0 is invalid: Type: The length of 'Type' must be 100 characters or fewer. You entered 101 characters.");
+        service.Verify(
+            s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     // ── Controllers ─────────────────────────────────────────────────

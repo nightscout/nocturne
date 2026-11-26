@@ -7,6 +7,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -42,10 +43,10 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        await using var conn = await OpenAsync();
-        _defaultRole = await ScalarAsync<string>(conn, "SELECT name FROM roles ORDER BY name LIMIT 1;");
+        await using var conn = await OpenPostgresAsync();
+        _defaultRole = await conn.ScalarAsync<string>("SELECT name FROM roles ORDER BY name LIMIT 1;");
         _providerId = Guid.CreateVersion7();
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
             VALUES (@provider, 'Admission IdP', @issuer, @client, true, 0, '["openid"]'::jsonb, '{}'::jsonb, @roles::jsonb, now(), now());
             """,
@@ -55,12 +56,12 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.PinTenantAsync(Fixture.TenantId);
+            await conn.ExecuteAsync("""
                 CREATE TEMP TABLE admission_subjects AS
                     SELECT subject_id FROM subject_oidc_identities WHERE provider_id = @provider;
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 DELETE FROM tenant_members WHERE subject_id IN (SELECT subject_id FROM admission_subjects);
                 DELETE FROM refresh_tokens WHERE subject_id IN (SELECT subject_id FROM admission_subjects);
                 DELETE FROM subject_roles WHERE subject_id IN (SELECT subject_id FROM admission_subjects);
@@ -69,7 +70,7 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM oidc_providers WHERE id = @provider;
                 DELETE FROM tenant_creation_invites WHERE label = @issuer;
                 """,
-                ("provider", _providerId), ("tenantText", Fixture.TenantId.ToString()), ("issuer", _issuer));
+                ("provider", _providerId), ("issuer", _issuer));
         }
 
         await base.DisposeAsync();
@@ -129,14 +130,14 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
     public async Task A_member_signs_in_as_the_subject_the_identity_is_linked_to()
     {
         var member = await CreateFromProviderAsync("member", name: "member");
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
+            await conn.PinTenantAsync(Fixture.TenantId);
+            await conn.ExecuteAsync("""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, now(), now());
                 """,
-                ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", member));
+                ("tenant", Fixture.TenantId), ("subject", member));
         }
 
         var result = await SignInAsync("member", Fixture.TenantId);
@@ -287,15 +288,15 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
 
     private async Task<string> SeedInviteAsync()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var token = $"invite-{Guid.NewGuid():N}";
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, Fixture.TenantId, RoleSeeds.Viewer);
-        await ExecuteAsync(conn, """
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync("""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES (@inviteId, @tenantId, @ownerId, @hash, @roleIds::jsonb, false, now() + interval '1 day', 0, now());
             """,
-            ("tenantText", Fixture.TenantId.ToString()), ("inviteId", Guid.CreateVersion7()),
+            ("inviteId", Guid.CreateVersion7()),
             ("tenantId", Fixture.TenantId), ("ownerId", Fixture.OwnerSubjectId),
             ("hash", HashUtils.Sha256Hex(token)), ("roleIds", $"[\"{viewerRoleId}\"]"));
         return token;
@@ -303,9 +304,9 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
 
     private async Task<string> SeedTenantCreationInviteAsync(bool revoked)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var token = $"start-{Guid.NewGuid():N}";
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_creation_invites (id, created_by_subject_id, token_hash, label, expires_at, use_count, revoked_at)
             VALUES (@id, @creator, @hash, @label, now() + interval '1 day', 0, CASE WHEN @revoked THEN now() END);
             """,
@@ -316,63 +317,33 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
 
     private async Task<long> RefreshTokenCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        return await ScalarAsync<long>(conn,
-            "SELECT count(*) FROM refresh_tokens WHERE subject_id = @subject;", ("subject", subjectId));
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM refresh_tokens WHERE subject_id = @subject;", ("subject", subjectId));
     }
 
     private async Task<long> IdentityLinkCountAsync(string externalId)
     {
-        await using var conn = await OpenAsync();
-        return await ScalarAsync<long>(conn,
-            "SELECT count(*) FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub;",
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub;",
             ("issuer", _issuer), ("sub", externalId));
     }
 
     private async Task<Guid> LinkedSubjectAsync(string externalId)
     {
-        await using var conn = await OpenAsync();
-        return await ScalarAsync<Guid>(conn,
-            "SELECT subject_id FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub;",
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<Guid>("SELECT subject_id FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub;",
             ("issuer", _issuer), ("sub", externalId));
     }
 
     private async Task<long> SubjectsNamedAsync(string name)
     {
-        await using var conn = await OpenAsync();
-        return await ScalarAsync<long>(conn, "SELECT count(*) FROM subjects WHERE name = @name;", ("name", name));
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM subjects WHERE name = @name;", ("name", name));
     }
 
     private async Task<List<string>> GlobalRolesAsync(Guid subjectId)
     {
         using var scope = Fixture.Services.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ISubjectService>().GetSubjectRolesAsync(subjectId);
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<T> ScalarAsync<T>(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        return (T)(await cmd.ExecuteScalarAsync())!;
     }
 }

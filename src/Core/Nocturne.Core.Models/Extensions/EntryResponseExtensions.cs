@@ -30,7 +30,7 @@ public static class EntryResponseExtensions
     /// </summary>
     /// <param name="entry">The entry to convert.</param>
     /// <returns>An <see cref="EntryV3Response"/> wrapping the entry.</returns>
-    public static object ToV3Response(this Entry entry)
+    public static EntryV3Response ToV3Response(this Entry entry)
     {
         return new EntryV3Response(entry);
     }

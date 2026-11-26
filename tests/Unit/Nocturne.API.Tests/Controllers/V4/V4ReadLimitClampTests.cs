@@ -22,7 +22,6 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -31,6 +30,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -254,7 +254,8 @@ public class V4ReadLimitClampTests
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>());
+            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>());
 
     private static void VerifyTherapySettingsFetched(Mock<ITherapySettingsRepository> repo, int limit, int offset) =>
         repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
@@ -501,6 +502,7 @@ public class V4ReadLimitClampTests
             Mock.Of<IDiscrepancyPersistenceService>(),
             repo.Object,
             Mock.Of<IHttpClientFactory>(),
+            new CredentialPathRedactor(),
             Options.Create(new CompatibilityProxyConfiguration()),
             Mock.Of<ILogger<CompatibilityController>>());
 
@@ -591,7 +593,7 @@ public class V4ReadLimitClampTests
                 Mock.Of<ISignalRBroadcastService>(),
                 Mock.Of<ITrackerAlertRuleSyncService>(),
                 Mock.Of<IAlertRepository>(),
-                Mock.Of<ITenantAccessor>(),
+                new SettableTenantAccessor(),
                 Mock.Of<IAlertAcknowledgementService>(),
                 new TrackerDeviceEventWriter(
                     Mock.Of<IDeviceEventRepository>(),

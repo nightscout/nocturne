@@ -5,7 +5,7 @@ using Nocturne.API.Services.Notifications;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.API.Services.Realtime;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Notifications;
 
@@ -38,7 +38,7 @@ public class NotificationV1ServiceTests
             _mockLogger.Object,
             _mockAuthorizationService.Object,
             _mockSignalRBroadcastService.Object,
-            Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId),
+            SettableTenantAccessor.Resolved(tenantId),
             _snoozes,
             _notifications,
             time ?? TimeProvider.System

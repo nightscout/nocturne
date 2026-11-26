@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Connectors;
@@ -33,13 +34,12 @@ public sealed class CareLinkConnectControllerTests
 
     private CareLinkConnectController Build(TenantContext? tenant, AuthContext? auth)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.Context).Returns(tenant);
+        var tenantAccessor = new SettableTenantAccessor(tenant);
 
         var controller = new CareLinkConnectController(
             Mock.Of<IConnectorConfigurationService>(),
             new MemoryCache(new MemoryCacheOptions()),
-            tenantAccessor.Object,
+            tenantAccessor,
             _jwtService.Object,
             NullLoggerFactory.Instance,
             NullLogger<CareLinkConnectController>.Instance);

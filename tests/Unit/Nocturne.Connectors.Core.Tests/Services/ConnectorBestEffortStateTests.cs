@@ -18,7 +18,7 @@ public class ConnectorBestEffortStateTests
     private static readonly DateTimeOffset Now = new(2026, 11, 24, 9, 0, 0, TimeSpan.Zero);
     private static readonly DateTime Earlier = Now.UtcDateTime.AddDays(-3);
 
-    private static ConnectorStateUnavailableException Down() =>
+    private static ConnectorStoreUnavailableException Down() =>
         new("connection refused", new InvalidOperationException("connection refused"));
 
     public class TestConfig : BaseConnectorConfiguration;
@@ -90,7 +90,7 @@ public class ConnectorBestEffortStateTests
         store.Resume.Should().BeEmpty();
         var warning = log.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning).Subject;
         warning.Message.Should().Be("[probe-connector] Could not record the stamp");
-        warning.Exception.Should().BeOfType<ConnectorStateUnavailableException>();
+        warning.Exception.Should().BeOfType<ConnectorStoreUnavailableException>();
     }
 
     [Fact]

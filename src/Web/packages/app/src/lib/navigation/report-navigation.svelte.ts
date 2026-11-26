@@ -187,10 +187,15 @@ export function reportKeywordWords(): Record<ReportKeywordKey, string[]> {
   };
 }
 
-/** A report's search words: the locale's, then the English ones it does not repeat. */
-export function reportKeywords(key: ReportKeywordKey, translated: Partial<Record<ReportKeywordKey, string[]>>): string[] {
-  const found = [...(translated[key] ?? []), ...ENGLISH_REPORT_KEYWORDS[key]];
+/** Search words: the locale's, then the English ones it does not repeat. */
+export function withEnglishWords(translated: readonly string[], english: readonly string[]): string[] {
+  const found = [...translated, ...english];
   return found.filter((word, i) => found.indexOf(word) === i);
+}
+
+/** A report's search words. */
+export function reportKeywords(key: ReportKeywordKey, translated: Partial<Record<ReportKeywordKey, string[]>>): string[] {
+  return withEnglishWords(translated[key] ?? [], ENGLISH_REPORT_KEYWORDS[key]);
 }
 
 /**

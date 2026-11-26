@@ -40,7 +40,7 @@ public class MigrationSourceEntity
     public string SourceIdentifier { get; set; } = string.Empty;
 
     /// <summary>
-    /// Nightscout URL for API mode, masked: no scheme, query or user info, each long path segment cut
+    /// Nightscout URL for API mode as shown: host and port, then <c>/…</c> when the base has a path
     /// </summary>
     [Column("nightscout_url")]
     [MaxLength(512)]

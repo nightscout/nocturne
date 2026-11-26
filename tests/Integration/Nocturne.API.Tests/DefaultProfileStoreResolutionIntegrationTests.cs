@@ -393,6 +393,7 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         documents.Select(d => (d!["_id"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
             .Should().BeEquivalentTo([("5f8d0c1e8a7b4c3d9e5f1887", "Day"), ("5f8d0c1e8a7b4c3d9e5f1886", "Night")]);
 
+        await SettleHistoryAsync();
         foreach (var path in new[] { "/api/v3/profile?limit=10", "/api/v3/profile/history/0?limit=10" })
         {
             var v3 = JsonNode.Parse(await client.GetStringAsync(path))!["result"]!.AsArray();
@@ -428,6 +429,7 @@ public class DefaultProfileStoreResolutionIntegrationTests : ApiIntegrationTestB
         documents.Select(d => (d!["_id"]!.GetValue<string>(), d["defaultProfile"]!.GetValue<string>()))
             .Should().BeEquivalentTo(expected);
 
+        await SettleHistoryAsync();
         foreach (var path in new[] { "/api/v3/profile?limit=10", "/api/v3/profile/history/0?limit=10" })
         {
             var v3 = JsonNode.Parse(await client.GetStringAsync(path))!["result"]!.AsArray();

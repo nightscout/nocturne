@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -28,6 +30,7 @@ public sealed class AccessRequestServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IInAppNotificationService> _notifications = new();
     private readonly Mock<ITenantRoleService> _roles = new();
+    private readonly Mock<ITeamRepository> _teams = new();
     private readonly AccessRequestService _service;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -50,7 +53,8 @@ public sealed class AccessRequestServiceTests : IDisposable
             _roles.Object,
             _notifications.Object,
             TimeProvider.System,
-            NullLogger<AccessRequestService>.Instance, AccountLinkRoutes.Off);
+            NullLogger<AccessRequestService>.Instance, AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer(_teams));
 
         _dbContext.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" });
         _dbContext.SaveChanges();
@@ -135,6 +139,24 @@ public sealed class AccessRequestServiceTests : IDisposable
         (await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requestorId))
             .ApprovalStatus.Should().Be("Pending");
     }
+
+    [Fact]
+    public async Task Approve_recountsTheTeamStaffOfTheSiteAndARefusalDoesNot()
+    {
+        var already = await SeedPendingRequestAsync();
+        _dbContext.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = already });
+        await _dbContext.SaveChangesAsync();
+        (await Approve(already, directPermissions: ["api:*:read"])).Outcome.Should().Be(ApproveAccessRequestOutcome.AlreadyMember);
+        RecountedSite(Times.Never());
+
+        (await Approve(await SeedPendingRequestAsync(), directPermissions: ["api:*:read"])).Outcome
+            .Should().Be(ApproveAccessRequestOutcome.Approved);
+
+        RecountedSite(Times.Once());
+    }
+
+    private void RecountedSite(Times times) =>
+        _teams.Verify(t => t.ListAccessOfTenantAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), times);
 
     [Fact]
     public async Task Approve_whenTheRolesExceedTheApprover_writesNothing()

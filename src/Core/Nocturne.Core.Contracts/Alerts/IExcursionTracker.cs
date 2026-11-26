@@ -34,10 +34,16 @@ public enum ExcursionTransitionType
 /// <param name="Type">The transition that occurred.</param>
 /// <param name="ExcursionId">The <see cref="Nocturne.Core.Models.AlertExcursion"/> identifier, if an excursion is active.</param>
 /// <param name="CloseReason">When <paramref name="Type"/> is <see cref="ExcursionTransitionType.ExcursionClosed"/>, why the excursion closed. Null for non-close transitions.</param>
+/// <param name="OwedAt">
+/// For an opening or a close, the stamp its owed work was recorded or taken up at, which its handler
+/// settles (<see cref="IAlertRepository.SettleTransitionAsync"/>). A close without one leaves its
+/// work owed for the sweep.
+/// </param>
 public record ExcursionTransition(
     ExcursionTransitionType Type,
     Guid? ExcursionId = null,
-    ExcursionCloseReason? CloseReason = null);
+    ExcursionCloseReason? CloseReason = null,
+    DateTime? OwedAt = null);
 
 /// <summary>
 /// Tracks the state-machine lifecycle of glucose excursions for a single
@@ -87,7 +93,7 @@ public interface IExcursionTracker
 
     /// <summary>
     /// Closes the rule's excursion with reason <see cref="ExcursionCloseReason.Hysteresis"/> when
-    /// it is in hysteresis and <c>HysteresisMinutes</c> have elapsed since it entered, without
+    /// it is in hysteresis and its start is not beyond the clock tolerance ahead, without
     /// evaluating the condition. The periodic counterpart of the expiry check
     /// <see cref="ProcessEvaluationAsync"/> makes on a false evaluation, so a window still
     /// expires when no evaluation arrives.

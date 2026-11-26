@@ -159,18 +159,6 @@ fn flag() -> BoxedStrategy<Value> {
     any::<bool>().prop_map(Value::from).boxed()
 }
 
-fn tracker_config() -> BoxedStrategy<Value> {
-    option::of(-2..40i32)
-        .prop_map(|h| {
-            let mut config = Map::new();
-            if let Some(h) = h {
-                config.insert("hysteresis_minutes".into(), h.into());
-            }
-            Value::Object(config)
-        })
-        .boxed()
-}
-
 fn tracker_request(required: Vec<Group>) -> BoxedStrategy<Value> {
     request(
         [required, vec![swappable("now", timestamp())]].concat(),
@@ -339,12 +327,7 @@ fn entry_points() -> Vec<EntryPoint> {
         EntryPoint {
             name: "tracker_process",
             call: nocturne_alerts_tracker_process,
-            request: || {
-                tracker_request(vec![
-                    swappable("config", tracker_config()),
-                    swappable("condition_met", flag()),
-                ])
-            },
+            request: || tracker_request(vec![swappable("condition_met", flag())]),
         },
         EntryPoint {
             name: "tracker_force_close",
@@ -361,7 +344,7 @@ fn entry_points() -> Vec<EntryPoint> {
         EntryPoint {
             name: "tracker_close_elapsed_hysteresis",
             call: nocturne_alerts_tracker_close_elapsed_hysteresis,
-            request: || tracker_request(vec![swappable("config", tracker_config())]),
+            request: || tracker_request(vec![]),
         },
     ]
 }

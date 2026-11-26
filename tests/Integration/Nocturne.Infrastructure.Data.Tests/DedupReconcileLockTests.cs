@@ -20,20 +20,15 @@ namespace Nocturne.Infrastructure.Data.Tests;
 public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
     : IClassFixture<DedupReconcileLockTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
+    // The reconcile pass waits this long for the full job to reach its carb-merge read. An unserialised
+    // pass meets it within; a serialised one waits it out alone. Part of the assertion, not a hang guard.
+    private static readonly TimeSpan JobReachesMergeWithin = TimeSpan.FromSeconds(5);
 
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("dedup_reconcile_lock");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
+    // A pass that the tenant lock serialises waits this long for a partner that cannot arrive. Part of
+    // the assertion, not a hang guard.
+    private static readonly TimeSpan SerialisedPassWaits = TimeSpan.FromMilliseconds(500);
 
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("dedup_reconcile_lock");
 
     /// <summary>
     /// Holds each pass after its first read until the other pass has made its own, or a timeout
@@ -75,10 +70,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
             && c.Parameters.Cast<DbParameter>().Any(p => Equals(p.Value, "carbintake")));
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, o => o.EnableRetryOnFailure())
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.Retrying, interceptors: interceptors);
 
     private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());
 
@@ -89,7 +81,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var at = DateTime.UtcNow.AddHours(-1);
         var (first, second) = await SeedDuplicateCarbsAsync(tenant, at);
 
-        var rendezvous = new Rendezvous(TimeSpan.FromMilliseconds(500));
+        var rendezvous = new Rendezvous(SerialisedPassWaits);
         await using var a = Context(tenant, MeetAfterCursorRead(rendezvous));
         await using var b = Context(tenant, MeetAfterCursorRead(rendezvous));
 
@@ -120,10 +112,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var cursor = new ReconcileCursor(DateTime.UtcNow.AddHours(-1), Guid.CreateVersion7());
 
         // A context without the retrying strategy, which refuses a transaction held open by hand.
-        await using var reconcile = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        await using var reconcile = TestContexts.Context(database.AppConnectionString, tenant);
         await using var transaction = await reconcile.Database.BeginTransactionAsync();
         await DuplicateReconciler.SetCursorAsync(reconcile, cursor, default);
 
@@ -132,7 +121,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, start);
 
         await transaction.CommitAsync();
-        var runId = await start.WaitAsync(TimeSpan.FromSeconds(30));
+        var runId = await start.WaitAsync(Eventually.DefaultPatience);
 
         await using var check = Context(tenant);
         var state = await check.DedupReconcileState.AsNoTracking().SingleAsync();
@@ -148,7 +137,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var (first, second) = await SeedDuplicateCarbsAsync(tenant, at);
 
         // The job counts and links every type before its first merge, well past the reconcile pass's read.
-        var rendezvous = new Rendezvous(TimeSpan.FromSeconds(5));
+        var rendezvous = new Rendezvous(JobReachesMergeWithin);
         await using var full = Context(tenant, MeetAfterFullCarbMergeRead(rendezvous));
         await using var reconcile = Context(tenant, MeetAfterCursorRead(rendezvous));
 
@@ -255,14 +244,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'dedup-reconcile-lock-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"dedup-lock-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"dedup-lock-{tenant:N}", "dedup-reconcile-lock-test");
         return tenant;
     }
 }

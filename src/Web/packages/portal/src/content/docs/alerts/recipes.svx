@@ -53,7 +53,7 @@ anything serious straight away. See
 | | |
 |---|---|
 | **Top** | any of |
-| **Rows** | Glucose below 70 (3.9); **or** a group, all of: Glucose below 100 (5.5) and Rate of change falling at least 2 (0.11) a minute |
+| **Rows** | Glucose below 70 (3.9). **Or** a group, all of: Glucose below 100 (5.5) and Rate of change falling at least 2 (0.11) a minute |
 | **Severity** | Warning |
 
 Alerts on a low, and also earlier on a fast fall towards one, such as during
@@ -87,7 +87,7 @@ when a high is lasting, which can be a sign of a blocked or failed infusion set.
 | | |
 |---|---|
 | **Top** | all of |
-| **Rows** | Glucose above 180 (10.0), for at least 30 min; **and** NOT Time of day 18:00 to 20:00 |
+| **Rows** | Glucose above 180 (10.0), for at least 30 min. **And** NOT Time of day 18:00 to 20:00 |
 
 A high alert that stays quiet through the rise you expect after the evening
 meal.
@@ -100,7 +100,7 @@ meal.
 | **Severity** | Warning, or Critical overnight |
 
 When readings stop, every glucose rule goes quiet with them. This is the rule
-that tells you. Every setup that relies on alerts should have one.
+that tells you. Every setup that relies on alerts needs one.
 
 ## Loop has stopped
 
@@ -130,8 +130,8 @@ Catches a pump suspended for a shower or a site change and not resumed.
 | **Severity** | Critical |
 | **Channels** | The second person's phone or chat |
 
-Escalation. If the Low alert has been going for 15 minutes and nobody has
-pressed **Acknowledge**, a second person is told. Acknowledging the Low alert
+Escalation. If the Low alert continues for 15 minutes and nobody
+presses **Acknowledge**, a second person is told. Acknowledging the Low alert
 stops this one. Snoozing does not, because a snooze is not an acknowledgement.
 
 Build the Low rule first, then pick it in this rule's **Other rule state** row.
@@ -142,7 +142,7 @@ If the Low rule is switched off or deleted, this rule stops being checked.
 | | |
 |---|---|
 | **Top** | all of |
-| **Rows** | Glucose below 80 (4.4), for at least 10 min; **and** Time of day 22:00 to 07:00 |
+| **Rows** | Glucose below 80 (4.4), for at least 10 min. **And** Time of day 22:00 to 07:00 |
 
 A slightly higher low threshold at night only, when a low is less likely to be
 noticed. The time window uses your time zone. As above, keep the "for at least"

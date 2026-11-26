@@ -16,21 +16,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class PlatformPolicyRepositoryPostgresTests(PlatformPolicyRepositoryPostgresTests.Database database)
     : IClassFixture<PlatformPolicyRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync() =>
-            AppConnectionString = (await SharedPostgres.CreateMigratedDatabaseAsync("platform_policy_repo")).AppConnectionString;
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("platform_policy_repo");
 
     private NocturneDbContext Context() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
+        TestContexts.Context(database.AppConnectionString);
 
     private PlatformPolicyRepository Policies() => new(new SuppliedContextFactory(Context), TimeProvider.System);
 

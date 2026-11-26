@@ -32,7 +32,7 @@ public class LastOwnerWhoCanSignInTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    public enum Path { Leave, Remove, RemoveOwnerRole, Deactivate, Delete }
+    public enum Path { DeleteEvenLastOwner, Remove, RemoveOwnerRole, Deactivate, Delete }
 
     public enum OtherOwner
     {
@@ -43,8 +43,9 @@ public class LastOwnerWhoCanSignInTests : IDisposable
         HoldsAConfirmedAddressWithoutDelivery,
     }
 
-    private TenantMembershipRepository Members(IAccountLinkRoute route) =>
-        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), route);
+    private TestNocturneDbContextFactory Contexts() => new(_db.CreateContext(_tenant));
+
+    private TenantMembershipRepository Members(IAccountLinkRoute route) => new(Contexts(), route);
 
     private SubjectRepository Subjects(IAccountLinkRoute route) =>
         new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), route);
@@ -101,17 +102,20 @@ public class LastOwnerWhoCanSignInTests : IDisposable
     }
 
     /// <summary>
-    /// Runs <paramref name="path"/> on A and answers whether it went ahead. Leaving every tenant is
-    /// not refused by the repository; it names the tenants its caller then refuses it for.
+    /// Runs <paramref name="path"/> on A and answers whether it went ahead. A delete that refuses no last
+    /// owner is not refused; it names the tenants it left without an owner, which count here as a refusal.
     /// </summary>
     private async Task<bool> ActAsync(Path path, Guid a, Guid aMember, IAccountLinkRoute route) => path switch
     {
-        Path.Leave => (await Members(route).RemoveMembershipsOfSubjectAsync(a, CancellationToken.None)).TenantsLeftWithoutOwner.Count == 0,
-        Path.Remove => (await Members(route).RemoveMemberUnlessLastOwnerAsync(_tenant, aMember, MembershipEndHow.Removed, Now, CancellationToken.None)).Outcome == OwnerGuardedChange.Changed,
-        Path.RemoveOwnerRole => await Members(route).ReplaceRolesUnlessLastOwnerAsync(
-            _tenant, aMember, [_ownerRole], [_caretakerRole], Now, CancellationToken.None) == OwnerGuardedChange.Changed,
+        Path.DeleteEvenLastOwner => (await SubjectDeletions.DeleteEvenLastOwnerAsync(Contexts(), route, a, CancellationToken.None))
+            .TenantsLeftWithoutOwner.Count == 0,
+        Path.Remove => (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+            Contexts(), route, _tenant, aMember, MembershipEndHow.Removed, Now, CancellationToken.None)).Outcome == OwnerGuardedChange.Changed,
+        Path.RemoveOwnerRole => await OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(
+            Contexts(), route, _tenant, aMember, [_ownerRole], [_caretakerRole], Now, CancellationToken.None) == OwnerGuardedChange.Changed,
         Path.Deactivate => await Subjects(route).UpdateAsync(a, new SubjectEdit(IsActive: false), CancellationToken.None) is SubjectChange.Changed,
-        Path.Delete => await Subjects(route).DeleteAsync(a, CancellationToken.None) is SubjectChange.Changed,
+        Path.Delete => await SubjectDeletions.DeleteAsync(
+            new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), route, a, CancellationToken.None) is SubjectChange.Changed,
         _ => throw new ArgumentOutOfRangeException(nameof(path)),
     };
 

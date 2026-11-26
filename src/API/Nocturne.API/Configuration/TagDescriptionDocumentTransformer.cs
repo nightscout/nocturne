@@ -29,7 +29,7 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
                 ("Guides",
                 [
                     "guide-authentication", "guide-data-model", "Syncing", "guide-realtime",
-                    "guide-sharing", "guide-nightscout",
+                    "guide-sharing", "guide-external-notifications", "guide-nightscout",
                 ]),
                 ("Authentication", null),
                 ("Identity", null),

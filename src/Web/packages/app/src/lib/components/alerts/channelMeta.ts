@@ -93,8 +93,6 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     type: ChannelType.WhatsAppDm,
     logo: "/logos/whatsapp.png",
     platform: "whatsapp",
-    destinationPlaceholder: "+15551234567",
-    destinationPattern: /^\+[1-9]\d{6,14}$/,
   },
   {
     type: ChannelType.ResendEmail,

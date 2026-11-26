@@ -43,20 +43,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     private static readonly DateTimeOffset Now = new(2026, 11, 22, 9, 0, 0, TimeSpan.Zero);
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("direct_beside_team");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("direct_beside_team");
 
     private sealed record Row(string EventType, string? Details)
     {
@@ -76,10 +63,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
 
     private NocturneDbContext Context(Guid tenant, Guid? actor)
     {
-        var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
+        var context = TestContexts.Context(database.AppConnectionString)
             .ActingAs(actor is { } subject ? new TestAuditActor { SubjectId = subject } : null);
         context.TenantId = tenant;
         return context;
@@ -90,10 +74,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     private async Task<Seeded> SeedAsync(string slug, bool personPending = false)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'direct-beside-team', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(database.MigratorConnectionString, tenant, $"{slug}-{tenant:N}", "direct-beside-team");
 
         var contexts = Contexts(tenant);
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
@@ -144,13 +125,16 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
                 VALUES ('{Guid.CreateVersion7()}', '{access}', '{teamMember}', 'approved');
                 """
             : string.Empty;
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{at}', false);
+        await using var seed = await NpgsqlTestCommands.OpenAsync(database.MigratorConnectionString);
+        await seed.PinTenantAsync(at);
+        await seed.ExecuteAsync($"""
             INSERT INTO teams (id, name) VALUES ('{team}', '{teamName}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{at}', {limit});
             {staff}
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
+            """);
+        await seed.PinTenantAsync(tenant);
+        await seed.ExecuteAsync($"""
             {(existing is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
                 VALUES ('{member}', '{tenant}', '{subject}', {limit}, now(), now());
@@ -206,7 +190,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         new FakeTimeProvider(Now),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static ITenantRoleService GrantsEverything() =>
         Mock.Of<ITenantRoleService>(r => r.ValidateRoleGrantAsync(
@@ -224,7 +208,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         new FakeTimeProvider(Now),
         NullLogger<MembershipRequestService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static TenantService TenantService(SuppliedContextFactory contexts, GuestSessionCacheService? sessions = null) => new(
         contexts,
@@ -238,7 +222,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         sessions is null ? Revocation() : new GrantRevocationService(sessions),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private Task<string> InviteAsync(Seeded s) => InviteByAsync(s, s.Manager);
 
@@ -339,14 +323,13 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         return (await GuestLinkByPersonAsync(s), await MadeByPersonAsync(s));
     }
 
-    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => ExecuteAsync($"""
-        SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+    private Task SetChannelTypeAsync(Seeded s, Guid channel, string channelType) => NpgsqlTestCommands.ExecuteAsTenantAsync(
+        database.MigratorConnectionString, s.Tenant, $"""
         UPDATE alert_rule_channels SET channel_type = '{channelType}' WHERE id = '{channel}';
         """);
 
     /// <summary>Clears the end of <see cref="Seeded.Person"/>'s row, as a build that knows nothing of reasons would.</summary>
-    private Task ClearAccessEndAsync(Seeded s) => ExecuteAsync($"""
-        SELECT set_config('app.current_tenant_id', '{s.Tenant}', false);
+    private Task ClearAccessEndAsync(Seeded s) => NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, s.Tenant, $"""
         UPDATE tenant_members SET access_ends_at = NULL WHERE tenant_id = '{s.Tenant}' AND subject_id = '{s.Person}';
         """);
 
@@ -459,7 +442,8 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             Mock.Of<IInAppNotificationService>(),
             new FakeTimeProvider(Now),
             NullLogger<AccessRequestService>.Instance,
-            AccountLinkRoutes.Off);
+            AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
 
         (await service.ApproveAsync(s.Person, s.Tenant, [s.ViewerRole], null, false, [Scope.FullAccess], s.Manager))
             .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
@@ -944,16 +928,6 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         (await MadeStateAsync(s, made)).Should().Be(((DateTime?)null, false, (DateTime?)null));
     }
 
-    private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     private Task<List<string>> ReadAsync(string sql) => ReadInTenantAsync(null, sql);
 
     private async Task<List<string>> ReadInTenantAsync(Guid? tenant, string sql)
@@ -962,8 +936,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         await conn.OpenAsync();
         if (tenant is { } pinned)
         {
-            await using var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{pinned}', false)", conn);
-            await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(pinned);
         }
 
         await using var cmd = new NpgsqlCommand(sql, conn);

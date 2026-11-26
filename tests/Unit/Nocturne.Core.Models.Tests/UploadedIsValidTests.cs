@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Core.Models;
 using Xunit;
@@ -7,7 +6,7 @@ namespace Nocturne.Core.Models.Tests;
 
 /// <summary>
 /// A treatment uploaded with <c>isValid: false</c> is stored deleted, so the span and temp basal
-/// upload fields keep only <c>isValid: true</c>. A <c>false</c> a record kept before still reads back.
+/// upload fields keep only <c>isValid: true</c>.
 /// </summary>
 [Trait("Category", "Unit")]
 public class UploadedIsValidTests
@@ -36,27 +35,25 @@ public class UploadedIsValidTests
         var record = TempBasalUploadedFields.Keep(null, new Treatment { IsValid = uploaded });
 
         var served = new Treatment();
-        TempBasalUploadedFields.Restore(served, record);
+        TempBasalUploadedFields.Restore(served, record, pumpRecordId: null);
 
         served.IsValid.Should().Be(kept);
     }
 
-    [Fact]
-    public void A_span_written_with_isValid_false_still_reads_back_false()
+    [Theory]
+    [InlineData("OMNIPOD_DASH", null, "7", 7L)]
+    [InlineData(null, "serial", "7", 7L)]
+    [InlineData(null, null, "7", null)]
+    [InlineData("OMNIPOD_DASH", null, "7,8", null)]
+    [InlineData("OMNIPOD_DASH", null, null, null)]
+    public void A_pump_id_is_served_only_for_a_record_whose_uploader_described_its_pump(
+        string? pumpType, string? pumpSerial, string? pumpRecordId, long? served)
     {
-        var served = new Treatment();
-        SpanUploadedFields.Restore(
-            served, new Dictionary<string, object> { ["isValid"] = JsonDocument.Parse("false").RootElement.Clone() });
+        var record = UploadedPumpFields.Keep(null, new Treatment { PumpType = pumpType, PumpSerial = pumpSerial });
 
-        served.IsValid.Should().BeFalse();
-    }
+        var treatment = new Treatment();
+        UploadedPumpFields.Restore(treatment, record, pumpRecordId);
 
-    [Fact]
-    public void A_temp_basal_written_with_isValid_false_still_reads_back_false()
-    {
-        var served = new Treatment();
-        TempBasalUploadedFields.Restore(served, new Dictionary<string, object?> { ["isValid"] = false });
-
-        served.IsValid.Should().BeFalse();
+        treatment.PumpId.Should().Be(served);
     }
 }

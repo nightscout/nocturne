@@ -14,6 +14,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Glucose;
 
@@ -156,8 +157,7 @@ public class CompressionLowNightWindowResolverTests
     public async Task DetectionAndTheSuggestionDetailCutTheSameWindowWhenNoZoneIsConfigured()
     {
         EntriesCarryOffset(OffsetMinutes);
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = SettableTenantAccessor.Resolved(Guid.NewGuid());
         var settings = new Mock<IUISettingsService>();
         settings
             .Setup(s => s.GetSettingsAsync(It.IsAny<CancellationToken>()))
@@ -186,7 +186,7 @@ public class CompressionLowNightWindowResolverTests
         services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
         services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
         services.AddScoped(_ => Mock.Of<ITenantOwnerResolver>());
-        services.AddScoped(_ => tenantAccessor.Object);
+        services.AddScoped<ITenantAccessor>(_ => tenantAccessor);
         services.AddLogging();
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -205,7 +205,7 @@ public class CompressionLowNightWindowResolverTests
             scope.ServiceProvider.GetRequiredService<ICompressionLowNightWindowResolver>(),
             settings.Object,
             Mock.Of<ITenantOwnerResolver>(),
-            tenantAccessor.Object,
+            tenantAccessor,
             TimeProvider.System,
             NullLogger<CompressionLowService>.Instance);
         await detail.GetSuggestionWithEntriesAsync(suggestion.Id);

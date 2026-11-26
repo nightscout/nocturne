@@ -7,7 +7,6 @@ export { DISCORD_COMMAND_MANIFEST, type SlashCommandDefinition } from "./command
 export { createStateToken, resolveStateToken } from "./lib/state-tokens.js";
 export {
   runWithContext,
-  runWithApi,
   getApi,
   getUnscopedApi,
   getScopedApiFactory,
@@ -17,6 +16,7 @@ export {
 export type { BotRequestContext, ResolvedLink } from "./lib/request-context.js";
 export { requireLink, requireLinkForAction } from "./lib/require-link.js";
 export { platformHandle } from "./lib/platform-handle.js";
+export { platformModule, resolvePlatforms, type PlatformSettings } from "./platforms/registry.js";
 export { formatGlucose, trendArrow, TREND_ARROWS } from "./lib/format.js";
 export type {
   BotApiClient,

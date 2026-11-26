@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -123,8 +124,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
     private async Task<Dictionary<string, List<string>>> DecomposeAsync(
         IReadOnlyList<string> sequence, Func<IDeviceStatusService, IReadOnlyList<DeviceStatus>, Task> decompose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
 
         var statuses = sequence.Select(json => JsonSerializer.Deserialize<DeviceStatus>(json)!).ToList();
@@ -137,14 +137,9 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
         var rows = new Dictionary<string, List<JsonObject>>();
         foreach (var table in Tables)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"SELECT row_to_json(t)::text FROM {table} t WHERE tenant_id = @tenant";
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var list = new List<JsonObject>();
-            while (await reader.ReadAsync())
-                list.Add(JsonNode.Parse(reader.GetString(0))!.AsObject());
-            rows[table] = list;
+            rows[table] = await conn.QueryAsync(
+                $"SELECT row_to_json(t)::text FROM {table} t WHERE tenant_id = @tenant",
+                reader => JsonNode.Parse(reader.GetString(0))!.AsObject(), ("tenant", Fixture.TenantId));
         }
 
         return Normalise(rows);

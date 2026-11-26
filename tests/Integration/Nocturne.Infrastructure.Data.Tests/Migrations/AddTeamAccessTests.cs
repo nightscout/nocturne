@@ -16,7 +16,7 @@ public class AddTeamAccessFixture : IAsyncLifetime
 {
     internal const string PriorMigration = "20261122160931_AddTenantSetupOwnerSubject";
 
-    private string _migrator = string.Empty;
+    internal string Migrator { get; private set; } = string.Empty;
 
     internal string DownMigrator { get; private set; } = string.Empty;
 
@@ -25,10 +25,10 @@ public class AddTeamAccessFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "add_team_access");
-        _migrator = database.MigratorConnectionString;
-        await ExecuteAsync($"INSERT INTO teams (id, name) VALUES ('{ExistingTeam}', 'Before');");
+        Migrator = database.MigratorConnectionString;
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"INSERT INTO teams (id, name) VALUES ('{ExistingTeam}', 'Before');");
 
-        await MigrateAsync(_migrator);
+        await MigrateAsync(Migrator);
 
         var down = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "add_team_access_down");
         DownMigrator = down.MigratorConnectionString;
@@ -41,7 +41,7 @@ public class AddTeamAccessFixture : IAsyncLifetime
     internal async Task<Guid> NewSubjectAsync()
     {
         var subject = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{subject}', 'access-{subject:N}', true, false, now(), now(), 'Approved');
             """);
@@ -51,17 +51,14 @@ public class AddTeamAccessFixture : IAsyncLifetime
     internal async Task<Guid> NewTenantAsync()
     {
         var tenant = Guid.CreateVersion7();
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'access-{tenant:N}', 'Site', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, tenant, $"access-{tenant:N}", "Site");
         return tenant;
     }
 
     internal async Task<Guid> NewRoleAsync(Guid tenant)
     {
         var role = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
             VALUES ('{role}', '{tenant}', 'Nights', 'nights-{role:N}', '["glucose.read"]', false, now(), now());
             """);
@@ -71,14 +68,14 @@ public class AddTeamAccessFixture : IAsyncLifetime
     internal async Task<Guid> NewTeamAsync()
     {
         var team = Guid.CreateVersion7();
-        await ExecuteAsync($"INSERT INTO teams (id, name) VALUES ('{team}', 'Clinic');");
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"INSERT INTO teams (id, name) VALUES ('{team}', 'Clinic');");
         return team;
     }
 
     internal async Task<Guid> NewLinkAsync(Guid team, Guid createdBy)
     {
         var link = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO team_access_links (id, team_id, created_by_subject_id, token_hash, expires_at, use_count, suggested_role_slug, suggested_limit_to_24_hours)
             VALUES ('{link}', '{team}', '{createdBy}', '{Guid.NewGuid():N}', now() + interval '1 day', 0, 'caretaker', false);
             """);
@@ -88,44 +85,23 @@ public class AddTeamAccessFixture : IAsyncLifetime
     internal async Task<Guid> NewAccessAsync(Guid team, Guid tenant, Guid? approver = null, Guid? link = null)
     {
         var access = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours, approved_by_subject_id, created_from_link_id)
             VALUES ('{access}', '{team}', '{tenant}', false, {Sql(approver)}, {Sql(link)});
             """);
         return access;
     }
 
-    internal Task<int> NewAccessRoleAsync(Guid access, Guid role) => ExecuteAsync($"""
+    internal Task<int> NewAccessRoleAsync(Guid access, Guid role) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO team_tenant_access_roles (id, team_tenant_access_id, tenant_role_id)
         VALUES ('{Guid.CreateVersion7()}', '{access}', '{role}');
         """);
-
-    internal Task<long> ScalarAsync(string sql) => ScalarAsync(_migrator, sql);
-
-    internal static async Task<long> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    internal async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
 
     private static string Sql(Guid? id) => id is { } value ? $"'{value}'" : "NULL";
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(connectionString);
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
@@ -137,19 +113,22 @@ public class AddTeamAccessTests(AddTeamAccessFixture fixture) : IClassFixture<Ad
     [Fact]
     public async Task An_existing_team_is_kept_and_has_no_access()
     {
-        (await fixture.ScalarAsync($"SELECT count(*) FROM teams WHERE id = '{fixture.ExistingTeam}'")).Should().Be(1);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access WHERE team_id = '{fixture.ExistingTeam}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM teams WHERE id = '{fixture.ExistingTeam}'")).Should().Be(1);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access WHERE team_id = '{fixture.ExistingTeam}'")).Should().Be(0);
     }
 
     [Fact]
     public async Task The_access_and_its_roles_are_under_the_tenant_pin_and_the_links_are_not()
     {
-        (await fixture.ScalarAsync("""
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, """
             SELECT count(*) FROM pg_class c
              WHERE c.relname IN ('team_tenant_access', 'team_tenant_access_roles') AND c.relrowsecurity AND c.relforcerowsecurity
                AND EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_pin')
             """)).Should().Be(2);
-        (await fixture.ScalarAsync("SELECT count(*) FROM pg_class WHERE relname = 'team_access_links' AND NOT relrowsecurity"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, "SELECT count(*) FROM pg_class WHERE relname = 'team_access_links' AND NOT relrowsecurity"))
             .Should().Be(1);
     }
 
@@ -180,11 +159,14 @@ public class AddTeamAccessTests(AddTeamAccessFixture fixture) : IClassFixture<Ad
         var access = await fixture.NewAccessAsync(team, tenant, subject, link);
         await fixture.NewAccessRoleAsync(access, role);
 
-        await fixture.ExecuteAsync($"DELETE FROM teams WHERE id = '{team}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM teams WHERE id = '{team}'");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_access_links WHERE team_id = '{team}'")).Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access WHERE team_id = '{team}'")).Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access_roles WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_access_links WHERE team_id = '{team}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access WHERE team_id = '{team}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access_roles WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
     }
 
     [Fact]
@@ -195,10 +177,12 @@ public class AddTeamAccessTests(AddTeamAccessFixture fixture) : IClassFixture<Ad
         var access = await fixture.NewAccessAsync(team, tenant);
         await fixture.NewAccessRoleAsync(access, await fixture.NewRoleAsync(tenant));
 
-        await fixture.ExecuteAsync($"DELETE FROM tenants WHERE id = '{tenant}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM tenants WHERE id = '{tenant}'");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access WHERE id = '{access}'")).Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access_roles WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access WHERE id = '{access}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access_roles WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
     }
 
     [Fact]
@@ -211,10 +195,10 @@ public class AddTeamAccessTests(AddTeamAccessFixture fixture) : IClassFixture<Ad
         var link = await fixture.NewLinkAsync(team, maker);
         var access = await fixture.NewAccessAsync(team, tenant, approver, link);
 
-        await fixture.ExecuteAsync($"DELETE FROM subjects WHERE id = '{approver}'");
-        await fixture.ExecuteAsync($"DELETE FROM team_access_links WHERE id = '{link}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM subjects WHERE id = '{approver}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM team_access_links WHERE id = '{link}'");
 
-        (await fixture.ScalarAsync($"""
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"""
             SELECT count(*) FROM team_tenant_access
              WHERE id = '{access}' AND approved_by_subject_id IS NULL AND created_from_link_id IS NULL
             """)).Should().Be(1);
@@ -229,22 +213,24 @@ public class AddTeamAccessTests(AddTeamAccessFixture fixture) : IClassFixture<Ad
         var access = await fixture.NewAccessAsync(team, tenant);
         await fixture.NewAccessRoleAsync(access, role);
 
-        await fixture.ExecuteAsync($"DELETE FROM tenant_roles WHERE id = '{role}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM tenant_roles WHERE id = '{role}'");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access_roles WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_tenant_access WHERE id = '{access}'")).Should().Be(1);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access_roles WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_tenant_access WHERE id = '{access}'")).Should().Be(1);
     }
 
     [Fact]
     public async Task Down_drops_the_tables_and_their_policies()
     {
-        (await AddTeamAccessFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.tables
              WHERE table_schema = 'public' AND table_name IN ('team_access_links', 'team_tenant_access', 'team_tenant_access_roles')
             """)).Should().Be(0);
-        (await AddTeamAccessFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_policies WHERE tablename IN ('team_tenant_access', 'team_tenant_access_roles')")).Should().Be(0);
-        (await AddTeamAccessFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator,
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'teams'")).Should().Be(1);
     }
 }

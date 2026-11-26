@@ -134,27 +134,16 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
                 recordTypeStr, allPotentialMatches.Select(m => m.CanonicalId).Distinct().ToList(), unlinked, ct);
         }
 
-        // A deleted member the record writes again (same source, and a shared legacy id or sync
-        // identifier) does not hold its source against the record, so a source that withdrew its copy
-        // of a linked dose and writes it again rejoins the group rather than standing beside the
-        // surviving copy as a second dose. Every other member holds its source, so a distinct dose of
-        // that source stays apart. A member outside the window is not in info and always holds it.
-        bool WrittenAgain(LinkedRecordTypes.GroupMember member, DeduplicationInput record) =>
-            string.Equals(member.DataSource, record.DataSource, StringComparison.OrdinalIgnoreCase)
-            && info.TryGetValue(member.RecordId, out var held)
-            && held.IsDeleted
-            && info.TryGetValue(record.RecordId, out var incoming)
-            && held.IsWrittenAgainAs(incoming);
-
-        HashSet<string>? SourcesHeldAgainst(Guid canonical, DeduplicationInput record) =>
+        // A member outside the window is not in info, so it always holds its source.
+        HashSet<string>? HeldAgainst(Guid canonical, DeduplicationInput record) =>
             groupMembers.TryGetValue(canonical, out var members)
-                ? members.Where(m => !WrittenAgain(m, record))
-                    .Select(m => m.DataSource)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                ? SourcesHeldAgainst(members, new LinkedRecordTypes.GroupMember(record.RecordId, record.DataSource), info)
                 : null;
 
         bool Refused(Guid canonical, DeduplicationInput record) =>
-            RefusesTightJoin(recordType, record.DataSource, SourcesHeldAgainst(canonical, record));
+            RefusesTightJoin(
+                recordType, new LinkedRecordTypes.GroupMember(record.RecordId, record.DataSource),
+                groupMembers.GetValueOrDefault(canonical), info);
 
         // 4. One query: which input records are already linked?
         var inputIds = records.Select(r => r.RecordId).ToList();
@@ -248,10 +237,10 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
                 }
             }
 
-            // Wide fallback: exactly one exact-value candidate group in the wide window, holding
-            // no record of this record's own source. Records assigned earlier in this chunk are
-            // candidates too, so a wide pair split across a batch resolves the same way it would
-            // across two batches.
+            // Wide fallback: exactly one exact-value candidate group in the wide window, with no
+            // member that holds this record's source against it (HoldsSourceAgainst). Records
+            // assigned earlier in this chunk are candidates too, so a wide pair split across a batch
+            // resolves the same way it would across two batches.
             if (canonicalId == null && wideEligible && CanEstablishCrossSource(record.DataSource))
             {
                 var wideLo = LowerBoundTimestamp(sortedTimestamps, record.Mills - WideMatchingWindowMillis);
@@ -284,7 +273,7 @@ public sealed class DuplicateLinker(INocturneDbContextFactory contexts, ILogger<
                 // source into the same group can still slip past between this read and the write;
                 // that race is pre-existing and self-corrects on the next reconcile pass.
                 if (wideCanonical is not null
-                    && SourcesHeldAgainst(wideCanonical.Value, record) is { } candidateSources
+                    && HeldAgainst(wideCanonical.Value, record) is { } candidateSources
                     && CanEstablishCrossSource(candidateSources)
                     && !candidateSources.Contains(record.DataSource))
                 {

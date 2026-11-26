@@ -12,7 +12,6 @@ using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -31,7 +30,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     public async Task Prune_deletes_old_reconciled_singletons_and_keeps_groups()
     {
         var tenant = await SeedTenantAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(fx.AppConnectionString);
         await using var context = await ContextAsync(provider, tenant);
         var service = Service(context);
 
@@ -52,7 +51,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     public async Task A_copy_arriving_after_the_prune_joins_the_pruned_reading()
     {
         var tenant = await SeedTenantAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(fx.AppConnectionString);
         await using var context = await ContextAsync(provider, tenant);
         var service = Service(context);
 
@@ -73,7 +72,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     public async Task Prune_waits_for_a_dedup_pass_holding_the_tenant_lock()
     {
         var tenant = await SeedTenantAsync();
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(fx.AppConnectionString);
         await using var context = await ContextAsync(provider, tenant);
         var service = Service(context);
         await IngestGlucoseAsync(context, Event, "dexcom-connector", 120);
@@ -90,15 +89,15 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
             await release.Task;
             return true;
         });
-        await locked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await locked.Task.WaitAsync(Eventually.DefaultPatience);
 
         var prune = service.PruneSingletonLinksAsync(100, 1);
         await PostgresLockWaits.UntilBlockedAsync(fx.AppConnectionString, prune);
         prune.IsCompleted.Should().BeFalse("the dedup write lock is held");
 
         release.SetResult();
-        await holding.WaitAsync(TimeSpan.FromSeconds(30));
-        (await prune.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
+        await holding.WaitAsync(Eventually.DefaultPatience);
+        (await prune.WaitAsync(Eventually.DefaultPatience)).Should().Be(1);
     }
 
     private static DuplicateReconciler Service(NocturneDbContext context) => DeduplicationModules.Reconciler(context.AsFactory());
@@ -131,15 +130,6 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
         context.ChangeTracker.Clear();
     }
 
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
-    }
-
     private static async Task<NocturneDbContext> ContextAsync(ServiceProvider provider, Guid tenantId)
     {
         var context = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync();
@@ -151,14 +141,7 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     {
         var tenantId = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'singleton-prune-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenantId));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"prune-{tenantId:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenantId, $"prune-{tenantId:N}", "singleton-prune-test");
         return tenantId;
     }
 }

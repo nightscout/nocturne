@@ -35,7 +35,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Test Rule",
-            HysteresisMinutes = 5,
         };
     }
 
@@ -75,7 +74,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Immediate Rule",
-            HysteresisMinutes = 5,
         };
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rule);
@@ -241,11 +239,11 @@ public class ExcursionTrackerTests
     }
 
     [NativeFact]
-    public async Task Hysteresis_FalseEvaluation_BeforeExpiry_NoTransition()
+    public async Task Hysteresis_FalseEvaluation_WhileItsStartIsBeyondTheClockToleranceAhead_NoTransition()
     {
-        SetupRule(); // hysteresis_minutes = 5
+        SetupRule();
         var excursionId = Guid.NewGuid();
-        var hysteresisStart = _timeProvider.GetUtcNow().UtcDateTime;
+        var hysteresisStart = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(10);
 
         SetupTrackerState(new AlertTrackerState
         {
@@ -257,9 +255,6 @@ public class ExcursionTrackerTests
         _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        // Advance 3 minutes (still within 5 min hysteresis)
-        _timeProvider.Advance(TimeSpan.FromMinutes(3));
-
         var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, null, CancellationToken.None);
 
         result.Type.Should().Be(ExcursionTransitionType.None);
@@ -268,7 +263,7 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task Hysteresis_FalseEvaluation_AfterExpiry_ClosesExcursion()
     {
-        SetupRule(); // hysteresis_minutes = 5
+        SetupRule();
         var excursionId = Guid.NewGuid();
         var hysteresisStart = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -322,7 +317,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Quick Rule",
-            HysteresisMinutes = 5,
         };
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rule);
@@ -343,7 +337,7 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task ExcursionClosed_ReturnsExcursionId()
     {
-        SetupRule(); // hysteresis_minutes = 5
+        SetupRule();
         var excursionId = Guid.NewGuid();
         var hysteresisStart = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -374,7 +368,6 @@ public class ExcursionTrackerTests
         {
             Id = _ruleId,
             Name = "Lifecycle Rule",
-            HysteresisMinutes = 3,
         };
         _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rule);
@@ -431,13 +424,12 @@ public class ExcursionTrackerTests
     /// Wires the mock repository to hand back whatever the tracker last persisted, so a sequence
     /// of calls sees the state a real repository would.
     /// </summary>
-    private void UseStatefulRepository(int hysteresisMinutes, AlertTrackerState? initial = null)
+    private void UseStatefulRepository(AlertTrackerState? initial = null)
     {
         SetupRule(new AlertRule
         {
             Id = _ruleId,
             Name = "Window Rule",
-            HysteresisMinutes = hysteresisMinutes,
         });
         SetupTrackerState(initial);
         _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
@@ -455,59 +447,46 @@ public class ExcursionTrackerTests
             CancellationToken.None);
     }
 
-    [NativeTheory]
-    [InlineData(0, 10)]
-    [InlineData(-5, 10)]
-    [InlineData(5, 10)]
-    [InlineData(12, 20)]
-    [InlineData(30, 35)]
-    public async Task HysteresisWindow_RunsFromEntry_ClosesOnFirstFalseEvaluationPastIt(
-        int hysteresisMinutes, int closeMinute)
+    [NativeFact]
+    public async Task Hysteresis_ClosesOnTheNextFalseEvaluation()
     {
-        UseStatefulRepository(hysteresisMinutes);
+        UseStatefulRepository();
         (await EvaluateAt(0, true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         (await EvaluateAt(5, false)).Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
 
-        for (var minute = 10; minute < closeMinute; minute += 5)
-        {
-            (await EvaluateAt(minute, false)).Type.Should().Be(ExcursionTransitionType.None, $"minute {minute}");
-        }
-
-        var close = await EvaluateAt(closeMinute, false);
+        var close = await EvaluateAt(10, false);
         close.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         close.CloseReason.Should().Be(ExcursionCloseReason.Hysteresis);
     }
 
     [NativeFact]
-    public async Task HysteresisEntry_RecordsItsStart_AndLaterEvaluationsKeepIt()
+    public async Task HysteresisEntry_RecordsItsStart()
     {
-        UseStatefulRepository(30);
+        UseStatefulRepository();
         await EvaluateAt(0, true);
         await EvaluateAt(5, false);
-        await EvaluateAt(10, false);
 
         var state = await _mockRepo.Object.GetTrackerStateAsync(_ruleId);
         state!.HysteresisStartedAt.Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc));
-        state.UpdatedAt.Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc),
-            "an evaluation that changes nothing but the timestamp is not written");
+        state.UpdatedAt.Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc));
     }
 
     [NativeFact]
     public async Task HysteresisReentry_ResumesSameExcursion_AndRestartsTheWindow()
     {
-        UseStatefulRepository(30);
+        UseStatefulRepository();
         var opened = await EvaluateAt(0, true);
         await EvaluateAt(5, false);
 
-        var resumed = await EvaluateAt(20, true);
+        var resumed = await EvaluateAt(10, true);
         resumed.Type.Should().Be(ExcursionTransitionType.HysteresisResumed);
         resumed.ExcursionId.Should().Be(opened.ExcursionId);
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.HysteresisStartedAt.Should().BeNull();
 
-        (await EvaluateAt(25, false)).Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
-        (await EvaluateAt(35, false)).Type.Should().Be(ExcursionTransitionType.None,
-            "30 minutes after the first entry is only 10 after the second");
-        var closed = await EvaluateAt(55, false);
+        (await EvaluateAt(15, false)).Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
+        (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.HysteresisStartedAt
+            .Should().Be(new DateTime(2026, 3, 22, 12, 15, 0, DateTimeKind.Utc));
+        var closed = await EvaluateAt(20, false);
         closed.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         closed.ExcursionId.Should().Be(opened.ExcursionId);
     }
@@ -515,19 +494,18 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task HysteresisWithoutStart_AdoptsUpdatedAtOnce()
     {
-        UseStatefulRepository(30, new AlertTrackerState
+        UseStatefulRepository(new AlertTrackerState
         {
             AlertRuleId = _ruleId,
             State = "hysteresis",
             ActiveExcursionId = Guid.NewGuid(),
-            UpdatedAt = new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2026, 3, 22, 12, 20, 0, DateTimeKind.Utc),
         });
 
         (await EvaluateAt(10, false)).Type.Should().Be(ExcursionTransitionType.None);
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.HysteresisStartedAt
-            .Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc));
-        (await EvaluateAt(30, false)).Type.Should().Be(ExcursionTransitionType.None);
-        (await EvaluateAt(35, false)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+            .Should().Be(new DateTime(2026, 3, 22, 12, 20, 0, DateTimeKind.Utc));
+        (await EvaluateAt(15, false)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
     }
 
     #endregion
@@ -540,27 +518,27 @@ public class ExcursionTrackerTests
         return await _tracker.CloseElapsedHysteresisAsync(_ruleId, CancellationToken.None);
     }
 
-    [NativeTheory]
-    [InlineData(0, 5)]
-    [InlineData(5, 10)]
-    [InlineData(30, 35)]
-    public async Task CloseElapsedHysteresis_ClosesOnlyOnceTheWindowHasElapsed(int hysteresisMinutes, int closeMinute)
+    [NativeFact]
+    public async Task CloseElapsedHysteresis_ClosesOnlyOnceItsStartIsWithinTheClockTolerance()
     {
-        UseStatefulRepository(hysteresisMinutes);
-        var opened = await EvaluateAt(0, true);
-        await EvaluateAt(5, false);
-
-        if (closeMinute > 5)
+        var excursionId = Guid.NewGuid();
+        UseStatefulRepository(new AlertTrackerState
         {
-            (await SweepAt(closeMinute - 1)).Type.Should().Be(ExcursionTransitionType.None);
-            _mockRepo.Verify(
-                x => x.CloseExcursionAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
-                Times.Never);
-        }
+            AlertRuleId = _ruleId,
+            State = "hysteresis",
+            ActiveExcursionId = excursionId,
+            UpdatedAt = new DateTime(2026, 3, 22, 12, 0, 0, DateTimeKind.Utc),
+            HysteresisStartedAt = new DateTime(2026, 3, 22, 12, 15, 0, DateTimeKind.Utc),
+        });
 
-        var closed = await SweepAt(closeMinute);
+        (await SweepAt(9)).Type.Should().Be(ExcursionTransitionType.None);
+        _mockRepo.Verify(
+            x => x.CloseExcursionAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        var closed = await SweepAt(10);
         closed.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
-        closed.ExcursionId.Should().Be(opened.ExcursionId);
+        closed.ExcursionId.Should().Be(excursionId);
         closed.CloseReason.Should().Be(ExcursionCloseReason.Hysteresis);
 
         var state = await _mockRepo.Object.GetTrackerStateAsync(_ruleId);
@@ -568,14 +546,14 @@ public class ExcursionTrackerTests
         state.ActiveExcursionId.Should().BeNull();
         state.HysteresisStartedAt.Should().BeNull();
         _mockRepo.Verify(
-            x => x.CloseExcursionAsync(opened.ExcursionId!.Value, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            x => x.CloseExcursionAsync(excursionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [NativeFact]
     public async Task CloseElapsedHysteresis_IgnoresAnActiveExcursion()
     {
-        UseStatefulRepository(0);
+        UseStatefulRepository();
         await EvaluateAt(0, true);
 
         (await SweepAt(60)).Type.Should().Be(ExcursionTransitionType.None);
@@ -585,18 +563,18 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task CloseElapsedHysteresis_WithoutStart_PersistsTheAdoptedStart()
     {
-        UseStatefulRepository(30, new AlertTrackerState
+        UseStatefulRepository(new AlertTrackerState
         {
             AlertRuleId = _ruleId,
             State = "hysteresis",
             ActiveExcursionId = Guid.NewGuid(),
-            UpdatedAt = new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2026, 3, 22, 12, 20, 0, DateTimeKind.Utc),
         });
 
         (await SweepAt(10)).Type.Should().Be(ExcursionTransitionType.None);
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.HysteresisStartedAt
-            .Should().Be(new DateTime(2026, 3, 22, 12, 5, 0, DateTimeKind.Utc));
-        (await SweepAt(35)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+            .Should().Be(new DateTime(2026, 3, 22, 12, 20, 0, DateTimeKind.Utc));
+        (await SweepAt(15)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
     }
 
     #endregion
@@ -612,7 +590,7 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task AutoResolve_OfAnActiveExcursion_OpensNothingUntilTheConditionIsFalse()
     {
-        UseStatefulRepository(0);
+        UseStatefulRepository();
         (await EvaluateAt(0, true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
         (await ForceCloseAt(0, ExcursionCloseReason.AutoResolve)).Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         (await _mockRepo.Object.GetTrackerStateAsync(_ruleId))!.AwaitingRearm.Should().BeTrue();
@@ -631,7 +609,7 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task AutoResolve_OfAnActiveExcursion_ReopensAtOnceWhenTheResolveTreeGoesFalse()
     {
-        UseStatefulRepository(0);
+        UseStatefulRepository();
         await EvaluateAt(0, true);
         await ForceCloseAt(0, ExcursionCloseReason.AutoResolve);
         (await EvaluateAt(1, true, autoResolveMet: true)).Type.Should().Be(ExcursionTransitionType.None);
@@ -643,7 +621,7 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task AutoResolve_IsReadOnlyWhileAwaitingRearm()
     {
-        UseStatefulRepository(0);
+        UseStatefulRepository();
         var reads = 0;
         Task<bool> Resolve(CancellationToken _)
         {
@@ -666,7 +644,7 @@ public class ExcursionTrackerTests
     [InlineData(false, ExcursionCloseReason.AutoResolve)]
     public async Task OtherCloses_LeaveTheRuleArmed(bool active, ExcursionCloseReason reason)
     {
-        UseStatefulRepository(60);
+        UseStatefulRepository();
         await EvaluateAt(0, true);
         if (!active)
             (await EvaluateAt(1, false)).Type.Should().Be(ExcursionTransitionType.HysteresisStarted);
@@ -779,7 +757,7 @@ public class ExcursionTrackerTests
     [NativeFact]
     public async Task HysteresisExpiry_Close_CarriesHysteresisReason()
     {
-        SetupRule(); // hysteresis_minutes = 5
+        SetupRule();
         var excursionId = Guid.NewGuid();
         var hysteresisStart = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -932,7 +910,8 @@ public class ExcursionTrackerTests
             SnapshotOf(_defaultRule), ExcursionCloseReason.AutoResolve, CancellationToken.None);
 
         result.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve,
+            _timeProvider.GetUtcNow().UtcDateTime));
     }
 
     [NativeFact]

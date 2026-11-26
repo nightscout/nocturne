@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Compatibility;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Services.CompatibilityProxy.Tests.Unit;
@@ -56,11 +57,11 @@ public class ForwardingResilienceTests
             request.Content = new StringContent("{}");
 
         var work = client.SendAsync(request);
-        while (!work.IsCompleted)
-        {
-            time.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(1);
-        }
+        await Eventually.UntilAsync(
+            "the forwarded request to complete",
+            () => work.IsCompleted,
+            step: TimeSpan.FromMilliseconds(1),
+            eachStep: () => time.Advance(TimeSpan.FromSeconds(1)));
 
         return await work;
     }

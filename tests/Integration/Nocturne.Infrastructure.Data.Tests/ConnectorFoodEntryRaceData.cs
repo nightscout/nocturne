@@ -7,7 +7,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
-using Npgsql;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests;
 
@@ -22,15 +22,7 @@ internal static class ConnectorFoodEntryRaceData
     {
         var tenant = Guid.NewGuid();
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, @name, true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"{name}-{tenant:N}"));
-        cmd.Parameters.Add(new NpgsqlParameter("@name", name));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"{name}-{tenant:N}", name);
         return tenant;
     }
 

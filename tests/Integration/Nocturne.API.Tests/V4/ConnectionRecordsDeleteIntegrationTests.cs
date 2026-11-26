@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -23,29 +24,18 @@ public class ConnectionRecordsDeleteIntegrationTests(ApiIntegrationTestFixture f
     private const string Path = "/api/v4/services/connections/delete-records";
     private const string SharedDevice = "Unknown";
 
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
     /// <summary>A direct grant of the tenant owner, who the api-secret client signs in as.</summary>
     private async Task<Guid> SeedOwnTokenAsync()
     {
         var grantId = Guid.CreateVersion7();
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
+        await using var conn = await OpenPostgresAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(Fixture.TenantId, local: true);
+        await conn.ExecuteAsync("""
             INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, created_at)
             VALUES (@id, @tenant, @subject, 'direct', ARRAY['*'], 'uploader', now());
-            """;
-        cmd.Parameters.AddWithValue("tenantText", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        cmd.Parameters.AddWithValue("id", grantId);
-        cmd.Parameters.AddWithValue("subject", Fixture.OwnerSubjectId);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenant", Fixture.TenantId), ("id", grantId), ("subject", Fixture.OwnerSubjectId));
+        await transaction.CommitAsync();
         return grantId;
     }
 
@@ -57,44 +47,36 @@ public class ConnectionRecordsDeleteIntegrationTests(ApiIntegrationTestFixture f
     {
         var clientId = Guid.CreateVersion7();
         var grantId = Guid.CreateVersion7();
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
+        await using var conn = await OpenPostgresAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(Fixture.TenantId, local: true);
+        await conn.ExecuteAsync("""
             INSERT INTO oauth_clients (id, tenant_id, client_id, software_id, display_name, is_known, redirect_uris)
             VALUES (@client, @tenant, @clientKey, @software, 'Companion', true, '[]');
             INSERT INTO oauth_grants (id, tenant_id, client_id, subject_id, grant_type, scopes, created_at, revoked_at)
             VALUES (@id, @tenant, @client, @subject, 'app', ARRAY['*'], now() - interval '90 days',
                     CASE WHEN @revoked THEN now() - interval '45 days' END);
-            """;
-        cmd.Parameters.AddWithValue("tenantText", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        cmd.Parameters.AddWithValue("client", clientId);
-        cmd.Parameters.AddWithValue("clientKey", $"companion-{clientId:N}");
-        cmd.Parameters.AddWithValue("software", softwareId);
-        cmd.Parameters.AddWithValue("id", grantId);
-        cmd.Parameters.AddWithValue("subject", Fixture.OwnerSubjectId);
-        cmd.Parameters.AddWithValue("revoked", revoked);
-        await cmd.ExecuteNonQueryAsync();
+            """,
+            ("tenant", Fixture.TenantId), ("client", clientId), ("clientKey", $"companion-{clientId:N}"),
+            ("software", softwareId), ("id", grantId), ("subject", Fixture.OwnerSubjectId), ("revoked", revoked));
+        await transaction.CommitAsync();
         return grantId;
     }
 
     /// <summary>The direct grant of a new member of the tenant.</summary>
     private async Task<Guid> SeedOtherMembersTokenAsync()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Other member");
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenantText, true);
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(Fixture.TenantId, local: true);
+        var grants = await conn.QueryAsync("""
             SELECT id FROM oauth_grants WHERE subject_id = @subject;
-            """;
-        cmd.Parameters.AddWithValue("tenantText", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        (await reader.ReadAsync()).Should().BeTrue();
-        return reader.GetGuid(0);
+            """,
+            reader => reader.GetGuid(0), ("subject", subjectId));
+        await transaction.CommitAsync();
+        grants.Should().NotBeEmpty();
+        return grants[0];
     }
 
     /// <summary>A sensor reading, a meter reading and a bolus from <paramref name="writer"/>, under <see cref="SharedDevice"/>.</summary>

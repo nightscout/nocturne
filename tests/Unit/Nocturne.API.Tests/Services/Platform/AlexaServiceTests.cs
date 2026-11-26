@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -55,7 +56,7 @@ public class AlexaServiceTests
             _mockProperties.Object,
             _mockDData.Object,
             _httpContextAccessor,
-            new TenantGlucoseUnits(Mock.Of<ITenantAccessor>(), _mockAppearance.Object, Mock.Of<ITenantService>()),
+            new TenantGlucoseUnits(new SettableTenantAccessor(), _mockAppearance.Object, Mock.Of<ITenantService>()),
             new FakeTimeProvider(Now),
             Mock.Of<ILogger<AlexaService>>()
         );

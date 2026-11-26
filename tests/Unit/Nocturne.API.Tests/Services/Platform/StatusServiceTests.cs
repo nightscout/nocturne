@@ -25,7 +25,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Tests.Shared.Mocks;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -47,7 +46,7 @@ public class StatusServiceTests
     private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<StatusService>> _mockLogger;
-    private readonly Mock<ITenantAccessor> _mockTenantAccessor;
+    private readonly SettableTenantAccessor _tenantAccessor;
     private readonly IConfiguration _configuration;
     private readonly NocturneDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -58,7 +57,7 @@ public class StatusServiceTests
         _mockCacheService = new Mock<ICacheService>();
         _mockDemoModeService = new Mock<IDemoModeService>();
         _mockLogger = new Mock<ILogger<StatusService>>();
-        _mockTenantAccessor = MockTenantAccessor.Create();
+        _tenantAccessor = SettableTenantAccessor.Resolved();
         _mockDemoModeService.Setup(x => x.IsEnabled).Returns(false);
         _dbContext = TestDbContextFactory.CreateInMemoryContext();
 
@@ -121,7 +120,7 @@ public class StatusServiceTests
         var nextResetAt = new DateTime(2026, 8, 5, 3, 0, 0, DateTimeKind.Utc);
         var dbName = $"nocturne_status_demo_{Guid.NewGuid()}";
         var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-        var tenantId = MockTenantAccessor.DefaultTenantId;
+        var tenantId = SettableTenantAccessor.DefaultTenantId;
 
         ctx.Tenants.Add(new TenantEntity
         {
@@ -136,7 +135,7 @@ public class StatusServiceTests
 
         var service = CreateStatusService(
             _configuration, ctx, dbName,
-            MockTenantAccessor.Create(tenantId: tenantId, slug: "demo", isDemo: true).Object);
+            SettableTenantAccessor.Resolved(tenantId: tenantId, slug: "demo", isDemo: true));
 
         var result = await service.GetSystemStatusAsync();
 
@@ -149,7 +148,7 @@ public class StatusServiceTests
     {
         var service = CreateStatusService(
             _configuration,
-            tenantAccessor: MockTenantAccessor.Create(isDemo: false).Object);
+            tenantAccessor: SettableTenantAccessor.Resolved(isDemo: false));
 
         var result = await service.GetSystemStatusAsync();
 
@@ -176,7 +175,7 @@ public class StatusServiceTests
     {
         var dbName = $"nocturne_status_cost_{Guid.NewGuid()}";
         var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-        var tenantId = MockTenantAccessor.DefaultTenantId;
+        var tenantId = SettableTenantAccessor.DefaultTenantId;
 
         ctx.Tenants.Add(new TenantEntity
         {
@@ -217,7 +216,7 @@ public class StatusServiceTests
             .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences());
 
-        var tenantAccessor = MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object;
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId: tenantId, slug: "t", isDemo: isDemo);
         var service = new StatusService(
             _configuration,
             _mockCacheService.Object,
@@ -541,9 +540,7 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_WithNoTenant_ReportsTheNightscoutLevelAndTheNocturneRelease()
     {
-        var unresolved = new Mock<ITenantAccessor>();
-        unresolved.Setup(x => x.IsResolved).Returns(false);
-        var service = CreateStatusService(_configuration, tenantAccessor: unresolved.Object);
+        var service = CreateStatusService(_configuration, tenantAccessor: new SettableTenantAccessor());
 
         var result = await service.GetSystemStatusAsync();
 
@@ -899,7 +896,7 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_ReportsTheTenantDefaultOverTheInstanceConfig()
     {
-        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(SettableTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync("mmol");
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Display:Units"] = "mg/dl" })
@@ -915,7 +912,7 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_ReportsTheOwnersOwnUnitsOverTheTenantDefault()
     {
-        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(SettableTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync("mg/dl");
 
         var result = await CreateStatusService(
@@ -931,7 +928,7 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_IgnoresTheLegacyFeaturesUnitsUntilTheOwnerChooses()
     {
-        _dbContext.TenantId = MockTenantAccessor.DefaultTenantId;
+        _dbContext.TenantId = SettableTenantAccessor.DefaultTenantId;
         await new UISettingsService(new TestNocturneDbContextFactory(_dbContext), TimeProvider.System, Mock.Of<ILogger<UISettingsService>>()).PatchSectionAsync<FeatureSettings>(
             "features", JsonDocument.Parse("""{"display":{"units":"mmol"}}""").RootElement);
         var configuration = new ConfigurationBuilder().Build();
@@ -940,7 +937,7 @@ public class StatusServiceTests
 
         result.Settings!["units"].Should().Be("mg/dl");
 
-        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(SettableTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync("mmol");
 
         (await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync())
@@ -1055,7 +1052,7 @@ public class StatusServiceTests
     {
         var dbName = $"nocturne_status_thresholds_{Guid.NewGuid()}";
         var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-        ctx.TenantId = MockTenantAccessor.DefaultTenantId;
+        ctx.TenantId = SettableTenantAccessor.DefaultTenantId;
         AddThresholdRule(ctx, "below", 60, AlertRuleSeverity.Critical);
         AddThresholdRule(ctx, "below", 90, AlertRuleSeverity.Warning);
         AddThresholdRule(ctx, "above", 170, AlertRuleSeverity.Warning);
@@ -1080,7 +1077,7 @@ public class StatusServiceTests
     {
         var dbName = $"nocturne_status_callers_{Guid.NewGuid()}";
         var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-        ctx.TenantId = MockTenantAccessor.DefaultTenantId;
+        ctx.TenantId = SettableTenantAccessor.DefaultTenantId;
         AddThresholdRule(ctx, "above", 170, AlertRuleSeverity.Warning);
         await ctx.SaveChangesAsync();
         var share = new Mock<ICategoryReadContext>();
@@ -1189,7 +1186,7 @@ public class StatusServiceTests
                 .GetSystemStatusAsync())
             .ToList();
         held.SetResult(new UserDisplayPreferences());
-        var results = await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5));
+        var results = await Task.WhenAll(reads).WaitAsync(Eventually.DefaultPatience);
 
         runs.Should().Be(1);
         results.Should().AllSatisfy(r => r.Should().BeSameAs(results[0]));
@@ -1211,9 +1208,9 @@ public class StatusServiceTests
             _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(), Mock.Of<ICollectionLastModifiedReader>(),
             new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>(), AccountLinkRoutes.Off),
             new RoleRepository(Mock.Of<INocturneDbContextFactory>()), new OidcProviderRepository(Mock.Of<INocturneDbContextFactory>()),
-            _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(),
+            _httpContextAccessor, _tenantAccessor, TestPublicAccessCache.Create(),
             new TenantGlucoseUnits(
-                _mockTenantAccessor.Object,
+                _tenantAccessor,
                 Mock.Of<ITenantAppearanceReader>(r =>
                     r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())
                         == Task.FromResult(new UserDisplayPreferences())),
@@ -1263,7 +1260,7 @@ public class StatusServiceTests
         ctx.AlertRules.Add(new AlertRuleEntity
         {
             Id = Guid.CreateVersion7(),
-            TenantId = MockTenantAccessor.DefaultTenantId,
+            TenantId = SettableTenantAccessor.DefaultTenantId,
             Name = $"{direction}-{value}",
             IsEnabled = true,
             ConditionType = AlertConditionType.Threshold,
@@ -1638,7 +1635,7 @@ public class StatusServiceTests
         alertContexts
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
-        tenantAccessor ??= _mockTenantAccessor.Object;
+        tenantAccessor ??= _tenantAccessor;
         alertRepository ??= new AlertRepository(alertContexts.Object.AsNocturneFactory(tenantAccessor.TenantId));
         return new StatusService(
             configuration,

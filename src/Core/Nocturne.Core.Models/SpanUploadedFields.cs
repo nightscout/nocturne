@@ -9,7 +9,7 @@ namespace Nocturne.Core.Models;
 /// </summary>
 /// <remarks>
 /// Only <c>isValid: true</c> is kept: a treatment uploaded with <c>isValid: false</c> is stored
-/// deleted. A <c>false</c> kept by a record written before that still reads back.
+/// deleted.
 /// </remarks>
 public static class SpanUploadedFields
 {
@@ -34,9 +34,8 @@ public static class SpanUploadedFields
     {
         treatment.IsValid = (metadata is not null && metadata.TryGetValue(IsValid, out var isValid) ? isValid : null) switch
         {
-            bool flag => flag,
+            true => true,
             JsonElement { ValueKind: JsonValueKind.True } => true,
-            JsonElement { ValueKind: JsonValueKind.False } => false,
             _ => null,
         };
         treatment.PumpId = (long?)metadata.TryReadDecimal(PumpId);

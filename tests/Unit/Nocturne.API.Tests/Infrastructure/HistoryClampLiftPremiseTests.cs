@@ -37,6 +37,9 @@ public class HistoryClampLiftPremiseTests
         // owner_notices and instance_key_check are platform tables no policy covers, and their
         // inserts do nothing on conflict.
         "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
+        // external_notifications is a platform table no policy covers, and its insert does nothing on
+        // conflict.
+        "src/API/Nocturne.API/Services/Notifications/External/ExternalNotificationLedger.cs",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
         // platform_policy is a platform table no policy covers, and its insert does nothing on conflict.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantCreationInviteRepository.cs",
@@ -57,6 +60,8 @@ public class HistoryClampLiftPremiseTests
         "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261102093846_AddSecondaryStreamFlagToSensorGlucose.cs",
         // A migration runs as the migrator, outside any reader's clamp, and inserts google_health_work rows.
         "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261124103542_MoveGoogleHealthStateToSlots.cs",
+        // A migration runs as the migrator, outside any reader's clamp, and upserts job_ledger rows.
+        "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261124222813_RetireInvalidUploadedTreatmentRows.cs",
     ];
 
     [Fact]

@@ -53,9 +53,9 @@ caption under the band says which group of people the typical range is for.
 ### Sleep Actogram
 
 The actogram has one row for each day. The newest day is at the top. The
-coloured blocks show your sleep stages. The line and dots show your glucose.
+colored blocks show your sleep stages. The line and dots show your glucose.
 Each row covers 48 hours: the day itself, and then the next day in a paler
-colour, so a night is not cut at midnight. Select a date to open the full
+color, so a night is not cut at midnight. Select a date to open the full
 report for that night.
 
 The app shows glucose values in mmol/L if you chose mmol/L.

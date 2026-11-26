@@ -32,20 +32,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
     private const string DeviceCodeHash = "device-code-hash";
     private const string ClientId = "app";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("oauth_device_code_poll");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("oauth_device_code_poll");
 
     /// <summary>Runs <paramref name="beforeStamp"/> once a poll has read its code and before it stamps the poll.</summary>
     private sealed class StageableRepository(INocturneDbContextFactory contexts, Func<Guid, Task> beforeStamp)
@@ -93,12 +80,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
     private NocturneDbContext Context(Guid tenant) => Context(tenant, null);
 
     private NocturneDbContext Context(Guid tenant, IInterceptor? staged) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(staged is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors: staged is null ? [] : [staged]);
 
     private sealed record Seeded(Guid Tenant, Guid CodeId, SuppliedContextFactory Contexts);
 
@@ -108,14 +90,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'device-code-poll-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"poll-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"poll-{tenant:N}", "device-code-poll-test");
         }
 
         var contexts = new SuppliedContextFactory(() => Context(tenant));
@@ -150,7 +125,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
         {
             if (Interlocked.Increment(ref arrived) == 2)
                 bothRead.SetResult();
-            return bothRead.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            return bothRead.Task.WaitAsync(Eventually.DefaultPatience);
         });
 
         var polls = await Task.WhenAll(

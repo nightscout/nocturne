@@ -104,8 +104,15 @@ public class OAuthGrantService : IOAuthGrantService
         Guid ownerSubjectId,
         CancellationToken ct = default)
     {
+        var grant = await FindUnrevokedOfSubjectAsync(grantId, ownerSubjectId, ct);
+        return grant is null ? null : OAuthGrantMapper.ToInfo(grant);
+    }
+
+    private async Task<OAuthGrantRecord?> FindUnrevokedOfSubjectAsync(
+        Guid grantId, Guid ownerSubjectId, CancellationToken ct)
+    {
         var grant = await _grants.FindOfSubjectAsync(grantId, ownerSubjectId, ct);
-        return grant is null || grant.IsRevoked ? null : OAuthGrantMapper.ToInfo(grant);
+        return grant is { IsRevoked: false } ? grant : null;
     }
 
     /// <inheritdoc />
@@ -147,7 +154,7 @@ public class OAuthGrantService : IOAuthGrantService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default) =>
-        _grants.RecordUseAsync(grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), ct);
+        _grants.RecordUseAsync(grantId, _time.GetUtcNow().UtcDateTime, new GrantPresentation(ipAddress, userAgent), ct);
 
     /// <inheritdoc />
     public async Task<OAuthGrantInfo?> UpdateGrantAsync(
@@ -158,7 +165,7 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default)
     {
-        var grant = await _grants.FindOfSubjectAsync(grantId, ownerSubjectId, ct);
+        var grant = await FindUnrevokedOfSubjectAsync(grantId, ownerSubjectId, ct);
 
         if (grant == null)
             return null;
@@ -185,7 +192,7 @@ public class OAuthGrantService : IOAuthGrantService
         if (validatedScopes is not null && grant.GrantType == OAuthGrantTypes.Guest)
         {
             var violation = bounds.GivenToOthers is null
-                ? new GrantCeilingViolation(MemberAccessFromTeam.Code, MemberAccessFromTeam.CallerDetail)
+                ? new GrantCeilingViolation(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail)
                 : Scope.ValidateDelegation(validatedScopes, bounds.GivenToOthers);
             if (violation is not null)
                 throw new GrantCeilingViolationException(violation);

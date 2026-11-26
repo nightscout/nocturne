@@ -39,7 +39,7 @@ There are two ways in:
 The graph shows your readings over the window, with a play control underneath
 that steps through it and a tick for every alert. Below that is the list of
 alerts the replay found, with the time each would have fired. Beside the graph
-are your rules, each with a switch to leave it out of the replay; open one to
+are your rules, each with a switch to leave it out of the replay. Open one to
 see when each of its conditions was true.
 
 ### What Replay can and cannot tell you
@@ -50,7 +50,7 @@ and other data Nocturne had at each moment. That makes it good at answering
 
 - **It cannot replay what people did.** Snoozes and acknowledgements are not
   replayed, so a replay shows every time a rule would have fired, not what
-  would have been sent after someone snoozed it.
+  Nocturne would send after someone snoozed it.
 - **Do not disturb:** times you switched Do not disturb on by hand are replayed,
   and fires during them are marked as silenced. Your recurring quiet-hours
   schedule is not, because Nocturne does not keep a history of changes to it.
@@ -84,11 +84,11 @@ Some things to try:
 A change a real save would refuse, such as "for at least" 0 minutes, is flagged
 here too, because the playground uses the same check as the rule editor. The
 playground offers the conditions that need only glucose, carbs, insulin and the
-clock; the app has many more (see [Conditions](/docs/alerts/conditions)).
+clock. The app has many more (see [Conditions](/docs/alerts/conditions)).
 
 <Callout type="info" title="Made-up readings, not advice">
 
-  The example days are invented to show one behaviour each, and the rules are
+  The example days are invented to show one behavior each, and the rules are
   illustrations, not settings to copy. Test your real rules with Replay on your
   own readings, and agree your thresholds with your care team.
 

@@ -75,26 +75,12 @@ internal sealed class SensorStateReportEntityConfiguration : IEntityTypeConfigur
 {
     public void Configure(EntityTypeBuilder<SensorStateReportEntity> entity)
     {
-        // An alert pass that reads the sensor's state reads the recent reports of the newest
-        // reading's device and source; see SensorStateReportRepository.GetReportedAsync.
+        // An alert pass that reads the sensor's state reads the newest recent report of the newest
+        // reading's device and source; see SensorStateReportRepository.GetNewestAsync.
         entity
             .HasIndex(e => new { e.TenantId, e.DataSource, e.Device, e.Timestamp })
             .HasDatabaseName("ix_sensor_state_reports_tenant_source_device_timestamp")
             .IsDescending(false, false, false, true)
-            .HasFilter("deleted_at IS NULL");
-    }
-}
-
-internal sealed class DeviceStatusExtrasEntityConfiguration : IEntityTypeConfiguration<DeviceStatusExtrasEntity>
-{
-    public void Configure(EntityTypeBuilder<DeviceStatusExtrasEntity> entity)
-    {
-        // The device status list walks extras newest-first beside the snapshots; see
-        // DeviceStatusGroupRepository.GetAsync.
-        entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
-            .IsDescending(false, true)
             .HasFilter("deleted_at IS NULL");
     }
 }

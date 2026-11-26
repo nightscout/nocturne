@@ -1,9 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <radialGradient id="g" cx="50%" cy="60%" r="50%">
-      <stop offset="0%" stop-color="#E23E57" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#E23E57" stop-opacity="0.6"/>
-    </radialGradient>
-  </defs>
-  <path d="M16 2 C16 2 8 14 8 20 C8 24.4 11.6 28 16 28 C20.4 28 24 24.4 24 20 C24 14 16 2 16 2Z" fill="url(#g)"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><title>nocturne.run</title><path fill="#F2667B" d="M 128.00,20.40 L 67.02,126.00 A 70.40,70.40 0 0 0 61.54,184.40 L 128.00,184.40 Z"/><path fill="#C42A48" d="M 145.60,50.88 L 188.98,126.00 A 70.40,70.40 0 0 1 194.46,184.40 L 145.60,184.40 Z M 70.62,202.00 L 185.38,202.00 A 70.40,70.40 0 0 1 70.62,202.00 Z"/></svg>

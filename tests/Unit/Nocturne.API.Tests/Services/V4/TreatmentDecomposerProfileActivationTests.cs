@@ -1,27 +1,17 @@
 using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Infrastructure;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -51,35 +41,16 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TestTenantCache.DefaultTenantId;
-        var dedup = new Mock<IDuplicateLinker>().Object;
-        var audit = new Mock<IAuditContext>().Object;
-        var factory = new TestNocturneDbContextFactory(_context);
 
         var deviceService = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
         deviceService
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        _decomposer = new TreatmentDecomposer(
-            factory, new DecomposedTreatmentKeys(factory),
-            new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
-            new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord().Object,
-            new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),
-            new BGCheckRepository(factory, dedup, audit, NullLogger<BGCheckRepository>.Instance),
-            new NoteRepository(factory, dedup, audit, NullLogger<NoteRepository>.Instance),
-            new DeviceEventRepository(factory, dedup, audit, NullLogger<DeviceEventRepository>.Instance),
-            new BolusCalculationRepository(factory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            new Mock<ITreatmentFoodService>().Object,
-            deviceService.Object,
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            new Mock<IPatientInsulinRepository>().Object,
-            TempBasalTestDeps.Unscheduled(),
-            Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance);
+        _decomposer = TreatmentDecomposerDoubles.Stored(
+            _context.AsFactory(), Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(),
+            tempBasal: new Mock<ITempBasalRepository>().AnswersBatchFormsPerRecord().Object,
+            devices: deviceService.Object);
     }
 
     public void Dispose()

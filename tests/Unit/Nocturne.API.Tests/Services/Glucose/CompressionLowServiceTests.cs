@@ -10,7 +10,6 @@ using Nocturne.API.Services.Profiles;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -37,8 +36,7 @@ public class CompressionLowServiceTests
 
     public CompressionLowServiceTests()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
 
         _tenantOwnerResolver
             .Setup(r => r.GetOwnerSubjectIdAsync(TenantId, It.IsAny<CancellationToken>()))
@@ -61,7 +59,7 @@ public class CompressionLowServiceTests
             Mock.Of<ICompressionLowNightWindowResolver>(),
             Mock.Of<IUISettingsService>(),
             _tenantOwnerResolver.Object,
-            tenantAccessor.Object,
+            tenantAccessor,
             TimeProvider.System,
             NullLogger<CompressionLowService>.Instance);
     }
@@ -92,8 +90,7 @@ public class CompressionLowServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Treatment>());
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
 
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -111,7 +108,7 @@ public class CompressionLowServiceTests
             Mock.Of<ICompressionLowNightWindowResolver>(),
             uiSettings,
             _tenantOwnerResolver.Object,
-            tenantAccessor.Object,
+            tenantAccessor,
             TimeProvider.System,
             NullLogger<CompressionLowService>.Instance);
 

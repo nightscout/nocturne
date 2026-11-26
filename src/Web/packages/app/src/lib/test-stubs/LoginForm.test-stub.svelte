@@ -2,24 +2,28 @@
   import { Button } from "#lib/components/ui/button/index.js";
 
   // Stands in for the sign-in form, whose passkey and provider ceremonies a browser test cannot
-  // complete: one button finishes the sign-in as the real form does when it succeeds, and one
-  // puts it where the real form shows first recovery codes.
+  // complete: one button starts a sign-in and leaves it in flight, one ends it as a failure, and
+  // one finishes it as the real form does when it succeeds. Like the real form, it reports not
+  // busy when it unmounts.
   let {
     returnUrl,
     onSuccess,
-    onShowingRecoveryCodes,
+    onBusyChange,
   }: {
     returnUrl?: string;
     onSuccess?: () => void;
-    onShowingRecoveryCodes?: (showing: boolean) => void;
+    onBusyChange?: (busy: boolean) => void;
   } = $props();
+
+  $effect(() => () => onBusyChange?.(false));
 </script>
 
 <p data-testid="login-form-return-url">{returnUrl}</p>
-<Button onclick={() => onShowingRecoveryCodes?.(true)}>Show recovery codes</Button>
+<Button onclick={() => onBusyChange?.(true)}>Start sign-in</Button>
+<Button onclick={() => onBusyChange?.(false)}>Fail sign-in</Button>
 <Button
   onclick={() => {
-    onShowingRecoveryCodes?.(false);
+    onBusyChange?.(false);
     onSuccess?.();
   }}>Finish sign-in</Button
 >

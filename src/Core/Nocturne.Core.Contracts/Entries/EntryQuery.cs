@@ -13,6 +13,12 @@ public sealed record EntryQuery
     public string? Find { get; init; }
 
     /// <summary>
+    /// Whether a <see cref="Find"/> that names <c>isValid</c> reads the rows stored deleted, as a v1
+    /// find does. A v3 search sets it false (<see cref="Nocturne.Core.Models.Queries.FindQuery.IncludesDeletedWhenNamed"/>).
+    /// </summary>
+    public bool IncludesDeletedWhenNamed { get; init; } = true;
+
+    /// <summary>
     /// Optional entry type filter (e.g., "sgv", "mbg", "cal").
     /// </summary>
     public string? Type { get; init; }

@@ -18,8 +18,8 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -38,15 +38,7 @@ namespace Nocturne.API.Tests.Services.Jobs;
 public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database database, ITestOutputHelper output)
     : IClassFixture<SweepJobsPostgresTests.Database>, IAsyncLifetime
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public TestDatabase Created { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Created = await SharedPostgres.CreateMigratedDatabaseAsync("sweep_jobs");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("sweep_jobs");
 
     private const int Tenants = 50;
 
@@ -54,8 +46,8 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
     private const int MergeLockClass = 0x4E44_5550;
 
     private readonly List<ServiceProvider> _providers = [];
-    private readonly string _app = database.Created.AppConnectionString;
-    private readonly string _migrator = database.Created.MigratorConnectionString;
+    private readonly string _app = database.AppConnectionString;
+    private readonly string _migrator = database.MigratorConnectionString;
 
     public async Task InitializeAsync()
     {
@@ -195,13 +187,17 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         await scheduler.EnrolAsync(default);
         clock.Advance(AlertSweepJob.Interval);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (sweep.Runs.Count < 6)
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the sweeps must not wait for the stuck connectors");
-            await scheduler.PollAsync(default);
-            await Task.Delay(20);
-        }
+        await Eventually.UntilAsync(
+            "every sweep to run without waiting for the stuck connectors",
+            async () =>
+            {
+                if (sweep.Runs.Count >= 6)
+                    return true;
+
+                await scheduler.PollAsync(default);
+                return false;
+            },
+            step: TimeSpan.FromMilliseconds(20));
 
         (first.Started + second.Started).Should().Be(8, "every connector together holds the group's cap");
         gate.SetResult();
@@ -245,8 +241,7 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         services.AddMetrics();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -278,11 +273,7 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var insert = new NpgsqlCommand(
-            "INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES (@id, @slug, 'T', true, now(), now())", conn);
-        insert.Parameters.AddWithValue("id", tenant);
-        insert.Parameters.AddWithValue("slug", tenant.ToString("N"));
-        await insert.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, tenant.ToString("N"), "T");
         return tenant;
     }
 
@@ -290,16 +281,15 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     private async Task<bool> ReconcileCursorExistsAsync(Guid tenant)
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false);", conn))
-            await pin.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
         await using var cmd = new NpgsqlCommand(
             $"SELECT count(*) FROM dedup_reconcile_state WHERE tenant_id = '{tenant}' AND last_reconciled_link_id IS NOT NULL;", conn);
         return (long)(await cmd.ExecuteScalarAsync())! > 0;

@@ -5,7 +5,6 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -31,26 +30,10 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
     private static readonly DateTime HeldSince = new(2026, 11, 20, 8, 0, 0, DateTimeKind.Utc);
     private static DateTime Bound => HeldSince + RustAlertEngine.HoldBound();
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("held_notice");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("held_notice");
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>A repository on connections of its own, as one instance of the API has.</summary>
     private AlertRepository Instance(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
@@ -65,14 +48,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'held-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"held-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"held-{tenant:N}", "held-test");
         }
 
         var rule = Guid.CreateVersion7();
@@ -120,7 +96,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
         var enricher = new Mock<ISensorContextEnricher>();
         enricher.Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SensorContext { LatestValue = null, LatestTimestamp = null, TrendRate = null, LastReadingAt = null });
-        var tenantAccessor = Mock.Of<ITenantAccessor>(a => a.TenantId == tenant);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenant);
         return new Sent(delivery, new HeldRuleNotice(
             repository ?? Instance(tenant), rules.Object, tenantAccessor, delivery.Object, enricher.Object,
             Mock.Of<IExcursionResolutionHandler>(), TimeProvider.System, NullLogger<HeldRuleNotice>.Instance));
@@ -171,7 +147,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
         (await repository.GetActiveAlertSnapshotsAsync(CancellationToken.None)).Should().BeEmpty();
         (await repository.GetStandingUnevaluableNoticesAsync(null, CancellationToken.None)).Should().BeEmpty();
         (await repository.GetStandingHeldNoticesAsync(rule, CancellationToken.None))
-            .Should().Equal(new StandingHeldNotice(notice.ExcursionId, notice.InstanceId, rule, HeldSince, false));
+            .Should().Equal(new StandingHeldNotice(notice.ExcursionId, notice.InstanceId, rule, HeldSince, false, Bound));
         var snapshot = (await repository.GetExcursionRuleAsync(notice.ExcursionId, CancellationToken.None))!;
         (snapshot.IsHeldNotice, snapshot.IsUnevaluableNotice).Should().Be((true, false));
     }

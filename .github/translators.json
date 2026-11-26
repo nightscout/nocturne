@@ -1,0 +1,8 @@
+{
+  "$comment": "GitHub accounts that may merge a pull request changing only their locale file, matched by account id (the login is for reading). translator-merge.yml writes its translations onto main once Tests passes, the CLA is signed and no changed translation breaks a placeholder. The copy on main is the one read.",
+  "src/Web/locales/cs.po": [{ "login": "mirkotomasek", "id": 167194648 }],
+  "src/Web/locales/de.po": [{ "login": "BlackSoul697", "id": 186886874 }],
+  "src/Web/locales/es.po": [{ "login": "josevicns", "id": 35335573 }],
+  "src/Web/locales/fr.po": [{ "login": "Uneo7", "id": 6579229 }],
+  "src/Web/locales/pl.po": [{ "login": "Pieselak", "id": 112515031 }]
+}

@@ -334,7 +334,7 @@ describe("ack_alert action", () => {
 
     expect(postEphemeral).toHaveBeenCalledExactlyOnceWith(
       event.user,
-      "You have multiple linked Nocturne accounts: `home` (HOME), `work` (WORK). Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
+      "You have multiple linked Nocturne accounts: `home` (HOME), `work` (WORK). Use the matching command with a label, or set a default in Settings → Integrations → Discord.",
       { fallbackToDM: true },
     );
     expect(ctx.scopedApiFactory).not.toHaveBeenCalled();
@@ -352,7 +352,7 @@ describe("ack_alert action", () => {
 
     expect(postEphemeral).toHaveBeenCalledExactlyOnceWith(
       event.user,
-      "You have multiple linked Nocturne accounts: `twin-a` (TWIN-A), `twin-b` (TWIN-B). Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
+      "You have multiple linked Nocturne accounts: `twin-a` (TWIN-A), `twin-b` (TWIN-B). Use the matching command with a label, or set a default in Settings → Integrations → Discord.",
       { fallbackToDM: true },
     );
     expect(ctx.scopedApiFactory).not.toHaveBeenCalled();

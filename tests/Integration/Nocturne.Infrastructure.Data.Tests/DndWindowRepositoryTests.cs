@@ -5,6 +5,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -199,14 +200,7 @@ public class DndWindowRepositoryTests
     private async Task SeedTenantAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'dnd-window-repo-test', true, now(), now())
-            """;
-        AddParam(cmd, "@id", tenantId);
-        AddParam(cmd, "@slug", $"dnd-{tenantId:N}");
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenantId, $"dnd-{tenantId:N}", "dnd-window-repo-test");
     }
 
     private async Task InsertWindowAsync(
@@ -217,11 +211,11 @@ public class DndWindowRepositoryTests
         DateTime? clearedAt = null)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await using var cmd = conn.CreateCommand();
         // dnd_windows is FORCE ROW LEVEL SECURITY, so the policy's WITH CHECK applies even to the
         // migrator role — the tenant context has to be set for the INSERT to be admitted at all.
+        await conn.PinTenantAsync(tenantId);
+        await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tid::text, false);
             INSERT INTO dnd_windows
                 (id, tenant_id, scope, started_at, ends_at, cleared_at, source, created_at)
             VALUES

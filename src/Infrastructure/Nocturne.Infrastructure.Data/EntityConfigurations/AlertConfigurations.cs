@@ -25,12 +25,12 @@ internal sealed class AlertRuleEntityConfiguration : IEntityTypeConfiguration<Al
 
         entity.ToTable("alert_rules");
         entity.Property(e => e.ConditionType).HasConversion(
-            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertConditionType>());
+            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertConditionType>(tolerant: true));
         entity.Property(e => e.ConditionParams).HasColumnType("jsonb").HasDefaultValue("{}");
         entity.Property(e => e.Severity).HasConversion(
-            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertRuleSeverity>());
+            new Converters.EnumMemberValueConverter<Core.Models.Alerts.AlertRuleSeverity>(tolerant: true));
         entity.Property(e => e.ScopeClass).HasConversion(
-            new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>());
+            new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>(tolerant: true));
         entity.Property(e => e.ClientConfiguration).HasColumnType("jsonb").HasDefaultValue("{}");
         entity.Property(e => e.IsEnabled).HasDefaultValue(true);
         entity.Property(e => e.OnUnknown).HasDefaultValue(Core.Models.Alerts.AlertRuleOnUnknown.Hold);
@@ -111,6 +111,12 @@ internal sealed class AlertExcursionEntityConfiguration : IEntityTypeConfigurati
         entity
             .HasIndex(e => new { e.AlertRuleId, e.EndedAt })
             .HasDatabaseName("ix_alert_excursions_rule_ended_at");
+
+        // The sweep's owed-work read: a row holds a stamp only while work is owed
+        entity
+            .HasIndex(e => e.TenantId)
+            .HasFilter("opened_owed_at IS NOT NULL OR closed_owed_at IS NOT NULL")
+            .HasDatabaseName("ix_alert_excursions_tenant_owed");
 
         entity.ToTable("alert_excursions");
 

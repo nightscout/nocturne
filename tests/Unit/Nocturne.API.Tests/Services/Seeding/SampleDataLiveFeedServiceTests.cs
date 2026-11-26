@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Seeding;
@@ -53,7 +54,7 @@ public class SampleDataLiveFeedServiceTests
             });
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
         services.AddSingleton(tenants.Object);
         services.AddScoped(sp => new SampleDataLiveFeed(
@@ -74,11 +75,11 @@ public class SampleDataLiveFeedServiceTests
         using var service = new SampleDataLiveFeedService(provider, time, NullLogger<SampleDataLiveFeedService>.Instance);
         await service.StartAsync(CancellationToken.None);
 
-        (await listed.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeTrue();
+        (await listed.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
         for (var tick = 0; tick < 2; tick++)
         {
             time.Advance(TimeSpan.FromMinutes(1));
-            (await advanced.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeTrue("the loop survived the last failure");
+            (await advanced.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue("the loop survived the last failure");
         }
 
         await service.StopAsync(CancellationToken.None);

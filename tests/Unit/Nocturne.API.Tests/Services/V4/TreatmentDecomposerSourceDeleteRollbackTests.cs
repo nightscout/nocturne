@@ -1,26 +1,13 @@
-using Nocturne.API.Tests.TestDoubles;
-using Nocturne.API.Tests.Infrastructure;
 using System.Data.Common;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -44,25 +31,12 @@ public class TreatmentDecomposerSourceDeleteRollbackTests : IDisposable
 
     public TreatmentDecomposerSourceDeleteRollbackTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _failure);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, "test", _failure);
         _context = _db.CreateContext();
 
-        _decomposer = new(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            Mock.Of<IBolusRepository>(), Mock.Of<ITempBasalRepository>(),
-            Mock.Of<ICarbIntakeRepository>(), Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(),
-            Mock.Of<IDeviceEventRepository>(), Mock.Of<IBolusCalculationRepository>(),
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            Mock.Of<ITreatmentFoodService>(),
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            new AuditContext { IsSystem = true },
-            NullLogger<TreatmentDecomposer>.Instance);
+        _decomposer = TreatmentDecomposerDoubles.Build(
+            _context.AsFactory(),
+            audit: new AuditContext { IsSystem = true });
     }
 
     public void Dispose()

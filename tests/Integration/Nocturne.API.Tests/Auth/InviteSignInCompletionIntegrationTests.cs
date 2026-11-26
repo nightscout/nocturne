@@ -9,6 +9,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -42,10 +43,10 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
+            await conn.PinTenantAsync(Fixture.TenantId);
+            await conn.ExecuteAsync("""
                 DELETE FROM tenant_members WHERE tenant_id = @tenant AND subject_id = ANY(@signedIn);
                 DELETE FROM tenant_members WHERE tenant_id = ANY(@created);
                 DELETE FROM tenants WHERE id = ANY(@created);
@@ -54,7 +55,7 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM refresh_tokens WHERE subject_id = ANY(@signedIn);
                 DELETE FROM subjects WHERE id = ANY(@signedIn);
                 """,
-                ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+                ("tenant", Fixture.TenantId),
                 ("created", _createdTenants.ToArray()), ("links", _creationLinks.ToArray()),
                 ("signedIn", _signedIn.ToArray()));
         }
@@ -67,7 +68,7 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     {
         var username = $"invitee-{Guid.NewGuid():N}"[..24];
         string token;
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
             token = await SeedMemberInviteAsync(conn);
 
         using (var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi))
@@ -106,7 +107,7 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
         var username = $"founder-{Guid.NewGuid():N}"[..24];
         var slug = $"link-{Guid.NewGuid():N}"[..20];
         string token;
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
             token = await SeedCreationLinkAsync(conn);
 
         using (var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi))
@@ -150,13 +151,10 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     /// <summary>The subject the options step created under <paramref name="username"/>, with the passkey the complete step stores.</summary>
     private async Task<Guid> EnrollingSubjectAsync(string username)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM subjects WHERE username = @username;";
-        cmd.Parameters.AddWithValue("username", username);
-        var subjectId = (Guid)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        var subjectId = await conn.ScalarAsync<Guid>("SELECT id FROM subjects WHERE username = @username;", ("username", username));
 
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
             VALUES (gen_random_uuid(), @subject, @credential, @credential, 0, '{}', now());
             """,
@@ -169,12 +167,12 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     {
         var token = $"invite-{Guid.NewGuid():N}";
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, Fixture.TenantId, RoleSeeds.Viewer);
-        await ExecuteAsync(conn, """
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync("""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES (@inviteId, @tenantId, @ownerId, @hash, @roleIds::jsonb, false, now() + interval '1 day', 0, now());
             """,
-            ("tenantText", Fixture.TenantId.ToString()), ("inviteId", Guid.CreateVersion7()), ("tenantId", Fixture.TenantId),
+            ("inviteId", Guid.CreateVersion7()), ("tenantId", Fixture.TenantId),
             ("ownerId", Fixture.OwnerSubjectId), ("hash", HashUtils.Sha256Hex(token)),
             ("roleIds", $"[\"{viewerRoleId}\"]"));
         return token;
@@ -184,7 +182,7 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     {
         var token = $"link-{Guid.NewGuid():N}";
         var id = Guid.CreateVersion7();
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_creation_invites (id, created_by_subject_id, token_hash, expires_at, use_count)
             VALUES (@id, @ownerId, @hash, now() + interval '1 day', 0);
             """,
@@ -195,14 +193,11 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
 
     private async Task<long> LiveSessionCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("""
             SELECT count(*) FROM refresh_tokens
             WHERE subject_id = @subject AND revoked_at IS NULL AND expires_at > now();
-            """;
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+            """, ("subject", subjectId));
     }
 
     /// <summary>
@@ -212,40 +207,16 @@ public class InviteSignInCompletionIntegrationTests : ApiIntegrationTestBase
     private async Task<List<(string EventType, bool Success, string? Method, string? Enrolment, long Keys, Guid? TenantId)>>
         EnrolmentRowsAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync<(string EventType, bool Success, string? Method, string? Enrolment, long Keys, Guid? TenantId)>("""
             SELECT event_type, success, details->>'method', details->>'enrolment',
                    (SELECT count(*) FROM jsonb_object_keys(details)), tenant_id
             FROM auth_audit_log
             WHERE target_subject_id = @subject AND details->>'enrolment' IS NOT NULL;
-            """;
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        var rows = new List<(string, bool, string?, string?, long, Guid?)>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            rows.Add((reader.GetString(0), reader.GetBoolean(1),
+            """, reader => (reader.GetString(0), reader.GetBoolean(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.GetInt64(4),
-                reader.IsDBNull(5) ? null : reader.GetGuid(5)));
-        return rows;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+                reader.IsDBNull(5) ? null : reader.GetGuid(5)), ("subject", subjectId));
     }
 }

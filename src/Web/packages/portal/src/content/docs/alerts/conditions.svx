@@ -50,7 +50,7 @@ The latest reading falls into one of the ranges you tick: very low, low, tight
 range, in range, high, very high.
 
 - **Settings:** one or more ranges.
-- **Use it for:** rules that should follow your target range, so changing your
+- **Use it for:** rules that you want to follow your target range, so changing your
   targets changes the alert too.
 - **Good to know:** the ranges come from your target range settings. With the
   standard targets they are: very low under 54 mg/dL (3.0 mmol/L), low from 54
@@ -117,9 +117,9 @@ falling fast.
 - **Settings:** one direction.
 - **Use it for:** rules that read like the arrow on your CGM app.
 - **Good to know:** the direction is worked out from the rate of change. Rising
-  fast is 3 mg/dL a minute or more; rising is 1 up to 3; flat is from falling 1
-  to rising 1 (a fall of exactly 1 counts as flat); falling is more than 1 up to
-  3 (a fall of exactly 3 counts as falling); falling fast is more than 3. Use
+  fast is 3 mg/dL a minute or more. Rising is 1 up to 3. Flat is from falling 1
+  to rising 1 (a fall of exactly 1 counts as flat). Falling is more than 1 up to
+  3 (a fall of exactly 3 counts as falling). Falling fast is more than 3. Use
   **Rate of change** when you want a precise number.
 
 ### Sensor stale
@@ -127,7 +127,7 @@ falling fast.
 How long since the last CGM reading arrived.
 
 - **Settings:** at least (≥) or more than (>), and a number of minutes.
-- **Use it for:** the same job as **Signal loss** below; use whichever reads
+- **Use it for:** the same job as **Signal loss** below. Use whichever reads
   more naturally to you.
 - **Good to know:** this is checked every 30 seconds, not only when a reading
   arrives, because the whole point is that none is arriving. On a site that has
@@ -150,14 +150,14 @@ A temporary basal rate that is running now.
 
 - **Settings:** whether to check the rate itself (units per hour) or the rate as
   a percentage of your scheduled basal, a comparison and a value.
-- **Use it for:** noticing a loop that has been running a very high temp basal.
+- **Use it for:** noticing a loop that is running a very high temp basal.
 - **Good to know:** when no temp basal is running, the condition is not true.
 
 ### Sensitivity
 
 The autosens ratio from AAPS or Trio: how much more or less sensitive to
-insulin the loop thinks you are right now. 1 is normal; under 1 means more
-sensitive (the loop is giving less insulin), over 1 means less sensitive.
+insulin the loop thinks you are right now. 1 is normal. Under 1 means more
+sensitive (the loop is giving less insulin). Over 1 means less sensitive.
 
 - **Settings:** a comparison and a ratio.
 - **Good to know:** only AAPS and Trio report it.
@@ -297,7 +297,7 @@ expired, or no value (the newest reading has no glucose value).
   states cannot know if they are true, and the rule waits. The minutes count from
   the first reading with no value. Checked every 30 seconds.
 
-## Behaviour
+## Behavior
 
 ### Pump suspended
 
@@ -317,7 +317,7 @@ is running, and optionally for how long.
 ### Do not disturb
 
 Whether Do not disturb is on right now, and optionally for how long. Useful for
-a rule that tells a carer when Do not disturb has been left on.
+a rule that tells a carer when Do not disturb is still on.
 
 ### Pump mode
 
@@ -352,7 +352,7 @@ The current time falls inside a window.
 - **Good to know:** the window includes its start and stops just before its
   end: 22:00 to 06:00 includes 22:00 and 05:59, not 06:00. A window that
   crosses midnight works as you would expect. The editor fills in your
-  browser's time zone; you can switch it to the time zone on your patient
+  browser's time zone. You can switch it to the time zone on your patient
   record instead.
 
 ### Day of week
@@ -366,7 +366,7 @@ Today is one of the days you pick, in your time zone.
 Whether another of your rules is firing, unacknowledged or acknowledged, and
 optionally for how long.
 
-- **Use it for:** escalation. For example, a rule "Low has been unacknowledged
+- **Use it for:** escalation. For example, a rule "Low is unacknowledged
   for 15 minutes" with a channel that messages a second person. See
   [Example rules](/docs/alerts/recipes#tell-someone-else-if-nobody-responds).
 - **Good to know:** "unacknowledged" means firing and not yet acknowledged.

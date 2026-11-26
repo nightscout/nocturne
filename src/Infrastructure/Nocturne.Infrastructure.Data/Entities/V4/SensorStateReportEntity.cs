@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 [Table("sensor_state_reports")]
 public class SensorStateReportEntity : V4TimeSeriesEntityBase
 {
-    /// <summary>The mapped state, by its member name; null when the model's state was unreadable.</summary>
+    /// <summary>The mapped state, by its member name; null for a value outside the allowlist or an unreadable state.</summary>
     [Column("state")]
     [MaxLength(64)]
     public string? State { get; set; }
@@ -23,5 +23,6 @@ public class SensorStateReportEntity : V4TimeSeriesEntityBase
     /// <summary>The value as the source sent it.</summary>
     [Column("reported_value")]
     [MaxLength(128)]
+    [FitToColumn]
     public string ReportedValue { get; set; } = null!;
 }

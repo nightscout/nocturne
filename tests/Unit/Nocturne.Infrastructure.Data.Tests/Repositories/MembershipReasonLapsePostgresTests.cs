@@ -32,26 +32,10 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     private static readonly DateTime CampEnds = new(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime After = new(2026, 12, 2, 0, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("membership_lapse");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("membership_lapse");
 
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant);
 
     private sealed record Site(
         string App, string Migrator, Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner,
@@ -63,10 +47,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     {
         var (app, migrator) = on ?? (database.AppConnectionString, database.MigratorConnectionString);
         var tenant = Guid.NewGuid();
-        await ExecuteAsync(migrator, $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-lapse', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(migrator, tenant, $"{slug}-{tenant:N}", "membership-lapse");
 
         var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
@@ -104,7 +85,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var reason = Guid.CreateVersion7();
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(site.Tenant, "Camp");
-        return ExecuteAsync(site.Migrator, $"""
+        return NpgsqlTestCommands.ExecuteAsync(site.Migrator, $"""
             {teamAccessSql}
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
             VALUES ('{reason}', '{member}', 'team', '{teamAccess}', false, {ends});
@@ -182,7 +163,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var subjects = new SubjectRepository(site.Factory, AccountLinkRoutes.Off);
         var username = $"lapse-{lapsing.Subject:N}";
         var email = $"{username}@example.com";
-        await ExecuteAsync(site.Migrator, $"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $"""
             UPDATE subjects SET username = '{username}', email = '{email}', email_confirmed_at = now()
              WHERE id = '{lapsing.Subject}';
             """);
@@ -231,7 +212,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var site = await SiteAsync("sweep", (fresh.AppConnectionString, fresh.MigratorConnectionString));
         var bad = await LapsingAsync(site, "sweep-bad");
         var good = await LapsingAsync(site, "sweep-good");
-        await ExecuteAsync(site.Migrator, $$"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $$"""
             UPDATE tenant_member_reasons SET direct_permissions = '{"not":"a list"}'::jsonb
              WHERE tenant_member_id = '{{bad.Member}}' AND kind = 'direct';
             """);
@@ -274,7 +255,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var write = site.Members.SetDirectPermissionsAsync(site.Tenant, lapsing.Member, ["glucose.read"], After, Ct);
         await PostgresLockWaits.UntilWaitingAsync(site.App, 2, recompute, write);
         await held.RollbackAsync();
-        await Task.WhenAll(recompute, write).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(recompute, write).WaitAsync(Eventually.DefaultPatience);
 
         var row = (await site.Members.GetMemberAsync(site.Tenant, lapsing.Member, Ct))!;
         row.DirectPermissions.Should().Equal("glucose.read");
@@ -294,7 +275,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         ReplaceRolesUnlessLastOwner,
         RemoveMemberUnlessLastOwner,
         DeleteRole,
-        RemoveMembershipsOfSubject,
+        DeleteSubjectEvenLastOwner,
         Recompute,
         DeleteSubject,
         RemoveMembersOfTenant,
@@ -309,7 +290,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     [InlineData(Writer.ReplaceRolesUnlessLastOwner)]
     [InlineData(Writer.RemoveMemberUnlessLastOwner)]
     [InlineData(Writer.DeleteRole)]
-    [InlineData(Writer.RemoveMembershipsOfSubject)]
+    [InlineData(Writer.DeleteSubjectEvenLastOwner)]
     [InlineData(Writer.Recompute)]
     [InlineData(Writer.DeleteSubject)]
     [InlineData(Writer.RemoveMembersOfTenant)]
@@ -335,20 +316,22 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             Writer.Add => site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, subject, [site.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct),
             Writer.SetDirectPermissions => site.Members.SetDirectPermissionsAsync(site.Tenant, member, ["glucose.read"], T0, Ct),
             Writer.SetLimitTo24Hours => site.Members.SetLimitTo24HoursAsync(site.Tenant, member, true, T0, Ct),
-            Writer.SetAccessEndUnlessOwner => site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, After, T0, Ct),
+            Writer.SetAccessEndUnlessOwner => OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(site.Factory, AccountLinkRoutes.Off, site.Tenant, member, After, T0, Ct),
             Writer.ReplaceRoles => site.Members.ReplaceRolesAsync(site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
-            Writer.ReplaceRolesUnlessLastOwner => site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
-            Writer.RemoveMemberUnlessLastOwner => site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, T0, Ct),
+            Writer.ReplaceRolesUnlessLastOwner => OwnerGuardedWrites.ReplaceRolesUnlessLastOwnerAsync(
+                site.Factory, AccountLinkRoutes.Off, site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
+            Writer.RemoveMemberUnlessLastOwner => OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+                site.Factory, AccountLinkRoutes.Off, site.Tenant, member, MembershipEndHow.Removed, T0, Ct),
             Writer.DeleteRole => site.Members.DeleteRoleAsync(site.Tenant, site.CaretakerRole, T0, Ct),
-            Writer.RemoveMembershipsOfSubject => site.Members.RemoveMembershipsOfSubjectAsync(subject, Ct),
+            Writer.DeleteSubjectEvenLastOwner => SubjectDeletions.DeleteEvenLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, subject, Ct),
             Writer.Recompute => MembershipReasons.RecomputeAsync(site.Factory, site.Tenant, subject, T0, Ct),
-            Writer.DeleteSubject => new SubjectRepository(site.Factory, AccountLinkRoutes.Off).DeleteAsync(subject, Ct),
+            Writer.DeleteSubject => SubjectDeletions.DeleteAsync(site.Factory, AccountLinkRoutes.Off, subject, Ct),
             _ => DevSnapshotMemberships.RemoveMembersOfTenantAsync(own, site.Tenant, Ct),
         };
 
         await PostgresLockWaits.UntilBlockedAsync(site.App, write);
         await held.RollbackAsync();
-        await write.WaitAsync(TimeSpan.FromSeconds(30));
+        await write.WaitAsync(Eventually.DefaultPatience);
     }
 
     [Fact]
@@ -397,7 +380,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var site = await SiteAsync("fails");
         var bad = await LapsingAsync(site, "fails-bad");
         var good = await LapsingAsync(site, "fails-good");
-        await ExecuteAsync(site.Migrator, $$"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $$"""
             UPDATE tenant_member_reasons SET direct_permissions = '{"not":"a list"}'::jsonb
              WHERE tenant_member_id = '{{bad.Member}}' AND kind = 'direct';
             """);
@@ -452,7 +435,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var site = await SiteAsync("resync", (fresh.AppConnectionString, fresh.MigratorConnectionString));
         var written = await DirectOnlyAsync(site, "resync-written");
         var started = await DirectOnlyAsync(site, "resync-started");
-        await ExecuteAsync(site.Migrator, $"""
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $"""
             UPDATE tenant_members SET next_reason_lapse_at = '{CampEnds:O}' WHERE id IN ('{written}', '{started}');
             """);
 
@@ -501,7 +484,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         await PostgresLockWaits.UntilBlockedAsync(site.App, adoption);
         await held.RollbackAsync();
 
-        (await adoption.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeTrue();
+        (await adoption.WaitAsync(Eventually.DefaultPatience)).Should().BeTrue();
         (await site.Members.FindMemberAsync(site.Tenant, holder, Ct)).Should().NotBeNull();
     }
 
@@ -529,14 +512,6 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         (await site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, subject, [site.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct))
             .Should().BeTrue();
         return (await site.Members.FindMemberAsync(site.Tenant, subject, Ct))!.Id;
-    }
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private sealed class RecordingLogger : ILogger

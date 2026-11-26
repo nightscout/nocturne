@@ -45,10 +45,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         // As the runtime role: the bootstrap superuser bypasses the policies under test, and the
         // interceptor refuses it.
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(dataSource);
         var factory = new InterceptingContextFactory(options);
 
         // Seed rules through EF so the enum/jsonb mapping matches the live schema. The interceptor
@@ -84,11 +81,8 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var tenant = await AuthTestHelpers.SeedTenantAsync(Fixture, $"on-unknown-{suffix}", "On unknown");
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var factory = new InterceptingContextFactory(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options);
-        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant));
+        var factory = new InterceptingContextFactory(TestContexts.Options(dataSource));
+        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant), TimeProvider.System);
         var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
         static NewAlertRule Rule(string name, string? onUnknown) => new(
             onUnknown is null
@@ -118,10 +112,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var other = await AuthTestHelpers.SeedTenantAsync(Fixture, $"other-{suffix}", "Other");
 
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(dataSource);
         var factory = new InterceptingContextFactory(options);
 
         await SeedRuleAsync(factory, stale, "Readable", AlertConditionType.Threshold);
@@ -148,15 +139,15 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         NpgsqlDataSource dataSource, Guid tenantId, string conditionType, string severity)
     {
         var id = Guid.CreateVersion7();
-        await using var cmd = dataSource.CreateCommand($"""
-            SELECT set_config('app.current_tenant_id', '{tenantId}', false);
+        await using var conn = await dataSource.OpenConnectionAsync();
+        await conn.PinTenantAsync(tenantId);
+        await conn.ExecuteAsync($"""
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
                                      sort_order, created_at, updated_at)
             VALUES ('{id}', '{tenantId}', 'Stale', '{conditionType}', '{"{}"}', false,
                     '{severity}', '{"{}"}', true, false, 'undirected', 1, now(), now());
             """);
-        await cmd.ExecuteNonQueryAsync();
         return id;
     }
 

@@ -11,7 +11,7 @@ public class CreateBasalInjectionRequest : IBulkUpsertRequest
     /// <summary>
     /// When the basal insulin was injected. Cannot be more than 5 minutes in the future.
     /// </summary>
-    public required DateTimeOffset Timestamp { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
 
     /// <summary>
     /// UTC offset in minutes at the time of the event, for local-time display.

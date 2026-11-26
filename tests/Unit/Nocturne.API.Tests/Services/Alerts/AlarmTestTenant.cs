@@ -15,7 +15,6 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Alerts;
 
@@ -61,7 +60,7 @@ internal sealed class AlarmTestTenant
 
     public IEnumerable<EngineAlarm> Clears => Sent.Where(a => a.EventName == EngineAlarmEvents.ClearAlarm);
 
-    public ITenantAccessor Accessor => MockTenantAccessor.Create(Tenant).Object;
+    public ITenantAccessor Accessor => SettableTenantAccessor.Resolved(Tenant);
 
     public EngineAlarmRelay Relay() => new(
         Contexts.AsNocturneFactory(),

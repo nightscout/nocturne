@@ -18,9 +18,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -54,15 +52,13 @@ public class DeviceStatusDecomposerTests : IDisposable
         _spans = _stateSpanServiceMock.BacksWith([]);
         _deviceServiceMock = new Mock<IDeviceService>().AnswersBatchFormsPerRecord();
 
-        _decomposer = new DeviceStatusDecomposer(
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
             apsRepo, pumpRepo, uploaderRepo,
             _extrasRepo,
             _sensorStateRepo,
             _stateSpanServiceMock.Object,
             _deviceServiceMock.Object,
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            new FakeTimeProvider(ReceivedAt), NullLogger<DeviceStatusDecomposer>.Instance);
+            time: new FakeTimeProvider(ReceivedAt));
     }
 
     public void Dispose()
@@ -2154,17 +2150,14 @@ public class DeviceStatusDecomposerTests : IDisposable
                 [.. ids.Select(id => { patientDevice.DeviceId = id; return patientDevice; })]);
 
         var ctxFactory = new TestNocturneDbContextFactory(_context);
-        return new DeviceStatusDecomposer(
+        return DeviceStatusDecomposerDoubles.Build(
             new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance),
             new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance),
             new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance),
             _extrasRepo,
             _sensorStateRepo,
             _stateSpanServiceMock.Object,
-            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()),
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, SettableTenantAccessor.Resolved(), DeviceDateClockDoubles.Utc()));
     }
 
     private static V4Models.PatientDevice MakeDatedPatientDevice() => new()
@@ -2829,7 +2822,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             "_id": "aaps-stamps-1",
             "mills": 1700000000000,
             "device": "openaps://samsung",
-            "isValid": false,
+            "isValid": true,
             "srvModified": 1,
             "srvCreated": 1,
             "configuration": { "sensitivityType": "oref1" },
@@ -2957,11 +2950,16 @@ public class DeviceStatusDecomposerTests : IDisposable
     [InlineData(0x01)]
     [InlineData(0x03)]
     [InlineData(0x13)]
-    public async Task AnXDripJsCodeOutsideTheAllowlistWritesNoReport(int code)
+    public async Task AnXDripJsCodeOutsideTheAllowlistWritesAReportWithNoState(int code)
     {
         await _decomposer.DecomposeBatchAsync([XDripJsStatus("xdripjs-1", code)], "nightscout", WriteOrigin.Live);
 
-        SensorStateReports().Should().BeEmpty();
+        var report = SensorStateReports().Single();
+        report.State.Should().BeNull();
+        report.ReportedField.Should().Be(V4Models.SensorStateReport.XDripJsField);
+        report.ReportedValue.Should().Be(code.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        report.Device.Should().Be("xdripjs://rig");
+        report.DataSource.Should().Be("nightscout");
         _context.DeviceStatusExtras.Should().ContainSingle("the extras row is written as before");
     }
 
@@ -2969,12 +2967,37 @@ public class DeviceStatusDecomposerTests : IDisposable
     [InlineData("SENSOR_SIGNAL_LOST")]
     [InlineData("SG_BELOW_40_MGDL")]
     [InlineData("warm_up")]
+    public async Task ACareLinkValueOutsideTheAllowlistWritesAReportWithNoState(string reported)
+    {
+        await _decomposer.DecomposeBatchAsync([CareLinkStatus("carelink-1", reported)], "carelink-connector", WriteOrigin.Live);
+
+        var report = SensorStateReports().Single();
+        report.State.Should().BeNull();
+        report.ReportedField.Should().Be(V4Models.SensorStateReport.CareLinkField);
+        report.ReportedValue.Should().Be(reported);
+        report.Device.Should().Be("CareLink MiniMed 780G");
+        report.DataSource.Should().Be("carelink-connector");
+        report.CorrelationId.Should().Be(_context.DeviceStatusExtras.Single().CorrelationId);
+    }
+
+    [Theory]
     [InlineData("")]
-    public async Task ACareLinkValueOutsideTheAllowlistWritesNoReport(string reported)
+    [InlineData("  ")]
+    public async Task AnEmptyCareLinkValueWritesNoReport(string reported)
     {
         await _decomposer.DecomposeBatchAsync([CareLinkStatus("carelink-1", reported)], "carelink-connector", WriteOrigin.Live);
 
         SensorStateReports().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AValueLongerThanTheStoreHoldsIsCutToFit()
+    {
+        var reported = new string('X', 148);
+
+        await _decomposer.DecomposeBatchAsync([CareLinkStatus("carelink-1", reported)], "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Single().ReportedValue.Should().Be(reported[..128], "the column holds 128 characters");
     }
 
     [Fact]
@@ -3013,6 +3036,18 @@ public class DeviceStatusDecomposerTests : IDisposable
         await _decomposer.DecomposeBatchAsync([ds], "carelink-connector", WriteOrigin.Live);
 
         SensorStateReports().Single().ReportedField.Should().Be(V4Models.SensorStateReport.XDripJsField);
+    }
+
+    [Fact]
+    public async Task WithNeitherValueMappedCareLinksIsWritten()
+    {
+        var ds = CareLinkStatus("carelink-1", "SENSOR_SIGNAL_LOST");
+        ds.XDripJs = new XDripJsStatus { State = 0x03 };
+
+        await _decomposer.DecomposeBatchAsync([ds], "carelink-connector", WriteOrigin.Live);
+
+        SensorStateReports().Should().ContainSingle().Which.Should().Match<V4Models.SensorStateReport>(r =>
+            r.State == null && r.ReportedField == V4Models.SensorStateReport.CareLinkField && r.ReportedValue == "SENSOR_SIGNAL_LOST");
     }
 
     [Theory]

@@ -311,7 +311,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>Single food record in V3 format</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/food/{id}")]
-    [ProducesResponseType(typeof(Food), 200)]
+    [ProducesResponseType(typeof(V3Envelope<object>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.FoodRead)]
@@ -344,7 +344,7 @@ public class FoodController : BaseV3Controller<Food>
 
         _logger.LogDebug("Successfully returned food with ID {Id}", id);
 
-        return Ok(result);
+        return CreateV3SuccessResponse(result!);
     }
 
     /// <summary>
@@ -427,6 +427,9 @@ public class FoodController : BaseV3Controller<Food>
                 return StatusCode(201, createdRecords.ToArray());
             }
 
+            if (createdRecords.Invalidated is [var invalidated])
+                return V3Deduplicated(invalidated.Id, srvModified: null);
+
             var created = createdRecords.FirstOrDefault();
             if (created == null)
             {
@@ -449,12 +452,12 @@ public class FoodController : BaseV3Controller<Food>
     /// <param name="id">Food ID to update</param>
     /// <param name="foodData">Updated food data as JSON</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated food record</returns>
+    /// <returns><c>{"status": 200, "lastModified": ...}</c> on success</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
-    [ProducesResponseType(typeof(Food), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
@@ -492,6 +495,9 @@ public class FoodController : BaseV3Controller<Food>
                 );
             }
 
+            if (food.IsValid == false)
+                return IsValidImmutable();
+
             ProcessFoodForCreation(food);
 
             var updatedFood = await _foodService.UpdateFoodAsync(id, food, FoodWriteMode.Legacy, cancellationToken);
@@ -507,7 +513,7 @@ public class FoodController : BaseV3Controller<Food>
 
             _logger.LogDebug("Successfully updated food with ID {Id}", id);
 
-            return Ok(updatedFood);
+            return V3Replaced();
         }
         catch (JsonException ex)
         {

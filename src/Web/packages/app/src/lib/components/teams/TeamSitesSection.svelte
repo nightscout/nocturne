@@ -2,18 +2,25 @@
   import * as Card from "#lib/components/ui/card/index.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { RULE_OWNER_APPROVES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
   import type { TeamSiteAccess } from "@nocturne/api-client";
 
   interface Props {
     sites: TeamSiteAccess[];
+    /** The team's staff see only the people in their groups. */
+    narrowsToGroups: boolean;
   }
 
-  let { sites }: Props = $props();
+  let { sites, narrowsToGroups }: Props = $props();
 </script>
 
 <Card.Root>
   <Card.Header>
     <Card.Title>Sites this team has access to</Card.Title>
+    <Card.Description>
+      Each site decides who approves the team's staff. Only an owner of the site can change this.
+    </Card.Description>
   </Card.Header>
   <Card.Content>
     {#if sites.length === 0}
@@ -36,6 +43,38 @@
               {/if}
               · Given {formatMediumDateTime(site.givenAt)}
             </p>
+            {#if !site.hasEnded}
+              <p class="text-sm text-muted-foreground">
+                {#if site.staffRule === RULE_TEAM_TRUSTED && narrowsToGroups}
+                  The site trusts the whole team. Every staff member that the site did not stop and that is in a group
+                  with this site can see this site.
+                {:else if site.staffRule === RULE_TEAM_TRUSTED}
+                  The site trusts the whole team. Every staff member that the site did not stop can see this site.
+                {:else if site.staffRule === RULE_OWNER_APPROVES}
+                  An owner of the site must approve each staff member.
+                {:else if (site.declinedStaffCount ?? 0) > 0}
+                  The team decides which of its staff can see this site. Staff that the site declined stay declined.
+                {:else}
+                  The team decides which of its staff can see this site.
+                {/if}
+              </p>
+              {#if (site.pendingStaffCount ?? 0) > 0}
+                <p class="text-sm text-muted-foreground">
+                  {plural(site.pendingStaffCount ?? 0, [
+                    "# staff member waits for the site's approval.",
+                    "# staff members wait for the site's approval.",
+                  ])}
+                </p>
+              {/if}
+              {#if (site.declinedStaffCount ?? 0) > 0}
+                <p class="text-sm text-muted-foreground">
+                  {plural(site.declinedStaffCount ?? 0, [
+                    "The site declined # staff member.",
+                    "The site declined # staff members.",
+                  ])}
+                </p>
+              {/if}
+            {/if}
           </li>
         {/each}
       </ul>

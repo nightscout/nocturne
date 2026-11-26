@@ -221,6 +221,7 @@ public class ShareReadSurfaceReachabilityTests
             // the share surface (see the remark on V4CrudControllerBase.ListDeleted).
             ["ListDeleted"] = "deleted-record enumeration is an editing surface",
             ["GetPendingDeliveries"] = "the delivery adapters' queue, with other recipients' destinations",
+            ["GetDeliveryPayload"] = "a delivery adapter's read of an alert it sends again in another form",
         };
 
     [Fact]

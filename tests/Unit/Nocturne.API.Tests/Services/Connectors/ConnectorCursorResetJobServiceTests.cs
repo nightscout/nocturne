@@ -82,23 +82,20 @@ public class ConnectorCursorResetJobServiceTests
         db.SaveChanges();
     }
 
-    private static async Task<ConnectorResetJobStatus> WaitForTerminalAsync(
-        ConnectorCursorResetJobService service, Guid jobId)
-    {
-        for (var i = 0; i < 100; i++)
-        {
-            var status = await service.GetStatusAsync(jobId);
-            if (status.State is ConnectorResetJobState.Completed
-                or ConnectorResetJobState.Failed
-                or ConnectorResetJobState.Cancelled)
+    private static Task<ConnectorResetJobStatus> WaitForTerminalAsync(
+        ConnectorCursorResetJobService service, Guid jobId) =>
+        Eventually.ValueAsync(
+            "the reset job to reach a terminal state",
+            async () =>
             {
-                return status;
-            }
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException("Reset job did not reach a terminal state in time.");
-    }
+                var status = await service.GetStatusAsync(jobId);
+                return status.State is ConnectorResetJobState.Completed
+                    or ConnectorResetJobState.Failed
+                    or ConnectorResetJobState.Cancelled
+                    ? status
+                    : null;
+            },
+            step: TimeSpan.FromMilliseconds(20));
 
     [Fact]
     public async Task StartResetAsync_UnknownTenant_ReturnsNull()

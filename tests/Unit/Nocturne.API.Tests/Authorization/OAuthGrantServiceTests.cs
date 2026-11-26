@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -73,7 +74,7 @@ public class OAuthGrantServiceTests : IDisposable
             });
     }
 
-    private OAuthGrantService CreateService(NocturneDbContext dbContext)
+    private OAuthGrantService CreateService(NocturneDbContext dbContext, TimeProvider? time = null)
     {
         return new OAuthGrantService(
             _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
@@ -81,7 +82,7 @@ public class OAuthGrantServiceTests : IDisposable
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),
             new GrantConsentService(NullLogger<GrantConsentService>.Instance),
-            TimeProvider.System,
+            time ?? TimeProvider.System,
             _mockLogger.Object);
     }
 
@@ -296,6 +297,22 @@ public class OAuthGrantServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateLastUsedAsync_RecordsTheInjectedTime()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var service = CreateService(db, time);
+
+        await service.UpdateLastUsedAsync(grantId, ipAddress: null, userAgent: null);
+
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        Assert.Equal(time.GetUtcNow().UtcDateTime, grant.LastUsedAt);
+    }
+
+    [Fact]
     public async Task UpdateGrantAsync_UpdatesScopes()
     {
         using var db = CreateDbContext();
@@ -461,7 +478,7 @@ public class OAuthGrantServiceTests : IDisposable
 
         var attempt = () => service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), scopes: [Scope.GlucoseRead]);
         (await attempt.Should().ThrowAsync<GrantCeilingViolationException>())
-            .Which.Violation.Code.Should().Be(MemberAccessFromTeam.Code);
+            .Which.Violation.Code.Should().Be(CallerAccessFromTeam.Code);
 
         var relabelled = await service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), label: "Renamed");
         relabelled!.Label.Should().Be("Renamed");
@@ -555,6 +572,42 @@ public class OAuthGrantServiceTests : IDisposable
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_ReturnsNullForARevokedGrantAndWritesNothing()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(
+            db, label: "Old Label", scopes: [Scope.GlucoseRead], revokedAt: DateTime.UtcNow);
+        var service = CreateService(db);
+
+        var result = await service.UpdateGrantAsync(
+            grantId, _ownerSubjectId, FullAccessBounds, label: "New Label", scopes: [Scope.TreatmentsRead]);
+
+        result.Should().BeNull();
+        var stored = await db.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == grantId);
+        stored.Label.Should().Be("Old Label");
+        stored.Scopes.Should().Equal([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrant_ForARevokedGrant_AnswersNotFoundAsForAMissingOne()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var revokedId = await SeedGrantAsync(db, revokedAt: DateTime.UtcNow);
+        var controller = CreateController(db, [Scope.GlucoseRead], ceiling: null);
+
+        var revoked = await controller.UpdateGrant(revokedId, new UpdateGrantRequest { Label = "Renamed" });
+        var missing = await controller.UpdateGrant(Guid.CreateVersion7(), new UpdateGrantRequest { Label = "Renamed" });
+
+        revoked.Result.Should().BeOfType<NotFoundObjectResult>()
+            .Which.Value.Should().BeEquivalentTo(
+                missing.Result.Should().BeOfType<NotFoundObjectResult>().Which.Value);
     }
 
     [Fact]

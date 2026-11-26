@@ -2,16 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -70,7 +65,7 @@ public class ImportedRoleDefinitionIntegrationTests
     [InlineData(Instance.TwoTenants)]
     public async Task An_import_adds_a_global_role_only_on_an_instance_with_one_tenant(Instance instance)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantA = await AuthTestHelpers.GetTenantIdAsync(conn);
         Guid? tenantB = null;
         try
@@ -80,14 +75,14 @@ public class ImportedRoleDefinitionIntegrationTests
 
             await ImportAsOwnerAsync(conn, tenantA);
 
-            (await RoleCountAsync(conn, CustomRole)).Should().Be(instance == Instance.OneTenant ? 1 : 0);
+            (await AuthTestHelpers.RoleCountAsync(conn, CustomRole)).Should().Be(instance == Instance.OneTenant ? 1 : 0);
             (await GrantScopesAsync(conn, tenantA, "Reader")).Should().BeEquivalentTo(ReaderScopes);
         }
         finally
         {
             await RemoveImportedRolesAsync(conn);
             if (tenantB is { } id)
-                await ExecuteAsync(conn, "DELETE FROM tenants WHERE id = @id;", ("id", id));
+                await conn.ExecuteAsync("DELETE FROM tenants WHERE id = @id;", ("id", id));
         }
     }
 
@@ -96,7 +91,7 @@ public class ImportedRoleDefinitionIntegrationTests
     [InlineData(Instance.TwoTenants)]
     public async Task An_import_adds_no_role_under_the_reserved_platform_admin_name(Instance instance)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantA = await AuthTestHelpers.GetTenantIdAsync(conn);
         Guid? tenantB = null;
         try
@@ -113,7 +108,7 @@ public class ImportedRoleDefinitionIntegrationTests
         {
             await RemoveImportedRolesAsync(conn);
             if (tenantB is { } id)
-                await ExecuteAsync(conn, "DELETE FROM tenants WHERE id = @id;", ("id", id));
+                await conn.ExecuteAsync("DELETE FROM tenants WHERE id = @id;", ("id", id));
         }
     }
 
@@ -146,7 +141,7 @@ public class ImportedRoleDefinitionIntegrationTests
     private static async Task<Guid> OwnerAsync(NpgsqlConnection conn, Guid tenantId)
     {
         var (ownerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Import Owner");
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
             SELECT gen_random_uuid(), id, @roleId FROM tenant_members WHERE tenant_id = @tenantId AND subject_id = @subjectId;
             """,
@@ -157,56 +152,22 @@ public class ImportedRoleDefinitionIntegrationTests
 
     private static async Task<string[]> GrantScopesAsync(NpgsqlConnection conn, Guid tenantId, string label)
     {
-        await ExecuteAsync(conn, "SELECT set_config('app.current_tenant_id', @tenant, false);", ("tenant", tenantId.ToString()));
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT scopes FROM oauth_grants WHERE tenant_id = @tenant AND label = @label;";
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        cmd.Parameters.AddWithValue("label", label);
-        return (string[])(await cmd.ExecuteScalarAsync())!;
+        await conn.PinTenantAsync(tenantId);
+        return await conn.ScalarAsync<string[]>("SELECT scopes FROM oauth_grants WHERE tenant_id = @tenant AND label = @label;", ("tenant", tenantId), ("label", label));
     }
 
     private static async Task RemoveImportedRolesAsync(NpgsqlConnection conn) =>
-        await ExecuteAsync(conn, "DELETE FROM roles WHERE name = @custom OR lower(name) = @reserved;",
+        await conn.ExecuteAsync("DELETE FROM roles WHERE name = @custom OR lower(name) = @reserved;",
             ("custom", CustomRole), ("reserved", PlatformAdminCredentials.RoleName));
-
-    private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
 
     private static async Task<long> ReservedRoleCountAsync(NpgsqlConnection conn)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM roles WHERE lower(name) = @reserved;";
-        cmd.Parameters.AddWithValue("reserved", PlatformAdminCredentials.RoleName);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE lower(name) = @reserved;", ("reserved", PlatformAdminCredentials.RoleName));
     }
 
     private static async Task<string> SlugAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT slug FROM tenants WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", tenantId);
-        return (string)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        return await conn.ScalarAsync<string>("SELECT slug FROM tenants WHERE id = @id;", ("id", tenantId));
     }
 
     /// <summary>
@@ -216,38 +177,33 @@ public class ImportedRoleDefinitionIntegrationTests
     /// </summary>
     public sealed class NightscoutAuthorizationSource : IAsyncLifetime
     {
-        private WebApplication? _app;
+        private FakeNightscout? _source;
 
         public string Url { get; private set; } = "";
 
         public async Task InitializeAsync()
         {
-            var builder = WebApplication.CreateBuilder();
-            builder.WebHost.UseUrls("http://127.0.0.1:0");
-            builder.Logging.SetMinimumLevel(LogLevel.Warning);
-            _app = builder.Build();
-
-            _app.MapGet("/api/v1/status", () => Results.Json(new { status = "ok", name = "Nightscout", version = "15.0.0" }));
-            _app.MapGet("/api/v2/authorization/roles", () => Results.Json(new object[]
+            _source = await FakeNightscout.StartAsync(new Dictionary<string, Func<HttpContext, Task<string>>>
             {
-                new { name = "readable", permissions = new[] { "*:*:read" } },
-                new { name = CustomRole, permissions = new[] { "api:treatments:*" } },
-                new { name = ReservedSpelling, permissions = new[] { "api:entries:read" } },
-            }));
-            _app.MapGet("/api/v2/authorization/subjects", () => Results.Json(new object[]
-            {
-                new { _id = "5f1a00000000000000000101", name = "Reader", roles = new[] { "readable", CustomRole }, accessToken = "reader-0123456789abcdef" },
-                new { _id = "5f1a00000000000000000102", name = "Operator", roles = new[] { ReservedSpelling }, accessToken = "operator-0123456789abcdef" },
-            }));
-
-            await _app.StartAsync();
-            Url = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
+                ["/api/v2/authorization/roles"] = FakeNightscout.Body(JsonSerializer.Serialize(new object[]
+                {
+                    new { name = "readable", permissions = new[] { "*:*:read" } },
+                    new { name = CustomRole, permissions = new[] { "api:treatments:*" } },
+                    new { name = ReservedSpelling, permissions = new[] { "api:entries:read" } },
+                })),
+                ["/api/v2/authorization/subjects"] = FakeNightscout.Body(JsonSerializer.Serialize(new object[]
+                {
+                    new { _id = "5f1a00000000000000000101", name = "Reader", roles = new[] { "readable", CustomRole }, accessToken = "reader-0123456789abcdef" },
+                    new { _id = "5f1a00000000000000000102", name = "Operator", roles = new[] { ReservedSpelling }, accessToken = "operator-0123456789abcdef" },
+                })),
+            });
+            Url = _source.Url;
         }
 
         public async Task DisposeAsync()
         {
-            if (_app is not null)
-                await _app.DisposeAsync();
+            if (_source is not null)
+                await _source.DisposeAsync();
         }
     }
 }

@@ -16,7 +16,6 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V3;
@@ -54,7 +53,7 @@ public class SettingsBroadcastTests : IDisposable
             StubHub<AlertHub>(),
             StubHub<HomeAssistantHub>(),
             StubHub<OverviewHub>(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             Options.Create(_protocol),
             NullLogger<SignalRBroadcastService>.Instance
         );
@@ -150,7 +149,7 @@ public class SettingsBroadcastTests : IDisposable
     }
 
     private static string SettingsGroup =>
-        TenantAwareHub.FormatTenantGroup(MockTenantAccessor.DefaultTenantId.ToString(), "settings");
+        TenantAwareHub.FormatTenantGroup(SettableTenantAccessor.DefaultTenantId.ToString(), "settings");
 
     /// <summary>
     /// The one event sent, as <see cref="JsonHubProtocol"/> puts it on the wire to the bridge, which

@@ -15,6 +15,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Infrastructure;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Trace;
@@ -283,13 +284,11 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
 
         await _client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path));
 
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!_factory.Spans.Skip(spansBefore).Any(s => s.UrlPath == expectedPath)
-            || !_factory.Logs.Skip(logsBefore).Any(l => l.Message.StartsWith("Request finished")))
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the request's server span and closing request line are captured");
-            await Task.Delay(20);
-        }
+        await Eventually.UntilAsync(
+            "the request's server span and closing request line to be captured",
+            () => _factory.Spans.Skip(spansBefore).Any(s => s.UrlPath == expectedPath)
+                && _factory.Logs.Skip(logsBefore).Any(l => l.Message.StartsWith("Request finished")),
+            step: TimeSpan.FromMilliseconds(20));
 
         return (_factory.Logs.Skip(logsBefore).ToList(), _factory.Spans.Skip(spansBefore).ToList());
     }
@@ -302,6 +301,9 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
     {
         ["api/v4/coach-marks/{key} key"] = "names a coach mark in the UI, not a credential",
         ["api/v4/setup-hub/items/{key} key"] = "names a setup hub item, not a credential",
+        ["api/v4/admin/tenants/{tenantId:guid}/notifications/{key} key"] =
+            "names the sender's notice, which the sender chose, not a credential",
+        ["api/v4/notifications/external/{key} key"] = "names the app's notice, which the app chose, not a credential",
     };
 
     private static bool IsMarked(RouteEndpoint endpoint, string parameterName) =>

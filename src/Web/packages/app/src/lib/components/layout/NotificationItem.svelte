@@ -74,6 +74,22 @@
   const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
   const renamedFrom = $derived(notification.metadata?.["oldName"]?.toString());
   const renamedTo = $derived(notification.metadata?.["newName"]?.toString());
+  const staffWaiting = $derived(notification.type === "team.staff_waiting");
+  const staffJoined = $derived(notification.type === "team.staff_joined");
+  const staffTeam = $derived(notification.metadata?.["team"]?.toString());
+  const staffTeamId = $derived(notification.metadata?.["teamId"]?.toString());
+  const staffCount = $derived(Number(notification.metadata?.["count"]) || 0);
+  // A notice from outside Nocturne: its title and body are the sender's own plain text, shown
+  // as written, under the sender's name.
+  const external = $derived(
+    notification.type === "external.operator" || notification.type === "external.app"
+  );
+  const senderName = $derived(notification.metadata?.["senderName"]?.toString());
+  const linkUrl = $derived.by(() => {
+    const url = notification.metadata?.["linkUrl"]?.toString();
+    return url?.startsWith("https://") ? url : undefined;
+  });
+  const linkLabel = $derived(notification.metadata?.["linkLabel"]?.toString());
 </script>
 
 <div
@@ -95,7 +111,9 @@
   <div class="flex-1 min-w-0">
     <div class="flex items-center justify-between gap-2">
       <span class={cn("text-sm truncate", isRead ? "font-normal" : "font-semibold")}>
-        {#if notification.type === "system.update_available" && releaseVersion}
+        {#if external}
+          {notification.title}
+        {:else if notification.type === "system.update_available" && releaseVersion}
           Nocturne {releaseVersion} is available
         {:else if notification.type === "system.release_installed" && releaseVersion}
           Nocturne is now on version {releaseVersion}
@@ -109,7 +127,20 @@
         {relativeAge(notification.createdAt)}
       </span>
     </div>
-    {#if notification.type === "system.update_available"}
+    {#if external}
+      {#if senderName}
+        <p class="text-xs mt-0.5 opacity-75">
+          {#if notification.type === "external.app"}
+            From {senderName} · connected app
+          {:else}
+            From {senderName}
+          {/if}
+        </p>
+      {/if}
+      {#if notification.subtitle}
+        <p class="text-xs mt-0.5 whitespace-pre-line break-words">{notification.subtitle}</p>
+      {/if}
+    {:else if notification.type === "system.update_available"}
       <p class="text-xs mt-0.5 opacity-75">
         <InstallTiming
           mode={notification.metadata?.["AutoUpdateMode"]?.toString()}
@@ -126,10 +157,33 @@
           platform={notification.type === "system.instance_key_changed_platform"}
         />
       </div>
+    {:else if staffWaiting && staffTeam && staffCount === 1}
+      <p class="text-xs mt-0.5 opacity-75">
+        1 staff member of the team {staffTeam} is waiting for your approval. They cannot see this site's data until an owner approves them.
+      </p>
+    {:else if staffWaiting && staffTeam && staffCount > 1}
+      <p class="text-xs mt-0.5 opacity-75">
+        {staffCount} staff members of the team {staffTeam} are waiting for your approval. They cannot see this site's data until an owner approves them.
+      </p>
+    {:else if staffJoined && staffTeam}
+      <p class="text-xs mt-0.5 opacity-75">
+        The team {staffTeam} has new staff who can now see this site's data.
+      </p>
     {:else if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
         {subtitle}
       </p>
+    {/if}
+    {#if (staffWaiting || staffJoined) && staffTeamId}
+      <Button
+        variant="outline"
+        size="sm"
+        class="mt-2"
+        href={resolve(`settings/members?team=${staffTeamId}`)}
+        onclick={() => onAction?.("open_team")}
+      >
+        Open the team
+      </Button>
     {/if}
     {#if channelNotice && noticeRuleId}
       <Button
@@ -142,7 +196,25 @@
         Edit this alert
       </Button>
     {/if}
-    {#if notification.actions && notification.actions.length > 0}
+    {#if external}
+      <div class="flex items-center gap-2 mt-2 flex-wrap">
+        {#if linkUrl && linkLabel}
+          <Button
+            variant="default"
+            size="sm"
+            href={linkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onclick={() => onAction?.("navigate")}
+          >
+            {linkLabel}
+          </Button>
+        {/if}
+        <Button variant="outline" size="sm" onclick={() => onAction?.("dismiss")}>
+          Dismiss
+        </Button>
+      </div>
+    {:else if notification.actions && notification.actions.length > 0}
       <div class="flex items-center gap-2 mt-2 flex-wrap">
         {#each notification.actions as action (action.actionId)}
           <Button

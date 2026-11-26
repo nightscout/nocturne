@@ -2,13 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Alerts.Native;
 
-/// <summary>The rule configuration the tracker entry points read.</summary>
-public sealed record RustTrackerConfig
-{
-    [JsonPropertyName("hysteresis_minutes")]
-    public int HysteresisMinutes { get; init; }
-}
-
 /// <summary>Request envelope for <c>nocturne_alerts_tracker_process</c>: one evaluation's truth.</summary>
 public sealed record RustTrackerProcessRequest
 {
@@ -19,8 +12,6 @@ public sealed record RustTrackerProcessRequest
     public RustTrackerState? Tracker { get; init; }
 
     public required DateTime Now { get; init; }
-
-    public required RustTrackerConfig Config { get; init; }
 
     [JsonPropertyName("condition_met")]
     public required bool ConditionMet { get; init; }
@@ -55,8 +46,6 @@ public sealed record RustTrackerCloseElapsedHysteresisRequest
     public RustTrackerState? Tracker { get; init; }
 
     public required DateTime Now { get; init; }
-
-    public required RustTrackerConfig Config { get; init; }
 }
 
 /// <summary>Response envelope shared by the three tracker entry points.</summary>

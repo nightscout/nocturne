@@ -52,10 +52,12 @@
     /** A step-up token from an identity-provider sign-in that still needs the authenticator code. */
     pendingStepUpToken?: string;
     /**
-     * Told when the form starts and stops showing first recovery codes. A dialog that holds the
-     * form must not close while they show, since they are shown nowhere else.
+     * Told when a passkey sign-in starts and stops being in flight, and while first recovery codes
+     * show. A dialog that holds the form must not close in between: the request finishes whether
+     * or not the form is still there, and the codes are shown nowhere else. Told false when the
+     * form unmounts.
      */
-    onShowingRecoveryCodes?: (showing: boolean) => void;
+    onBusyChange?: (busy: boolean) => void;
   }
 
   let {
@@ -63,7 +65,7 @@
     onSuccess,
     tenantless = false,
     pendingStepUpToken,
-    onShowingRecoveryCodes,
+    onBusyChange,
   }: Props = $props();
 
   const oidcQuery = getOidcProviders();
@@ -131,10 +133,14 @@
 
   let issuedRecoveryCodes = $state<string[]>([]);
 
+  const busy = $derived(isLoading || mode === "recovery-codes");
+
+  $effect(() => onBusyChange?.(busy));
+  $effect(() => () => onBusyChange?.(false));
+
   async function finishSignIn() {
     if (onSuccess) {
       await invalidateAll();
-      onShowingRecoveryCodes?.(false);
       onSuccess();
     } else {
       await goToReturnUrl(returnUrl, { refreshAll: true });
@@ -161,7 +167,6 @@
     if (outcome.recoveryCodes.length > 0) {
       issuedRecoveryCodes = outcome.recoveryCodes;
       mode = "recovery-codes";
-      onShowingRecoveryCodes?.(true);
       return;
     }
 
@@ -214,21 +219,26 @@
   $effect(() => {
     if (mode !== "username" || tenantless || !passkeysSupported) return;
 
-    let abandoned = false;
-
     void offerPasskeyInAutofill(async () => {
-      const result = await runPasskeyAssertion(
-        discoverableLoginOptions,
-        completePasskeySignIn,
-        true
-      );
-      if (!abandoned) await handleAuthResult(result);
+      let submitted = false;
+      try {
+        await handleAuthResult(
+          await runPasskeyAssertion(
+            discoverableLoginOptions,
+            (assertion) => {
+              submitted = true;
+              isLoading = true;
+              return completePasskeySignIn(assertion);
+            },
+            true
+          )
+        );
+      } finally {
+        if (submitted) isLoading = false;
+      }
     }).catch(() => {});
 
-    return () => {
-      abandoned = true;
-      WebAuthnAbortService.cancelCeremony();
-    };
+    return () => WebAuthnAbortService.cancelCeremony();
   });
 
   function loginWithProvider(providerId: string) {

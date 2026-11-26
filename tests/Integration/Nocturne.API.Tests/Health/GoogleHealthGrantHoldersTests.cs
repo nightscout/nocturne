@@ -1,4 +1,3 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -33,6 +32,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -160,9 +160,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     /// <summary>A tenant's session store over its own secrets, recording what it revokes at Google.</summary>
     private GoogleHealthSessionStore Sessions(Guid tenant, PostgresGoogleHealthGrantHolders holders)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(value => value.IsResolved).Returns(true);
-        accessor.SetupGet(value => value.TenantId).Returns(tenant);
+        var accessor = SettableTenantAccessor.Resolved(tenant);
         var platform = new Mock<IGoogleHealthPlatformSettings>();
         platform.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleHealthPlatformOptions
         {
@@ -174,9 +172,9 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         disposables.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(http, new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
+            accessor, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
-        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform.Object,
+        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor, platform.Object,
             NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System);
     }
 
@@ -231,16 +229,16 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
     {
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
+        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
-            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
         services.AddSingleton(AccountLinkRoutes.Off);
         return services;
     }
 
     private NocturneDbContext SuperuserContext() => new(new DbContextOptionsBuilder<NocturneDbContext>()
-        .UseNpgsql(fixture.Database.SuperuserConnectionString).Options);
+        .UseNpgsql(fixture.SuperuserConnectionString).Options);
 
     private sealed class RevokeRecorder(List<string> revoked) : HttpMessageHandler
     {

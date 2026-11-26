@@ -1,13 +1,12 @@
 using Nocturne.API.Services.Health.GoogleHealth;
 using Nocturne.Core.Models.Health;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
 public class GoogleHealthCoordinatorTests
 {
-    private static readonly TimeSpan Prompt = TimeSpan.FromSeconds(5);
-
     [Fact]
     public async Task Operation_lock_makes_waiters_wait_and_zero_timeout_callers_refuse()
     {
@@ -17,15 +16,19 @@ public class GoogleHealthCoordinatorTests
         Assert.NotNull(held);
 
         var waiter = coordinator.AcquireAsync(tenant, default);
-        await Task.Delay(100);
         Assert.False(waiter.IsCompleted);
         Assert.Null(await coordinator.AcquireAsync(tenant, default, TimeSpan.Zero));
         Assert.False(await coordinator.QueueAsync(tenant, 1, default));
-        using (var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(100)))
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.AcquireAsync(tenant, cancelled.Token));
+        using (var cancelled = new CancellationTokenSource())
+        {
+            var cancelling = coordinator.AcquireAsync(tenant, cancelled.Token);
+            Assert.False(cancelling.IsCompleted);
+            await cancelled.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelling);
+        }
 
         await held!.DisposeAsync();
-        await using var next = await waiter.WaitAsync(Prompt);
+        await using var next = await waiter.WaitAsync(Eventually.DefaultPatience);
         Assert.NotNull(next);
     }
 
@@ -73,7 +76,7 @@ public class GoogleHealthCoordinatorTests
 
         var request = await coordinator.RequestDisconnectAsync(tenant, subject, default);
         await Task.Delay(Timeout.Infinite, running.Token)
-            .ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(Prompt);
+            .ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(Eventually.DefaultPatience);
         Assert.Equal(request, await coordinator.RequestDisconnectAsync(tenant, Guid.NewGuid(), default));
         Assert.Equal(subject, (await coordinator.DisconnectRequestAsync(tenant, default))!.SubjectId);
         await using (var late = await coordinator.WatchReadsAsync(tenant, default))
@@ -95,10 +98,9 @@ public class GoogleHealthCoordinatorTests
         var coordinator = InMemoryGoogleHealthCoordinator.Create();
         var queued = Guid.NewGuid();
         var disconnecting = Guid.NewGuid();
-        using var timeout = new CancellationTokenSource(Prompt);
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         await using var requests = coordinator.ReadRequestsAsync(timeout.Token).GetAsyncEnumerator();
         var next = requests.MoveNextAsync().AsTask();
-        await Task.Delay(50);
         Assert.False(next.IsCompleted);
 
         Assert.True(await coordinator.QueueAsync(queued, 1, default));

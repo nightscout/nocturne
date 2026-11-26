@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -29,12 +30,12 @@ public class PatientRecordControllerTests
     private readonly Mock<IDeviceReattributionService> _reattribution;
     private readonly Mock<ISensorSessionInferenceRunner> _sessionInference = new();
     private readonly Mock<ISensorSessionInferenceService> _inference = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<ITenantCache> _tenantCache = new();
     private readonly Mock<IDeviceTrackerProvisioner> _trackerProvisioner = new();
     private readonly PatientRecordController _controller;
 
     private static readonly TenantContext Tenant = new(Guid.NewGuid(), "sleepy", "Sleepy", true, IsDemo: false);
+    private readonly SettableTenantAccessor _tenantAccessor = new(Tenant);
 
     public PatientRecordControllerTests()
     {
@@ -54,7 +55,7 @@ public class PatientRecordControllerTests
             _reattribution.Object,
             _sessionInference.Object,
             _trackerProvisioner.Object,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             _tenantCache.Object,
             TempBasalTestDeps.NoReresolution(),
             NullLogger<PatientRecordController>.Instance)
@@ -62,7 +63,6 @@ public class PatientRecordControllerTests
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
 
-        _tenantAccessor.Setup(t => t.Context).Returns(Tenant);
         _sessionInference
             .Setup(r => r.RunAsync(
                 It.IsAny<TenantContext>(), It.IsAny<Func<ISensorSessionInferenceService, CancellationToken, Task>>(),

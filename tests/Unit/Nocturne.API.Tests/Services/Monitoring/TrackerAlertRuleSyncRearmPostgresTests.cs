@@ -30,20 +30,7 @@ namespace Nocturne.API.Tests.Services.Monitoring;
 public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPostgresTests.Database database)
     : IClassFixture<TrackerAlertRuleSyncRearmPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("tracker_rule_rearm");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("tracker_rule_rearm");
 
     /// <summary>Fails every statement writing <see cref="Table"/> once armed.</summary>
     private sealed class Failure : DbCommandInterceptor
@@ -82,11 +69,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
         Failure Failure);
 
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor(), failure)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly, interceptors: [failure]);
 
     /// <summary>A definition with one 24h threshold, synced to its managed rule, which holds re-arm.</summary>
     private async Task<Setup> CreateAsync()
@@ -95,14 +78,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'tracker-rearm-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"tracker-rearm-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"tracker-rearm-{tenant:N}", "tracker-rearm-test");
         }
 
         var failure = new Failure();

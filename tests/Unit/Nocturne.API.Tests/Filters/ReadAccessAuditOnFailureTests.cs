@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Filters;
 
@@ -52,8 +53,7 @@ public class ReadAccessAuditOnFailureTests
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
         var entry = await WaitForEntryAsync(ThrowingEndpoint);
-        entry.Should().NotBeNull("a failed PHI read still has to leave an audit trail");
-        entry!.StatusCode.Should().Be(500);
+        entry.StatusCode.Should().Be(500);
     }
 
     [Fact]
@@ -64,31 +64,24 @@ public class ReadAccessAuditOnFailureTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         var entry = await WaitForEntryAsync(NotFoundEndpoint);
-        entry.Should().NotBeNull();
-        entry!.StatusCode.Should().Be(404);
+        entry.StatusCode.Should().Be(404);
     }
 
     /// <summary>
     /// The audit write is fire-and-forget, so it can land after the response.
     /// </summary>
-    private async Task<ReadAccessLogEntity?> WaitForEntryAsync(string endpoint)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (DateTime.UtcNow < deadline)
-        {
-            await using var db = await _contextFactory.CreateDbContextAsync();
-            db.TenantId = TestDatabaseSeeder.TenantId;
-            var entry = await db
-                .ReadAccessLog.AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Endpoint == endpoint);
-            if (entry is not null)
-                return entry;
-
-            await Task.Delay(50);
-        }
-
-        return null;
-    }
+    private Task<ReadAccessLogEntity> WaitForEntryAsync(string endpoint) =>
+        Eventually.ValueAsync(
+            $"the audit row a failed PHI read must leave for {endpoint}",
+            async () =>
+            {
+                await using var db = await _contextFactory.CreateDbContextAsync();
+                db.TenantId = TestDatabaseSeeder.TenantId;
+                return await db
+                    .ReadAccessLog.AsNoTracking()
+                    .FirstOrDefaultAsync(e => e.Endpoint == endpoint);
+            },
+            step: TimeSpan.FromMilliseconds(50));
 
     /// <summary>
     /// Makes the collection read throw, so one route on the controller fails while the sibling

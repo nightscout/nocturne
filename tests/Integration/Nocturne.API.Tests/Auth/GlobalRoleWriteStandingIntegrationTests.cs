@@ -8,6 +8,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -73,7 +74,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
     public async Task A_caller_without_standing_over_the_instance_is_refused_a_global_role_write_as_a_member_without_full_access_is(
         Refused caller, Write write)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantA = await AuthTestHelpers.GetTenantIdAsync(conn);
         var slugA = await SlugAsync(conn, tenantA);
         var slugB = $"roles-b-{Guid.NewGuid():N}"[..20];
@@ -85,7 +86,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
         try
         {
             if (caller == Refused.OwnerBesideADeactivatedTenant)
-                await ExecuteAsync(conn, "UPDATE tenants SET is_active = false WHERE id = @id;", ("id", tenantB));
+                await conn.ExecuteAsync("UPDATE tenants SET is_active = false WHERE id = @id;", ("id", tenantB));
 
             var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
                 conn, tenantA, "Roles A Reader", [Scope.GlucoseRead]);
@@ -93,7 +94,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
 
             target = await SeedTargetAsync(conn, write);
             if (write != Write.Create)
-                await ExecuteAsync(conn, "INSERT INTO subject_roles (subject_id, role_id, assigned_at) VALUES (@s, @r, now());",
+                await conn.ExecuteAsync("INSERT INTO subject_roles (subject_id, role_id, assigned_at) VALUES (@s, @r, now());",
                     ("s", holderId.Value), ("r", target.Id));
 
             using var refusedCaller = caller == Refused.PlatformAdminDirectGrant
@@ -147,7 +148,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
     [InlineData(Standing.SoleTenantOwnerBesideADemoTenant, Write.Delete)]
     public async Task A_caller_with_standing_over_the_instance_writes_a_global_role(Standing standing, Write write)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantA = await AuthTestHelpers.GetTenantIdAsync(conn);
         var slugA = await SlugAsync(conn, tenantA);
         var baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
@@ -159,7 +160,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
             if (standing is not (Standing.SoleTenantOwnerSession or Standing.SoleTenantApiSecret))
                 tenantB = await AuthTestHelpers.SeedTenantAsync(Fixture, $"roles-b-{Guid.NewGuid():N}"[..20], "Roles B");
             if (standing == Standing.SoleTenantOwnerBesideADemoTenant)
-                await ExecuteAsync(conn, "UPDATE tenants SET is_demo = true WHERE id = @id;", ("id", tenantB!.Value));
+                await conn.ExecuteAsync("UPDATE tenants SET is_demo = true WHERE id = @id;", ("id", tenantB!.Value));
 
             target = await SeedTargetAsync(conn, write);
             using var caller = standing switch
@@ -183,16 +184,16 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
             switch (write)
             {
                 case Write.Create:
-                    (await RoleCountAsync(conn, target.Name)).Should().Be(1);
+                    (await AuthTestHelpers.RoleCountAsync(conn, target.Name)).Should().Be(1);
                     break;
                 case Write.Rename:
-                    (await RoleCountAsync(conn, target.Renamed)).Should().Be(1);
+                    (await AuthTestHelpers.RoleCountAsync(conn, target.Renamed)).Should().Be(1);
                     break;
                 case Write.Repermission:
                     (await PermissionsOfAsync(conn, Readable)).Should().Be("[\"*\"]");
                     break;
                 default:
-                    (await RoleCountAsync(conn, target.Name)).Should().Be(0);
+                    (await AuthTestHelpers.RoleCountAsync(conn, target.Name)).Should().Be(0);
                     break;
             }
         }
@@ -217,12 +218,12 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
         switch (write)
         {
             case Write.Repermission:
-                return new Target(await RoleIdAsync(conn, Readable), Readable, Readable, Seeded: false);
+                return new Target(await AuthTestHelpers.RoleIdAsync(conn, Readable), Readable, Readable, Seeded: false);
             case Write.Create:
                 return new Target(Guid.Empty, name, renamed, Seeded: false);
             default:
                 var id = Guid.CreateVersion7();
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO roles (id, name, description, permissions, is_system_role, created_at, updated_at)
                     VALUES (@id, @name, 'Instance-wide', '["api:entries:read"]'::jsonb, false, now(), now());
                     """,
@@ -243,7 +244,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
 
     private static async Task RestoreAsync(NpgsqlConnection conn, Target target, string readable)
     {
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             DELETE FROM subject_roles WHERE role_id IN (SELECT id FROM roles WHERE name IN (@name, @renamed) AND name <> @readable);
             DELETE FROM roles WHERE name IN (@name, @renamed) AND name <> @readable;
             UPDATE roles SET permissions = @permissions::jsonb WHERE name = @readable;
@@ -255,8 +256,8 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
     private static async Task RemoveTenantAsync(NpgsqlConnection conn, Guid tenantId, Guid? holderId)
     {
         if (holderId is { } holder)
-            await ExecuteAsync(conn, "DELETE FROM subject_roles WHERE subject_id = @id;", ("id", holder));
-        await ExecuteAsync(conn, "DELETE FROM tenants WHERE id = @id;", ("id", tenantId));
+            await conn.ExecuteAsync("DELETE FROM subject_roles WHERE subject_id = @id;", ("id", holder));
+        await conn.ExecuteAsync("DELETE FROM tenants WHERE id = @id;", ("id", tenantId));
     }
 
     /// <summary>
@@ -277,7 +278,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
     private async Task<HttpClient> PlatformAdminAsync(NpgsqlConnection conn, Guid tenantId, string slug, string baseDomain)
     {
         var (adminId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Roles Platform Admin");
-        await ExecuteAsync(conn, "UPDATE subjects SET is_platform_admin = true WHERE id = @id;", ("id", adminId));
+        await conn.ExecuteAsync("UPDATE subjects SET is_platform_admin = true WHERE id = @id;", ("id", adminId));
         return AuthTestHelpers.CreateTenantBearerClient(
             Fixture, slug, baseDomain, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, adminId));
     }
@@ -286,7 +287,7 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
     private static async Task<Guid> OwnerAsync(NpgsqlConnection conn, Guid tenantId, string name)
     {
         var (ownerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name);
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
             SELECT gen_random_uuid(), id, @roleId FROM tenant_members WHERE tenant_id = @tenantId AND subject_id = @subjectId;
             """,
@@ -323,61 +324,20 @@ public partial class GlobalRoleWriteStandingIntegrationTests : ApiIntegrationTes
 
     private static async Task<string> RolesSnapshotAsync(NpgsqlConnection conn)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name, permissions::text, is_system_role FROM roles ORDER BY id;";
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var rows = new List<string>();
-        while (await reader.ReadAsync())
-            rows.Add($"{reader.GetGuid(0)} {reader.GetString(1)} {reader.GetString(2)} {reader.GetBoolean(3)}");
+        var rows = await conn.QueryAsync(
+            "SELECT id, name, permissions::text, is_system_role FROM roles ORDER BY id;",
+            reader => $"{reader.GetGuid(0)} {reader.GetString(1)} {reader.GetString(2)} {reader.GetBoolean(3)}");
         return string.Join("\n", rows);
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
     }
 
     private static async Task<string> SlugAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT slug FROM tenants WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", tenantId);
-        return (string)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<string>("SELECT slug FROM tenants WHERE id = @id;", ("id", tenantId));
     }
 
     private static async Task<string> PermissionsOfAsync(NpgsqlConnection conn, string name)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT permissions::text FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (string)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task<Guid> RoleIdAsync(NpgsqlConnection conn, string name)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        return await conn.ScalarAsync<string>("SELECT permissions::text FROM roles WHERE name = @name;", ("name", name));
     }
 
     private static async Task<string> ShapeOfAsync(HttpResponseMessage response)

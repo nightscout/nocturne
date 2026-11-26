@@ -1,3 +1,5 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -11,7 +13,7 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// pinned to one tenant, on a real PostgreSQL. A first run is cancelled after its first page, then
 /// resumed, then run again.
 /// </summary>
-public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
+public class TempBasalOriginCorroboratorFixture() : MigratedDatabase("temp_basal_origin")
 {
     internal static readonly Guid TenantA = Guid.Parse("a1111111-1111-7111-8111-111111111111");
     internal static readonly Guid TenantB = Guid.Parse("b2222222-2222-7222-8222-222222222222");
@@ -78,8 +80,6 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     internal static readonly Guid SnapshotA = Guid.Parse("50000000-0000-7000-8000-000000000001");
     internal static readonly Guid SnapshotB = Guid.Parse("50000000-0000-7000-8000-000000000002");
 
-    private TestDatabase _database = null!;
-
     internal int CrossTenantWritten { get; private set; }
     internal int JudgedBeforeCancel { get; private set; }
     internal int FirstWritten { get; private set; }
@@ -92,17 +92,18 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
 
     internal sealed record Row(string Origin, string? Evidence, Guid? SnapshotId, DateTime UpdatedAt);
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        _database = await SharedPostgres.CreateMigratedDatabaseAsync("temp_basal_origin");
+        await base.InitializeAsync();
         await SeedAsync();
 
         CrossTenantWritten = await CorroborateAsync(pinnedTo: TenantA, tenant: TenantB);
 
-        using (var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+        using (var cancel = new CancellationTokenSource(Eventually.DefaultPatience))
         {
             var interrupted = async () => await CorroborateAsync(
-                TenantA, TenantA, pageSize: 1, pauseAfterWrite: TimeSpan.FromMinutes(1), ct: cancel.Token);
+                TenantA, TenantA, pageSize: 1, pauseAfterWrite: TimeSpan.FromMinutes(1), ct: cancel.Token,
+                interceptors: new CancelAfterFirstCommit(cancel));
             await interrupted.Should().ThrowAsync<OperationCanceledException>();
         }
 
@@ -113,7 +114,7 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
         AfterRerun = await ReadAsync();
 
         LateBeforeSnapshot = AfterRerun[Late];
-        var beforeSnapshot = DateTime.UtcNow.AddSeconds(-1);
+        var beforeSnapshot = await LatestSnapshotWriteAsync();
         await SeedLateSnapshotAsync();
         LateReopened = await ReopenAsync(TenantA, beforeSnapshot);
         await CorroborateAsync(TenantA, TenantA);
@@ -126,31 +127,46 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
         return (await TempBasalOriginCorroborator.ReopenNearNewSnapshotsAsync(db, tenant, since, 500, CancellationToken.None)).Reopened;
     }
 
-    private NocturneDbContext Context(Guid pinnedTo) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = pinnedTo };
+    private NocturneDbContext Context(Guid pinnedTo, params IInterceptor[] interceptors) =>
+        TestContexts.Context(AppConnectionString, pinnedTo, interceptors);
+
+    /// <summary>Cancels the run once its first page has committed, so the run stops on that event and not on a clock.</summary>
+    private sealed class CancelAfterFirstCommit(CancellationTokenSource run) : DbTransactionInterceptor
+    {
+        public override async Task TransactionCommittedAsync(
+            DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            await run.CancelAsync();
+        }
+    }
+
+    /// <summary>The newest snapshot write so far, read on the database's clock, which the late snapshot is stamped on.</summary>
+    private async Task<DateTime> LatestSnapshotWriteAsync()
+    {
+        await using var conn = new NpgsqlConnection(SuperuserConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand("SELECT max(sys_updated_at) FROM aps_snapshots", conn);
+        return (DateTime)(await cmd.ExecuteScalarAsync())!;
+    }
 
     private async Task SeedLateSnapshotAsync()
     {
-        await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(TenantA);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $$"""
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate)
             VALUES ('{{LateSnapshot}}', '{{TenantA}}', '2026-08-01T20:01:00Z', 'Trio', 'Trio', true, 1.4);
             """;
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
-
     private async Task<int> CorroborateAsync(
-        Guid pinnedTo, Guid tenant, int pageSize = 500, TimeSpan pauseAfterWrite = default, CancellationToken ct = default)
+        Guid pinnedTo, Guid tenant, int pageSize = 500, TimeSpan pauseAfterWrite = default, CancellationToken ct = default,
+        params IInterceptor[] interceptors)
     {
-        await using var db = Context(pinnedTo);
+        await using var db = Context(pinnedTo, interceptors);
         return await TempBasalOriginCorroborator.CorroborateTenantAsync(
             db, tenant, DateTime.UtcNow.AddMinutes(-30), pageSize, pauseAfterWrite, TimeSpan.Zero, ct);
     }
@@ -158,16 +174,11 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     private async Task<Dictionary<Guid, Row>> ReadAsync()
     {
         var rows = new Dictionary<Guid, Row>();
-        await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT id, origin, origin_evidence, aps_snapshot_id, sys_updated_at FROM temp_basals;";
@@ -187,15 +198,12 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
 
     private async Task SeedAsync()
     {
-        await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+        await using var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'Tenant B', true, now(), now());
-
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate, suggested_json, enacted_json)
             VALUES
               ('{{SnapshotA}}', '{{TenantA}}', '2026-08-01T12:01:00Z', 'Trio', 'Trio', true, 1.2,
@@ -247,16 +255,15 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
               ('{{GlookoManual}}', '{{TenantA}}', '2026-08-02T04:00:00Z', 0.9, NULL, NULL, 'glooko-connector', 'Manual', '2026-08-02T00:00:00Z');
             INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, data_source, origin, legacy_id, sys_updated_at)
             VALUES ('{{Tidepool}}', '{{TenantA}}', '2026-08-01T23:00:00Z', 0.85, 'tidepool', 'tidepool', 'nightscout-connector', 'Manual', 'ns-Tidepool', '2026-08-02T00:00:00Z');
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate)
             VALUES ('{{SnapshotB}}', '{{TenantB}}', '2026-08-01T12:00:00Z', 'Trio', 'Trio', true, 1.2);
             INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, legacy_id, sys_updated_at)
             VALUES ('{{OtherTenant}}', '{{TenantB}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', 'ns-OtherTenant', '2026-08-02T00:00:00Z');
-
-            SELECT set_config('app.current_tenant_id', '', false);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 
@@ -434,15 +441,12 @@ public class TempBasalOriginCorroboratorConcurrencyTests(TempBasalOriginCorrobor
 
         var corroborate = Task.Run(async () =>
         {
-            await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(fixture.Database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options) { TenantId = Tenant };
+            await using var db = TestContexts.Context(fixture.AppConnectionString, Tenant);
             return await TempBasalOriginCorroborator.CorroborateTenantAsync(
                 db, Tenant, DateTime.UtcNow.AddMinutes(-30), 500, TimeSpan.Zero, TimeSpan.Zero, CancellationToken.None);
         });
 
-        await PostgresLockWaits.UntilBlockedAsync(fixture.Database.SuperuserConnectionString, corroborate);
+        await PostgresLockWaits.UntilBlockedAsync(fixture.SuperuserConnectionString, corroborate);
         await transaction.CommitAsync();
 
         (await corroborate).Should().Be(0);
@@ -456,21 +460,18 @@ public class TempBasalOriginCorroboratorConcurrencyTests(TempBasalOriginCorrobor
 }
 
 /// <summary>A migrated database holding one Trio temp basal and the snapshot that enacted it.</summary>
-public class TempBasalOriginCorroboratorConcurrencyFixture : IAsyncLifetime
+public class TempBasalOriginCorroboratorConcurrencyFixture() : MigratedDatabase("temp_basal_origin_race")
 {
     internal static readonly Guid Tenant = Guid.Parse("a1111111-1111-7111-8111-111111111111");
     internal static readonly Guid TempBasal = Guid.Parse("70000000-0000-7000-8000-000000000001");
 
-    internal TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("temp_basal_origin_race");
+        await base.InitializeAsync();
         await using var conn = await OpenPinnedAsync();
+        await conn.SeedTenantAsync(Tenant, "tenant-a", "Tenant A");
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{{Tenant}}', 'tenant-a', 'Tenant A', true, now(), now());
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate)
             VALUES ('50000000-0000-7000-8000-000000000001', '{{Tenant}}', '2026-08-01T12:01:00Z', 'Trio', 'Trio', true, 1.2);
             INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, legacy_id, sys_updated_at)
@@ -479,15 +480,11 @@ public class TempBasalOriginCorroboratorConcurrencyFixture : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
-
     internal async Task<NpgsqlConnection> OpenPinnedAsync()
     {
-        var conn = new NpgsqlConnection(Database.MigratorConnectionString);
+        var conn = new NpgsqlConnection(MigratorConnectionString);
         await conn.OpenAsync();
-        await using var pin = conn.CreateCommand();
-        pin.CommandText = $"SELECT set_config('app.current_tenant_id', '{Tenant}', false);";
-        await pin.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(Tenant);
         return conn;
     }
 }

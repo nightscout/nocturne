@@ -19,27 +19,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTests.Database database)
     : IClassFixture<SystemEventRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("system_event_repo");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("system_event_repo");
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .AddInterceptors(interceptors)
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>Runs <paramref name="competitor"/> once, just before the first save it sees.</summary>
     private sealed class CommitBeforeFirstSave(Func<Task> competitor) : SaveChangesInterceptor
@@ -63,11 +46,7 @@ public class SystemEventRepositoryPostgresTests(SystemEventRepositoryPostgresTes
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'system-events-{tenant:N}', 'system-events', true, now(), now());
-            """, conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"system-events-{tenant:N}", "system-events");
         return tenant;
     }
 

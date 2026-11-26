@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -224,14 +225,7 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
     private async Task<long> OwnerCountAsync(string table, Guid id)
     {
         await using var conn = await fx.OpenAppConnectionAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            $"SELECT set_config('app.current_tenant_id', @tid, false); SELECT count(*) FROM {table} WHERE id = @id";
-        cmd.Parameters.AddWithValue("tid", _tenant.ToString());
-        cmd.Parameters.AddWithValue("id", id);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        await reader.ReadAsync();
-        return reader.GetInt64(0);
+        await conn.PinTenantAsync(_tenant);
+        return await conn.ScalarAsync<long>($"SELECT count(*) FROM {table} WHERE id = @id", ("id", id));
     }
 }

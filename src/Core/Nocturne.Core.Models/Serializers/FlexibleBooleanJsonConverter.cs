@@ -45,16 +45,18 @@ public class FlexibleBooleanJsonConverter : JsonConverter<bool?>
                     _ => null,
                 };
             case JsonTokenType.Number:
-                var numberValue = reader.GetInt32();
-                return numberValue switch
-                {
-                    1 => true,
-                    0 => false,
-                    _ => null,
-                };
+                return reader.TryGetInt32(out var numberValue)
+                    ? numberValue switch
+                    {
+                        1 => true,
+                        0 => false,
+                        _ => null,
+                    }
+                    : null;
             case JsonTokenType.Null:
                 return null;
             default:
+                reader.TrySkip();
                 return null;
         }
     }
@@ -110,16 +112,11 @@ public class FlexibleNonNullableBooleanJsonConverter : JsonConverter<bool>
                     _ => false,
                 };
             case JsonTokenType.Number:
-                var numberValue = reader.GetInt32();
-                return numberValue switch
-                {
-                    1 => true,
-                    0 => false,
-                    _ => false,
-                };
+                return reader.TryGetInt32(out var numberValue) && numberValue == 1;
             case JsonTokenType.Null:
                 return false;
             default:
+                reader.TrySkip();
                 return false;
         }
     }

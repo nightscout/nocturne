@@ -15,7 +15,7 @@ const LABEL_MAP: Record<string, string> = {
   open_connectors: "Open connectors",
   open_alerts: "Open alerts",
   alert_unevaluable_subtitle:
-    "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+    "This rule cannot run as set, so it sends no alerts. Open the rule, check its settings, and save it.",
   alert_held_subtitle:
     "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back. Open the rule to see the cause.",
   alert_held_closed_subtitle:
@@ -27,6 +27,8 @@ const LABEL_MAP: Record<string, string> = {
   open_platform_settings: "Open platform settings",
   release_installed: "Nocturne is updated",
   team_renamed: "A team has a new name",
+  team_staff_joined: "A team has new staff",
+  team_staff_waiting: "Team staff are waiting for your approval",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
@@ -46,6 +48,9 @@ const LABEL_MAP: Record<string, string> = {
   rejected_uploads: "Some uploads could not be stored",
   rejected_uploads_subtitle:
     "An uploader sent a record Nocturne could not store. Most uploaders treat it as saved, so it is kept under Data Quality for you to review or export.",
+  raw_mmol_profile_values: "Some profile values look like mmol/L",
+  raw_mmol_profile_values_subtitle:
+    "Some target or ISF values look like mmol/L values stored as mg/dL. These values change insulin and alert calculations. Go to your profile settings to check and correct them.",
   declared_zone_changed_subtitle:
     "Your connected account now reports a different timezone, so a matching entry was added to your timezone timeline. You can review or edit it in settings.",
 };

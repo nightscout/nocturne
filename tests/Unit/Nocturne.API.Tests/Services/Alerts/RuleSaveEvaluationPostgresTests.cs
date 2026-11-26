@@ -34,7 +34,6 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -56,20 +55,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     private const string Below50 = """{"direction":"below","value":50}""";
     private const string TelegramUserId = "864203571";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("rule_save_evaluation");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("rule_save_evaluation");
 
     /// <summary>Records the rules each pass evaluated, then decides them.</summary>
     private sealed class RecordingOrchestrator(AlertOrchestrator inner, List<IReadOnlyList<Guid>> passes) : IAlertOrchestrator
@@ -87,10 +73,11 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     /// <summary>Counts the evaluations the scheduler starts, whatever they go on to select.</summary>
     private sealed class CountingEvaluator(CanonicalAlertEvaluator inner, Tenant tenant) : ICanonicalAlertEvaluator
     {
-        public Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+        public Task<bool> EvaluateAsync(
+            MovedFacts moved, ReadingReport report = ReadingReport.Here, CancellationToken ct = default)
         {
             Interlocked.Increment(ref tenant.Evaluations);
-            return inner.EvaluateAsync(moved, ct);
+            return inner.EvaluateAsync(moved, report, ct);
         }
     }
 
@@ -190,7 +177,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         public async Task SettledAsync()
         {
             Time.Advance(AlertFactEvaluationScheduler.Debounce);
-            await Scheduler.StoppedAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+            await Scheduler.StoppedAsync(CancellationToken.None).WaitAsync(Eventually.DefaultPatience);
         }
 
         public async Task<int> ExcursionsAsync(Guid rule)
@@ -211,8 +198,8 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
                 new TenantMembershipRepository(Contexts, AccountLinkRoutes.Off),
                 new SubjectRepository(Contexts, AccountLinkRoutes.Off),
                 new AlertRepository(Contexts),
-                new AlertRuleRepository(Contexts),
-                MockTenantAccessor.Create(Id).Object,
+                new AlertRuleRepository(Contexts, TimeProvider.System),
+                SettableTenantAccessor.Resolved(Id),
                 Mock.Of<IAlertReferenceService>(),
                 Mock.Of<IAlertDeliveryService>(),
                 Classifier(),
@@ -240,7 +227,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
             Mock.Of<ITenantGlucoseUnits>(u => u.ResolveAsync(It.IsAny<CancellationToken>()) == Task.FromResult("mg/dl")),
             new TenantMembershipRepository(Contexts, AccountLinkRoutes.Off),
             new SubjectRepository(Contexts, AccountLinkRoutes.Off),
-            new AlertRuleRepository(Contexts),
+            new AlertRuleRepository(Contexts, TimeProvider.System),
             Classifier(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<IAlertDeliveryService>(),
@@ -252,10 +239,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Tenant> SeedAsync()
     {
@@ -263,14 +247,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'rule-save', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"save-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"save-{tenant:N}", "rule-save");
         }
 
         return new Tenant(tenant, () => Context(tenant));
@@ -487,7 +464,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         await tenant.Setup().SaveAsync(Guid.NewGuid(), null, request, CancellationToken.None);
         await tenant.SettledAsync();
 
-        var starters = await new AlertRuleRepository(tenant.Contexts).GetStarterRulesAsync(CancellationToken.None);
+        var starters = await new AlertRuleRepository(tenant.Contexts, TimeProvider.System).GetStarterRulesAsync(CancellationToken.None);
         tenant.Passes.Should().ContainSingle().Which.Should().BeEquivalentTo(
             [starters[StarterAlertKind.UrgentLow].Rule.Id, starters[StarterAlertKind.Low].Rule.Id, starters[StarterAlertKind.NoReadings].Rule.Id],
             "the disabled high is not evaluated");

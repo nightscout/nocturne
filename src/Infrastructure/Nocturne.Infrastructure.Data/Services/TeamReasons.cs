@@ -1,13 +1,15 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Services;
 
 /// <summary>
 /// The team reasons a subject's membership of a site holds when it agrees with the team's rows: one for
-/// each access to the site whose team has the subject as staff, approved there by its
-/// <c>team_site_staff</c> row, and whose staff member's ceiling is a seed role this release knows. Each
+/// each access to the site whose team has the subject as staff, whose <c>team_site_staff</c> row gives a
+/// reason (<see cref="GivesReason"/>), and whose staff member's ceiling is a seed role this release knows. Each
 /// gives the access's roles capped at that ceiling (<see cref="GrantOf"/>), the 24-hour limit when the
 /// access or the staff member has it, and the earlier of their two ends.
 /// </summary>
@@ -16,6 +18,12 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// nothing rather than everything the access holds. A ceiling that shares nothing with the access's roles
 /// gives no reason either: a membership that reaches nothing would still list the staff member as having
 /// access. A team reason never gives the owner role: an access holds data roles only.
+/// <para>
+/// An owner of the site is never staff there, so a subject whose direct reason holds the owner role and is
+/// in force holds no team reason at the site. Their access stands on the direct reason alone, and stepping
+/// down or losing the owner role leaves them what the team's rows give. A direct reason that has lapsed is
+/// no owner.
+/// </para>
 /// </remarks>
 internal static class TeamReasons
 {
@@ -23,16 +31,72 @@ internal static class TeamReasons
     internal sealed record AccessRole(Guid Id, IReadOnlyList<string> Permissions);
 
     /// <summary>
+    /// Whether a staff member's row at a site gives them the team's reason there: when an owner approved
+    /// them, or whatever their row says when the site trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>),
+    /// and never while the site has stopped them (<see cref="Blocked"/>), whatever the rule. While the team
+    /// narrows to groups (<see cref="TeamStaffReach.TheirGroups"/>), only when they also share one of its
+    /// groups with the site (<see cref="SharesGroup"/>): a group narrows which of the staff the site's own
+    /// decisions let through, and lifts none of them.
+    /// </summary>
+    /// <remarks>
+    /// This is the one test of it: the sync, the startup check and the counts every page reads all go by it.
+    /// The stop and the group are written out again in <see cref="Waits"/>, <see cref="Blocked"/> and
+    /// <see cref="SharesGroup"/>, since a query cannot call one expression from another.
+    /// </remarks>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> GivesReason = s =>
+        (s.Status == TeamSiteStaffStatus.Approved || s.TeamTenantAccess!.StaffRule == TeamStaffRule.TeamTrusted)
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId)
+        && (s.TeamTenantAccess!.Team!.StaffReach == TeamStaffReach.EveryPerson
+            || s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
+                && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
+
+    /// <summary>
+    /// Whether a staff member's row at a site waits for an owner's approval: pending, at a site that does not
+    /// trust the whole team and has not stopped them, and while the team narrows to groups, in a group with
+    /// them. So no owner is told that a person waits who would reach nothing once approved.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Waits = s =>
+        s.Status == TeamSiteStaffStatus.Pending
+        && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId)
+        && (s.TeamTenantAccess!.Team!.StaffReach == TeamStaffReach.EveryPerson
+            || s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
+                && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
+
+    /// <summary>
+    /// Whether the staff member of a row and its site are in one group of the team, which is what
+    /// <see cref="GivesReason"/> asks of them while the team narrows to groups.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> SharesGroup = s =>
+        s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
+            && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId));
+
+    /// <summary>
+    /// Whether the site of a staff member's row has stopped them reaching it through any team
+    /// (<see cref="TeamSiteBlockEntity"/>): whatever the row and the rule say, it gives no reason.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Blocked = s =>
+        s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+
+    /// <summary>Whether a staff member's row at a site keeps them out by an owner's decline: declined, at a site that does not trust the whole team.</summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> DeclineApplies = s =>
+        s.Status == TeamSiteStaffStatus.Declined && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted;
+
+    /// <summary>
     /// What the team reasons of <paramref name="subjectId"/> on <paramref name="tenantId"/> give when they
-    /// agree with the team's rows, keyed by access id, ends that have passed included. Reads the rows of
-    /// that site only, on a context pinned to it or to none.
+    /// agree with the team's rows, keyed by access id, ends that have passed included; none for an owner of
+    /// the site at <paramref name="now"/>. Reads the rows of that site only, on a context pinned to it or to
+    /// none.
     /// </summary>
     public static async Task<IReadOnlyDictionary<Guid, MembershipGrant>> DesiredAsync(
-        NocturneDbContext db, Guid tenantId, Guid subjectId, CancellationToken ct)
+        NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct)
     {
+        if (await OwnsAsync(db, tenantId, subjectId, now, ct))
+            return new Dictionary<Guid, MembershipGrant>();
+
         var rows = await db.TeamSiteStaff.AsNoTracking()
-            .Where(s => s.Status == TeamSiteStaffStatus.Approved
-                && s.TeamTenantAccess!.TenantId == tenantId
+            .Where(GivesReason)
+            .Where(s => s.TeamTenantAccess!.TenantId == tenantId
                 && s.TeamMember!.SubjectId == subjectId
                 && s.TeamMember.Kind == TeamMemberKind.Staff)
             .Select(s => new
@@ -63,6 +127,25 @@ internal static class TeamReasons
 
         return desired;
     }
+
+    /// <summary>
+    /// Whether the subject's direct reason on the site holds the owner role and is in force at
+    /// <paramref name="now"/>, as <see cref="MembershipReasons"/> brings it into line with the row before a
+    /// change: a member who holds no team reason has their row for a direct reason, since a row with no
+    /// reason is adopted and a lone direct reason that differs from the row is re-synced from it.
+    /// </summary>
+    private static Task<bool> OwnsAsync(NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct) =>
+        db.TenantMembers.AsNoTracking().AnyAsync(m =>
+            m.TenantId == tenantId
+            && m.SubjectId == subjectId
+            && (m.Reasons.Any(r => r.Kind == MembershipReasonKind.Team)
+                ? m.Reasons.Any(r =>
+                    r.Kind == MembershipReasonKind.Direct
+                    && (r.AccessEndsAt == null || r.AccessEndsAt > now)
+                    && r.ReasonRoles.Any(rr => rr.TenantRole.Slug == RoleSeeds.Owner))
+                : (m.AccessEndsAt == null || m.AccessEndsAt > now)
+                    && m.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner)),
+            ct);
 
     /// <summary>
     /// What a team access holding <paramref name="roles"/> gives a staff member whose ceiling is

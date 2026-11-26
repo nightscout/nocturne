@@ -316,6 +316,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_alert_excursions_tenant_owed")
+                        .HasFilter("opened_owed_at IS NOT NULL OR closed_owed_at IS NOT NULL");
+
                     b.HasIndex("AlertRuleId", "EndedAt")
                         .HasDatabaseName("ix_alert_excursions_rule_ended_at");
 
@@ -426,6 +430,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("ReceiptConfirmedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("receipt_confirmed_at");
+
+                    b.Property<DateTime?>("RenotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("renotified_at");
 
                     b.Property<string>("ResolutionReason")
                         .HasMaxLength(32)
@@ -2147,6 +2155,77 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("dnd_windows", (string)null);
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ExternalNotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("GrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("grant_id");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<Guid?>("NotificationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("notification_id");
+
+                    b.Property<string>("SenderId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("sender_id");
+
+                    b.Property<string>("SenderKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("sender_kind");
+
+                    b.Property<string>("SenderName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("sender_name");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("SenderKind", "SenderId", "TenantId", "SysCreatedAt")
+                        .HasDatabaseName("ix_external_notifications_sender_tenant_created");
+
+                    b.HasIndex("SenderKind", "SenderId", "TenantId", "SubjectId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_external_notifications_sender_tenant_subject_key");
+
+                    b.ToTable("external_notifications");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.FoodEntity", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -2770,8 +2849,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.Property<string>("DataSource")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("data_source");
 
                     b.Property<bool>("IsPrimary")
@@ -3077,6 +3156,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
+
+                    b.Property<Guid?>("StartedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("started_by_subject_id");
+
+                    b.Property<DateTime?>("StarterAccessEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starter_access_ends_at");
 
                     b.Property<string>("State")
                         .IsRequired()
@@ -5004,6 +5091,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<string>("UpstreamFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("upstream_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -5580,6 +5671,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("StaffReach")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("every_person")
+                        .HasColumnName("staff_reach");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -5596,7 +5694,117 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("CreatedBySubjectId");
 
-                    b.ToTable("teams");
+                    b.ToTable("teams", t =>
+                        {
+                            t.HasCheckConstraint("ck_teams_staff_reach", "staff_reach IN ('every_person', 'their_groups')");
+                        });
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_key")
+                        .HasComputedColumnSql("lower(name)", true);
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId", "NameKey")
+                        .IsUnique();
+
+                    b.ToTable("team_groups");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupPersonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_group_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TeamGroupId", "TenantId")
+                        .IsUnique();
+
+                    b.ToTable("team_group_people");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupStaffEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_group_id");
+
+                    b.Property<Guid>("TeamMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_member_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamMemberId");
+
+                    b.HasIndex("TeamGroupId", "TeamMemberId")
+                        .IsUnique();
+
+                    b.ToTable("team_group_staff");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamInviteEntity", b =>
@@ -5735,6 +5943,74 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteBlockEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CreatedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_subject_id");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBySubjectId");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("team_site_blocks");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteDeclineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamTenantAccessId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_tenant_access_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("TeamTenantAccessId", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("team_site_declines");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteStaffEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5777,7 +6053,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.ToTable("team_site_staff", t =>
                         {
-                            t.HasCheckConstraint("ck_team_site_staff_status", "status IN ('pending', 'approved')");
+                            t.HasCheckConstraint("ck_team_site_staff_status", "status IN ('pending', 'approved', 'declined')");
                         });
                 });
 
@@ -5877,6 +6153,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("limit_to_24_hours");
 
+                    b.Property<string>("StaffRule")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("team_decides")
+                        .HasColumnName("staff_rule");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -5893,11 +6176,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("team_id");
 
-                    b.Property<bool>("TeamManagesStaff")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("team_manages_staff");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -5913,7 +6191,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TeamId", "TenantId")
                         .IsUnique();
 
-                    b.ToTable("team_tenant_access");
+                    b.ToTable("team_tenant_access", t =>
+                        {
+                            t.HasCheckConstraint("ck_team_tenant_access_staff_rule", "staff_rule IN ('owner_approves', 'team_decides', 'team_trusted')");
+                        });
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessRoleEntity", b =>
@@ -7464,6 +7745,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_aps_snapshots_tenant_timestamp_id")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_aps_snapshots_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_aps_snapshots_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_aps_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_aps_snapshots_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
@@ -7471,6 +7756,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex(new[] { "TenantId", "DataSource", "SyncIdentifier" }, "ix_aps_snapshots_tenant_source_sync_id_user_deleted")
                         .HasDatabaseName("ix_aps_snapshots_tenant_source_sync_id_user_deleted")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_by_user");
+
+                    b.HasIndex(new[] { "TenantId", "Timestamp", "Id" }, "ix_aps_snapshots_tenant_timestamp_id_any")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_aps_snapshots_tenant_timestamp_id_any");
 
                     b.ToTable("aps_snapshots");
                 });
@@ -7572,6 +7861,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -7594,6 +7887,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_bg_checks_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_bg_checks_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
                         .HasDatabaseName("ix_bg_checks_tenant_source_sync_id")
@@ -7615,6 +7912,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_bg_checks_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_bg_checks_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_bg_checks_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_bg_checks_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_bg_checks_tenant_legacy_id_user_deleted")
@@ -8020,6 +8321,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -8042,6 +8347,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_bolus_calculations_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_bolus_calculations_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_bolus_calculations_tenant_source_timestamp")
@@ -8058,6 +8367,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_bolus_calculations_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_bolus_calculations_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_bolus_calculations_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_bolus_calculations_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_bolus_calculations_tenant_legacy_id_user_deleted")
@@ -8214,6 +8527,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -8277,6 +8594,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_boluses_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_boluses_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_boluses_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_boluses_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_boluses_tenant_legacy_id_user_deleted")
@@ -8405,9 +8726,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_calibrations_tenant_timestamp_id")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_calibrations_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_calibrations_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_calibrations_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_calibrations_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
+
+                    b.HasIndex(new[] { "TenantId", "Timestamp", "Id" }, "ix_calibrations_tenant_timestamp_id_any")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_calibrations_tenant_timestamp_id_any");
 
                     b.ToTable("calibrations");
                 });
@@ -8515,6 +8844,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -8562,6 +8895,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_carb_intakes_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_carb_intakes_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_carb_intakes_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_carb_intakes_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_carb_intakes_tenant_legacy_id_user_deleted")
@@ -8856,6 +9193,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -8882,6 +9223,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_device_events_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_device_events_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
                         .HasDatabaseName("ix_device_events_tenant_source_sync_id")
@@ -8907,6 +9252,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_device_events_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_device_events_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_device_events_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_device_events_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_device_events_tenant_legacy_id_user_deleted")
@@ -8971,8 +9320,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "Timestamp")
                         .IsDescending(false, true)
-                        .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
-                        .HasFilter("deleted_at IS NULL");
+                        .HasDatabaseName("ix_device_status_extras_tenant_timestamp");
 
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_device_status_extras_tenant_history");
@@ -9100,9 +9448,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_meter_glucose_tenant_timestamp_id")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_meter_glucose_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_meter_glucose_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_meter_glucose_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_meter_glucose_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
+
+                    b.HasIndex(new[] { "TenantId", "Timestamp", "Id" }, "ix_meter_glucose_tenant_timestamp_id_any")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_meter_glucose_tenant_timestamp_id_any");
 
                     b.ToTable("meter_glucose");
                 });
@@ -9204,6 +9560,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -9225,6 +9585,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_notes_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_notes_tenant_timestamp");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
@@ -9702,6 +10066,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -9728,8 +10096,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "Timestamp")
                         .IsDescending(false, true)
-                        .HasDatabaseName("ix_profile_activations_tenant_start_timestamp")
-                        .HasFilter("deleted_at IS NULL");
+                        .HasDatabaseName("ix_profile_activations_tenant_start_timestamp");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
@@ -9738,6 +10105,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_profile_activations_tenant_history");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_profile_activations_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_profile_activations_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_profile_activations_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_profile_activations_tenant_legacy_id_user_deleted")
@@ -9938,6 +10309,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_pump_snapshots_tenant_timestamp_id")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_pump_snapshots_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_pump_snapshots_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_pump_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_pump_snapshots_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
@@ -9945,6 +10320,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex(new[] { "TenantId", "DataSource", "SyncIdentifier" }, "ix_pump_snapshots_tenant_source_sync_id_user_deleted")
                         .HasDatabaseName("ix_pump_snapshots_tenant_source_sync_id_user_deleted")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_by_user");
+
+                    b.HasIndex(new[] { "TenantId", "Timestamp", "Id" }, "ix_pump_snapshots_tenant_timestamp_id_any")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_pump_snapshots_tenant_timestamp_id_any");
 
                     b.ToTable("pump_snapshots");
                 });
@@ -10254,6 +10633,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_sensor_glucose_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_sensor_glucose_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_sensor_glucose_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_sensor_glucose_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_sensor_glucose_tenant_legacy_id_user_deleted")
@@ -10650,6 +11033,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("utc_offset");
 
+                    b.Property<string>("WriteBackSentFingerprint")
+                        .HasColumnType("text")
+                        .HasColumnName("write_back_sent_fingerprint");
+
                     b.Property<Guid?>("WriterGrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("writer_grant_id");
@@ -10709,6 +11096,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_temp_basals_tenant_visible_timestamp_id")
                         .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_temp_basals_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_temp_basals_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
 
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_temp_basals_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_temp_basals_tenant_legacy_id_user_deleted")
@@ -10909,6 +11300,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_therapy_settings_tenant_history");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_therapy_settings_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_therapy_settings_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_therapy_settings_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_therapy_settings_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
@@ -11069,6 +11464,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_uploader_snapshots_tenant_type_timestamp")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_uploader_snapshots_tenant_legacy_id_deleted")
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_legacy_id_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NOT NULL");
+
                     b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_uploader_snapshots_tenant_legacy_id_user_deleted")
                         .HasDatabaseName("ix_uploader_snapshots_tenant_legacy_id_user_deleted")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
@@ -11076,6 +11475,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex(new[] { "TenantId", "DataSource", "SyncIdentifier" }, "ix_uploader_snapshots_tenant_source_sync_id_user_deleted")
                         .HasDatabaseName("ix_uploader_snapshots_tenant_source_sync_id_user_deleted")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_by_user");
+
+                    b.HasIndex(new[] { "TenantId", "Timestamp", "Id" }, "ix_uploader_snapshots_tenant_timestamp_id_any")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_timestamp_id_any");
 
                     b.ToTable("uploader_snapshots");
                 });
@@ -11453,6 +11856,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DndWindowEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ExternalNotificationEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
@@ -11960,6 +12372,55 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("CreatedBy");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamEntity", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupPersonEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", "TeamGroup")
+                        .WithMany("People")
+                        .HasForeignKey("TeamGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TeamGroup");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupStaffEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", "TeamGroup")
+                        .WithMany("Staff")
+                        .HasForeignKey("TeamGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamMemberEntity", "TeamMember")
+                        .WithMany("GroupPlaces")
+                        .HasForeignKey("TeamMemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TeamGroup");
+
+                    b.Navigation("TeamMember");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamInviteEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "CreatedBy")
@@ -12003,6 +12464,51 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Subject");
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteBlockEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedBySubjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
+                        .WithMany("TeamSiteBlocks")
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Subject");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteDeclineEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessEntity", "TeamTenantAccess")
+                        .WithMany()
+                        .HasForeignKey("TeamTenantAccessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Subject");
+
+                    b.Navigation("TeamTenantAccess");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteStaffEntity", b =>
@@ -12825,12 +13331,26 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.Navigation("SubjectRoles");
 
+                    b.Navigation("TeamSiteBlocks");
+
                     b.Navigation("TotpCredentials");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamEntity", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", b =>
+                {
+                    b.Navigation("People");
+
+                    b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamMemberEntity", b =>
+                {
+                    b.Navigation("GroupPlaces");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessEntity", b =>

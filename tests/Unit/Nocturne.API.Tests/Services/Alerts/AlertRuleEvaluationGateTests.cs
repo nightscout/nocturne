@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Nocturne.API.Services.Alerts;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -19,7 +20,7 @@ public class AlertRuleEvaluationGateTests
         contender.IsCompleted.Should().BeFalse();
 
         held.Dispose();
-        (await contender.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
+        (await contender.WaitAsync(Eventually.DefaultPatience)).Dispose();
     }
 
     [Fact]
@@ -33,19 +34,19 @@ public class AlertRuleEvaluationGateTests
         var section = gate.RunExclusiveAsync(ruleId, async () =>
         {
             using var inner = await gate.AcquireAsync(ruleId, CancellationToken.None)
-                .WaitAsync(TimeSpan.FromSeconds(5));
+                .WaitAsync(Eventually.DefaultPatience);
             entered.SetResult();
             await release.Task;
             return 1;
         }, CancellationToken.None);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(Eventually.DefaultPatience);
 
         var contender = gate.AcquireAsync(ruleId, CancellationToken.None);
         contender.IsCompleted.Should().BeFalse();
 
         release.SetResult();
         (await section).Should().Be(1);
-        (await contender.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
+        (await contender.WaitAsync(Eventually.DefaultPatience)).Dispose();
         gate.StripeCount.Should().Be(0);
     }
 
@@ -67,13 +68,13 @@ public class AlertRuleEvaluationGateTests
             return Task.FromResult(0);
         }, CancellationToken.None);
 
-        var holder = await gate.AcquireAsync(ruleId, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        var holder = await gate.AcquireAsync(ruleId, CancellationToken.None).WaitAsync(Eventually.DefaultPatience);
         go.SetResult();
         await Task.Delay(100);
         escaped!.IsCompleted.Should().BeFalse("the section's lease was released when it returned");
 
         holder.Dispose();
-        (await escaped.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
+        (await escaped.WaitAsync(Eventually.DefaultPatience)).Dispose();
         gate.StripeCount.Should().Be(0);
     }
 
@@ -84,7 +85,7 @@ public class AlertRuleEvaluationGateTests
 
         using var held = await gate.AcquireAsync(Guid.NewGuid(), CancellationToken.None);
         using var other = await gate.AcquireAsync(Guid.NewGuid(), CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .WaitAsync(Eventually.DefaultPatience);
     }
 
     [Fact]
@@ -98,7 +99,7 @@ public class AlertRuleEvaluationGateTests
         gate.StripeCount.Should().Be(1);
 
         held.Dispose();
-        (await contender.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
+        (await contender.WaitAsync(Eventually.DefaultPatience)).Dispose();
 
         gate.StripeCount.Should().Be(0);
     }

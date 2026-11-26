@@ -7,6 +7,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -169,15 +170,16 @@ public class MongoMigrationStorageTests : ApiIntegrationTestBase, IClassFixture<
         var job = await start.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
         await MigrationJobPump.RunAsync(Fixture);
 
-        for (var i = 0; i < 120; i++)
-        {
-            var status = await AuthenticatedClient.GetFromJsonAsync<MigrationJobStatus>(
-                $"/api/v4/migration/{job!.Id}/status", JsonOptions);
-            if (status!.State is MigrationJobState.Completed or MigrationJobState.Failed or MigrationJobState.Cancelled)
-                return status;
-            await Task.Delay(250);
-        }
-
-        throw new TimeoutException("The MongoDB migration did not finish.");
+        return await Eventually.ValueAsync(
+            "the MongoDB migration to finish",
+            async () =>
+            {
+                var status = await AuthenticatedClient.GetFromJsonAsync<MigrationJobStatus>(
+                    $"/api/v4/migration/{job!.Id}/status", JsonOptions);
+                return status!.State is MigrationJobState.Completed or MigrationJobState.Failed or MigrationJobState.Cancelled
+                    ? status
+                    : null;
+            },
+            step: TimeSpan.FromMilliseconds(250));
     }
 }

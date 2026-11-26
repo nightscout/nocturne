@@ -138,14 +138,14 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
 
         await using (var conn = await _fx.OpenMigratorConnectionAsync())
         {
-            await ExecAsync(conn, $"""
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"""
                 CREATE TABLE IF NOT EXISTS {ProbeTable} (
                     id uuid PRIMARY KEY,
                     tenant_id uuid NOT NULL,
                     created_at timestamptz NOT NULL)
                 """);
-            await ExecAsync(conn, $"TRUNCATE {ProbeTable}");
-            await ExecAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"TRUNCATE {ProbeTable}");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
 
             foreach (var owner in new[] { tenant, neighbour })
             {
@@ -174,7 +174,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         finally
         {
             await using var conn = await _fx.OpenMigratorConnectionAsync();
-            await ExecAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
+            await NpgsqlTestCommands.ExecuteAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
         }
     }
 
@@ -219,12 +219,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     {
         if (extra is null)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddHttpContextAccessor();
-            services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-
-            var provider = services.BuildServiceProvider();
+            var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
             _owned.Add(provider);
             return provider.GetRequiredService<INocturneDbContextFactory>();
         }
@@ -232,10 +227,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         var dataSource = new NpgsqlDataSourceBuilder(_fx.AppConnectionString).Build();
         _owned.Add(dataSource);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(dataSource)
-            .AddInterceptors(new TenantConnectionInterceptor(), extra)
-            .Options;
+        var options = TestContexts.Options(dataSource, [extra]);
         return new SuppliedContextFactory(() => new NocturneDbContext(options));
     }
 
@@ -250,7 +242,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     private async Task<long> CountAsync(Guid tenant)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"SELECT COUNT(*) FROM {AuditTable} WHERE tenant_id = @tid";
         AddParam(cmd, "@tid", tenant);
@@ -261,19 +253,10 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
 
-        await using (var insertTenant = conn.CreateCommand())
-        {
-            insertTenant.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'audit-purge-test', true, now(), now())
-                """;
-            AddParam(insertTenant, "@id", tenant);
-            AddParam(insertTenant, "@slug", $"audit-purge-{tenant:N}");
-            await insertTenant.ExecuteNonQueryAsync();
-        }
+        await conn.SeedTenantAsync(tenant, $"audit-purge-{tenant:N}", "audit-purge-test");
 
         // Row inserts run under the tenant so the multitenant RLS policy admits them.
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
 
         for (var i = 0; i < rows; i++)
         {
@@ -289,27 +272,12 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     private async Task SeedRecentRowAsync(Guid tenant)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             $"INSERT INTO {AuditTable} (id, tenant_id, entity_type, action, created_at) "
             + "VALUES (gen_random_uuid(), @tid, 'SensorGlucose', 'update', now())";
         AddParam(cmd, "@tid", tenant);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        AddParam(cmd, "@tid", tenant.ToString());
-        await cmd.ExecuteScalarAsync();
-    }
-
-    private static async Task ExecAsync(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync();
     }
 

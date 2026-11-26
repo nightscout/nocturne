@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Identity;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -82,6 +83,7 @@ public class TeamsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutpu
         info.GetProperty("narrowing").GetProperty("roleCeilingSlug").GetString().Should().Be("viewer");
         info.GetProperty("narrowing").GetProperty("limitTo24Hours").GetBoolean().Should().BeTrue();
         info.GetProperty("alreadyMember").GetBoolean().Should().BeFalse();
+        RoleSlugs(info).Should().Equal(TeamSuggestableRoles.All.Select(r => r.Slug));
         (await staffClient.PostAsync($"/api/v4/me/teams/staff-invites/{token}/accept", null)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var asStaff = await staffClient.GetStringAsync($"/api/v4/me/teams/{teamId}");
@@ -93,8 +95,9 @@ public class TeamsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutpu
             root.GetProperty("name").GetString().Should().Be("Camp staff");
             root.GetProperty("managers").GetArrayLength().Should().Be(0);
             root.GetProperty("managerNames").GetArrayLength().Should().Be(1);
-            foreach (var hidden in new[] { "invites", "staffInvites", "staff", "accessLinks", "sites", "suggestableRoles" })
+            foreach (var hidden in new[] { "invites", "staffInvites", "staff", "accessLinks", "sites" })
                 root.GetProperty(hidden).GetArrayLength().Should().Be(0, hidden);
+            RoleSlugs(root).Should().Equal(TeamSuggestableRoles.All.Select(r => r.Slug), "a staff member names their role ceiling from the static seed roles");
             root.GetProperty("ownStaff").GetProperty("narrowing").GetProperty("roleCeilingSlug").GetString().Should().Be("viewer");
         }
 
@@ -150,6 +153,9 @@ public class TeamsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutpu
         (await personClient.GetAsync($"/api/v4/me/teams/{teamId}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    private static IEnumerable<string?> RoleSlugs(JsonElement element) =>
+        element.GetProperty("suggestableRoles").EnumerateArray().Select(r => r.GetProperty("slug").GetString());
+
     private static async Task<Guid> CreateTeamAsync(HttpClient client, string name)
     {
         var created = await client.PostAsJsonAsync("/api/v4/me/teams", new { name });
@@ -170,8 +176,7 @@ public class TeamsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutpu
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         return await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name);
     }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -34,9 +35,7 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
         var response = await client.GetAsync("/api/v1/status");
         response.StatusCode.Should().Be(HttpStatusCode.OK, "tenant provisioning request should succeed");
 
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         Log($"Provisioned tenant {_tenantId}");
@@ -46,9 +45,7 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
     public async Task FreshTenant_NoPasskeys_Returns503SetupRequired()
     {
         // Arrange - delete all passkey credentials for tenant members
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         await DeleteAllPasskeysForTenantAsync(conn, _tenantId);
 
@@ -70,9 +67,7 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
     public async Task TenantWithPasskey_ApiAccessible()
     {
         // Arrange - seed a subject with passkey
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         // Every member holds a passkey: the seeded owner does, and so does this one.
         var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Setup Guard User");
@@ -92,9 +87,7 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
     public async Task AStuckMemberStopsTheSiteOnlyWhenNoMemberAdministratorCanSignIn(
         bool signedInMemberAdministers, bool recoveryMode)
     {
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         await DeleteAllPasskeysForTenantAsync(conn, _tenantId);
 
@@ -120,9 +113,7 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
     public async Task SetupEndpoints_AllowedDuringSetup()
     {
         // Arrange - delete all passkeys so setup guard is active
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         await DeleteAllPasskeysForTenantAsync(conn, _tenantId);
 
@@ -144,14 +135,11 @@ public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
 
     private static async Task DeleteAllPasskeysForTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             DELETE FROM passkey_credentials
             WHERE subject_id IN (
                 SELECT subject_id FROM tenant_members WHERE tenant_id = @tenantId
             );
-            """;
-        cmd.Parameters.AddWithValue("tenantId", tenantId);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenantId", tenantId));
     }
 }

@@ -9,9 +9,9 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -38,20 +38,7 @@ namespace Nocturne.API.Tests.Services.Entries;
 public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Database database)
     : IClassFixture<EntryServiceDeletePostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("entry_delete_served_id");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("entry_delete_served_id");
 
     private sealed record Setup(
         EntryService Service,
@@ -66,12 +53,10 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         Func<NocturneDbContext> Db);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(
-                new TenantConnectionInterceptor(), new MutationAuditInterceptor())
-            .Options) { TenantId = tenant }.AttributedTo(_audit);
+        TestContexts.Context(
+                database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly,
+                interceptors: [new MutationAuditInterceptor()])
+            .AttributedTo(_audit);
 
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
 
@@ -81,14 +66,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'entry-delete-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"entry-delete-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"entry-delete-{tenant:N}", "entry-delete-test");
         }
 
         var factory = new SuppliedContextFactory(() => Context(tenant));
@@ -108,9 +86,8 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         config.Setup(c => c.GetPreferredProcessingAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync((GlucoseProcessing?)null);
 
-        var decomposer = new EntryDecomposer(
-            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
-            Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
+        var decomposer = EntryDecomposerDoubles.Build(
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object), audit: audit);
         var store = new EntryReadService(
             sensorGlucose, meterGlucose, calibration, Mock.Of<IDemoModeService>(), NullLogger<EntryReadService>.Instance);
         var service = new EntryService(

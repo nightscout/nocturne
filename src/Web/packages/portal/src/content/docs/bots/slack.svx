@@ -9,20 +9,20 @@ title: Slack Bot
 # Slack Bot
 
 Connect a Slack app so people can run `/bg` and receive alerts in Slack. This page covers the
-Slack-specific steps; for account linking, alert delivery, and the Admin UI /
+Slack-specific steps. For account linking, alert delivery, and the Admin UI /
 environment-variable workflow that all platforms share, see [Chat Bots](/docs/bots).
 
 ## 1. Create a Slack app
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
-2. Choose **From scratch**, name it (e.g. *Nocturne*), and pick the workspace to develop in.
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and select **Create New App**.
+2. Choose **From scratch**, name it (for example, *Nocturne*), and pick the workspace to develop in.
 
 ## 2. Add bot scopes and install
 
 1. Open **OAuth & Permissions**.
 2. Under **Bot Token Scopes**, add the scopes the bot needs to post and respond, such as
    `chat:write`, `commands`, and `im:history`.
-3. Click **Install to Workspace** and approve.
+3. Select **Install to Workspace** and approve.
 4. Copy the **Bot User OAuth Token** (it starts with `xoxb-`).
 
 ## 3. Collect the credentials
@@ -45,7 +45,7 @@ At **Platform > Administration > Integrations**, fill in the **Slack** card:
 | **Bot Token** | The `xoxb-…` token from step 3 |
 | **Signing Secret** | The signing secret from step 3 |
 
-Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
+Turn **Enabled** on, select **Save**, and restart the Nocturne web service.
 
 ### Option B: Environment variables
 

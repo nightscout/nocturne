@@ -14,6 +14,7 @@ using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -53,8 +54,8 @@ public class ProviderIdTokenBearerIntegrationTests : ApiIntegrationTestBase
 
         _providerId = Guid.CreateVersion7();
         _clientId = $"client-{_providerId:N}";
-        await using var conn = await OpenAsync();
-        await ExecuteAsync(conn, """
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync("""
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
             VALUES (@provider, 'ID token IdP', @issuer, @client, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now());
             """,
@@ -62,7 +63,7 @@ public class ProviderIdTokenBearerIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_admin, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "id-token-admin");
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             UPDATE subjects SET is_platform_admin = true WHERE id = @subject;
             INSERT INTO subject_oidc_identities (id, subject_id, provider_id, oidc_subject_id, issuer, linked_at)
             VALUES (gen_random_uuid(), @subject, @provider, 'id-token-admin', @issuer, now());
@@ -72,9 +73,9 @@ public class ProviderIdTokenBearerIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 UPDATE subjects SET is_platform_admin = false WHERE id = @admin;
                 DELETE FROM subject_oidc_identities WHERE provider_id = @provider;
                 DELETE FROM oidc_providers WHERE id = @provider;
@@ -135,12 +136,11 @@ public class ProviderIdTokenBearerIntegrationTests : ApiIntegrationTestBase
             (await apex.GetAsync("/api/v4/me/tenants")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
-        await using var conn = await OpenAsync();
-        (await ScalarAsync<long>(conn,
-                "SELECT count(*) FROM subject_oidc_identities WHERE provider_id = @provider;",
+        await using var conn = await OpenPostgresAsync();
+        (await conn.ScalarAsync<long>("SELECT count(*) FROM subject_oidc_identities WHERE provider_id = @provider;",
                 ("provider", _providerId)))
             .Should().Be(1, "only the identity the test linked exists");
-        (await ScalarAsync<long>(conn, "SELECT count(*) FROM subjects WHERE name = @name;", ("name", stranger)))
+        (await conn.ScalarAsync<long>("SELECT count(*) FROM subjects WHERE name = @name;", ("name", stranger)))
             .Should().Be(0);
     }
 
@@ -198,30 +198,5 @@ public class ProviderIdTokenBearerIntegrationTests : ApiIntegrationTestBase
         var bound = new Uri(_idp.Services.GetRequiredService<IServer>().Features
             .Get<IServerAddressesFeature>()!.Addresses.Single());
         _issuer = $"http://localhost:{bound.Port}{path}";
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<T> ScalarAsync<T>(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        return (T)(await cmd.ExecuteScalarAsync())!;
     }
 }

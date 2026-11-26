@@ -25,7 +25,6 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -84,7 +83,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         _deviceId = ConnectorMetadataService.GetByConnectorId(ConnectorId)?.DataSourceId
             ?? throw new InvalidOperationException("Nightscout connector metadata failed to load");
 
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
     }
 
     public void Dispose() => _db.Dispose();
@@ -156,7 +155,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     }
 
     private static GoogleHealthPurgeGuard GoogleHealthGuard(GoogleHealthCoordinator coordinator, TimeSpan? gateTimeout = null) =>
-        new(coordinator, Mock.Of<ITenantAccessor>(tenant => tenant.TenantId == TenantId), gateTimeout);
+        new(coordinator, SettableTenantAccessor.Resolved(TenantId), gateTimeout);
 
     private void SeedOneOfEachType()
     {
@@ -683,6 +682,8 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             NullLogger<Nocturne.Connectors.Nightscout.Services.NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new Nocturne.Connectors.Nightscout.Services.NightscoutLookups(),
+            SettableTenantAccessor.Resolved(),
             publisher.Object);
 
         await service.SyncDataAsync(
@@ -933,7 +934,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     }
 
     private OuraImportPurgeGuard OuraGuard(TenantRunGuard runGuard) =>
-        new(runGuard, Mock.Of<ITenantAccessor>(tenant => tenant.TenantId == TenantId));
+        new(runGuard, SettableTenantAccessor.Resolved(TenantId));
 
     private static string OuraDataSourceId
     {

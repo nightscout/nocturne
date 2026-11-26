@@ -1,25 +1,11 @@
 using System.Collections.Concurrent;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
-
-/// <summary>
-/// Settable <see cref="ITenantAccessor"/> for golden tests. The fixture sets the current tenant
-/// before a scenario resolves a scope; every context of that scope, scoped or from
-/// <c>INocturneDbContextFactory</c>, reads it live as its tenant.
-/// </summary>
-internal sealed class TestTenantAccessor : ITenantAccessor
-{
-    public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-    public bool IsResolved => Context is not null;
-    public TenantContext? Context { get; private set; }
-    public void SetTenant(TenantContext context) => Context = context;
-}
 
 /// <summary>
 /// Stand-in for the request-scoped <see cref="IAuditContext"/> the API populates per request (that

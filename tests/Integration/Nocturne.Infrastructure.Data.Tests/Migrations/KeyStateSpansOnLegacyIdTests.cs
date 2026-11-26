@@ -2,8 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -83,10 +83,7 @@ public class KeyStateSpansOnLegacyIdFixture : IAsyncLifetime
 
     private async Task MigrateToAsync(string? targetMigration)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(_migratorConnectionString);
 
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(targetMigration);
@@ -125,9 +122,9 @@ public class KeyStateSpansOnLegacyIdFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
+        await conn.PinTenantAsync(TenantA);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $$"""
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
             INSERT INTO state_spans (id, tenant_id, category, state, start_timestamp, source, original_id)
             VALUES ('{{Guid.CreateVersion7()}}', '{{TenantA}}', 'PumpMode', 'Manual', now(), 'Loop', 'solo');
             """;
@@ -148,12 +145,7 @@ public class KeyStateSpansOnLegacyIdFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using (var cmd = conn.CreateCommand())
             {
@@ -193,13 +185,11 @@ public class KeyStateSpansOnLegacyIdFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'Tenant B', true, now(), now());
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
 
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO state_spans
               (id, tenant_id, category, state, start_timestamp, source, original_id, is_duplicate,
                created_at, updated_at, deleted_at, deleted_by_user)
@@ -235,8 +225,10 @@ public class KeyStateSpansOnLegacyIdFixture : IAsyncLifetime
                1780300700000, 'xDrip', false),
               ('{{Guid.CreateVersion7()}}', '{{TenantA}}', '{{GroupWithWinnerInA}}', 'statespan', '{{PrimaryNewerInA}}',
                1780300900000, 'Loop', false);
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO state_spans
               (id, tenant_id, category, state, start_timestamp, source, original_id, is_duplicate,
                created_at, updated_at, deleted_at, deleted_by_user)
@@ -260,10 +252,7 @@ public class KeyStateSpansOnLegacyIdFixture : IAsyncLifetime
                1780387100000, 'xDrip', false),
               ('{{Guid.CreateVersion7()}}', '{{TenantB}}', '{{GroupWithoutWinnerInB}}', 'statespan', '{{LiveMemberInB}}',
                1780387300000, 'Loop', false);
-
-            SELECT set_config('app.current_tenant_id', '', false);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 

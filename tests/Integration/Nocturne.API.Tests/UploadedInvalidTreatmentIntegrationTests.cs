@@ -5,8 +5,8 @@ using Castle.DynamicProxy;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Treatments;
-using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
@@ -146,6 +146,7 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Live> LiveAsync(HttpClient client)
     {
+        await SettleHistoryAsync();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var onBoard = await WithTenantScopeAsync(async sp =>
         {
@@ -163,8 +164,11 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
             onBoard.Total.Cob?.Cob ?? 0);
     }
 
-    private static async Task<JsonArray> HistoryAsync(HttpClient client) =>
-        (await GetAsync(client, "/api/v3/treatments/history/0"))["result"]!.AsArray();
+    private async Task<JsonArray> HistoryAsync(HttpClient client)
+    {
+        await SettleHistoryAsync();
+        return (await GetAsync(client, "/api/v3/treatments/history/0"))["result"]!.AsArray();
+    }
 
     private static bool IsDeleted(JsonNode? treatment) => treatment?["isValid"]?.GetValue<bool>() == false;
 
@@ -391,6 +395,18 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
         (await HistoryAsync(client)).Should().Contain(t => IsDeleted(t));
     }
 
+    [Fact]
+    public async Task A_v3_search_naming_isValid_lists_no_treatment_stored_deleted()
+    {
+        var client = CreateAuthenticatedClient();
+        await UploadAsync(client, Treatment("Correction Bolus", NewId(), isValid: false), v3: false);
+        (await GetAsync(client, "/api/v1/treatments?find[isValid]=false&count=100")).AsArray().Should().ContainSingle();
+
+        var search = await GetAsync(client, "/api/v3/treatments?isValid$eq=false&limit=100");
+
+        search["result"]!.AsArray().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -514,7 +530,7 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
         {
             var notes = new ProxyGenerator().CreateInterfaceProxyWithTarget(
                 scope.ServiceProvider.GetRequiredService<INoteRepository>(), new FailsWritingNotes(storeTimesOut));
-            var decomposer = ActivatorUtilities.CreateInstance<TreatmentDecomposer>(scope.ServiceProvider, notes);
+            var decomposer = TreatmentDecomposerDoubles.Resolved(scope.ServiceProvider, notes);
             var store = ActivatorUtilities.CreateInstance<TreatmentReadService>(scope.ServiceProvider, decomposer);
             var service = ActivatorUtilities.CreateInstance<TreatmentService>(
                 scope.ServiceProvider, store, decomposer, (IDataEventSink<TreatmentModel>)events);

@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -147,8 +148,7 @@ public partial class TreatmentBatchEquivalenceTests : ApiIntegrationTestBase
     private async Task<Dictionary<string, List<string>>> DecomposeAsync(
         int seed, IReadOnlyList<string> sequence, Func<ITreatmentService, IReadOnlyList<Treatment>, Task> decompose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
 
         var treatments = sequence.Select(json => JsonSerializer.Deserialize<Treatment>(json)!).ToList();
@@ -172,20 +172,14 @@ public partial class TreatmentBatchEquivalenceTests : ApiIntegrationTestBase
         var rows = new Dictionary<string, List<JsonObject>>();
         foreach (var table in Tables)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = table == "treatment_foods"
+            var sql = table == "treatment_foods"
                 ? "SELECT row_to_json(t)::text FROM treatment_foods t"
                 : $"SELECT row_to_json(t)::text FROM {table} t WHERE tenant_id = @tenant";
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var list = new List<JsonObject>();
-            while (await reader.ReadAsync())
-            {
-                var row = JsonNode.Parse(reader.GetString(0))!.AsObject();
-                if (row["deleted_at"] is null || row["deleted_by_user"]?.GetValue<bool>() == true)
-                    list.Add(row);
-            }
-            rows[table] = list;
+            var all = await conn.QueryAsync(
+                sql, reader => JsonNode.Parse(reader.GetString(0))!.AsObject(), ("tenant", Fixture.TenantId));
+            rows[table] = all
+                .Where(row => row["deleted_at"] is null || row["deleted_by_user"]?.GetValue<bool>() == true)
+                .ToList();
         }
 
         return Normalise(rows);

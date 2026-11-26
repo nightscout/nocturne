@@ -2,6 +2,7 @@ import type { ActionEvent, SlashCommandEvent } from "chat";
 import { getUnscopedApi, runWithResolvedLink, type ResolvedLink } from "./request-context.js";
 import { decodeActionValue, encodeTenantKey } from "./action-value.js";
 import type { DirectoryCandidate } from "../types.js";
+import { defaultLinkSetting, platformName } from "../platforms/registry.js";
 
 interface LinkResolutionInput {
   platform: string;
@@ -60,7 +61,7 @@ interface LinkResolutionInput {
  * // Zero candidates branch:
  * //   User invokes /bg, never ran /connect.
  * //   Ephemeral: "Your Discord account isn't linked to a Nocturne account
- * //   yet. Run `/connect` to get started."
+ * //   yet. Run `/connect` to get started." It names the event's platform.
  *
  * @example
  * // Single candidate branch:
@@ -107,7 +108,7 @@ async function withResolvedLink<T>(
 
   if (!candidates || candidates.length === 0) {
     await explain(
-      "Your Discord account isn't linked to a Nocturne account yet. Run `/connect` to get started.",
+      `Your ${platformName(input.platform)} account isn't linked to a Nocturne account yet. Run \`/connect\` to get started.`,
     );
     return null;
   }
@@ -189,7 +190,7 @@ export async function requireLink<T>(
       platformUserId: event.user.userId,
       labelArg: event.text?.trim().toLowerCase() || null,
       tenantKey: null,
-      disambiguationHint: `Use \`${event.command} <label>\` to pick one, or set a default in Settings → Integrations → Discord.`,
+      disambiguationHint: withDefaultSetting(`Use \`${event.command} <label>\` to pick one`, event.adapter.name),
     },
     (message) =>
       event.channel.postEphemeral(event.user, message, { fallbackToDM: true }),
@@ -228,14 +229,22 @@ export async function requireLinkForAction<T>(
       platformUserId: event.user.userId,
       labelArg: null,
       tenantKey: decodeActionValue(event.value).tenantKey,
-      disambiguationHint:
-        "Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
+      disambiguationHint: withDefaultSetting(
+        "Use the matching command with a label",
+        event.adapter.name,
+      ),
     },
     (message) =>
       event.thread?.postEphemeral(event.user, message, { fallbackToDM: true }) ??
       Promise.resolve(null),
     callback,
   );
+}
+
+/** `instruction`, then the default-link setting where the platform has one, as one sentence. */
+function withDefaultSetting(instruction: string, platform: string): string {
+  const setting = defaultLinkSetting(platform);
+  return setting ? `${instruction}, or ${setting}.` : `${instruction}.`;
 }
 
 /**

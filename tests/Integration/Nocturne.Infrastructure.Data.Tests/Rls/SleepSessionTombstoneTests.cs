@@ -202,13 +202,8 @@ public class SleepSessionTombstoneTests(RlsCompletenessFixture fx)
         OriginalId = originalId,
     };
 
-    private static async Task<long> CountRowsAsync(NpgsqlConnection conn, string originalId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM sleep_sessions WHERE original_id = @id";
-        cmd.Parameters.AddWithValue("id", originalId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
+    private static Task<long> CountRowsAsync(NpgsqlConnection conn, string originalId) =>
+        conn.ScalarAsync<long>("SELECT count(*) FROM sleep_sessions WHERE original_id = @id", ("id", originalId));
 
     private Guid _tenant;
 
@@ -219,24 +214,10 @@ public class SleepSessionTombstoneTests(RlsCompletenessFixture fx)
     {
         _tenant = Guid.NewGuid();
         await using (var migrator = await fx.OpenMigratorConnectionAsync())
-        await using (var cmd = migrator.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'sleep-tombstone-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("tid", _tenant);
-            cmd.Parameters.AddWithValue("slug", $"sleep-{_tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+            await migrator.SeedTenantAsync(_tenant, $"sleep-{_tenant:N}", "sleep-tombstone-test");
 
         var conn = await fx.OpenAppConnectionAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false), set_config('app.is_share', 'false', false)";
-            cmd.Parameters.AddWithValue("tid", _tenant.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(_tenant);
 
         return conn;
     }

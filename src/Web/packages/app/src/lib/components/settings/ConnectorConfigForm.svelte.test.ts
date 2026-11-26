@@ -31,6 +31,7 @@ describe("ConnectorConfigForm", () => {
 	it("renders string fields with labels", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "https://example.com", pollingInterval: 300 },
 				onSave: vi.fn(),
@@ -54,6 +55,7 @@ describe("ConnectorConfigForm", () => {
 
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: boolSchema,
 				configuration: { syncGlucose: true },
 				onSave: vi.fn(),
@@ -68,6 +70,7 @@ describe("ConnectorConfigForm", () => {
 	it("disables a switch the API locks and says why", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: { type: "object", properties: { syncGlucose: { type: "boolean", default: false } }, secrets: [] },
 				configuration: { syncGlucose: false },
 				lockedKeys: ["syncGlucose"],
@@ -84,6 +87,7 @@ describe("ConnectorConfigForm", () => {
 	it("leaves a switch the API does not lock enabled, with no reason", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: { type: "object", properties: { syncGlucose: { type: "boolean", default: false } }, secrets: [] },
 				configuration: { syncGlucose: false },
 				lockedKeys: [],
@@ -98,6 +102,7 @@ describe("ConnectorConfigForm", () => {
 	it("renders number fields with constraints info", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "", pollingInterval: 300 },
 				onSave: vi.fn(),
@@ -116,6 +121,7 @@ describe("ConnectorConfigForm", () => {
 	it("shows Credentials card when schema has secrets", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "", pollingInterval: 300 },
 				onSave: vi.fn(),
@@ -129,6 +135,7 @@ describe("ConnectorConfigForm", () => {
 	it("shows Configured badge when hasSecrets is true", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "", pollingInterval: 300 },
 				hasSecrets: true,
@@ -142,6 +149,7 @@ describe("ConnectorConfigForm", () => {
 	it("shows Not configured badge when hasSecrets is false", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "", pollingInterval: 300 },
 				hasSecrets: false,
@@ -155,6 +163,7 @@ describe("ConnectorConfigForm", () => {
 	it("does not show save bar initially when there are no unsaved changes", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "", pollingInterval: 300 },
 				onSave: vi.fn(),
@@ -167,6 +176,7 @@ describe("ConnectorConfigForm", () => {
 	it("has show/hide toggle button for secret fields", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: schemaWithSecretProp,
 				configuration: { serverUrl: "", pollingInterval: 300 },
 				onSave: vi.fn(),
@@ -197,6 +207,7 @@ describe("ConnectorConfigForm", () => {
 
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: envSchema,
 				configuration: {},
 				effectiveConfig: {
@@ -217,6 +228,7 @@ describe("ConnectorConfigForm", () => {
 	it("does not mark a field whose environment value matches the default", async () => {
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: { type: "object", properties: { serverUrl: { type: "string", default: "https://same.example" } }, secrets: [] },
 				configuration: {},
 				effectiveConfig: { serverUrl: "https://same.example" },
@@ -232,6 +244,7 @@ describe("ConnectorConfigForm", () => {
 		const onSave = vi.fn().mockResolvedValue(undefined);
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: {
 					type: "object",
 					properties: {
@@ -260,6 +273,7 @@ describe("ConnectorConfigForm", () => {
 		const onSave = vi.fn().mockResolvedValue(undefined);
 		render(ConnectorConfigForm, {
 			props: {
+				storedConfiguration: {},
 				schema: testSchema,
 				configuration: { serverUrl: "https://example.com", pollingInterval: 300 },
 				saveLabel: "Start import",
@@ -281,7 +295,7 @@ describe("ConnectorConfigForm", () => {
 		const setupSchema = {
 			type: "object",
 			properties: {
-				url: { type: "string", format: "uri", "x-envVar": "CONNECT_NIGHTSCOUT_URL" },
+				url: { type: "string", format: "uri", "x-address": true, "x-envVar": "CONNECT_NIGHTSCOUT_URL" },
 				timezoneOffset: { type: "number", default: 0, "x-envVar": "CONNECT_NIGHTSCOUT_TIMEZONE_OFFSET" },
 				glucoseProcessing: { type: "string", enum: ["Smoothed", "Unsmoothed"] },
 				syncGlucose: { type: "boolean", default: true },
@@ -294,6 +308,7 @@ describe("ConnectorConfigForm", () => {
 		it("shows only what connecting needs, with no environment names", async () => {
 			render(ConnectorConfigForm, {
 				props: {
+					storedConfiguration: {},
 					schema: setupSchema,
 					configuration: { url: "https://ns.example" },
 					effectiveConfig: { timezoneOffset: 2 },
@@ -315,6 +330,7 @@ describe("ConnectorConfigForm", () => {
 		it("does not call a required secret optional", async () => {
 			render(ConnectorConfigForm, {
 				props: {
+					storedConfiguration: {},
 					schema: { ...setupSchema, required: ["apiSecret"] },
 					configuration: {},
 					variant: "setup",
@@ -329,6 +345,7 @@ describe("ConnectorConfigForm", () => {
 		it("shows a required field of any category", async () => {
 			render(ConnectorConfigForm, {
 				props: {
+					storedConfiguration: {},
 					schema: { ...setupSchema, required: ["maxCount"] },
 					configuration: {},
 					variant: "setup",
@@ -343,6 +360,7 @@ describe("ConnectorConfigForm", () => {
 			const onSave = vi.fn().mockResolvedValue(undefined);
 			render(ConnectorConfigForm, {
 				props: {
+					storedConfiguration: {},
 					schema: setupSchema,
 					configuration: { url: "https://ns.example" },
 					variant: "setup",

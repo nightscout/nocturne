@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Contracts.Audit;
@@ -13,6 +12,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -54,8 +54,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
 
     private SampleDataSeeder CreateSeeder()
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(TenantId);
+        var tenant = SettableTenantAccessor.Resolved(TenantId);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -95,7 +94,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             });
 
         return new SampleDataSeeder(
-            tenant.Object,
+            tenant,
             _db.ContextFactory.AsNocturneFactory(),
             new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             entries.Object,
@@ -104,7 +103,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
-            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory()),
+            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory(), _time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,
@@ -120,6 +119,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             new TempBasalRepository(
                 _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
                 NullLogger<TempBasalRepository>.Instance),
+            new InAppNotificationRepository(_db.ContextFactory.AsNocturneFactory()),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

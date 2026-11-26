@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,8 +7,8 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.API.Tests.Services.Jobs;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
@@ -28,7 +27,7 @@ public sealed class NotificationResolutionJobTests
         _repository
             .Setup(r => r.ArchiveAsync(It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()))
             .Callback((Guid id, NotificationArchiveReason reason, CancellationToken _) => _archived.Add((id, reason)))
-            .ReturnsAsync((InAppNotificationEntity?)null);
+            .ReturnsAsync((InAppNotification?)null);
     }
 
     [Fact]
@@ -68,11 +67,9 @@ public sealed class NotificationResolutionJobTests
             .RunAsync(new JobRun(tenant, null, 0, services, Now), CancellationToken.None);
     }
 
-    private static InAppNotificationEntity Notification(DateTime expiresAt) => new()
+    private static InAppNotification Notification(DateTime expiresAt) => new()
     {
         Id = Guid.CreateVersion7(),
-        ResolutionConditionsJson = JsonSerializer.Serialize(
-            new ResolutionConditions { ExpiresAt = expiresAt },
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+        ResolutionConditions = new ResolutionConditions { ExpiresAt = expiresAt },
     };
 }

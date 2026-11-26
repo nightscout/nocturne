@@ -17,6 +17,19 @@ public interface IAlertDeliveryService
     /// call that did not finish. One <c>alert_deliveries</c> row is written per channel before the
     /// provider call so the audit trail is complete even on provider failure.
     /// </summary>
+    /// <remarks>
+    /// Owed delivery is judged per send: a call sends only what the instance's latest send left owed.
+    /// That send is the opening until a re-notification starts, and from then the re-notification
+    /// (<c>alert_instances.renotified_at</c>, written before its rows), so only the rows written at or
+    /// after its start count. A channel is owed when it has no such row, or its row is still
+    /// <c>pending</c> (written, and the process died before its provider answered). A row
+    /// <c>delivered</c>, <c>failed</c> (the provider answered and refused, which is not retried) or
+    /// <c>expired</c> is done. With nothing owed it sends nothing, not even the broadcast; otherwise
+    /// the broadcast and the alarm go out again with the sends. A chat-bot row stays <c>pending</c>
+    /// until the bot reports it, so such a call can send a chat message twice: the safe way to fail.
+    /// An instance already resolved, by a close that ran while its opening was still owed, is not
+    /// dispatched.
+    /// </remarks>
     /// <param name="alertInstanceId">The alert instance the deliveries belong to.</param>
     /// <param name="channels">The rule's channel list (typically empty when the rule was created with no opt-in delivery surface).</param>
     /// <param name="payload">The <see cref="AlertPayload"/> rendered into each delivery.</param>
@@ -48,8 +61,11 @@ public interface IAlertDeliveryService
     /// <param name="channels">Channels to fire through (typically the rule's saved channels; for dry-run flows the editor passes its in-memory list).</param>
     /// <param name="payload">A <see cref="AlertPayload"/> rendered by the caller — name is conventionally prefixed with <c>"[Test] "</c>.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The id of the test instance, which its delivery rows hang from.</returns>
-    Task<Guid> TestFireAsync(
+    /// <returns>
+    /// The id of the test instance, which its delivery rows hang from, and the channels it did not
+    /// send because they do not deliver. A channel not sent keeps its delivery row, recorded failed.
+    /// </returns>
+    Task<AlertTestFire> TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
@@ -77,4 +93,12 @@ public interface IAlertDeliveryService
     /// Records a failed delivery attempt with the error details.
     /// </summary>
     Task MarkFailedAsync(Guid deliveryId, string error, CancellationToken ct);
+
+    /// <summary>
+    /// Records that the platform failed a message it had first accepted, as WhatsApp does in a status
+    /// webhook outside the customer service window. That status can land before the sender's own report
+    /// of the send, and the failure then stands against the send report for the same message. A failure
+    /// that names no message, such as a dispatch timeout, does not: the send report replaces it.
+    /// </summary>
+    Task MarkSentMessageFailedAsync(Guid deliveryId, string platformMessageId, string error, CancellationToken ct);
 }

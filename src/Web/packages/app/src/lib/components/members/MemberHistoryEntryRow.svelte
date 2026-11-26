@@ -12,6 +12,8 @@
   import { scopeLabels } from "#lib/constants/scope-labels.svelte.js";
   import { formatDateTime, formatMediumDate } from "#lib/utils/formatting.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
+  import { RULE_OWNER_APPROVES, RULE_TEAM_DECIDES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
+  import { REACH_EVERY_PERSON, REACH_THEIR_GROUPS } from "#lib/teams/staff-reach.svelte.js";
 
   interface Props {
     entry: MemberHistoryEntry;
@@ -107,9 +109,9 @@
         {:else if entry.joinedHow === MembershipJoinHow.System}
           The system added {member}.
         {:else if entry.joinedHow === MembershipJoinHow.Team && entry.team?.name}
-          {memberFirst} joined as staff of the team {entry.team.name}.
+          {memberFirst} now has access through the team {entry.team.name}.
         {:else if entry.joinedHow === MembershipJoinHow.Team}
-          {memberFirst} joined as staff of a team. The detail is no longer stored.
+          {memberFirst} now has access through a team. The detail is no longer stored.
         {:else}
           {memberFirst} joined. The detail is no longer stored.
         {/if}
@@ -125,9 +127,9 @@
         {:else if entry.removedHow === MembershipEndHow.System}
           The system removed {member}.
         {:else if entry.removedHow === MembershipEndHow.Team && entry.team?.name}
-          {memberFirst} is no longer staff of the team {entry.team.name}.
+          {memberFirst} no longer has access through the team {entry.team.name}.
         {:else if entry.removedHow === MembershipEndHow.Team}
-          {memberFirst} is no longer staff of a team. The detail is no longer stored.
+          {memberFirst} no longer has access through a team. The detail is no longer stored.
         {:else}
           {memberFirst}'s membership ended. The detail is no longer stored.
         {/if}
@@ -222,6 +224,113 @@
               {actor} gave a team that was deleted access with the roles {teamRoles}.
             {/if}
           {/if}
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamAccessChanged}
+        {#if entry.team?.name}
+          {actor} changed what the team {entry.team.name} can do on this site.
+        {:else}
+          {actor} changed what a team that was deleted can do on this site.
+        {/if}
+        {#if teamRoleCount === 0}
+          The detail is no longer stored.
+        {:else if teamRoleCount === 1}
+          {#if teamLimited && accessEnd}
+            After this change, the team had access with the role {teamRoles} to the last 24 hours only, until {accessEnd}.
+          {:else if teamLimited}
+            After this change, the team had access with the role {teamRoles} to the last 24 hours only.
+          {:else if accessEnd}
+            After this change, the team had access with the role {teamRoles} until {accessEnd}.
+          {:else}
+            After this change, the team had access with the role {teamRoles}.
+          {/if}
+        {:else}
+          {#if teamLimited && accessEnd}
+            After this change, the team had access with the roles {teamRoles} to the last 24 hours only, until {accessEnd}.
+          {:else if teamLimited}
+            After this change, the team had access with the roles {teamRoles} to the last 24 hours only.
+          {:else if accessEnd}
+            After this change, the team had access with the roles {teamRoles} until {accessEnd}.
+          {:else}
+            After this change, the team had access with the roles {teamRoles}.
+          {/if}
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamStaffApproved}
+        {#if entry.team?.name}
+          {actor} approved {member} as staff of the team {entry.team.name}.
+        {:else}
+          {actor} approved {member} as staff of a team that was deleted.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamStaffDeclined}
+        {#if entry.team?.name}
+          {actor} declined {member} as staff of the team {entry.team.name}.
+        {:else}
+          {actor} declined {member} as staff of a team that was deleted.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamStaffBlocked}
+        {actor} stopped {member} from seeing this site through any team.
+      {:else if entry.kind === MemberHistoryKind.TeamStaffUnblocked}
+        {actor} let {member} see this site through teams again.
+      {:else if entry.kind === MemberHistoryKind.TeamStaffRuleChanged}
+        {#if entry.team?.name && entry.staffRule === RULE_OWNER_APPROVES}
+          {actor} set the team {entry.team.name} so that an owner approves each staff member.
+        {:else if entry.team?.name && entry.staffRule === RULE_TEAM_DECIDES}
+          {actor} set the team {entry.team.name} so that the team decides who on its staff can see this site.
+        {:else if entry.team?.name && entry.staffRule === RULE_TEAM_TRUSTED}
+          {actor} set the team {entry.team.name} so that every staff member of the team can see this site.
+        {:else if entry.staffRule === RULE_OWNER_APPROVES}
+          {actor} set a team that was deleted so that an owner approves each staff member.
+        {:else if entry.staffRule === RULE_TEAM_DECIDES}
+          {actor} set a team that was deleted so that the team decides who on its staff can see this site.
+        {:else if entry.staffRule === RULE_TEAM_TRUSTED}
+          {actor} set a team that was deleted so that every staff member of the team can see this site.
+        {:else if entry.team?.name}
+          {actor} changed who approves the staff of the team {entry.team.name}. The detail is no longer stored.
+        {:else}
+          {actor} changed who approves the staff of a team that was deleted. The detail is no longer stored.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamGroupPersonAdded}
+        {#if entry.team?.name}
+          The team {entry.team.name} added this site to a group.
+        {:else}
+          A team that was deleted added this site to a group.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamGroupPersonRemoved}
+        {#if entry.team?.name}
+          The team {entry.team.name} removed this site from a group.
+        {:else}
+          A team that was deleted removed this site from a group.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamGroupStaffAdded}
+        {#if entry.team?.name}
+          The team {entry.team.name} added {member} to a group with this site.
+        {:else}
+          A team that was deleted added {member} to a group with this site.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamGroupStaffRemoved}
+        {#if entry.team?.name}
+          The team {entry.team.name} removed {member} from a group with this site.
+        {:else}
+          A team that was deleted removed {member} from a group with this site.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamGroupDeleted}
+        {#if entry.team?.name}
+          The team {entry.team.name} removed a group with this site.
+        {:else}
+          A team that was deleted removed a group with this site.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamStaffReachChanged}
+        {#if entry.team?.name && entry.staffReach === REACH_THEIR_GROUPS}
+          The team {entry.team.name} set its staff to see only the people in their groups.
+        {:else if entry.team?.name && entry.staffReach === REACH_EVERY_PERSON}
+          The team {entry.team.name} set its staff to see every person that the team follows.
+        {:else if entry.staffReach === REACH_THEIR_GROUPS}
+          A team that was deleted set its staff to see only the people in their groups.
+        {:else if entry.staffReach === REACH_EVERY_PERSON}
+          A team that was deleted set its staff to see every person that the team follows.
+        {:else if entry.team?.name}
+          The team {entry.team.name} changed which people its staff see. The detail is no longer stored.
+        {:else}
+          A team that was deleted changed which people its staff see. The detail is no longer stored.
         {/if}
       {:else if entry.kind === MemberHistoryKind.RolePermissionsChanged}
         {#if entry.role}

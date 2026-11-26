@@ -40,20 +40,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
     private static readonly DateTimeOffset Now = new(2026, 11, 22, 9, 0, 0, TimeSpan.Zero);
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("member_invite_maker");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("member_invite_maker");
 
     private sealed record Seeded(Guid Tenant, Guid Owner, Guid Maker, Guid Joiner, Guid CaretakerRole);
 
@@ -73,10 +60,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
 
     private NocturneDbContext Context(Guid tenant, Guid? actor)
     {
-        var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
+        var context = TestContexts.Context(database.AppConnectionString)
             .ActingAs(actor is { } subject ? new TestAuditActor { SubjectId = subject } : null);
         context.TenantId = tenant;
         return context;
@@ -90,14 +74,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'invite-maker-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"{slug}-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"{slug}-{tenant:N}", "invite-maker-test");
         }
 
         var contexts = Contexts(tenant);
@@ -134,7 +111,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         new FakeTimeProvider(Now),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        Revocation());
+        Revocation(), InertTeamStaff.Announcer());
 
     private static TenantService TenantService(SuppliedContextFactory contexts) => new(
         contexts,
@@ -148,7 +125,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         Revocation(),
         new FakeTimeProvider(Now),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private async Task<(Guid Id, string Token)> InviteByAsync(
         Seeded s, Guid maker, DateTime? expiresAt = null, int? maxUses = null)
@@ -228,7 +205,8 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         var (id, token) = await InviteByAsync(s, s.Maker);
         var members = new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off);
         var maker = (await members.FindMemberAsync(s.Tenant, s.Maker, Ct))!;
-        (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+                Contexts(s.Tenant), AccountLinkRoutes.Off, s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.Changed);
         (await StoredAsync(s, id)).RevokedAt.Should().BeNull();
 
@@ -244,7 +222,8 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         var (id, token) = await InviteByAsync(s, s.Maker, maxUses: 1);
         var members = new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off);
         var maker = (await members.FindMemberAsync(s.Tenant, s.Maker, Ct))!;
-        (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
+        (await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+                Contexts(s.Tenant), AccountLinkRoutes.Off, s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
             .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var service = InviteService(Contexts(s.Tenant), new MakerStillReadsAsMember(Contexts(s.Tenant), s.Maker));

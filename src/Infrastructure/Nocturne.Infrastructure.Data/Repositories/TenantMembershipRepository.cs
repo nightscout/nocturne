@@ -101,6 +101,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         {
             return await InTransactionAsync(member.TenantId, async (db, token) =>
             {
+                await db.LockSubjectRowSharedAsync(member.SubjectId, token);
                 await db.LockMembershipAsync(member.TenantId, member.SubjectId, token);
                 if (await db.TenantMembers.AnyAsync(m => m.TenantId == member.TenantId && m.SubjectId == member.SubjectId, token))
                     return false;
@@ -124,6 +125,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         {
             return await InTransactionAsync(member.TenantId, async (db, token) =>
             {
+                await db.LockSubjectRowSharedAsync(member.SubjectId, token);
                 await db.LockMembershipAsync(member.TenantId, member.SubjectId, token);
                 var existing = await db.TenantMembers
                     .FirstOrDefaultAsync(m => m.TenantId == member.TenantId && m.SubjectId == member.SubjectId, token);
@@ -215,8 +217,10 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     /// Stages setting the reason a team's access to the tenant (<paramref name="teamAccessId"/>) gives
     /// <paramref name="subjectId"/> to <paramref name="grant"/> through <see cref="MembershipReasons.SetTeamReasonAsync"/>,
     /// with the rows of what changed in it, attributed to <paramref name="source"/>, on <paramref name="unit"/>,
-    /// which must be pinned to <paramref name="tenantId"/>. A membership it leaves with an earlier end has
-    /// what the subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
+    /// which must be pinned to <paramref name="tenantId"/>. A reason whose end had passed and whose grant is
+    /// in force again also stages its joined row, as <see cref="StageAddTeamReasonAsync"/> does, since the
+    /// member has access through the team again. A membership it leaves with an earlier end has what the
+    /// subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
     /// </summary>
     /// <returns>The grants the cap lowered, for the caller to evict their sessions once the unit commits.</returns>
     /// <exception cref="InvalidOperationException">
@@ -231,6 +235,15 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
         if (member is null || await MembershipReasons.TeamGrantAsync(db, member, teamAccessId, now, ct) is not { } before)
             throw new InvalidOperationException($"Subject {subjectId} holds no reason from team access {teamAccessId} on tenant {tenantId}.");
+
+        if (MembershipLiveness.HasEnded(before.AccessEndsAt, now) && !MembershipLiveness.HasEnded(grant.AccessEndsAt, now))
+        {
+            var team = await db.TeamTenantAccess.AsNoTracking()
+                .Where(a => a.Id == teamAccessId)
+                .Select(a => new MemberAccessTeam(a.TeamId, a.Team!.Name))
+                .FirstAsync(ct);
+            MemberAccessAudit.StageJoined(db, tenantId, subjectId, MembershipJoinHow.Team, inviteId: null, by: null, team, source);
+        }
 
         MemberAccessAudit.StageRoles(
             db, tenantId, subjectId,
@@ -471,41 +484,64 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <summary>
-    /// Runs <paramref name="change"/> under the tenant's owner lock (<see cref="TenantOwnerLock"/>)
-    /// and saves it when it reports <see cref="OwnerGuardedChange.Changed"/>: on this repository's unit,
-    /// whose owner commits it, else on a new unit pinned to <paramref name="tenantId"/>.
+    /// Stages <paramref name="change"/> on this repository's unit under the tenant's owner lock
+    /// (<see cref="TenantOwnerLock"/>) and its team access lock (<see cref="TeamAccessLock"/>), in the
+    /// order <see cref="MembershipLock"/> states, for the unit's owner to save, sync and commit.
     /// </summary>
     /// <remarks>
-    /// Holding the lock from the check to the commit makes the second of two owners stepping down or
-    /// removing each other read the first one's write.
+    /// Holding the owner lock from the check to the commit makes the second of two owners stepping down
+    /// or removing each other read the first one's write. A change here can change whether the member
+    /// owns the site, and an owner holds no team reason, so the owner of the unit syncs the member's team
+    /// reasons in the same commit (<see cref="TeamReasonChanges.SyncAsync"/>), which needs the team access
+    /// lock; it cannot be taken after the membership lock the change takes. There is no form without a
+    /// unit: it would commit an owner change that nothing syncs.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">The repository is over a unit with no transaction open.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The repository is not over a unit, or the unit has no transaction open.
+    /// </exception>
     private async Task<OwnerGuardedChange> UnderOwnersLockAsync(
         Guid tenantId,
         Func<NocturneDbContext, CancellationToken, Task<OwnerGuardedChange>> change,
         CancellationToken ct)
     {
-        if (_unit is not null)
-        {
-            await _unit.Context.LockTenantOwnersAsync(tenantId, ct);
-            return await change(_unit.Context, ct);
-        }
-
-        await using var unit = await DbUnitOfWork.OpenForTenantAsync(Pinnable, tenantId, ct);
-        return await unit.CommitAsync(
-            async token =>
-            {
-                await unit.Context.LockTenantOwnersAsync(tenantId, token);
-                var outcome = await change(unit.Context, token);
-                if (outcome == OwnerGuardedChange.Changed)
-                    await unit.Context.SaveChangesAsync(token);
-                return outcome;
-            },
-            ct: ct);
+        var unit = _unit ?? throw new InvalidOperationException(
+            "An owner-guarded change runs on a repository over a unit, whose owner syncs the member's team reasons in its commit.");
+        await unit.Context.LockTenantOwnersAsync(tenantId, ct);
+        await unit.Context.LockTeamAccessAsync(tenantId, ct);
+        return await change(unit.Context, ct);
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<DirectReasonRemoval> RemoveMemberUnlessLastOwnerAsync(
+    /// <summary>
+    /// Takes, on <paramref name="unit"/>, what a write that can change whether <paramref name="subjectId"/>
+    /// owns <paramref name="tenantId"/> holds from before any other lock to its commit, in the order
+    /// <see cref="MembershipLock"/> states: the subject's row, the site's owners lock and its team access
+    /// lock. Under them the write and then a sync of the subject's team reasons at the site
+    /// (<see cref="TeamReasonChanges.SyncAsync"/>) can each take the membership's lock.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the unit.</exception>
+    public static async Task LockOwnerChangeAsync(DbUnitOfWork unit, Guid tenantId, Guid subjectId, CancellationToken ct)
+    {
+        await unit.LockSubjectRowSharedAsync(subjectId, ct);
+        await unit.Context.LockTenantOwnersAsync(tenantId, ct);
+        await unit.Context.LockTeamAccessAsync(tenantId, ct);
+    }
+
+    /// <summary>
+    /// Stages on this repository's unit the removal of the membership's direct reason, refused with
+    /// <see cref="OwnerGuardedChange.LastOwner"/> when <see cref="TenantOwnerFilter.IsLastOwnerAsync"/>
+    /// says it is the last owner, and with <see cref="OwnerGuardedChange.FromTeam"/> when it holds no
+    /// direct reason. A membership whose only reason it is goes with it; one that also holds a team's
+    /// reason stays, projected at <paramref name="now"/> from what is left, and says the end it keeps.
+    /// Its removed row records <paramref name="how"/>.
+    /// </summary>
+    /// <remarks>
+    /// Call it inside the unit's commit, which holds the locks <see cref="UnderOwnersLockAsync"/> takes
+    /// until it commits. The caller saves, caps what the member made at
+    /// <see cref="DirectReasonRemoval.KeptAccessEndsAt"/> (<c>MemberCreations.CapAsync</c>) and syncs the
+    /// subject's team reasons on the tenant, all in that commit.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public async Task<DirectReasonRemoval> RemoveMemberUnlessLastOwnerAsync(
         Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct)
     {
         var kept = false;
@@ -528,41 +564,6 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return OwnerGuardedChange.Changed;
         }, ct);
         return new DirectReasonRemoval(outcome, kept, keptEnd);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<SubjectMembershipsRemoval> RemoveMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct)
-    {
-        if (_unit is not null)
-            return await RemoveMembershipsUnderOwnerLocksAsync(_unit.Context, subjectId, _linkRoute, ct);
-
-        await using var unit = await DbUnitOfWork.OpenPlatformAsync(Pinnable, ct);
-        return await unit.CommitAsync(
-            async token =>
-            {
-                var removal = await RemoveMembershipsUnderOwnerLocksAsync(unit.Context, subjectId, _linkRoute, token);
-                await unit.Context.SaveChangesAsync(token);
-                return removal;
-            },
-            ct: ct);
-    }
-
-    private static async Task<SubjectMembershipsRemoval> RemoveMembershipsUnderOwnerLocksAsync(
-        NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
-    {
-        var leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, linkRoute, ct);
-        await db.LockTeamManagersOfSubjectAsync(subjectId, ct);
-        var memberships = await db.TenantMembers
-            .Include(m => m.MemberRoles)
-            .Where(m => m.SubjectId == subjectId)
-            .ToListAsync(ct);
-        await db.LockMembershipsAsync(memberships.Select(m => (m.TenantId, m.SubjectId)), ct);
-
-        foreach (var membership in memberships)
-            await StageRemovalAsync(db, membership, ct);
-        foreach (var membership in memberships)
-            await MembershipReasons.RemoveMemberAsync(db, membership, MembershipEndHow.System, ct);
-        return new SubjectMembershipsRemoval(memberships.Count, leftWithoutOwner);
     }
 
     /// <summary>
@@ -619,8 +620,16 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return true;
         }, ct);
 
-    /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(
+    /// <summary>
+    /// Stages on this repository's unit when the membership's direct reason ends, null clearing it, and
+    /// stamps it updated at <paramref name="now"/> when the date moved. Refused with
+    /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it would give an owner an end date, and with
+    /// <see cref="OwnerGuardedChange.FromTeam"/> when it holds no direct reason. The caller saves, caps
+    /// what the member made and syncs the member's team reasons in the unit's commit.
+    /// </summary>
+    /// <remarks>Holds the locks <see cref="UnderOwnersLockAsync"/> takes, so it and a role change cannot race.</remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(
         Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct) =>
         UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
@@ -671,8 +680,17 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return true;
         }, ct);
 
-    /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
+    /// <summary>
+    /// <see cref="ReplaceRolesAsync"/> staged on this repository's unit, refused with
+    /// <see cref="OwnerGuardedChange.LastOwner"/> when it removes the owner role from a membership
+    /// <see cref="TenantOwnerFilter.IsLastOwnerAsync"/> says is the last owner, with
+    /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it gives the owner role to a direct reason
+    /// that has an end date, and with <see cref="OwnerGuardedChange.FromTeam"/> when the membership holds
+    /// no direct reason. The caller saves and syncs the member's team reasons in the unit's commit.
+    /// </summary>
+    /// <remarks>Holds the locks <see cref="UnderOwnersLockAsync"/> takes.</remarks>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
         Guid tenantId, Guid memberId, IReadOnlyCollection<Guid> removedRoleIds, IReadOnlyCollection<Guid> addedRoleIds,
         DateTime now, CancellationToken ct) =>
         UnderOwnersLockAsync(tenantId, async (db, token) =>

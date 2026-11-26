@@ -78,6 +78,10 @@ public class PlatformSettingsService
             new("appSecret", "App Secret", true),
             new("phoneNumberId", "Phone Number ID", true),
             new("verifyToken", "Verify Token", true),
+            // The approved utility template alerts are sent as outside the 24-hour customer service
+            // window. Without one, such alerts are recorded failed.
+            new("alertTemplateName", "Alert Template Name", false),
+            new("alertTemplateLanguage", "Alert Template Language", false),
         ],
         ["resend"] =
         [
@@ -95,6 +99,13 @@ public class PlatformSettingsService
         [("telegram", "webhookSecretToken")] = (
             new Regex("^[A-Za-z0-9_-]{1,256}$", RegexOptions.CultureInvariant),
             "Webhook Secret Token must be 1-256 characters of letters, digits, '_' or '-'"),
+        // WhatsApp Manager allows only these characters in a template name.
+        [("whatsapp", "alertTemplateName")] = (
+            new Regex("^[a-z0-9_]{1,512}$", RegexOptions.CultureInvariant),
+            "Alert Template Name must be lowercase letters, digits or '_', as in WhatsApp Manager"),
+        [("whatsapp", "alertTemplateLanguage")] = (
+            new Regex("^[a-z]{2,3}(_[A-Z]{2})?$", RegexOptions.CultureInvariant),
+            "Alert Template Language must be a WhatsApp language code, such as en or en_US"),
     };
 
     public PlatformSettingsService(INocturneDbContextFactory contexts, ISecretEncryptionService encryption, IOptions<BaseDomainOptions> baseDomain)

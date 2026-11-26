@@ -41,26 +41,10 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
 {
     private static readonly DateTimeOffset Instant = new(2026, 3, 14, 20, 0, 0, TimeSpan.Zero);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("sample_data_trackers");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("sample_data_trackers");
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private SuppliedContextFactory Contexts(Guid tenant) => new(() => Context(tenant));
 
@@ -69,22 +53,14 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'tracker-seed-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"tracker-seed-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"tracker-seed-{tenant:N}", "tracker-seed-test");
         return tenant;
     }
 
     private SampleDataSeeder CreateSeeder(Guid tenantId)
     {
         var contexts = Contexts(tenantId);
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(tenantId);
+        var tenant = SettableTenantAccessor.Resolved(tenantId);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -113,7 +89,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
         time.SetLocalTimeZone(TimeZoneInfo.Utc);
         var audit = new SystemAuditContext();
         return new SampleDataSeeder(
-            tenant.Object,
+            tenant,
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             entries.Object,
@@ -122,7 +98,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             new TrackerRepository(contexts, time),
-            new AlertRuleRepository(contexts),
+            new AlertRuleRepository(contexts, time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,
@@ -135,6 +111,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
             new ProfileActivationRepository(contexts, audit, NullLogger<ProfileActivationRepository>.Instance),
             new TempBasalRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance),
+            new InAppNotificationRepository(contexts),
             time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

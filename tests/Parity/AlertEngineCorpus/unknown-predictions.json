@@ -12,7 +12,6 @@
         "value": 70,
         "within_minutes": 30
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
         "value": 70,
         "within_minutes": 10
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

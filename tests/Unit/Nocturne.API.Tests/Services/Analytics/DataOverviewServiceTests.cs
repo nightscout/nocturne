@@ -1745,7 +1745,7 @@ public class DataOverviewServiceTests : IDisposable
         var context = TestDbContextFactory.CreateInMemoryContext(_dbName);
         context.TenantId = TenantId;
         held.SetResult(context);
-        var results = await Task.WhenAll(reads).WaitAsync(TimeSpan.FromSeconds(5));
+        var results = await Task.WhenAll(reads).WaitAsync(Eventually.DefaultPatience);
 
         _contextsOpened.Should().Be(1);
         results.Should().AllSatisfy(r => r.Should().BeSameAs(results[0]));

@@ -11,7 +11,7 @@ namespace Nocturne.API.Services.Effects;
 /// <see cref="ITenantCache"/> invalidation and <see cref="ISignalRBroadcastService"/> real-time broadcasting.
 /// </summary>
 /// <remarks>
-/// Broadcast failures are caught and logged without propagating — the write itself is never rolled back.
+/// A broadcast does not throw (see <see cref="ISignalRBroadcastService"/>), so the write is never rolled back.
 /// </remarks>
 /// <seealso cref="IWriteSideEffects"/>
 /// <seealso cref="ISignalRBroadcastService"/>
@@ -42,7 +42,6 @@ public class WriteSideEffectsService : IWriteSideEffects
     /// <remarks>
     /// Sequence: cache invalidation, then per-record <c>create</c> SignalR broadcast, then optional
     /// <c>dataUpdate</c> broadcast if <see cref="WriteEffectOptions.BroadcastDataUpdate"/> is set.
-    /// Broadcast failures are swallowed and logged.
     /// </remarks>
     public async Task OnCreatedAsync<T>(
         string collectionName,
@@ -55,28 +54,17 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         await InvalidateCacheAsync(options, cancellationToken);
 
-        try
+        foreach (var record in records)
         {
-            foreach (var record in records)
-            {
-                await _broadcast.BroadcastStorageCreateAsync(
-                    collectionName,
-                    new StorageDocumentEvent(collectionName, record)
-                );
-            }
-
-            if (options.BroadcastDataUpdate)
-            {
-                await _broadcast.BroadcastDataUpdateAsync(records.ToArray());
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Broadcast failed during create for {Collection}",
-                collectionName
+            await _broadcast.BroadcastStorageCreateAsync(
+                collectionName,
+                new StorageDocumentEvent(collectionName, record)
             );
+        }
+
+        if (options.BroadcastDataUpdate)
+        {
+            await _broadcast.BroadcastDataUpdateAsync(records.ToArray());
         }
     }
 
@@ -92,21 +80,10 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         await InvalidateCacheAsync(options, cancellationToken);
 
-        try
-        {
-            await _broadcast.BroadcastStorageUpdateAsync(
-                collectionName,
-                new StorageDocumentEvent(collectionName, record)
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Broadcast failed during update for {Collection}",
-                collectionName
-            );
-        }
+        await _broadcast.BroadcastStorageUpdateAsync(
+            collectionName,
+            new StorageDocumentEvent(collectionName, record)
+        );
     }
 
     /// <inheritdoc />
@@ -129,25 +106,14 @@ public class WriteSideEffectsService : IWriteSideEffects
         if (deletedRecord is null)
             return;
 
-        try
-        {
-            await _broadcast.BroadcastStorageDeleteAsync(
+        await _broadcast.BroadcastStorageDeleteAsync(
+            collectionName,
+            new StorageDeleteEvent(
                 collectionName,
-                new StorageDeleteEvent(
-                    collectionName,
-                    (deletedRecord as IProcessableDocument)?.Id,
-                    deletedRecord
-                )
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Broadcast failed during delete for {Collection}",
-                collectionName
-            );
-        }
+                (deletedRecord as IProcessableDocument)?.Id,
+                deletedRecord
+            )
+        );
     }
 
     /// <inheritdoc />
@@ -165,26 +131,15 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         await InvalidateCacheAsync(options, cancellationToken);
 
-        try
-        {
-            await _broadcast.BroadcastStorageDeleteAsync(
-                collectionName,
-                new StorageBulkDeleteEvent(collectionName, deletedCount)
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Broadcast failed during bulk delete for {Collection}",
-                collectionName
-            );
-        }
+        await _broadcast.BroadcastStorageDeleteAsync(
+            collectionName,
+            new StorageBulkDeleteEvent(collectionName, deletedCount)
+        );
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Exceptions are caught and logged as warnings — cache failures must not abort the write path.
+    /// Exceptions are caught and logged as warnings, because a cache failure must not abort the write path.
     /// </remarks>
     public async Task InvalidateCacheAsync(WriteEffectOptions options, CancellationToken cancellationToken = default)
     {

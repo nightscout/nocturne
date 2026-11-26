@@ -79,6 +79,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 new TreatmentQuery
                 {
                     Find = findQuery,
+                    IncludesDeletedWhenNamed = false,
                     Count = parameters.Limit,
                     Skip = parameters.Offset,
                     ReverseResults = !parameters.Sort.Descending,
@@ -117,15 +118,15 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// </summary>
     /// <param name="id">Treatment ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Single treatment in V3 format</returns>
+    /// <returns>The treatment in V3 format, in the V3 envelope</returns>
     [HttpGet("{id}")]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
-    [ProducesResponseType(typeof(Treatment), 200)]
+    [ProducesResponseType(typeof(V3Envelope<Treatment>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TreatmentsRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Treatment>> GetTreatment(
+    public async Task<ActionResult<V3Envelope<Treatment>>> GetTreatment(
         string id,
         CancellationToken cancellationToken = default
     )
@@ -149,7 +150,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
         Response.Headers["ETag"] = FormatCursorETag(treatment.SrvModified ?? treatment.Mills);
         Response.Headers["Cache-Control"] = "private, max-age=60";
 
-        return Ok(treatment);
+        return CreateV3SuccessResponse(treatment);
     }
 
     /// <summary>
@@ -205,8 +206,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                     treatment.Id,
                     cancellationToken
                 );
-                // A create with isValid: false replaces the stored treatment, as Nightscout's create of
-                // a stored identifier does, which leaves it deleted.
+                // A create with isValid: false is not a duplicate of the treatment its id names: it
+                // deletes it (InvalidUploads in Services/V4).
                 if (existingTreatment != null && treatment.IsValid != false)
                 {
                     return V3Deduplicated(existingTreatment.Id, existingTreatment.SrvModified);
@@ -318,17 +319,17 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <param name="id">Treatment ID</param>
     /// <param name="treatment">Updated treatment data</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Updated treatment</returns>
+    /// <returns><c>{"status": 200, "lastModified": ...}</c> on success</returns>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
-    [ProducesResponseType(typeof(Treatment), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Treatment>> UpdateTreatment(
+    public async Task<ActionResult> UpdateTreatment(
         string id,
         [FromBody] Treatment treatment,
         CancellationToken cancellationToken = default
@@ -374,7 +375,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             _logger.LogDebug("Successfully updated V3 treatment {Id}", id);
 
-            return Ok(updatedTreatment);
+            return V3Replaced();
         }
         catch (ArgumentException ex)
         {
@@ -458,7 +459,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <param name="id">The treatment ID to patch.</param>
     /// <param name="patchData">JSON merge-patch data to apply to the existing <see cref="Treatment"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The patched <see cref="Treatment"/> with updated fields.</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     /// <remarks>
     /// Delegates to <see cref="ITreatmentService.PatchTreatmentAsync"/> which applies JSON merge-patch
     /// semantics. This is critical for AAPS which uses PATCH to update Temp Basal end times and durations.
@@ -471,7 +472,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
-    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
@@ -484,9 +485,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     {
         _logger.LogDebug("V3 treatment PATCH requested for {Id}", id);
 
-        if (patchData.ValueKind == JsonValueKind.Object
-            && patchData.TryGetProperty("isValid", out var isValid)
-            && isValid.ValueKind == JsonValueKind.False)
+        if (PatchSetsInvalid(patchData))
             return IsValidImmutable();
 
         var result = await _treatmentService.PatchTreatmentAsync(
@@ -506,24 +505,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
         _logger.LogDebug("Successfully patched V3 treatment {Id}", id);
 
-        return Ok(
-            new
-            {
-                status = 200,
-                result,
-                identifier = MongoObjectId.Coerce(result.Id),
-            }
-        );
+        return V3Patched();
     }
 
     #region Helper Methods
-
-    /// <summary>
-    /// Nightscout's answer to an update that sets <c>isValid: false</c>: a client deletes a treatment
-    /// with DELETE, never by an edit.
-    /// </summary>
-    private ActionResult IsValidImmutable() =>
-        CreateV3ErrorResponse(400, "Field isValid cannot be modified by the client");
 
 
     private DateTimeOffset GetLastModified(List<Treatment> treatments)

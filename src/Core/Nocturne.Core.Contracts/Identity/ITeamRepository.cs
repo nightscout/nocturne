@@ -31,6 +31,19 @@ public interface ITeamRepository
     Task<string?> RenameAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
 
     /// <summary>
+    /// Makes an empty group named <paramref name="name"/> in the team. <see cref="TeamGroupChange.NotFound"/>
+    /// when the caller is not a manager of it, <see cref="TeamGroupChange.NameTaken"/> when another of its groups
+    /// has the name, ignoring case. Changes nobody's access.
+    /// </summary>
+    Task<TeamGroupCreation> CreateGroupAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
+
+    /// <summary>
+    /// Renames the team's group, as <see cref="CreateGroupAsync"/> refuses a name; also
+    /// <see cref="TeamGroupChange.NotFound"/> when the team has no such group. Changes nobody's access.
+    /// </summary>
+    Task<TeamGroupChange> RenameGroupAsync(Guid teamId, Guid callerSubjectId, Guid groupId, string name, CancellationToken ct);
+
+    /// <summary>
     /// Removes <paramref name="managerSubjectId"/> from the team; the caller's own id means leave.
     /// Refused with <see cref="ManagerGuardedChange.LastManager"/> when the team would have no
     /// manager who counts, and <see cref="ManagerGuardedChange.NotFound"/> when either the caller or
@@ -88,8 +101,14 @@ public interface ITeamRepository
     /// <summary>Of <paramref name="tenantIds"/>, the sites the team already has access to.</summary>
     Task<IReadOnlySet<Guid>> ListSitesWithAccessAsync(Guid teamId, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct);
 
-    /// <summary>The teams with access to <paramref name="tenantId"/>, by name.</summary>
+    /// <summary>The teams with access to <paramref name="tenantId"/>, by name, each with its staff waiting for approval first.</summary>
     Task<IReadOnlyList<TenantTeamAccess>> ListAccessOfTenantAsync(Guid tenantId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// The people <paramref name="tenantId"/> stopped reaching it through any team, the latest first, staff of
+    /// a team with access to it or not, so an owner can always remove a stop.
+    /// </summary>
+    Task<IReadOnlyList<TenantTeamStaffBlock>> ListStaffBlocksOfTenantAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>The roles of <paramref name="tenantId"/> a team's access gives.</summary>
     Task<IReadOnlySet<Guid>> ListRolesHeldByTeamsAsync(Guid tenantId, CancellationToken ct);
@@ -99,4 +118,16 @@ public interface ITeamRepository
     /// with the team's name as it is now.
     /// </summary>
     Task<IReadOnlyList<TeamAccessApprover>> ListAccessApproversAsync(Guid teamId, CancellationToken ct);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> with the team's current name and the staff whose rows on its access to
+    /// <paramref name="tenantId"/> wait for an owner, and whose place and access have not ended at
+    /// <paramref name="now"/>, read under a lock on the team at the site that every other call for the pair
+    /// waits for until <paramref name="work"/> has finished. Null when the team has no access to the site.
+    /// </summary>
+    Task WithStaffWaitingLockedAsync(
+        Guid tenantId, Guid teamId, DateTime now, Func<TeamStaffWaiting?, Task> work, CancellationToken ct);
+
+    /// <summary>Each team and site where <paramref name="subjectId"/> has a <c>team_site_staff</c> row, across every site.</summary>
+    Task<IReadOnlyList<TeamSiteKey>> ListStaffSitesOfSubjectAsync(Guid subjectId, CancellationToken ct);
 }

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -28,13 +29,13 @@ public class TranslationDraftUniqueIndexTests(RlsCompletenessFixture fx)
         var tenantB = Guid.NewGuid();
 
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantA);
-        await InsertTenantAsync(conn, tenantB);
+        await conn.SeedTenantAsync(tenantA, $"draft-{tenantA:N}", "draft-index-test");
+        await conn.SeedTenantAsync(tenantB, $"draft-{tenantB:N}", "draft-index-test");
 
-        await SetCurrentTenantAsync(conn, tenantA);
+        await conn.PinTenantAsync(tenantA);
         await InsertDraftAsync(conn, tenantA, subject, "fr", "", "Hello");
 
-        await SetCurrentTenantAsync(conn, tenantB);
+        await conn.PinTenantAsync(tenantB);
         var act = () => InsertDraftAsync(conn, tenantB, subject, "fr", "", "Hello");
 
         await act.Should().NotThrowAsync(
@@ -49,8 +50,8 @@ public class TranslationDraftUniqueIndexTests(RlsCompletenessFixture fx)
         var tenant = Guid.NewGuid();
 
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenant);
-        await SetCurrentTenantAsync(conn, tenant);
+        await conn.SeedTenantAsync(tenant, $"draft-{tenant:N}", "draft-index-test");
+        await conn.PinTenantAsync(tenant);
 
         await InsertDraftAsync(conn, tenant, subject, "fr", "", "Hello");
         var act = () => InsertDraftAsync(conn, tenant, subject, "fr", "", "Hello");
@@ -59,20 +60,6 @@ public class TranslationDraftUniqueIndexTests(RlsCompletenessFixture fx)
         thrown.Which.SqlState.Should().Be(
             "23505",
             "within one tenant a subject holds at most one draft per (locale, context, msgid)");
-    }
-
-    private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants
-                (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES
-                (@id, @slug, 'draft-index-test', true, now(), now())
-            """;
-        AddParam(cmd, "@id", tenantId);
-        AddParam(cmd, "@slug", $"draft-{tenantId:N}");
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task InsertDraftAsync(
@@ -91,14 +78,6 @@ public class TranslationDraftUniqueIndexTests(RlsCompletenessFixture fx)
         AddParam(cmd, "@ctx", context);
         AddParam(cmd, "@msgid", msgId);
         await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task SetCurrentTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        AddParam(cmd, "@tid", tenantId.ToString());
-        await cmd.ExecuteScalarAsync();
     }
 
     private static void AddParam(NpgsqlCommand cmd, string name, object value)

@@ -16,11 +16,12 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
@@ -40,7 +41,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     private readonly ScanClock _clock = new(new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero));
     private readonly SqliteTestDatabase _database = TestDbContextFactory.CreateSqlite();
     private readonly List<Sent> _sent = [];
-    private readonly List<InAppNotificationEntity> _active = [];
+    private readonly List<InAppNotification> _active = [];
     private readonly List<(string UserId, string Type, string SourceId, NotificationArchiveReason Reason)> _archived = [];
     private readonly Dictionary<Guid, string[]> _owners = [];
     private readonly ListLogger _log = new();
@@ -64,7 +65,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(_database.ContextFactory);
-        services.AddScoped<ITenantAccessor, StubTenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(sp => _database.ContextFactory.AsNocturneFactory(sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped(_ => owners.Object);
         services.AddScoped(_ => repository.Object);
@@ -72,6 +73,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new RecordingNotifications(sp.GetRequiredService<ITenantAccessor>(), this));
         services.AddTransient(_ => _key);
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddTransient<UndecryptableSecretScanner>();
         _provider = services.BuildServiceProvider();
@@ -129,7 +131,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         await CreateService().ReconcileAsync(generation, CancellationToken.None);
 
-        var json = InAppNotificationRepository.SerializeMetadata(_sent[0].Metadata)!;
+        var json = InAppNotificationMapper.SerializeMetadata(_sent[0].Metadata)!;
         using var document = JsonDocument.Parse(json);
         document.RootElement.GetProperty("AlertChannels")[0].EnumerateObject().Select(p => p.Name)
             .Should().Equal("ruleId", "ruleName", "destination");
@@ -143,7 +145,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var affected = _database.ContextFactory.AsNocturneFactory(Affected);
         var found = await new UndecryptableSecretScanner(
-            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected), _newKey).ScanTenantAsync(CancellationToken.None);
+            affected, new ConnectorConfigurationRepository(affected), new AlertRuleRepository(affected, TimeProvider.System), _newKey).ScanTenantAsync(CancellationToken.None);
 
         found.AlertChannels.Select(c => (c.RuleName, c.Destination)).Should().Equal(
             ("Bare", ""), ("Mixed", "a.example.com"));
@@ -214,7 +216,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await using (var db = _database.CreateContext(Affected))
             await db.AlertRuleChannels.ExecuteDeleteAsync();
         await StorePlatformSettingAsync("discord", enabled: true, _newKey);
-        await AdvanceUntilAsync(() => service.ExecuteTask!.IsCompleted);
+        await Eventually.UntilAsync("the service to finish", () => service.ExecuteTask!.IsCompleted, eachStep: AdvanceRescan);
         await service.ExecuteTask!;
 
         _archived.Should().BeEquivalentTo(
@@ -255,7 +257,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await StartAndAwaitPassAsync(first);
         var firstChange = (await CheckAsync())!.Generation.ToString();
         await StoreConnectorAsync(Affected, "dexcom", _newKey);
-        await AdvanceUntilAsync(() => _archived.Count == 2);
+        await Eventually.UntilAsync("the second check to be archived", () => _archived.Count == 2, eachStep: AdvanceRescan);
         await first.StopAsync(CancellationToken.None);
         _sent.Clear();
         _archived.Clear();
@@ -286,10 +288,11 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var service = CreateService(snapshotContexts: flaky.AsNocturneFactory());
         await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => flaky.Failed);
+        await Eventually.UntilAsync("the snapshot read to fail", () => flaky.Failed);
         service.ExecuteTask!.IsCompleted.Should().BeFalse();
 
-        await AdvanceUntilAsync(() => _sent.Count == OwnersOf(Affected).Length);
+        await Eventually.UntilAsync(
+            "a notice to reach every affected owner", () => _sent.Count == OwnersOf(Affected).Length, eachStep: AdvanceRescan);
         await service.StopAsync(CancellationToken.None);
 
         _log.Entries.Should().Contain(e => e.Level == LogLevel.Error);
@@ -377,7 +380,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     private static async Task RunAsync(InstanceKeyChangeService service)
     {
         await service.StartAsync(CancellationToken.None);
-        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await service.ExecuteTask!.WaitAsync(Eventually.DefaultPatience);
     }
 
     /// <summary>
@@ -388,27 +391,12 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     {
         var scans = _clock.Scans;
         await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _clock.Scans > scans || service.ExecuteTask!.IsCompleted);
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition())
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline);
-            await Task.Delay(10);
-        }
+        await Eventually.UntilAsync(
+            "the service to finish a pass", () => _clock.Scans > scans || service.ExecuteTask!.IsCompleted);
     }
 
     /// <summary>Moves the clock a scan at a time, since a scan may not yet be waiting when it moves.</summary>
-    private Task AdvanceUntilAsync(Func<bool> condition) => WaitUntilAsync(() =>
-    {
-        if (condition())
-            return true;
-        _clock.Advance(InstanceKeyChangeService.RescanInterval);
-        return false;
-    });
+    private void AdvanceRescan() => _clock.Advance(InstanceKeyChangeService.RescanInterval);
 
     private async Task WriteCheckAsync(ISecretEncryptionService key) =>
         (await new InstanceKeyCheck(_database.ContextFactory.AsNocturneFactory(), key)
@@ -553,7 +541,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             lock (test._sent)
             {
                 test._sent.Add(new Sent(tenant.TenantId, userId, type, sourceId!, urgency, actions ?? [], metadata!));
-                test._active.Add(new InAppNotificationEntity
+                test._active.Add(new InAppNotification
                 {
                     Id = Guid.NewGuid(), UserId = userId, Type = type, Source = InstanceKeyChangeService.Source,
                     SourceId = sourceId,
@@ -635,14 +623,5 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             lock (Entries)
                 Entries.Add((logLevel, formatter(state, exception)));
         }
-    }
-
-    private sealed class StubTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

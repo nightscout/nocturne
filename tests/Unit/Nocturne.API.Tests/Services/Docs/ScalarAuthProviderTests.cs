@@ -7,6 +7,8 @@ using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Docs;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Docs;
@@ -443,6 +445,81 @@ public class ScalarAuthProviderTests : IDisposable
             .SingleAsync(c => c.TenantId == tenantId);
         client.IsKnown.Should().BeFalse();
         client.ClientId.Should().NotBe(ScalarAuthProvider.ScalarSoftwareId);
+    }
+
+    /// <summary>
+    /// An opt-in that cannot be read is not an opt-in, so a store failure refuses the docs rather
+    /// than serving them on a tenant that may never have turned them on.
+    /// </summary>
+    [Fact]
+    public async Task TryPrepareAsync_RefusesTheDocs_WhenTheTenantCannotBeRead()
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var tenants = new Mock<ITenantRepository>();
+        tenants.Setup(t => t.FindBySlugAsync("rhys", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the database did not answer"));
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run");
+
+        (await _fixture.BuildProvider(tenants: tenants.Object).TryPrepareAsync(context)).Should().BeFalse();
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_LetsAnUnexpectedFailureOfTheTenantReadPropagate()
+    {
+        var tenants = new Mock<ITenantRepository>();
+        tenants.Setup(t => t.FindBySlugAsync("rhys", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NullReferenceException());
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run");
+
+        var act = () => _fixture.BuildProvider(tenants: tenants.Object).TryPrepareAsync(context);
+
+        await act.Should().ThrowAsync<NullReferenceException>();
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_ServesTheDocsWithoutAuthentication_WhenTheClientCannotBeRegistered()
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var clients = new Mock<IOAuthClientRepository>();
+        clients.Setup(c => c.FindOrCreateWithRedirectUriAsync(
+                It.IsAny<Guid>(), It.IsAny<NewOAuthClient>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the database did not answer"));
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run");
+
+        (await _fixture.BuildProvider(clients: clients.Object).TryPrepareAsync(context)).Should().BeTrue();
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_ServesTheDocsWithoutAuthentication_WhenTheDemoSessionIsRefused()
+    {
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        _fixture.SessionService
+            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Subject not found."));
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_LetsAnUnexpectedFailureOfTheAuthenticationPreparationPropagate()
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var clients = new Mock<IOAuthClientRepository>();
+        clients.Setup(c => c.FindOrCreateWithRedirectUriAsync(
+                It.IsAny<Guid>(), It.IsAny<NewOAuthClient>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NullReferenceException());
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run");
+
+        var act = () => _fixture.BuildProvider(clients: clients.Object).TryPrepareAsync(context);
+
+        await act.Should().ThrowAsync<NullReferenceException>();
     }
 
     private static ScalarAuthContext? Auth(HttpContext context) =>

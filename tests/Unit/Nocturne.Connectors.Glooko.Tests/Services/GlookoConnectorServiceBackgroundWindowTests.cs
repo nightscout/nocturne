@@ -332,7 +332,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var handler = new GlookoEndpointHandler();
         var store = new InMemoryConnectorStateStore
         {
-            BeforeRead = _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()),
+            BeforeRead = _ => throw new ConnectorStoreUnavailableException("connection refused", new InvalidOperationException()),
         };
 
         var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
@@ -347,7 +347,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
         var handler = new GlookoEndpointHandler();
         var store = new InMemoryConnectorStateStore
         {
-            BeforeWrite = _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()),
+            BeforeWrite = _ => throw new ConnectorStoreUnavailableException("connection refused", new InvalidOperationException()),
         };
 
         var result = await Scheduled(Service(handler, state: store), ScheduledConfig());

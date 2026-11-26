@@ -31,11 +31,7 @@ public sealed class LostCommitAcknowledgementPostgresTests(V4GoldenFixture fx)
 
         await using var connection = new NpgsqlConnection(fx.MigratorConnectionString);
         await connection.OpenAsync();
-        await using (var guc = new NpgsqlCommand("SELECT set_config('app.current_tenant_id', @t, false)", connection))
-        {
-            guc.Parameters.AddWithValue("t", tenantId.ToString());
-            await guc.ExecuteScalarAsync();
-        }
+        await connection.PinTenantAsync(tenantId);
 
         var fault = new FirstTransactionFault(TransactionFault.AfterCommit);
         var options = new DbContextOptionsBuilder<NocturneDbContext>()

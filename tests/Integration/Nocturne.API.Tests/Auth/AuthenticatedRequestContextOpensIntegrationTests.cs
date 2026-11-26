@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -86,10 +87,10 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
         (await SendAsync(client, Bearer(token))).Response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var otherTenant = Guid.CreateVersion7();
+        await using (var seed = await OpenPostgresAsync())
+            await seed.SeedTenantAsync(otherTenant, $"other-{otherTenant:N}", "Other");
         await ExecuteAsync(
             $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{otherTenant}', 'other-{otherTenant:N}', 'Other', true, now(), now());
             UPDATE tenant_members SET tenant_id = '{otherTenant}' WHERE subject_id = @subject;
             """,
             subjectId);
@@ -153,15 +154,12 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
     /// </summary>
     private async Task MarkEveryCredentialJustUsedAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, false);
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync("""
             UPDATE tenant_members SET last_used_at = now();
             UPDATE oauth_grants SET last_used_at = now();
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 
     private static Action<HttpRequestMessage> Cookie(string session) =>
@@ -186,24 +184,14 @@ public class AuthenticatedRequestContextOpensIntegrationTests : ApiIntegrationTe
 
     private async Task<(Guid SubjectId, string Token)> SeedMemberAsync(string name)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, name);
     }
 
     private async Task ExecuteAsync(string sql, Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);" + sql;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        (await cmd.ExecuteNonQueryAsync()).Should().BeGreaterThan(0);
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
+        (await conn.ExecuteAsync(sql, ("subject", subjectId))).Should().BeGreaterThan(0);
     }
 }

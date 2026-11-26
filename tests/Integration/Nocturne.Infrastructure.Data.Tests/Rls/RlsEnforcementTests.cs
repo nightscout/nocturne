@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -105,7 +106,7 @@ public class RlsEnforcementTests
         await SeedRowAsync(tenantB);
 
         await using var conn = await _fx.OpenAppConnectionAsync();
-        await SetCurrentTenantAsync(conn, tenantA);
+        await conn.PinTenantAsync(tenantA);
 
         var visibleA = await CountForTenantAsync(conn, tenantA);
         var visibleB = await CountForTenantAsync(conn, tenantB);
@@ -121,7 +122,7 @@ public class RlsEnforcementTests
         var wrongTenant = Guid.NewGuid();
 
         await using var conn = await _fx.OpenAppConnectionAsync();
-        await SetCurrentTenantAsync(conn, sessionTenant);
+        await conn.PinTenantAsync(sessionTenant);
 
         var act = () => InsertRowAsync(conn, wrongTenant);
 
@@ -159,11 +160,11 @@ public class RlsEnforcementTests
 
         await using var conn = await _fx.OpenAppConnectionAsync();
 
-        await SetCurrentTenantAsync(conn, tenantA);
+        await conn.PinTenantAsync(tenantA);
         (await CountInvitesByTokenHashAsync(conn, tokenHash)).Should().Be(0,
             "a token minted for tenant B must read as unknown under tenant A, with no tenant predicate in the query");
 
-        await SetCurrentTenantAsync(conn, tenantB);
+        await conn.PinTenantAsync(tenantB);
         (await CountInvitesByTokenHashAsync(conn, tokenHash)).Should().Be(1,
             "the invite must stay readable on the tenant it was minted for — the pre-auth join paths depend on it");
     }
@@ -192,8 +193,8 @@ public class RlsEnforcementTests
         // INSERT or the WITH CHECK clause rejects it. The tenants table itself
         // isn't tenant-scoped so the tenant insert doesn't need a GUC.
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantId);
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.SeedTenantAsync(tenantId, $"rls-{tenantId:N}", "rls-test");
+        await conn.PinTenantAsync(tenantId);
         await InsertRowAsync(conn, tenantId);
     }
 
@@ -204,7 +205,7 @@ public class RlsEnforcementTests
     private async Task SeedInviteAsync(Guid tenantId, string tokenHash)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await InsertTenantAsync(conn, tenantId);
+        await conn.SeedTenantAsync(tenantId, $"rls-{tenantId:N}", "rls-test");
 
         var subjectId = Guid.NewGuid();
         await using (var subject = conn.CreateCommand())
@@ -217,7 +218,7 @@ public class RlsEnforcementTests
             await subject.ExecuteNonQueryAsync();
         }
 
-        await SetCurrentTenantAsync(conn, tenantId);
+        await conn.PinTenantAsync(tenantId);
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
@@ -234,13 +235,8 @@ public class RlsEnforcementTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<long> CountInvitesByTokenHashAsync(NpgsqlConnection conn, string tokenHash)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM member_invites WHERE token_hash = @hash";
-        AddParameter(cmd, "@hash", tokenHash);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountInvitesByTokenHashAsync(NpgsqlConnection conn, string tokenHash) =>
+        conn.ScalarAsync<long>("SELECT COUNT(*) FROM member_invites WHERE token_hash = @hash", ("hash", tokenHash));
 
     private static void AddParameter(NpgsqlCommand cmd, string name, object value)
     {
@@ -248,20 +244,6 @@ public class RlsEnforcementTests
         p.ParameterName = name;
         p.Value = value;
         cmd.Parameters.Add(p);
-    }
-
-    private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants
-                (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES
-                (@id, @slug, 'rls-test', true, now(), now())
-            """;
-        AddParameter(cmd, "@id", tenantId);
-        AddParameter(cmd, "@slug", $"rls-{tenantId:N}");
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task InsertRowAsync(NpgsqlConnection conn, Guid rowTenantId)
@@ -277,19 +259,6 @@ public class RlsEnforcementTests
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task SetCurrentTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
-        AddParameter(cmd, "@tid", tenantId.ToString());
-        await cmd.ExecuteScalarAsync();
-    }
-
-    private static async Task<long> CountForTenantAsync(NpgsqlConnection conn, Guid tenantId)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {SampleTable} WHERE tenant_id = @tid";
-        AddParameter(cmd, "@tid", tenantId);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
+    private static Task<long> CountForTenantAsync(NpgsqlConnection conn, Guid tenantId) =>
+        conn.ScalarAsync<long>($"SELECT COUNT(*) FROM {SampleTable} WHERE tenant_id = @tid", ("tid", tenantId));
 }

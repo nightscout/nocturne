@@ -36,6 +36,12 @@ public class NotificationTemplate
     public string? Source { get; init; }
 
     /// <summary>
+    /// Whether a notice of this type puts a person's name or own words in front of someone else. True
+    /// exactly for the types <see cref="NotificationSubjectNaming.Pointers"/> declares.
+    /// </summary>
+    public required bool NamesSubject { get; init; }
+
+    /// <summary>
     /// Default actions available on notifications of this type
     /// </summary>
     public List<NotificationActionDto>? DefaultActions { get; init; }

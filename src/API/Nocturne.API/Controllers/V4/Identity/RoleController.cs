@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -73,6 +74,7 @@ public class RoleController : ControllerBase
                 TeamRefusedPermissions = holders.HeldByTeam.Contains(r.Id)
                     ? Scope.AdministrativePermissions.Order(StringComparer.Ordinal).ToList()
                     : [],
+                CanGiveToTeam = TeamAccessRules.MayGiveToTeam(r),
                 CoveredPermissions = holders.HeldByTeam.Contains(r.Id) && !callerIsOwner
                     ? Scope.PermissionAtoms.Where(a => Scope.Satisfies(r.Permissions, a)).Order(StringComparer.Ordinal).ToList()
                     : null,

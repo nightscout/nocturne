@@ -20,7 +20,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     internal static readonly Guid Owner = Guid.Parse("c1111111-1111-7111-8111-111111113841");
     internal static readonly Guid SeededMember = Guid.Parse("e1111111-1111-7111-8111-111111113841");
 
-    private string _migrator = string.Empty;
+    internal string Migrator { get; private set; } = string.Empty;
 
     internal long ReasonTablesBefore { get; private set; }
     internal long ReasonTablesAfter { get; private set; }
@@ -30,23 +30,20 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "tenant_member_reasons");
-        _migrator = database.MigratorConnectionString;
+        Migrator = database.MigratorConnectionString;
 
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'member-reasons', 'member-reasons', true, now(), now());
-            """);
+        await NpgsqlTestCommands.SeedTenantAsync(Migrator, Tenant, "member-reasons", "member-reasons");
         await InsertSubjectAsync(Owner);
         await InsertMemberAsync(SeededMember, Owner);
 
         ReasonTablesBefore = await CountReasonTablesAsync();
-        MembersBefore = await ScalarAsync("SELECT count(*) FROM tenant_members");
+        MembersBefore = await NpgsqlTestCommands.ScalarAsync<long>(Migrator, "SELECT count(*) FROM tenant_members");
 
         await using (var context = new NocturneDbContext(Options()))
             await context.GetService<IMigrator>().MigrateAsync();
 
         ReasonTablesAfter = await CountReasonTablesAsync();
-        MembersAfter = await ScalarAsync("SELECT count(*) FROM tenant_members");
+        MembersAfter = await NpgsqlTestCommands.ScalarAsync<long>(Migrator, "SELECT count(*) FROM tenant_members");
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -63,7 +60,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     internal async Task<Guid> NewRoleAsync()
     {
         var role = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO tenant_roles (id, tenant_id, name, slug, permissions, is_system, sys_created_at, sys_updated_at)
             VALUES ('{role}', '{Tenant}', 'Role {role:N}', 'role-{role:N}', '[]', false, now(), now());
             """);
@@ -73,8 +70,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     internal async Task<Guid> NewInviteAsync()
     {
         var invite = Guid.CreateVersion7();
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(Migrator, Tenant, $"""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES ('{invite}', '{Tenant}', '{Owner}', '{invite:N}', false, now() + interval '1 day', 0, now());
             """);
@@ -87,7 +83,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
         Guid? sourceId = kind == MembershipReasonKind.Direct ? null : source ?? Guid.CreateVersion7();
         if (sourceId is { } access)
             await NewTeamAccessAsync(access);
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, created_from_invite_id)
             VALUES ('{reason}', '{member}', '{kind}', {(sourceId is { } s ? $"'{s}'" : "NULL")},
                     false, {(invite is { } id ? $"'{id}'" : "NULL")});
@@ -99,8 +95,7 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     private Task<int> NewTeamAccessAsync(Guid access)
     {
         var team = Guid.CreateVersion7();
-        return ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+        return NpgsqlTestCommands.ExecuteAsTenantAsync(Migrator, Tenant, $"""
             INSERT INTO teams (id, name) VALUES ('{team}', 'Team {team:N}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{Tenant}', false)
@@ -108,43 +103,28 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
             """);
     }
 
-    internal Task NewReasonRoleAsync(Guid reason, Guid role) => ExecuteAsync($"""
+    internal Task NewReasonRoleAsync(Guid reason, Guid role) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
         VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
         """);
 
-    internal Task<long> ScalarAsync(string sql) => RunAsync(async cmd => Convert.ToInt64(await cmd.ExecuteScalarAsync()), sql);
-
-    internal Task<int> ExecuteAsync(string sql) => RunAsync(cmd => cmd.ExecuteNonQueryAsync(), sql);
-
-    private Task<long> CountReasonTablesAsync() => ScalarAsync("""
+    private Task<long> CountReasonTablesAsync() => NpgsqlTestCommands.ScalarAsync<long>(Migrator, """
         SELECT count(*) FROM information_schema.tables
          WHERE table_schema = 'public' AND table_name IN ('tenant_member_reasons', 'tenant_member_reason_roles')
         """);
 
-    private Task<int> InsertSubjectAsync(Guid subject) => ExecuteAsync($"""
+    private Task<int> InsertSubjectAsync(Guid subject) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
         VALUES ('{subject}', 'member-reasons-{subject:N}', true, false, now(), now(), 'Approved');
         """);
 
-    private Task<int> InsertMemberAsync(Guid member, Guid subject) => ExecuteAsync($"""
+    private Task<int> InsertMemberAsync(Guid member, Guid subject) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
         VALUES ('{member}', '{Tenant}', '{subject}', false, now(), now());
         """);
 
     private DbContextOptions<NocturneDbContext> Options() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migrator, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
-
-    private async Task<T> RunAsync<T>(Func<NpgsqlCommand, Task<T>> run, string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await run(cmd);
-    }
+        TestContexts.MigrationsOptions(Migrator);
 }
 
 [Trait("Category", "Integration")]
@@ -169,13 +149,13 @@ public class AddTenantMemberReasonsTests(AddTenantMemberReasonsFixture fixture)
         await fixture.NewReasonRoleAsync(direct, role);
         await fixture.NewReasonRoleAsync(other, role);
 
-        await fixture.ExecuteAsync($"DELETE FROM tenant_members WHERE id = '{member}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM tenant_members WHERE id = '{member}'");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'"))
             .Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_member_reason_id IN ('{direct}', '{other}')"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_member_reason_id IN ('{direct}', '{other}')"))
             .Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_roles WHERE id = '{role}'")).Should().Be(1);
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_roles WHERE id = '{role}'")).Should().Be(1);
     }
 
     [Fact]
@@ -197,7 +177,7 @@ public class AddTenantMemberReasonsTests(AddTenantMemberReasonsFixture fixture)
         await fixture.NewReasonAsync(member, "team");
         await fixture.NewReasonAsync(member, "team");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'"))
             .Should().Be(3);
     }
 
@@ -212,7 +192,7 @@ public class AddTenantMemberReasonsTests(AddTenantMemberReasonsFixture fixture)
 
         (await again.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
         await fixture.NewReasonAsync(member, "team", source: Guid.CreateVersion7());
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'"))
             .Should().Be(2);
     }
 
@@ -238,13 +218,13 @@ public class AddTenantMemberReasonsTests(AddTenantMemberReasonsFixture fixture)
         await fixture.NewReasonRoleAsync(reason, deleted);
         await fixture.NewReasonRoleAsync(reason, kept);
 
-        await fixture.ExecuteAsync($"DELETE FROM tenant_roles WHERE id = '{deleted}'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM tenant_roles WHERE id = '{deleted}'");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_member_reason_id = '{reason}' AND tenant_role_id = '{deleted}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_member_reason_id = '{reason}' AND tenant_role_id = '{deleted}'"))
             .Should().Be(0);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_member_reason_id = '{reason}' AND tenant_role_id = '{kept}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_member_reason_id = '{reason}' AND tenant_role_id = '{kept}'"))
             .Should().Be(1);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}'")).Should().Be(1);
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}'")).Should().Be(1);
     }
 
     [Fact]
@@ -252,15 +232,14 @@ public class AddTenantMemberReasonsTests(AddTenantMemberReasonsFixture fixture)
     {
         var invite = await fixture.NewInviteAsync();
         var reason = await fixture.NewReasonAsync(await fixture.NewMemberAsync(), MembershipReasonKind.Direct, invite);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}' AND created_from_invite_id = '{invite}'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}' AND created_from_invite_id = '{invite}'"))
             .Should().Be(1);
 
-        await fixture.ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{AddTenantMemberReasonsFixture.Tenant}', false);
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(fixture.Migrator, AddTenantMemberReasonsFixture.Tenant, $"""
             DELETE FROM member_invites WHERE id = '{invite}';
             """);
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}' AND created_from_invite_id IS NULL"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE id = '{reason}' AND created_from_invite_id IS NULL"))
             .Should().Be(1);
     }
 }

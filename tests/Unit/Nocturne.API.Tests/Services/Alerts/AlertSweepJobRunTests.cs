@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -88,7 +89,8 @@ public class AlertSweepJobRunTests
     [Fact]
     public async Task A_notice_left_standing_when_the_tenants_only_rule_was_disabled_is_resolved()
     {
-        var notice = new StandingUnevaluableNotice(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "v1", Dispatched: true);
+        var notice = new StandingUnevaluableNotice(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "v1", DateTime.UnixEpoch, Dispatched: true, OpenedOwedAt: null);
         _repository
             .Setup(r => r.GetStandingUnevaluableNoticesAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([notice]);
@@ -98,7 +100,7 @@ public class AlertSweepJobRunTests
         await using var services = new ServiceCollection()
             .AddSingleton(_repository.Object)
             .AddSingleton(Mock.Of<IAlertRuleRepository>())
-            .AddSingleton(Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant))
+            .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
             .AddSingleton(Mock.Of<IAlertDeliveryService>())
             .AddSingleton(Mock.Of<ISensorContextEnricher>())
             .AddSingleton(resolution.Object)
@@ -131,7 +133,7 @@ public class AlertSweepJobRunTests
             .AddSingleton(NoHeldRules.Notice())
             .AddSingleton(Mock.Of<IClockAnomalyNotice>())
             .AddSingleton(Mock.Of<IAlertChannelNotice>())
-            .AddScoped(_ => Mock.Of<ITenantAccessor>())
+            .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
             .BuildServiceProvider();
         return await new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(services, Tenant, Now, active);
     }

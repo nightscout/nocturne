@@ -11,6 +11,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
@@ -125,6 +126,68 @@ public class NightscoutTreatmentReconcileTests
     }
 
     [Fact]
+    public async Task Another_source_with_a_later_clock_does_not_forget_this_sources_lookups()
+    {
+        var memory = new NightscoutLookups();
+        var harness = new Harness
+        {
+            LookupMemory = memory,
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+            AlsoUpstream = [TrioGone],
+        };
+        var later = Now.AddDays(7);
+        var elsewhere = new Harness
+        {
+            LookupMemory = memory,
+            At = later,
+            LatestStored = later.AddMinutes(-10),
+            Upstream = [Trio(MongoIdB, TrioKept, later.AddMinutes(-30))],
+            Stored = [TrioKept, LoopGone],
+            AlsoUpstream = [LoopGone],
+        };
+
+        await harness.SyncAsync();
+        var firstLookups = harness.Lookups.Count;
+        await elsewhere.SyncAsync();
+        await harness.SyncAsync();
+
+        elsewhere.Lookups.Should().Contain(l => l.EndsWith(LoopGone), "the later source looked its own treatment up");
+        harness.Lookups.Skip(firstLookups).Should().NotContain($"find[id]={TrioGone}");
+    }
+
+    [Fact]
+    public async Task Another_tenants_lookup_on_the_same_site_does_not_stand_for_this_tenants()
+    {
+        var memory = new NightscoutLookups();
+        const string site = "https://shared.ns.example";
+        var first = new Harness
+        {
+            LookupMemory = memory,
+            Url = site,
+            Tenant = Guid.NewGuid(),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+            AlsoUpstream = [TrioGone],
+        };
+        var second = new Harness
+        {
+            LookupMemory = memory,
+            Url = site,
+            Tenant = Guid.NewGuid(),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept, TrioGone],
+        };
+
+        await first.SyncAsync();
+        await second.SyncAsync();
+
+        first.Deleted.Should().BeEmpty();
+        second.Lookups.Should().Contain($"find[id]={TrioGone}", "the first tenant's lookup was of its own copy");
+        second.Deleted.Should().ContainSingle().Which.Should().BeEquivalentTo([TrioGone]);
+    }
+
+    [Fact]
     public async Task A_source_missing_much_of_the_window_deletes_nothing()
     {
         var missing = Enumerable.Range(0, 5).Select(i => $"cccccccc-cccc-4ccc-8ccc-00000000000{i}").ToList();
@@ -175,8 +238,8 @@ public class NightscoutTreatmentReconcileTests
         var result = await harness.SyncAsync();
 
         result.Success.Should().BeTrue();
-        harness.Crawled.Select(t => t.Id).Should().Equal(LoopKept);
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, LoopGone]);
+        harness.CrawledIds.Should().Equal(LoopKept);
+        harness.RepublishedIds.Should().BeEquivalentTo([MongoIdA, LoopGone]);
         harness.Republished.Should().OnlyContain(t => t.DataSource == Source);
     }
 
@@ -191,7 +254,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, MongoIdB]);
+        harness.RepublishedIds.Should().BeEquivalentTo([MongoIdA, MongoIdB]);
         harness.Republished.Should().OnlyContain(t => TreatmentClientId.Of(t) == TrioKept);
         harness.Lookups.Should().BeEmpty("a row stored under the id the read carries is not missing");
         harness.Deleted.Should().BeEmpty();
@@ -275,7 +338,7 @@ public class NightscoutTreatmentReconcileTests
 
         harness.TreatmentReads.Should().Be(1);
         harness.CrawlLowerBound.Should().Be(Now.UtcDateTime.AddMinutes(-15));
-        harness.Republished.Select(t => t.Id).Should().Equal(MongoIdA);
+        harness.RepublishedIds.Should().Equal(MongoIdA);
         harness.FullReconcileRecorded.Should().BeEmpty();
     }
 
@@ -374,8 +437,8 @@ public class NightscoutTreatmentReconcileTests
         {
             Upstream =
             [
-                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
                 Trio(MongoIdB, TrioKept, Now.AddMinutes(-20)),
+                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
             ],
             Stored = [ownKey, TrioKept, missingKey],
             AlsoUpstreamByIdentifier = [missingKey],
@@ -386,6 +449,7 @@ public class NightscoutTreatmentReconcileTests
         harness.Deleted.Should().BeEmpty();
         harness.Lookups.Should().ContainInOrder(
             $"find[id]={missingKey}", $"find[identifier][$in]={missingKey},{MongoObjectId.Coerce(missingKey)}");
+        harness.Lookups.Should().NotContain(l => l.Contains(ownKey), "the read served it as an identifier, so it is neither missing nor the canary");
     }
 
     /// <summary>
@@ -434,6 +498,11 @@ public class NightscoutTreatmentReconcileTests
 
     private sealed class Harness : HttpMessageHandler
     {
+        /// <summary>What the connector remembers of its lookups; give two harnesses one to share it.</summary>
+        public NightscoutLookups LookupMemory { get; init; } = new();
+
+        public Guid Tenant { get; init; } = SettableTenantAccessor.DefaultTenantId;
+
         public string Url { get; init; } = $"https://{Guid.NewGuid():N}.ns.example";
 
         public DateTimeOffset At { get; init; } = Now;
@@ -450,8 +519,13 @@ public class NightscoutTreatmentReconcileTests
         public DateTime? LastFullReconcile { get; init; }
         public int? Written { get; init; }
 
-        public List<Treatment> Crawled { get; } = [];
         public List<Treatment> Republished { get; } = [];
+
+        /// <summary>The ids the crawl offered the store, as the source served them.</summary>
+        public List<string?> CrawledIds { get; } = [];
+
+        /// <summary>The ids the reconcile offered the store, as the source served them.</summary>
+        public List<string?> RepublishedIds { get; } = [];
         public List<IReadOnlySet<string>> Deleted { get; } = [];
         public List<string> DeletedFrom { get; } = [];
         public List<string> StoredAskedOf { get; } = [];
@@ -525,6 +599,13 @@ public class NightscoutTreatmentReconcileTests
             return Task.FromResult(ReadFails ? Failure() : Json(Upstream));
         }
 
+        /// <summary>The store names each treatment it keeps by an id of its own, which the source does not know.</summary>
+        private static void RenameAsStored(IEnumerable<Treatment> published)
+        {
+            foreach (var treatment in published)
+                treatment.Id = Guid.CreateVersion7().ToString();
+        }
+
         private NightscoutConnectorService NewService()
         {
             var treatments = new Mock<ITreatmentPublisher>();
@@ -534,12 +615,23 @@ public class NightscoutTreatmentReconcileTests
             treatments
                 .Setup(p => p.PublishTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => Crawled.AddRange(batch))
+                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    var list = batch.ToList();
+                    CrawledIds.AddRange(list.Select(t => t.Id));
+                    RenameAsStored(list);
+                })
                 .ReturnsAsync(true);
             treatments
                 .Setup(p => p.PublishRecentTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => Republished.AddRange(batch))
+                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    var list = batch.ToList();
+                    Republished.AddRange(list);
+                    RepublishedIds.AddRange(list.Select(t => t.Id));
+                    RenameAsStored(list);
+                })
                 .ReturnsAsync((IEnumerable<Treatment> batch, string _, WriteOrigin _, CancellationToken _) =>
                     Written ?? batch.Count());
             treatments
@@ -578,6 +670,8 @@ public class NightscoutTreatmentReconcileTests
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
+                LookupMemory,
+                SettableTenantAccessor.Resolved(Tenant),
                 publisher.Object,
                 new FakeTimeProvider(At));
         }

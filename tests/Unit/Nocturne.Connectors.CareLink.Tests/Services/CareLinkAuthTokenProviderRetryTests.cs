@@ -9,6 +9,7 @@ using Nocturne.Connectors.CareLink.Services;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
@@ -158,9 +159,7 @@ public class CareLinkAuthTokenProviderRetryTests
         CancellationToken cancellationToken = default)
     {
         var tenantId = Guid.NewGuid();
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId);
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -170,7 +169,7 @@ public class CareLinkAuthTokenProviderRetryTests
             new HttpClient(handler),
             cache,
             new ConnectorServerResolver<CareLinkConnectorConfiguration>(null, null, CareLinkConstants.Servers.Eu),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<CareLinkAuthTokenProvider>.Instance,
             retryDelay.Object,
             handler);

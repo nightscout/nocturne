@@ -8,7 +8,6 @@ using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
@@ -18,7 +17,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -42,20 +40,12 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
             _context.AsFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
             NullLogger<StateSpanRepository>.Instance);
 
-        _decomposer = new DeviceStatusDecomposer(
-            MicrosecondPrecision<IApsSnapshotRepository>.Wrap(new ApsSnapshotRepository(
+        _decomposer = DeviceStatusDecomposerDoubles.Build(
+            aps: MicrosecondPrecision<IApsSnapshotRepository>.Wrap(new ApsSnapshotRepository(
                 new TestNocturneDbContextFactory(_context), new SystemAuditContext(),
                 NullLogger<ApsSnapshotRepository>.Instance)),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            Mock.Of<ISensorStateReportRepository>(),
-            new StateSpanService(
-                MicrosecondPrecision<IStateSpanRepository>.Wrap(_spans), NullLogger<StateSpanService>.Instance),
-            new UnresolvedDevices(),
-            Mock.Of<IAuditContext>(),
-            Mock.Of<ILoopClosedLoopStamper>(),
-            TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
+            stateSpans: new StateSpanService(
+                MicrosecondPrecision<IStateSpanRepository>.Wrap(_spans), NullLogger<StateSpanService>.Instance));
     }
 
     public void Dispose()
@@ -281,6 +271,23 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
         var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
         span.StartTimestamp.Should().Be(At(0));
         span.EndTimestamp.Should().Be(At(3).AddMinutes(30));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecomposeAsync_RestatedAtTheInstantTheSpanEnded_ExtendsThatSpanInsteadOfOpeningAnother(bool batch)
+    {
+        List<DeviceStatus> statuses = [Restating(0, 300), Restating(1, 1800)];
+
+        if (batch)
+            await _decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Live);
+        else
+            await DecomposeEachAsync(statuses);
+
+        var span = (await OverrideSpansAsync()).Should().ContainSingle().Subject;
+        span.StartTimestamp.Should().Be(At(0));
+        span.EndTimestamp.Should().Be(At(1).AddMinutes(30));
     }
 
     [Fact]

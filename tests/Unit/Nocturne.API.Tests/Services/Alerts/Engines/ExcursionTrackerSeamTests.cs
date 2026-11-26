@@ -23,14 +23,13 @@ public class ExcursionTrackerSeamTests
 
     private sealed class Fixture
     {
-        public Fixture(int hysteresisMinutes = 0)
+        public Fixture()
         {
             Time.SetUtcNow(T0);
             Repository = new RecordingTrackerRepository(new AlertRule
             {
                 Id = RuleId,
                 Name = "low",
-                HysteresisMinutes = hysteresisMinutes,
             });
             Tracker = EngineTestHarness.BuildRustTracker(Time, Repository);
         }
@@ -127,7 +126,7 @@ public class ExcursionTrackerSeamTests
     [NativeFact]
     public async Task Starts_and_resumes_hysteresis()
     {
-        var f = new Fixture(hysteresisMinutes: 10);
+        var f = new Fixture();
         var opened = await f.Process(true);
         var excursion = f.Repository.Excursions[opened.ExcursionId!.Value];
         f.At(TimeSpan.FromMinutes(1));
@@ -150,35 +149,36 @@ public class ExcursionTrackerSeamTests
     }
 
     [NativeFact]
-    public async Task Closes_elapsed_hysteresis_only_once_the_window_has_passed()
+    public async Task Closes_elapsed_hysteresis_only_once_its_start_is_within_the_clock_tolerance()
     {
-        var f = new Fixture(hysteresisMinutes: 10);
+        var f = new Fixture();
         var opened = await f.Process(true);
+        f.At(TimeSpan.FromMinutes(10));
         await f.Process(false);
         var writes = f.Repository.Writes.Count;
 
-        f.At(TimeSpan.FromMinutes(9));
+        f.At(TimeSpan.FromMinutes(4));
         (await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None))
             .Type.Should().Be(ExcursionTransitionType.None);
         f.Repository.Writes.Should().HaveCount(writes, "an unchanged state is not rewritten");
 
-        f.At(TimeSpan.FromMinutes(10));
+        f.At(TimeSpan.FromMinutes(5));
         var closed = await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None);
 
         closed.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, opened.ExcursionId, ExcursionCloseReason.Hysteresis));
-        f.Repository.Excursions[opened.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(10));
+            ExcursionTransitionType.ExcursionClosed, opened.ExcursionId, ExcursionCloseReason.Hysteresis, T0.AddMinutes(5)));
+        f.Repository.Excursions[opened.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(5));
         f.State.Should().BeEquivalentTo(new
         {
             State = "idle", ActiveExcursionId = (Guid?)null,
-            HysteresisStartedAt = (DateTime?)null, UpdatedAt = T0.AddMinutes(10),
+            HysteresisStartedAt = (DateTime?)null, UpdatedAt = T0.AddMinutes(5),
         });
     }
 
     [NativeFact]
     public async Task Close_elapsed_hysteresis_persists_an_adopted_start()
     {
-        var f = new Fixture(hysteresisMinutes: 10);
+        var f = new Fixture();
         var opened = await f.Process(true);
         var legacy = f.State!;
         f.Repository.States[RuleId] = new AlertTrackerState
@@ -186,7 +186,7 @@ public class ExcursionTrackerSeamTests
             AlertRuleId = RuleId,
             State = "hysteresis",
             ActiveExcursionId = legacy.ActiveExcursionId,
-            UpdatedAt = T0,
+            UpdatedAt = T0.AddMinutes(10),
         };
         f.At(TimeSpan.FromMinutes(3));
 
@@ -195,7 +195,7 @@ public class ExcursionTrackerSeamTests
 
         f.State.Should().BeEquivalentTo(new
         {
-            State = "hysteresis", HysteresisStartedAt = (DateTime?)T0, UpdatedAt = T0,
+            State = "hysteresis", HysteresisStartedAt = (DateTime?)T0.AddMinutes(10), UpdatedAt = T0.AddMinutes(10),
             ActiveExcursionId = opened.ExcursionId,
         });
     }
@@ -203,7 +203,7 @@ public class ExcursionTrackerSeamTests
     [NativeFact]
     public async Task An_unknown_stored_state_reads_as_idle_or_active()
     {
-        var f = new Fixture(hysteresisMinutes: 10);
+        var f = new Fixture();
         var opened = await f.Process(true);
         AlertTrackerState Unknown(Guid? excursion) => new()
         {
@@ -254,13 +254,14 @@ public class ExcursionTrackerSeamTests
     [InlineData(ExcursionCloseReason.RuleDisabled)]
     public async Task Force_close_closes_from_any_open_state(ExcursionCloseReason reason)
     {
-        var f = new Fixture(hysteresisMinutes: 10);
+        var f = new Fixture();
         var first = await f.Process(true);
         f.At(TimeSpan.FromMinutes(1));
 
         var fromActive = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
 
-        fromActive.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, first.ExcursionId, reason));
+        fromActive.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, first.ExcursionId, reason, T0.AddMinutes(1)));
         f.Repository.Excursions[first.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(1));
         f.State.Should().BeEquivalentTo(new
         {
@@ -273,7 +274,8 @@ public class ExcursionTrackerSeamTests
         await f.Process(false);
         var fromHysteresis = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
 
-        fromHysteresis.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, second.ExcursionId, reason));
+        fromHysteresis.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, second.ExcursionId, reason, T0.AddMinutes(1)));
         f.State!.HysteresisStartedAt.Should().BeNull();
     }
 

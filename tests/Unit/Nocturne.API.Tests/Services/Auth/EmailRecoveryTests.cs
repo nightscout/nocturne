@@ -21,7 +21,6 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -70,7 +69,7 @@ public class EmailRecoveryTests : IDisposable
         _tenant = new TenantContext(_tenantId, "alpha", "Alpha household", true, false);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
 
         using var seed = _db.CreateContext(Guid.Empty);
         seed.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "alpha", DisplayName = "Alpha household" });
@@ -376,14 +375,6 @@ public class EmailRecoveryTests : IDisposable
         }
     }
 
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     private CapturingRequests Requests()
     {
         var services = new ServiceCollection();
@@ -404,7 +395,7 @@ public class EmailRecoveryTests : IDisposable
             new RecoverySession(contexts, _loginCodes, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object,
             new Mock<IAuthAuditService>().Object,
-            MockTenantAccessor.Create(tenant).Object,
+            SettableTenantAccessor.Resolved(tenant),
             new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -666,7 +657,7 @@ public class EmailRecoveryTests : IDisposable
             new Mock<IRecoveryCodeService>().Object,
             new RecoverySession(failing.Object, _loginCodes, Mock.Of<ITenantMemberService>(), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
-            MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
+            SettableTenantAccessor.Resolved(_tenantId), new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
             Options.Create(new OidcOptions()), NullLogger<PasskeyController>.Instance, TimeProvider.System)
@@ -695,7 +686,7 @@ public class EmailRecoveryTests : IDisposable
             recoveryCodes.Object,
             new RecoverySession(contexts, _loginCodes, new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object,
-            MockTenantAccessor.Create(_tenantId).Object, new Mock<ITenantService>().Object,
+            SettableTenantAccessor.Resolved(_tenantId), new Mock<ITenantService>().Object,
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System), new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantRepository(contexts), new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), contexts,
             Options.Create(new OidcOptions()), NullLogger<PasskeyController>.Instance, TimeProvider.System)

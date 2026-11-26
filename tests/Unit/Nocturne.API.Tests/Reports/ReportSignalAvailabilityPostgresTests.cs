@@ -36,11 +36,8 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         Scope.SleepRead, Scope.AlertsRead,
     ];
 
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_availability")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
         /// <summary>A loop snapshot two hours ago, a profile activation an hour ago and one glucose reading three days ago.</summary>
         public Guid Tenant { get; private set; }
 
@@ -53,11 +50,9 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
         /// </summary>
         public Guid Modules { get; private set; }
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_availability");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
+            await base.InitializeAsync();
             Tenant = await TenantAsync();
             Other = await TenantAsync();
             Modules = await TenantAsync();
@@ -102,27 +97,15 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
             await seed.SaveChangesAsync();
         }
 
-        public Task DisposeAsync() => Task.CompletedTask;
-
         public DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString);
 
         private async Task<Guid> TenantAsync()
         {
             var tenant = Guid.NewGuid();
             await using var conn = new NpgsqlConnection(MigratorConnectionString);
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'report-availability-test', true, now(), now())
-                """;
-            cmd.Parameters.AddWithValue("id", tenant);
-            cmd.Parameters.AddWithValue("slug", $"report-availability-{tenant:N}");
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"report-availability-{tenant:N}", "report-availability-test");
             return tenant;
         }
     }

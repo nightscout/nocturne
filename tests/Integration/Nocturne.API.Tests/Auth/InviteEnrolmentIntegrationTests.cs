@@ -5,6 +5,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -73,14 +74,13 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
     /// <returns>The seeded subject's name afterwards, and how many subjects hold the username.</returns>
     private async Task<(string Name, long SubjectsWithTheUsername)> EnrolUnderTheUsernameOfAsync(string heldBy)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var username = $"dormant-{Guid.NewGuid():N}";
         var dormantId = Guid.CreateVersion7();
         var providerId = Guid.CreateVersion7();
-        await ExecuteAsync(conn, $"""
+        await conn.ExecuteAsync($"""
             INSERT INTO subjects (id, name, username, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES (@id, 'Dormant Account', @username, true, false, now(), now(), 'Approved');
             {heldBy}
@@ -90,12 +90,12 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
 
         var token = $"invite-{Guid.NewGuid():N}";
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Viewer);
-        await ExecuteAsync(conn, """
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
+        await conn.PinTenantAsync(tenantId);
+        await conn.ExecuteAsync("""
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES (@inviteId, @tenantId, @ownerId, @hash, @roleIds::jsonb, false, now() + interval '1 day', 0, now());
             """,
-            ("tenantText", tenantId.ToString()), ("inviteId", Guid.CreateVersion7()), ("tenantId", tenantId),
+            ("inviteId", Guid.CreateVersion7()), ("tenantId", tenantId),
             ("ownerId", Fixture.OwnerSubjectId), ("hash", HashUtils.Sha256Hex(token)),
             ("roleIds", $"[\"{viewerRoleId}\"]"));
 
@@ -108,12 +108,12 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
 
             options.StatusCode.Should().Be(HttpStatusCode.OK, await options.Content.ReadAsStringAsync());
             return (
-                await ScalarAsync<string>(conn, "SELECT name FROM subjects WHERE id = @id;", ("id", dormantId)),
-                await ScalarAsync<long>(conn, "SELECT count(*) FROM subjects WHERE username = @username;", ("username", username)));
+                await conn.ScalarAsync<string>("SELECT name FROM subjects WHERE id = @id;", ("id", dormantId)),
+                await conn.ScalarAsync<long>("SELECT count(*) FROM subjects WHERE username = @username;", ("username", username)));
         }
         finally
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 DELETE FROM subject_oidc_identities WHERE provider_id = @providerId;
                 DELETE FROM oidc_providers WHERE id = @providerId;
                 DELETE FROM totp_credentials WHERE subject_id = @id;
@@ -122,25 +122,5 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
                 """,
                 ("providerId", providerId), ("id", dormantId), ("username", username));
         }
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<T> ScalarAsync<T>(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        return (T)(await cmd.ExecuteScalarAsync())!;
     }
 }

@@ -5,6 +5,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -72,7 +73,8 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         var team = await managerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/{teamId}");
         var given = team.GetProperty("sites").EnumerateArray().Should().ContainSingle().Subject;
         given.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            "tenantId", "displayName", "roleNames", "limitTo24Hours", "accessEndsAt", "hasEnded", "givenAt");
+            "tenantId", "displayName", "roleNames", "limitTo24Hours", "accessEndsAt", "hasEnded", "givenAt",
+            "staffRule", "pendingStaffCount", "declinedStaffCount");
         given.GetProperty("tenantId").GetGuid().Should().Be(tenantId);
 
         using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
@@ -127,8 +129,7 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
 
     private async Task<Guid> TenantIdAsync()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return await AuthTestHelpers.GetTenantIdAsync(conn);
     }
 
@@ -138,22 +139,16 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, permissions);
         if (owner)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
+            await conn.ExecuteAsync("""
                 INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
                 SELECT gen_random_uuid(), id, @roleId FROM tenant_members
                  WHERE tenant_id = @tenantId AND subject_id = @subjectId;
-                """;
-            cmd.Parameters.AddWithValue("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner));
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", seeded.SubjectId);
-            await cmd.ExecuteNonQueryAsync();
+                """, ("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner)), ("tenantId", tenantId), ("subjectId", seeded.SubjectId));
         }
 
         return seeded;

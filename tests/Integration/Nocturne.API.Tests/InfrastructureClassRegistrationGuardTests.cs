@@ -12,14 +12,14 @@ namespace Nocturne.API.Tests.Integration;
 /// Every descriptor the host's real startup holds for a class implemented in
 /// <c>Nocturne.Infrastructure.Data</c>, in any namespace, is one Infrastructure's own registration
 /// methods produce, once, with the same lifetime. A descriptor belongs to the class when its
-/// service type, its implementation type or the type of its instance is declared there, so an
-/// instance, a method group or a local that <c>InfrastructureRegistrationGuardTests</c> cannot see
-/// in the source is still checked. That check reads only the descriptors, so it cannot tell a host
-/// registration from the Infrastructure call it replaced.
+/// service type, its implementation type or the type of its instance is declared there, so a
+/// <c>Type</c> held in a local, or a registration made by a host helper, that
+/// <c>InfrastructureRegistrationGuardTests</c> cannot see is still checked. That check reads only
+/// the descriptors, so it cannot tell a host registration from the Infrastructure call it replaced.
 /// </summary>
 [Trait("Category", "Integration")]
-public class InfrastructureClassRegistrationGuardTests(ServiceProviderValidationTests.MigratedDatabase fixture)
-    : IClassFixture<ServiceProviderValidationTests.MigratedDatabase>
+public class InfrastructureClassRegistrationGuardTests(ServiceProviderValidationTests.Database fixture)
+    : IClassFixture<ServiceProviderValidationTests.Database>
 {
     private static readonly Assembly InfrastructureAssembly = typeof(NocturneDbContext).Assembly;
 

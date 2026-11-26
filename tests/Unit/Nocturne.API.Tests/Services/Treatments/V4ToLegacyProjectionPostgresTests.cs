@@ -24,20 +24,7 @@ public class V4ToLegacyProjectionPostgresTests(V4ToLegacyProjectionPostgresTests
 {
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("legacy_projection");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("legacy_projection");
 
     /// <summary>
     /// A crowded instant keeps the records with the newest ids, as the bolus repository's window
@@ -90,24 +77,14 @@ public class V4ToLegacyProjectionPostgresTests(V4ToLegacyProjectionPostgresTests
             NullLogger<V4ToLegacyProjectionService>.Instance);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Guid> SeedTenantAsync()
     {
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'legacy-projection-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"projection-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"projection-{tenant:N}", "legacy-projection-test");
         return tenant;
     }
 }

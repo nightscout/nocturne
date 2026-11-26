@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Seeding;
 using Nocturne.API.Tests.TestDoubles;
@@ -14,6 +13,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -51,8 +51,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
     private SampleDataSeeder CreateSeeder()
     {
         var contexts = _db.ContextFactory.AsNocturneFactory();
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.SetupGet(t => t.TenantId).Returns(TenantId);
+        var tenant = SettableTenantAccessor.Resolved(TenantId);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -83,7 +82,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
 
         var audit = new SystemAuditContext();
         return new SampleDataSeeder(
-            tenant.Object,
+            tenant,
             contexts,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             entries.Object,
@@ -92,7 +91,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
-            new AlertRuleRepository(contexts),
+            new AlertRuleRepository(contexts, _time),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,
@@ -106,6 +105,7 @@ public class SampleDataSeederLegacyReadTests : IDisposable
                 contexts, audit, NullLogger<ProfileActivationRepository>.Instance, changes: _written.AsRecordChanges()),
             new TempBasalRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, changes: _written.AsRecordChanges()),
+            new InAppNotificationRepository(contexts),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

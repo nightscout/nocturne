@@ -8,12 +8,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -36,16 +39,23 @@ internal static class MigrationJobHarness
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 
-    private sealed class FixedTenantAccessor : ITenantAccessor
+    /// <summary>Answers each request from <paramref name="respond"/>, keyed on the path alone.</summary>
+    internal sealed class RoutedNightscout(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
     {
-        public TenantContext? Context { get; private set; }
-
-        public bool IsResolved => Context is not null;
-
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-
-        public void SetTenant(TenantContext? tenant) => Context = tenant;
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(respond(request.RequestUri!.AbsolutePath));
     }
+
+    internal static HttpResponseMessage Json(System.Net.HttpStatusCode status, string body = "[]") =>
+        new(status) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+
+    /// <summary>A Nightscout that answers each path in <paramref name="bodies"/> with its body and every other path with a 404.</summary>
+    public static HttpMessageHandler Serving(IReadOnlyDictionary<string, string> bodies) => new RoutedNightscout(path =>
+        bodies.TryGetValue(path, out var body) ? Json(System.Net.HttpStatusCode.OK, body) : Json(System.Net.HttpStatusCode.NotFound));
+
+    public static HttpMessageHandler Serving(string path, string body) =>
+        Serving(new Dictionary<string, string> { [path] = body });
 
     /// <summary>Marks what it encrypts, so a test can tell stored ciphertext from plaintext, and reads only that back.</summary>
     internal sealed class MarkingSecrets : ISecretEncryptionService
@@ -85,7 +95,7 @@ internal static class MigrationJobHarness
     /// <summary>Runs the tenant's live job slice by slice until it ends.</summary>
     public static async Task RunToEndAsync(MigrationJobService service, TenantContext tenant)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(Eventually.DefaultPatience);
         while (await service.RunSliceAsync(tenant, timeout.Token))
         {
         }
@@ -96,15 +106,18 @@ internal static class MigrationJobHarness
     /// <param name="profileOutcome">What the profile decomposer reports for each profile; empty when omitted.</param>
     /// <param name="deviceStatusOutcome">What the device status import reports for each page; empty when omitted.</param>
     /// <param name="interceptor">Attached to every <see cref="NocturneDbContext"/> the provider creates.</param>
+    /// <param name="database">Configures the store every context opens; a fresh in-memory one when omitted.</param>
     public static ServiceProvider BuildProvider(
         HttpMessageHandler handler,
         Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
         Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null,
-        Func<Profile, DecompositionResult>? profileOutcome = null,
+        Func<Profile, InvalidatingDecomposition<Profile>>? profileOutcome = null,
         IInterceptor? interceptor = null,
-        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null)
+        Func<IReadOnlyList<DeviceStatus>, DecompositionResult>? deviceStatusOutcome = null,
+        Action<DbContextOptionsBuilder>? database = null)
     {
-        var database = $"migration-{Guid.NewGuid():N}";
+        var inMemory = $"migration-{Guid.NewGuid():N}";
+        database ??= o => o.UseInMemoryDatabase(inMemory);
 
         var entries = new Mock<IEntryService>();
         entries
@@ -128,7 +141,7 @@ internal static class MigrationJobHarness
         profiles
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<Profile> batch, WriteOrigin _, CancellationToken _) =>
-                profileOutcome?.Invoke(batch.Single()) ?? new DecompositionResult());
+                profileOutcome?.Invoke(batch.Single()) ?? new InvalidatingDecomposition<Profile>());
 
         var activities = new Mock<IActivityDecomposer>();
         activities
@@ -138,13 +151,13 @@ internal static class MigrationJobHarness
         return new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o =>
             {
-                o.UseInMemoryDatabase(database);
+                database(o);
                 if (interceptor is not null)
                     o.AddInterceptors(interceptor);
             })
             .AddDataServices()
             .AddSingleton(AccountLinkRoutes.Off)
-            .AddScoped<ITenantAccessor, FixedTenantAccessor>()
+            .AddScoped<ITenantAccessor, SettableTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(handler))
             .AddSingleton(entries.Object)
@@ -152,6 +165,10 @@ internal static class MigrationJobHarness
             .AddSingleton(deviceStatuses.Object)
             .AddSingleton(profiles.Object)
             .AddSingleton(activities.Object)
+            .AddFoodServices()
+            .AddSingleton(Mock.Of<IDocumentProcessingService>())
+            .AddSingleton(Mock.Of<IWriteSideEffects>())
+            .AddLogging()
             .BuildServiceProvider();
     }
 

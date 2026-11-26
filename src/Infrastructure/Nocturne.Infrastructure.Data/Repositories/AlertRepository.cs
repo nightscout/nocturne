@@ -56,73 +56,53 @@ public class AlertRepository : IAlertRepository
 
     /// <summary>
     /// The context's tenant's enabled rules, less any whose condition type, severity or scope class no enum
-    /// member has.
+    /// member has (<see cref="AlertRuleMapper.IsReadable(AlertRuleEntity)"/>).
     /// </summary>
     /// <remarks>
-    /// The enum converter throws on such a value, which fails the whole read, so one stale row
-    /// would stop every rule of the tenant evaluating. Each skipped rule is logged as an error
-    /// every time it is read, and returned as an <see cref="UnreadableAlertRule"/> for the sweep to
-    /// tell its recipients.
+    /// Each rule left out is logged as an error every time it is read, and returned as an
+    /// <see cref="UnreadableAlertRule"/>, with its stored values as text, for the sweep to tell its
+    /// recipients.
     /// </remarks>
     private async Task<EnabledAlertRules> ReadEnabledRulesAsync(NocturneDbContext context, CancellationToken ct)
     {
-        try
-        {
-            return new EnabledAlertRules(await EnabledRules(context, []).ToListAsync(ct), []);
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            var tenantId = context.TenantId;
-            var stored = await context.Database
-                .SqlQuery<StoredRule>(
-                    $"""SELECT id AS "Id", name AS "Name", condition_type AS "ConditionType", condition_params::text AS "ConditionParams", severity AS "Severity", scope_class AS "ScopeClass", allow_through_dnd AS "AllowThroughDnd" FROM alert_rules WHERE tenant_id = {tenantId} AND is_enabled""")
-                .ToListAsync(ct);
-            var unreadable = stored
-                .Where(r => !EnumMemberValueConverter<AlertConditionType>.TryRead(r.ConditionType, out _)
-                            || !EnumMemberValueConverter<AlertRuleSeverity>.TryRead(r.Severity, out _)
-                            || !EnumMemberValueConverter<RuleScopeClass>.TryRead(r.ScopeClass, out _))
-                .Select(r => new UnreadableAlertRule(
-                    r.Id,
-                    r.Name,
-                    r.ConditionType,
-                    r.ConditionParams,
-                    r.Severity,
-                    EnumMemberValueConverter<AlertRuleSeverity>.TryRead(r.Severity, out var severity)
-                        ? severity
-                        : AlertRuleSeverity.Critical,
-                    r.ScopeClass,
-                    EnumMemberValueConverter<RuleScopeClass>.TryRead(r.ScopeClass, out var scopeClass)
-                        ? scopeClass
-                        : RuleScopeClass.Undirected,
-                    r.AllowThroughDnd))
-                .ToList();
-            if (unreadable.Count == 0)
-                throw;
-
-            foreach (var rule in unreadable)
-            {
-                _logger.LogError(
-                    "Alert rule {AlertRuleId} for tenant {TenantId} is not evaluated: condition type '{ConditionType}', severity '{Severity}' or scope class '{ScopeClass}' is not one the engine knows",
-                    rule.Id, tenantId, rule.StoredConditionType, rule.StoredSeverity, rule.StoredScopeClass);
-            }
-
-            var excluded = unreadable.Select(r => r.Id).ToList();
-            return new EnabledAlertRules(await EnabledRules(context, excluded).ToListAsync(ct), unreadable);
-        }
-    }
-
-    private static IQueryable<AlertRuleSnapshot> EnabledRules(NocturneDbContext context, List<Guid> excluded) =>
-        Snapshots(context.AlertRules
+        var enabled = await context.AlertRules
             .AsNoTracking()
-            .Where(r => r.IsEnabled && !excluded.Contains(r.Id))
-            .OrderBy(r => r.SortOrder));
+            .Where(r => r.IsEnabled)
+            .OrderBy(r => r.SortOrder)
+            .ToListAsync(ct);
+        var held = enabled.Where(r => !AlertRuleMapper.IsReadable(r)).ToDictionary(r => r.Id);
+        if (held.Count == 0)
+            return new EnabledAlertRules(enabled.Select(AlertRuleMapper.ToSnapshot).ToList(), []);
 
-    private static IQueryable<AlertRuleSnapshot> Snapshots(IQueryable<AlertRuleEntity> rules) =>
-        rules.Select(r => new AlertRuleSnapshot(
-            r.Id, r.TenantId, r.Name, r.ConditionType,
-            r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-            r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass, r.OnUnknown,
-            r.GlucoseFreshnessMinutes, r.EnabledAt));
+        var tenantId = context.TenantId;
+        var stored = await context.Database
+            .SqlQuery<StoredRule>(
+                $"""SELECT id AS "Id", name AS "Name", condition_type AS "ConditionType", condition_params::text AS "ConditionParams", severity AS "Severity", scope_class AS "ScopeClass", allow_through_dnd AS "AllowThroughDnd" FROM alert_rules WHERE tenant_id = {tenantId} AND is_enabled""")
+            .ToListAsync(ct);
+        var unreadable = stored
+            .Where(r => held.ContainsKey(r.Id))
+            .Select(r => new UnreadableAlertRule(
+                r.Id,
+                r.Name,
+                r.ConditionType,
+                r.ConditionParams,
+                r.Severity,
+                AlertRuleMapper.Readable(held[r.Id].Severity),
+                r.ScopeClass,
+                AlertRuleMapper.Readable(held[r.Id].ScopeClass),
+                r.AllowThroughDnd))
+            .ToList();
+
+        foreach (var rule in unreadable)
+        {
+            _logger.LogError(
+                "Alert rule {AlertRuleId} for tenant {TenantId} is not evaluated: condition type '{ConditionType}', severity '{Severity}' or scope class '{ScopeClass}' is not one the engine knows",
+                rule.Id, tenantId, rule.StoredConditionType, rule.StoredSeverity, rule.StoredScopeClass);
+        }
+
+        return new EnabledAlertRules(
+            enabled.Where(r => !held.ContainsKey(r.Id)).Select(AlertRuleMapper.ToSnapshot).ToList(), unreadable);
+    }
 
     private sealed class StoredRule
     {
@@ -152,10 +132,11 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contexts.CreateForTenantAsync(tenantId, ct);
 
-        return await Snapshots(context.AlertRules
-                .AsNoTracking()
-                .OrderBy(r => r.SortOrder))
+        var rules = await context.AlertRules
+            .AsNoTracking()
+            .OrderBy(r => r.SortOrder)
             .ToListAsync(ct);
+        return rules.Select(AlertRuleMapper.ToSnapshot).ToList();
     }
 
     /// <inheritdoc/>
@@ -250,6 +231,7 @@ public class AlertRepository : IAlertRepository
         var rows = await context.AlertExcursions
             .AsNoTracking()
             .OfCondition()
+            .Concat(context.AlertExcursions.AsNoTracking().ResolvedNotices())
             .Where(e => e.OpenedOwedAt < takenUpBefore || e.ClosedOwedAt < takenUpBefore)
             .Select(e => new { e.Id, e.AlertRuleId, e.OpenedOwedAt, e.ClosedOwedAt, e.EndedAt })
             .ToListAsync(ct);
@@ -284,18 +266,87 @@ public class AlertRepository : IAlertRepository
 
     /// <inheritdoc/>
     public virtual async Task SettleTransitionAsync(
-        Guid excursionId, ExcursionTransitionType kind, CancellationToken ct)
+        Guid excursionId, ExcursionTransitionType kind, DateTime owedAt, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+        var held = NocturneDbContext.AtStoredPrecision(owedAt);
+
+        var excursion = context.AlertExcursions.Where(e => e.Id == excursionId);
+        if (kind == ExcursionTransitionType.ExcursionOpened)
+            await excursion.Where(e => e.OpenedOwedAt == held)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OpenedOwedAt, (DateTime?)null), ct);
+        else
+            await excursion.Where(e => e.ClosedOwedAt == held)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.ClosedOwedAt, (DateTime?)null), ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> OweCloseIfEndedAsync(Guid excursionId, DateTime now, CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        var excursion = await context.AlertExcursions.FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        var excursion = await context.AlertExcursions.OfCondition(includeTest: true)
+            .Where(e => e.EndedAt != null)
+            .Concat(context.AlertExcursions.ResolvedNotices())
+            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
         if (excursion is null)
-            return;
-        if (kind == ExcursionTransitionType.ExcursionOpened)
-            excursion.OpenedOwedAt = null;
-        else
-            excursion.ClosedOwedAt = null;
+            return false;
+        excursion.ClosedOwedAt = now;
         await context.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<LapsedSnoozeEnd> EndLapsedSnoozeAsync(
+        Guid instanceId, DateTime lapsedUntil, DateTime? renotifyAt, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+        var at = renotifyAt is { } value ? NocturneDbContext.AtStoredPrecision(value) : (DateTime?)null;
+
+        return await context.ExecuteInTransactionAsync(async token =>
+        {
+            var instance = context.AlertInstances.OfCondition(includeTest: true)
+                .Where(i => i.Id == instanceId && i.SnoozedUntil == lapsedUntil);
+            var ended = at is null
+                ? await instance.ExecuteUpdateAsync(s => s.SetProperty(i => i.SnoozedUntil, (DateTime?)null), token)
+                : await instance.ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.SnoozedUntil, (DateTime?)null)
+                    .SetProperty(i => i.RenotifiedAt, at), token);
+            if (ended == 0)
+                return LapsedSnoozeEnd.Lost;
+            if (at is null)
+                return LapsedSnoozeEnd.Ended;
+
+            var held = await context.AlertExcursions.OfCondition(includeTest: true)
+                .Where(e => e.OpenedOwedAt == null
+                            && e.Instances.Any(i => i.Id == instanceId))
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OpenedOwedAt, at), token);
+            return held == 1 ? LapsedSnoozeEnd.EndedHoldingOpening : LapsedSnoozeEnd.Ended;
+        },
+        verifySucceeded: async (end, token) =>
+            end == LapsedSnoozeEnd.Lost
+            || await context.AlertInstances.OfCondition(includeTest: true).AnyAsync(
+                i => i.Id == instanceId && i.SnoozedUntil == null && (at == null || i.RenotifiedAt == at), token),
+        ct: ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> ExtendLapsedSnoozeAsync(
+        Guid instanceId, DateTime lapsedUntil, DateTime snoozedUntil, int snoozeCount, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        return await context.ExecuteInTransactionAsync(
+            async token => await context.AlertInstances.OfCondition(includeTest: true)
+                .Where(i => i.Id == instanceId && i.SnoozedUntil == lapsedUntil)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.SnoozedUntil, snoozedUntil)
+                    .SetProperty(i => i.SnoozeCount, snoozeCount), token) == 1,
+            verifySucceeded: async (extended, token) =>
+                !extended
+                || await context.AlertInstances.OfCondition(includeTest: true).AnyAsync(
+                    i => i.Id == instanceId && i.SnoozedUntil == snoozedUntil && i.SnoozeCount == snoozeCount, token),
+            ct: ct);
     }
 
     /// <inheritdoc/>
@@ -346,30 +397,6 @@ public class AlertRepository : IAlertRepository
                     .SetProperty(i => i.ResolvedAt, resolvedAt)
                     .SetProperty(i => i.ResolutionReason, resolutionReason), token);
         }, ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task UpdateInstanceAsync(
-        UpdateAlertInstanceRequest request, CancellationToken ct)
-    {
-        await using var context = await _contexts.CreateForTenantAsync(request.TenantId, ct);
-
-        var entity = await context.AlertInstances
-            .FirstOrDefaultAsync(i => i.Id == request.Id, ct);
-
-        if (entity == null) return;
-
-        if (request.Status is not null)
-            entity.Status = request.Status;
-
-        if (request.SnoozedUntil.HasValue)
-            entity.SnoozedUntil = request.SnoozedUntil == DateTime.MinValue
-                ? null : request.SnoozedUntil.Value;
-
-        if (request.SnoozeCount.HasValue)
-            entity.SnoozeCount = request.SnoozeCount.Value;
-
-        await context.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -469,7 +496,7 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        return await context.AlertExcursions
+        var excursions = await context.AlertExcursions
             .AsNoTracking()
             .OfCondition(includeTest: true)
             .Where(e => e.EndedAt == null)
@@ -478,15 +505,12 @@ public class AlertRepository : IAlertRepository
             .Where(x => x.r.IsEnabled
                         && x.r.AutoResolveEnabled
                         && x.r.AutoResolveParams != null)
-            .Select(x => new AutoResolveExcursionSnapshot(
-                x.e.Id,
-                x.e.TenantId,
-                new AlertRuleSnapshot(
-                    x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
-                    x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
-                    x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd, x.r.ScopeClass,
-                    x.r.OnUnknown, x.r.GlucoseFreshnessMinutes, x.r.EnabledAt)))
+            .Select(x => new { x.e.Id, x.e.TenantId, Rule = x.r })
             .ToListAsync(ct);
+        return excursions
+            .Where(x => AlertRuleMapper.IsReadable(x.Rule))
+            .Select(x => new AutoResolveExcursionSnapshot(x.Id, x.TenantId, AlertRuleMapper.ToSnapshot(x.Rule)))
+            .ToList();
     }
 
     /// <inheritdoc/>
@@ -528,6 +552,8 @@ public class AlertRepository : IAlertRepository
         // the original. First writer wins.
         if (instance.SuppressionReason is not null) return;
 
+        if (await context.AlertDeliveries.AnyAsync(d => d.AlertInstanceId == instanceId, ct)) return;
+
         instance.SuppressionReason = reason;
         // Suppression closes the active dispatch path. Keep the row around with
         // status="triggered" so Acknowledge / Resolve still work normally.
@@ -548,9 +574,7 @@ public class AlertRepository : IAlertRepository
         RecordNoticeAsync(
             rule.Id,
             e => e.UnevaluableConditionVersion = conditionVersion,
-            async (context, token) => await Standing(context, rule.Id, conditionVersion).FirstOrDefaultAsync(token) is { } n
-                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
-                : null,
+            (context, token) => RecordedAsync(UnevaluableRows(context, rule.Id, conditionVersion), token),
             at,
             (context, token) => context.AlertRules.AnyAsync(r => r.Id == rule.Id
                                                                  && r.IsEnabled
@@ -567,9 +591,7 @@ public class AlertRepository : IAlertRepository
         RecordNoticeAsync(
             rule.Id,
             e => e.UnevaluableConditionVersion = conditionVersion,
-            async (context, token) => await Standing(context, rule.Id, conditionVersion).FirstOrDefaultAsync(token) is { } n
-                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
-                : null,
+            (context, token) => RecordedAsync(UnevaluableRows(context, rule.Id, conditionVersion), token),
             at,
             async (context, token) => (await context.Database
                 .SqlQuery<Guid>(
@@ -591,9 +613,7 @@ public class AlertRepository : IAlertRepository
                 e.HeldSince = heldSince;
                 e.UnevaluableConditionVersion = $"held:{heldSince:O}";
             },
-            async (context, token) => await StandingHeld(context, ruleId, heldSince).FirstOrDefaultAsync(token) is { } n
-                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
-                : null,
+            (context, token) => RecordedAsync(HeldRows(context, ruleId, heldSince), token),
             at,
             async (context, token) =>
                 await context.AlertRules.AnyAsync(r => r.Id == ruleId && r.IsEnabled, token)
@@ -645,7 +665,7 @@ public class AlertRepository : IAlertRepository
             context.AlertInstances.Add(instance);
             await context.SaveChangesAsync(token);
 
-            return new NoticeRecorded(excursion.Id, instance.Id, Dispatched: false);
+            return new NoticeRecorded(excursion.Id, instance.Id, Dispatched: false, excursion.OpenedOwedAt);
         },
         verifySucceeded: async (recorded, token) =>
             recorded is not null
@@ -664,7 +684,7 @@ public class AlertRepository : IAlertRepository
         if (notice is null) return;
 
         notice.EndedAt = at;
-        notice.OpenedOwedAt = null;
+        notice.ClosedOwedAt = at;
         await context.SaveChangesAsync(ct);
     }
 
@@ -674,24 +694,59 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        return await Standing(context, ruleId).ToListAsync(ct);
+        return await UnevaluableRows(context, ruleId)
+            .Select(n => new StandingUnevaluableNotice(
+                n.ExcursionId, n.InstanceId, n.AlertRuleId, n.ConditionVersion!, n.StartedAt, n.Dispatched, n.OpenedOwedAt))
+            .ToListAsync(ct);
     }
 
-    private static IQueryable<StandingUnevaluableNotice> Standing(
-        NocturneDbContext context, Guid? ruleId, string? conditionVersion = null) =>
+    /// <summary>A standing notice as every read of one has it.</summary>
+    private sealed class NoticeRow
+    {
+        public Guid ExcursionId { get; init; }
+        public Guid InstanceId { get; init; }
+        public Guid AlertRuleId { get; init; }
+        public bool Dispatched { get; init; }
+        public DateTime? OpenedOwedAt { get; init; }
+        public DateTime StartedAt { get; init; }
+        public DateTime? HeldSince { get; init; }
+        public string? ConditionVersion { get; init; }
+    }
+
+    private static IQueryable<NoticeRow> NoticeRows(NocturneDbContext context, Guid? ruleId) =>
         context.AlertInstances
             .AsNoTracking()
             .OfStandingNotices()
-            .Where(i => i.AlertExcursion!.HeldSince == null)
             .Where(i => ruleId == null || i.AlertExcursion!.AlertRuleId == ruleId)
-            .Where(i => conditionVersion == null || i.AlertExcursion!.UnevaluableConditionVersion == conditionVersion)
-            .Select(i => new StandingUnevaluableNotice(
-                i.AlertExcursionId,
-                i.Id,
-                i.AlertExcursion!.AlertRuleId,
-                i.AlertExcursion.UnevaluableConditionVersion!,
-                i.AlertExcursion.OpenedOwedAt == null
-                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
+            .Select(i => new NoticeRow
+            {
+                ExcursionId = i.AlertExcursionId,
+                InstanceId = i.Id,
+                AlertRuleId = i.AlertExcursion!.AlertRuleId,
+                Dispatched = i.AlertExcursion.OpenedOwedAt == null
+                             && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id)),
+                OpenedOwedAt = i.AlertExcursion.OpenedOwedAt,
+                StartedAt = i.AlertExcursion.StartedAt,
+                HeldSince = i.AlertExcursion.HeldSince,
+                ConditionVersion = i.AlertExcursion.UnevaluableConditionVersion,
+            });
+
+    private static IQueryable<NoticeRow> UnevaluableRows(
+        NocturneDbContext context, Guid? ruleId, string? conditionVersion = null) =>
+        NoticeRows(context, ruleId)
+            .Where(n => n.HeldSince == null)
+            .Where(n => conditionVersion == null || n.ConditionVersion == conditionVersion);
+
+    private static IQueryable<NoticeRow> HeldRows(
+        NocturneDbContext context, Guid? ruleId, DateTime? heldSince = null) =>
+        NoticeRows(context, ruleId)
+            .Where(n => n.HeldSince != null)
+            .Where(n => heldSince == null || n.HeldSince == heldSince);
+
+    private static async Task<NoticeRecorded?> RecordedAsync(IQueryable<NoticeRow> rows, CancellationToken ct) =>
+        await rows
+            .Select(n => new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched, n.OpenedOwedAt))
+            .FirstOrDefaultAsync(ct);
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<StandingHeldNotice>> GetStandingHeldNoticesAsync(
@@ -699,24 +754,11 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        return await StandingHeld(context, ruleId).ToListAsync(ct);
+        return await HeldRows(context, ruleId)
+            .Select(n => new StandingHeldNotice(
+                n.ExcursionId, n.InstanceId, n.AlertRuleId, n.HeldSince!.Value, n.Dispatched, n.OpenedOwedAt))
+            .ToListAsync(ct);
     }
-
-    private static IQueryable<StandingHeldNotice> StandingHeld(
-        NocturneDbContext context, Guid? ruleId, DateTime? heldSince = null) =>
-        context.AlertInstances
-            .AsNoTracking()
-            .OfStandingNotices()
-            .Where(i => i.AlertExcursion!.HeldSince != null)
-            .Where(i => ruleId == null || i.AlertExcursion!.AlertRuleId == ruleId)
-            .Where(i => heldSince == null || i.AlertExcursion!.HeldSince == heldSince)
-            .Select(i => new StandingHeldNotice(
-                i.AlertExcursionId,
-                i.Id,
-                i.AlertExcursion!.AlertRuleId,
-                i.AlertExcursion.HeldSince!.Value,
-                i.AlertExcursion.OpenedOwedAt == null
-                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<HeldRuleState>> GetHeldRuleStatesAsync(CancellationToken ct)
@@ -738,7 +780,9 @@ public class AlertRepository : IAlertRepository
         return await context.AlertExcursions
             .AsNoTracking()
             .OfCondition()
-            .AnyAsync(e => e.AlertRuleId == ruleId && e.StartedAt <= at && (e.EndedAt == null || e.EndedAt >= at), ct);
+            .Where(e => e.AlertRuleId == ruleId)
+            .ActiveAt(e => e.StartedAt, e => e.EndedAt, at, ActiveEnd.Inclusive)
+            .AnyAsync(ct);
     }
 
     /// <summary>
@@ -767,8 +811,8 @@ public class AlertRepository : IAlertRepository
                 r => r.Id,
                 (x, r) => new SnoozedInstanceSnapshot(
                     x.Instance.Id, x.Instance.TenantId, x.Instance.AlertExcursionId,
-                    x.Instance.Status, x.Instance.SnoozeCount,
-                    r.Id, r.ConditionType, r.ConditionParams, r.ClientConfiguration))
+                    x.Instance.Status, x.Instance.SnoozedUntil!.Value, x.Instance.SnoozeCount,
+                    r.Id, AlertRuleMapper.Readable(r.ConditionType), r.ConditionParams, r.ClientConfiguration))
             .ToListAsync(ct);
     }
 

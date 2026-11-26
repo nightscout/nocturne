@@ -63,21 +63,6 @@ public static class LinkedRecordTypes
     internal static string WriteLockKey(Guid tenantId) => $"dedup:{tenantId}";
 
     /// <summary>
-    /// The data sources of every member <see cref="LoadGroupMembersAsync"/> reads for each of the given
-    /// canonical groups.
-    /// </summary>
-    internal static async Task<Dictionary<Guid, HashSet<string>>> LoadGroupSourcesAsync(
-        NocturneDbContext db,
-        string recordTypeStr,
-        List<Guid> canonicalIds,
-        IReadOnlyDictionary<Guid, LinkedRecordEntity> unlinked,
-        CancellationToken ct) =>
-        (await LoadGroupMembersAsync(db, recordTypeStr, canonicalIds, unlinked, ct))
-        .ToDictionary(
-            group => group.Key,
-            group => group.Value.Select(m => m.DataSource).ToHashSet(StringComparer.OrdinalIgnoreCase));
-
-    /// <summary>
     /// Every member of each of the given canonical groups. The whole group is read rather than just
     /// the links inside a matching window, so a same-source record sitting outside the window still
     /// blocks a wide match. A group in <paramref name="unlinked"/> is not stored and its one record is
@@ -268,17 +253,11 @@ public static class LinkedRecordTypes
                     .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
                     .Where(e => EF.Property<DateTime>(e, createdAtName) < createdBefore
                         && !context.LinkedRecords.Any(lr =>
-                            lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)));
-                if (fromMills is { } from)
-                {
-                    var fromTime = from.ToUtcDateTime();
-                    query = query.Where(e => EF.Property<DateTime>(e, timestampName) >= fromTime);
-                }
-                if (toMills is { } to)
-                {
-                    var toTime = to.ToUtcDateTime();
-                    query = query.Where(e => EF.Property<DateTime>(e, timestampName) <= toTime);
-                }
+                            lr.RecordType == key && lr.RecordId == EF.Property<Guid>(e, idName)))
+                    .InWindow(
+                        e => EF.Property<DateTime>(e, timestampName),
+                        fromMills?.ToUtcDateTime(),
+                        toMills?.ToUtcDateTime());
 
                 return (await query.ToListAsync(ct)).Select(e => new LinkedRecordEntity
                 {

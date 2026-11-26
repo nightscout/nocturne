@@ -41,14 +41,14 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
         FlagsAfterUp = await PerTenantAsync("SELECT is_secondary_stream::text FROM sensor_glucose");
         RowsAfterUp = await LedgerRowsAsync();
 
-        await ExecuteAsync($"DELETE FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = '{Migration}'");
+        await NpgsqlTestCommands.ExecuteAsync(_migrator, $"DELETE FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = '{Migration}'");
         await MigrateToAsync(null);
         RowsAfterRestart = await LedgerRowsAsync();
 
         await MigrateToAsync(PriorMigration);
-        ColumnsAfterDown = await ScalarAsync(
+        ColumnsAfterDown = await NpgsqlTestCommands.ScalarAsync<long>(_migrator,
             "SELECT count(*) FROM information_schema.columns WHERE column_name = 'is_secondary_stream' AND table_schema = 'public'");
-        RowsAfterDown = await ScalarAsync(
+        RowsAfterDown = await NpgsqlTestCommands.ScalarAsync<long>(_migrator,
             $"SELECT count(*) FROM job_ledger WHERE job = '{AddSecondaryStreamFlagToSensorGlucose.JobName}'");
     }
 
@@ -56,10 +56,8 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
 
     private async Task SeedAsync(Guid tenant)
     {
-        await ExecuteAsync($"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{tenant}', 'stream-{tenant:N}', 'secondary-stream', true, now(), now());
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
+        await NpgsqlTestCommands.SeedTenantAsync(_migrator, tenant, $"stream-{tenant:N}", "secondary-stream");
+        await NpgsqlTestCommands.ExecuteAsTenantAsync(_migrator, tenant, $"""
             INSERT INTO sensor_glucose (id, tenant_id, timestamp, mgdl, data_source, device, sys_created_at, sys_updated_at)
             VALUES (gen_random_uuid(), '{tenant}', now(), 110, 'xdrip', 'phone', now(), now()),
                    (gen_random_uuid(), '{tenant}', now(), 120, 'dexcom-connector', 'share', now(), now());
@@ -84,10 +82,7 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
     }
 
     private DbContextOptions<NocturneDbContext> Options() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migrator, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.MigrationsOptions(_migrator);
 
     private async Task MigrateToAsync(string? target)
     {
@@ -103,8 +98,7 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
         foreach (var tenant in new[] { TenantA, TenantB })
         {
             await using var transaction = await conn.BeginTransactionAsync();
-            await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', true)", conn))
-                await pin.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(tenant, local: true);
             await using var cmd = new NpgsqlCommand(sql, conn);
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -112,22 +106,6 @@ public class AddSecondaryStreamFlagToSensorGlucoseFixture : IAsyncLifetime
         }
 
         return rows;
-    }
-
-    private async Task<long> ScalarAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 }
 

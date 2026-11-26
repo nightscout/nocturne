@@ -47,11 +47,12 @@ describe("filterTenantlessNav", () => {
     expect(isTenantlessRoute("/settings/teams")).toBe(true);
     expect(isTenantlessRoute("/settings/teams/0d3c1f52-7a4b-4f4e-9d1a-1c2b3d4e5f60")).toBe(true);
     expect(isTenantlessRoute("/teams/join")).toBe(true);
+    expect(isTenantlessRoute("/teams/join-staff")).toBe(true);
     expect(isTenantlessRoute("/teams/access")).toBe(true);
   });
 
   it("does not admit paths that only resemble the teams pages", () => {
-    for (const href of ["/settings/teams/a/b", "/settings/teams/", "/teams", "/teams/join/x", "/teams/access/x", "/teams/accessx", "/teams/access/"]) {
+    for (const href of ["/settings/teams/a/b", "/settings/teams/", "/teams", "/teams/join/x", "/teams/join-staff/x", "/teams/access/x", "/teams/accessx", "/teams/access/"]) {
       expect(isTenantlessRoute(href)).toBe(false);
     }
   });

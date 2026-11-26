@@ -1,6 +1,7 @@
 using System.Text;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -81,23 +82,17 @@ public class UnchangedResendIntegrationTests : ApiIntegrationTestBase
     private async Task<Dictionary<string, string>> RowVersionsAsync(string tag)
     {
         var versions = new Dictionary<string, string>();
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using (var set = conn.CreateCommand())
-        {
-            set.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false)";
-            set.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-            await set.ExecuteScalarAsync();
-        }
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(Fixture.TenantId);
 
         foreach (var table in Tables)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"SELECT id::text, xmin::text, sys_updated_at::text FROM {table} WHERE legacy_id LIKE @tag";
-            cmd.Parameters.AddWithValue("tag", $"6a1b2c3d4e5f{tag}%");
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                versions[$"{table}/{reader.GetString(0)}"] = $"{reader.GetString(1)}@{reader.GetString(2)}";
+            var rows = await conn.QueryAsync(
+                $"SELECT id::text, xmin::text, sys_updated_at::text FROM {table} WHERE legacy_id LIKE @tag",
+                reader => (Id: reader.GetString(0), Version: $"{reader.GetString(1)}@{reader.GetString(2)}"),
+                ("tag", $"6a1b2c3d4e5f{tag}%"));
+            foreach (var (id, version) in rows)
+                versions[$"{table}/{id}"] = version;
         }
 
         return versions;

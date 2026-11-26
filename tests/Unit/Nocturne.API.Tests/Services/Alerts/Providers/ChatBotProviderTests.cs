@@ -8,9 +8,9 @@ using Moq;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts.Providers;
@@ -57,20 +57,16 @@ public class ChatBotProviderTests
         configMock.Setup(c => c["BASE_DOMAIN"]).Returns(baseDomain);
         configMock.Setup(c => c["INSTANCE_KEY"]).Returns(instanceKey);
 
-        var tenantAccessorMock = new Mock<ITenantAccessor>();
-        if (tenantSlug is not null)
-        {
-            tenantAccessorMock
-                .Setup(a => a.Context)
-                .Returns(new TenantContext(Guid.NewGuid(), tenantSlug, "Acme", true, IsDemo: false));
-        }
+        var tenantAccessor = tenantSlug is null
+            ? new SettableTenantAccessor()
+            : SettableTenantAccessor.Resolved(Guid.NewGuid(), tenantSlug, "Acme");
 
         var logger = NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();
 
         return new ChatBotProvider(
             httpClientFactoryMock.Object,
             configMock.Object,
-            tenantAccessorMock.Object,
+            tenantAccessor,
             logger);
     }
 

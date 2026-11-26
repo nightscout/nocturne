@@ -3,12 +3,12 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -20,12 +20,6 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="IMealMatchingService"/>
 public class MealMatchingService : IMealMatchingService
 {
-    /// <summary>
-    /// Notification type for a suggested match. Registered in <c>BuiltInNotificationTemplates</c>,
-    /// which supplies its category, icon and source.
-    /// </summary>
-    public const string SuggestedMatchNotificationType = "meal_matching.suggested_match";
-
     /// <summary>Cap on carb intake records pulled per matching window.</summary>
     private const int CandidateLimit = 1000;
 
@@ -114,7 +108,7 @@ public class MealMatchingService : IMealMatchingService
     {
         await _notificationService.ArchiveBySourceAsync(
             userId,
-            SuggestedMatchNotificationType,
+            IMealMatchingService.SuggestedMatchNotificationType,
             foodEntryId.ToString(),
             NotificationArchiveReason.ConditionMet,
             ct);
@@ -294,7 +288,7 @@ public class MealMatchingService : IMealMatchingService
         // and starts throwing.
         var existing = await _notificationRepository.FindBySourceAsync(
             userId,
-            SuggestedMatchNotificationType,
+            IMealMatchingService.SuggestedMatchNotificationType,
             entry.Id.ToString(),
             ct);
 
@@ -331,7 +325,7 @@ public class MealMatchingService : IMealMatchingService
 
         await _notificationService.CreateNotificationAsync(
             userId,
-            SuggestedMatchNotificationType,
+            IMealMatchingService.SuggestedMatchNotificationType,
             title,
             subtitle: subtitle,
             sourceId: entry.Id.ToString(),

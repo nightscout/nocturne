@@ -16,8 +16,7 @@
             "value": 2
           }
         }
-      },
-      "hysteresis_minutes": 0
+      }
     }
   ],
   "ticks": [

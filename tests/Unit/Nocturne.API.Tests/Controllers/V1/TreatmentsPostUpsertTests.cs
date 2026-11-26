@@ -1,28 +1,20 @@
 using Nocturne.API.Tests.TestDoubles;
 using System.Text.Json;
-using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Legacy;
-using Nocturne.API.Services.V4;
-using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.Services.Treatments;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -47,7 +39,7 @@ public class TreatmentsPostUpsertTests : IDisposable
 
     public TreatmentsPostUpsertTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
 
         var audit = Mock.Of<IAuditContext>();
@@ -80,21 +72,13 @@ public class TreatmentsPostUpsertTests : IDisposable
                 It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            bolusRepo, tempBasalRepo.Object,
-            carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            foods.Object,
-            devices.Object,
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            audit,
-            NullLogger<TreatmentDecomposer>.Instance);
+        var decomposer = TreatmentDecomposerDoubles.Build(
+            _context.AsFactory(),
+            bolus: bolusRepo, tempBasal: tempBasalRepo.Object,
+            carbIntake: carbRepo, bgCheck: bgCheckRepo, note: noteRepo, deviceEvent: deviceEventRepo, bolusCalculation: bolusCalcRepo,
+            foods: foods.Object,
+            devices: devices.Object,
+            audit: audit);
 
         _service = WritingTreatmentService.Over(
             decomposer, tempBasalRepo.Object, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,

@@ -26,7 +26,6 @@ public class TimerContinuityTests
         ConditionType = AlertConditionType.Sustained,
         ConditionParams =
             """{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}""",
-        HysteresisMinutes = 0,
     };
 
     private static AlertRuleSnapshot ToSnapshot(AlertRule rule) => new(

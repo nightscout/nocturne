@@ -23,8 +23,8 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
 
@@ -41,7 +41,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
     public async Task InitializeAsync()
     {
-        connectionString = fixture.Database.SuperuserConnectionString;
+        connectionString = fixture.SuperuserConnectionString;
         await using var db = Context();
         db.Tenants.AddRange(
             new TenantEntity { Id = tenantId, Slug = $"google-test-{tenantId:N}", DisplayName = "Synthetic", IsActive = true },
@@ -365,7 +365,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         try
         {
             Assert.Null(await coordinator.AcquireAsync(tenantId, default, TimeSpan.Zero));
-            Assert.False(await coordinator.QueueAsync(tenantId, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.False(await coordinator.QueueAsync(tenantId, 4, default).WaitAsync(Eventually.DefaultPatience));
             await using var unrelated = await coordinator.AcquireAsync(otherTenantId, default, TimeSpan.Zero);
             Assert.NotNull(unrelated);
             using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
@@ -434,14 +434,14 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var subject = Guid.NewGuid();
         await using var reader = await coordinator.WatchReadsAsync(tenantId, default);
         var request = await coordinator.RequestDisconnectAsync(tenantId, subject, default);
-        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(Timeout.Infinite, reader.Token).ContinueWith(task => Assert.True(task.IsCanceled)).WaitAsync(Eventually.DefaultPatience);
         var restarted = Coordinator(provider);
         Assert.Equal(subject, (await restarted.DisconnectRequestAsync(tenantId, default))!.SubjectId);
         Assert.Equal(request, await restarted.RequestDisconnectAsync(tenantId, Guid.NewGuid(), default));
         await using (var late = await restarted.WatchReadsAsync(tenantId, default))
             Assert.True(late.Token.IsCancellationRequested);
         await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
-        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await requests.MoveNextAsync().AsTask().WaitAsync(Eventually.DefaultPatience));
         Assert.Equal(tenantId, requests.Current);
         await restarted.FinishDisconnectAsync(tenantId, Guid.NewGuid());
         Assert.NotNull(await restarted.DisconnectRequestAsync(tenantId, default));
@@ -457,10 +457,11 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var tenants = Mock.Get(provider.GetRequiredService<ITenantService>());
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var coordinator = Coordinator(provider);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cancellation = new CancellationTokenSource(Eventually.DefaultPatience);
         await using var requests = coordinator.ReadRequestsAsync(cancellation.Token).GetAsyncEnumerator();
         var next = requests.MoveNextAsync().AsTask();
-        while (tenants.Invocations.Count == 0) await Task.Delay(10, cancellation.Token);
+        await Eventually.UntilAsync(
+            "the coordinator to list the tenants", () => tenants.Invocations.Count > 0);
         Assert.False(next.IsCompleted);
 
         Assert.True(await coordinator.QueueAsync(tenantId, 1, cancellation.Token));
@@ -560,9 +561,9 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
+        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.AppConnectionString));
         services.AddDbContextFactory<NocturneDbContext>((provider, options) => options
-            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(provider.GetRequiredService<NpgsqlDataSource>()));
         services.AddDataServices();
         services.AddSingleton(AccountLinkRoutes.Off);
         var tenants = new Mock<ITenantService>();
@@ -580,8 +581,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         if (db.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
             await db.Database.OpenConnectionAsync();
         await db.Database.ExecuteSqlRawAsync("SET ROLE nocturne_app");
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.current_tenant_id', {tenant.ToString()}, false)");
-        db.TenantId = tenant;
+        await db.PinTenantAsync(tenant);
     }
 
     private static HealthRecordTransactions Transactions(NocturneDbContext db) =>
@@ -589,6 +589,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
     private static GoogleHealthReadingWriter Writer(NocturneDbContext db)
     {
+        // A mock because the answer is read from the context on each call, and the test repins the context.
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(a => a.TenantId).Returns(() => db.TenantId);
         return new(
@@ -600,12 +601,4 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
 }
 
-public sealed class GoogleHealthPostgresFixture : IAsyncLifetime
-{
-    public TestDatabase Database { get; private set; } = null!;
-
-    public async Task InitializeAsync() =>
-        Database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health");
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class GoogleHealthPostgresFixture() : MigratedDatabase("google_health");

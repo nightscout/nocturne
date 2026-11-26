@@ -13,9 +13,9 @@ using Nocturne.API.Services.Jobs;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -35,22 +35,14 @@ namespace Nocturne.API.Tests.Services.Jobs;
 public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database database)
     : IClassFixture<DailyJobsPostgresTests.Database>, IAsyncLifetime
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public TestDatabase Created { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Created = await SharedPostgres.CreateMigratedDatabaseAsync("daily_jobs");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("daily_jobs");
 
     private static readonly DateTimeOffset Start = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
     private readonly FakeTimeProvider _clock = new(Start);
     private readonly List<ServiceProvider> _providers = [];
-    private readonly string _app = database.Created.AppConnectionString;
-    private readonly string _migrator = database.Created.MigratorConnectionString;
+    private readonly string _app = database.AppConnectionString;
+    private readonly string _migrator = database.MigratorConnectionString;
 
     public async Task InitializeAsync()
     {
@@ -187,13 +179,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options)
-        {
-            TenantId = tenant,
-        };
+        TestContexts.Context(_app, tenant);
 
     private JobScheduler Scheduler(string job)
     {
@@ -202,8 +188,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -238,11 +223,7 @@ public sealed class DailyJobsPostgresTests(DailyJobsPostgresTests.Database datab
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var insert = new NpgsqlCommand(
-            "INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES (@id, @slug, 'T', true, now(), now())", conn);
-        insert.Parameters.AddWithValue("id", tenant);
-        insert.Parameters.AddWithValue("slug", tenant.ToString("N"));
-        await insert.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, tenant.ToString("N"), "T");
         return tenant;
     }
 }

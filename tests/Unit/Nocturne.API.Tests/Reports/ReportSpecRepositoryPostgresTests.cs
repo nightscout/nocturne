@@ -18,26 +18,11 @@ namespace Nocturne.API.Tests.Reports;
 public class ReportSpecRepositoryPostgresTests(ReportSpecRepositoryPostgresTests.Database database)
     : IClassFixture<ReportSpecRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    public sealed class Database() : MigratedDatabase("report_spec_concurrency")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var db = await SharedPostgres.CreateMigratedDatabaseAsync("report_spec_concurrency");
-            AppConnectionString = db.AppConnectionString;
-            MigratorConnectionString = db.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-
+        // Retrying, as the API's contexts are: that strategy refuses a transaction begun outside it.
         public DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                // Retrying, as the API's contexts are: that strategy refuses a transaction begun outside it.
-                .UseNpgsql(AppConnectionString, o => o.EnableRetryOnFailure())
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString, npgsql: TestContexts.Retrying);
 
         public async Task<ReportSpecRepository> TenantAsync()
         {
@@ -45,14 +30,7 @@ public class ReportSpecRepositoryPostgresTests(ReportSpecRepositoryPostgresTests
             await using (var conn = new NpgsqlConnection(MigratorConnectionString))
             {
                 await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                    VALUES (@id, @slug, 'report-spec-test', true, now(), now())
-                    """;
-                cmd.Parameters.AddWithValue("id", tenant);
-                cmd.Parameters.AddWithValue("slug", $"report-spec-{tenant:N}");
-                await cmd.ExecuteNonQueryAsync();
+                await conn.SeedTenantAsync(tenant, $"report-spec-{tenant:N}", "report-spec-test");
             }
             return new ReportSpecRepository(new NocturneDbContext(Options) { TenantId = tenant }.AsFactory());
         }

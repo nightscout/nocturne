@@ -163,7 +163,7 @@ internal sealed class UnevaluableRuleNotice(
         {
             await NotifyAsync(rule, record, tenantId, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Sending the notice that alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
@@ -186,7 +186,7 @@ internal sealed class UnevaluableRuleNotice(
         {
             await ResolveNoticeAsync(notice.ExcursionId, reason, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex,
                 "Resolving notice {ExcursionId} that alert rule {AlertRuleId} cannot be evaluated failed",
@@ -244,24 +244,14 @@ internal sealed class UnevaluableRuleNotice(
             (tenant, activeExcursionCount) => AlertPayloads.Unevaluable(
                 rule.Name, rule.ConditionType, rule.Severity, tenantId, notice.ExcursionId, notice.InstanceId,
                 tenant, activeExcursionCount, now),
-            tenantId, repository, ruleRepository, deliveryService, contextEnricher, logger, ct);
+            tenantId, repository, ruleRepository, deliveryService, contextEnricher, resolutionHandler, logger, ct);
 
         logger.LogInformation(
             "Notice {InstanceId} sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",
             notice.InstanceId, rule.Id);
-
-        // A retirement that ran during the dispatch resolved the notice before a provider made what
-        // the resolution clears (an in-app notification), so resolve it again.
-        if (!(await repository.GetStandingUnevaluableNoticesAsync(rule.Id, ct)).Any(n => n.ExcursionId == notice.ExcursionId))
-            await ResolveNoticeAsync(notice.ExcursionId, ExcursionCloseReason.RuleDisabled, ct);
     }
 
-    private async Task ResolveNoticeAsync(Guid excursionId, ExcursionCloseReason reason, CancellationToken ct)
-    {
-        await repository.EndNoticeAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct);
-        await resolutionHandler.HandleClosedAsync(
-            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, reason),
-            tenantAccessor.TenantId,
-            ct);
-    }
+    private Task ResolveNoticeAsync(Guid excursionId, ExcursionCloseReason reason, CancellationToken ct) =>
+        RuleNoticeDispatch.ResolveAsync(
+            excursionId, reason, tenantAccessor.TenantId, repository, resolutionHandler, timeProvider, ct);
 }

@@ -41,19 +41,11 @@ namespace Nocturne.API.Tests.Services.Jobs;
 public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgresTests.Database database)
     : IClassFixture<RestartSensitiveJobsPostgresTests.Database>, IAsyncLifetime
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public TestDatabase Created { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Created = await SharedPostgres.CreateMigratedDatabaseAsync("restart_sensitive_jobs");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("restart_sensitive_jobs");
 
     private readonly List<ServiceProvider> _providers = [];
-    private readonly string _app = database.Created.AppConnectionString;
-    private readonly string _migrator = database.Created.MigratorConnectionString;
+    private readonly string _app = database.AppConnectionString;
+    private readonly string _migrator = database.MigratorConnectionString;
 
     public async Task InitializeAsync()
     {
@@ -182,8 +174,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -298,8 +289,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         services.AddMetrics();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(_app)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(_app));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -325,11 +315,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var insert = new NpgsqlCommand(
-            "INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES (@id, @slug, 'T', true, now(), now())", conn);
-        insert.Parameters.AddWithValue("id", tenant);
-        insert.Parameters.AddWithValue("slug", tenant.ToString("N"));
-        await insert.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, tenant.ToString("N"), "T");
         return tenant;
     }
 
@@ -337,16 +323,15 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     private async Task<string?> EvidenceAsync(Guid tenant, Guid tempBasal)
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using (var pin = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false);", conn))
-            await pin.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
         await using var cmd = new NpgsqlCommand($"SELECT origin_evidence FROM temp_basals WHERE id = '{tempBasal}';", conn);
         return await cmd.ExecuteScalarAsync() as string;
     }

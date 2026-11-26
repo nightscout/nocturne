@@ -41,7 +41,7 @@ public class ProfileWriteService : IProfileWriteService
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Profile>> CreateProfilesAsync(
+    public async Task<BulkWrite<Profile>> CreateProfilesAsync(
         IEnumerable<Profile> profiles,
         CancellationToken cancellationToken = default
     )
@@ -57,17 +57,27 @@ public class ProfileWriteService : IProfileWriteService
             }
         }
 
-        await _decomposer.DecomposeBatchAsync(profileList, WriteOrigin.Live, cancellationToken);
+        var result = await _decomposer.DecomposeBatchAsync(profileList, WriteOrigin.Live, cancellationToken);
 
-        await _sideEffects.OnCreatedAsync(
-            CollectionName,
-            profileList,
-            cancellationToken: cancellationToken
-        );
+        var written = profileList.Where(p => p.IsValid != false).ToList();
+        if (written.Count > 0)
+        {
+            await _sideEffects.OnCreatedAsync(
+                CollectionName,
+                written,
+                cancellationToken: cancellationToken
+            );
 
-        await _events.OnCreatedAsync(profileList, cancellationToken);
+            await _events.OnCreatedAsync(written, cancellationToken);
+        }
 
-        return profileList;
+        if (result.Invalidated.Count > 0)
+            await OnDeletedAsync(cancellationToken);
+
+        return new BulkWrite<Profile>(profileList, 0)
+        {
+            Invalidated = [.. profileList.Where(result.Invalidated.Contains)],
+        };
     }
 
     /// <inheritdoc />

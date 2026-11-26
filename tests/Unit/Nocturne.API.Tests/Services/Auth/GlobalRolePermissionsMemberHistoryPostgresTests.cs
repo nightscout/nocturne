@@ -26,26 +26,10 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
     private static readonly CancellationToken Ct = CancellationToken.None;
     private static readonly DateTime Now = new(2026, 11, 23, 12, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var created = await SharedPostgres.CreateMigratedDatabaseAsync("global_role_permissions_history");
-            AppConnectionString = created.AppConnectionString;
-            MigratorConnectionString = created.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("global_role_permissions_history");
 
     private NocturneDbContext Context(Guid tenant, Guid? actor = null) =>
-        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant }
+        TestContexts.Context(database.AppConnectionString, tenant)
             .ActingAs(new TestAuditActor { SubjectId = actor });
 
     [Fact]
@@ -57,14 +41,7 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'global-role-permissions-history-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", roleName));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, roleName, "global-role-permissions-history-test");
         }
 
         await using (var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -88,9 +65,7 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
         var history = new MemberHistoryReader(contexts);
         (await history.GetAsync(tenant, null, 100, 0, Now, Ct)).Data.Should().BeEmpty();
 
-        (await new SubjectRepository(
-            new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off)
-            .DeleteAsync(admin, Ct)).Should().BeOfType<SubjectChange.Changed>();
+        (await SubjectDeletions.DeleteAsync(new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off, admin, Ct)).Should().BeOfType<SubjectChange.Changed>();
 
         (await PermissionRowsAsync(roleId)).Should().ContainSingle().Which.DetailsJson.Should().BeNull();
         (await history.GetAsync(tenant, null, 100, 0, Now, Ct)).Data.Should().BeEmpty();

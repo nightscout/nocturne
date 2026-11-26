@@ -8,11 +8,7 @@ public sealed record TempBasalSnapshot(
     DateTime StartedAt);
 
 /// <summary>Lightweight projection of an active override for alert evaluation.</summary>
-public sealed record OverrideSnapshot(
-    DateTime StartedAt,
-    DateTime? EndsAt,
-    decimal? Multiplier,
-    string? Name);
+public sealed record OverrideSnapshot(DateTime StartedAt);
 
 /// <summary>Lightweight projection of an active pump-suspension StateSpan for alert evaluation.
 /// Set to null when the underlying pump snapshot is stale, so suspension conditions don't latch

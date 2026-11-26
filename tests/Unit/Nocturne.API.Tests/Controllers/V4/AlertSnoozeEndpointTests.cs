@@ -11,7 +11,6 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -53,13 +52,11 @@ public class AlertSnoozeEndpointTests
 
     private AlertsController CreateController()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var snoozeService = new AlertSnoozeService(
             (new InMemoryFactory(_options)).AsNocturneFactory(_tenantId),
-            tenantAccessor.Object,
+            tenantAccessor,
             Mock.Of<IAlertRepository>(),
             Mock.Of<IAlertRuleRepository>(),
             Mock.Of<IAlertDeliveryService>(),
@@ -67,6 +64,7 @@ public class AlertSnoozeEndpointTests
             Mock.Of<ICanonicalGlucoseService>(),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),
+            Mock.Of<IExcursionResolutionHandler>(),
             TimeProvider.System,
             NullLogger<AlertSnoozeService>.Instance);
 
@@ -75,7 +73,7 @@ public class AlertSnoozeEndpointTests
             Mock.Of<IAlertAcknowledgementService>(),
             Mock.Of<IAlertDeliveryService>(),
             snoozeService,
-            tenantAccessor.Object,
+            tenantAccessor,
             Mock.Of<ILogger<AlertsController>>())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

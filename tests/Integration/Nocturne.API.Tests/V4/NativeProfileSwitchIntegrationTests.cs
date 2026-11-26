@@ -117,6 +117,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         (await client.GetFromJsonAsync<JsonArray>("/api/v1/treatments"))!.Should().BeEmpty(
             "AAPS imports every Profile Switch it reads on the treatments feed");
         (await client.GetFromJsonAsync<JsonNode>("/api/v3/treatments"))!["result"]!.AsArray().Should().BeEmpty();
+        await SettleHistoryAsync();
         (await client.GetFromJsonAsync<JsonNode>("/api/v3/treatments/history/0"))!["result"]!.AsArray().Should().BeEmpty();
     }
 
@@ -260,8 +261,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         await StoreProfileAsync(owner);
         var id = (await SwitchAsync(owner, new { baseProfileName = "Rhys" }))["id"]!.GetValue<string>();
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Therapy Reader");
         var sessionToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -285,8 +285,7 @@ public class NativeProfileSwitchIntegrationTests : ApiIntegrationTestBase
         await StoreProfileAsync(owner);
         var id = (await SwitchAsync(owner, new { baseProfileName = "Rhys" }))["id"]!.GetValue<string>();
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var slug = $"tenant-b-{Guid.NewGuid():N}"[..20];
         var tenantB = await AuthTestHelpers.SeedTenantAsync(Fixture, slug, "Tenant B");
         var (_, tokenB) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantB, "Tenant B User");

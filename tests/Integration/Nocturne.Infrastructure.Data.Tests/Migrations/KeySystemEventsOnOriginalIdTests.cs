@@ -58,22 +58,12 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    internal static async Task<object?> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteScalarAsync();
-    }
-
     internal static async Task<string?> InsertSqlStateAsync(string connectionString, Guid tenant, string? originalId)
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"""
-            SELECT set_config('app.current_tenant_id', '{tenant}', false);
-            {InsertStatement(Guid.CreateVersion7(), tenant, originalId, DateTime.UtcNow)}
-            """, conn);
+        await conn.PinTenantAsync(tenant);
+        await using var cmd = new NpgsqlCommand(InsertStatement(Guid.CreateVersion7(), tenant, originalId, DateTime.UtcNow), conn);
         try
         {
             await cmd.ExecuteNonQueryAsync();
@@ -98,13 +88,11 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{TenantA}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now());
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
 
-            SELECT set_config('app.current_tenant_id', '{TenantA}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($"""
             {InsertStatement(OldestInA, TenantA, "dup", Older)}
             {InsertStatement(NewestInA, TenantA, "dup", Newest)}
             {InsertStatement(MiddleInA, TenantA, "dup", Newer)}
@@ -113,13 +101,14 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
             {InsertStatement(OtherNullIdInA, TenantA, null, Older)}
             {InsertStatement(EmptyIdInA, TenantA, "", Older)}
             {InsertStatement(OtherEmptyIdInA, TenantA, "", Older)}
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{TenantB}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($"""
             {InsertStatement(TiedLowerIdInB, TenantB, "dup", Newer)}
             {InsertStatement(TiedHigherIdInB, TenantB, "dup", Newer)}
             {InsertStatement(SameKeyInB, TenantB, "solo", Older)}
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 
     private static async Task ReadAsync(string connectionString, Dictionary<Guid, string?> rows)
@@ -128,12 +117,7 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT id, original_id FROM system_events;";
@@ -145,10 +129,7 @@ public class KeySystemEventsOnOriginalIdFixture : IAsyncLifetime
 
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(connectionString);
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
@@ -210,14 +191,14 @@ public class KeySystemEventsOnOriginalIdTests(KeySystemEventsOnOriginalIdFixture
     [Fact]
     public async Task The_key_is_a_valid_unique_index_over_tenant_and_id_that_replaces_the_plain_one()
     {
-        var definition = (string?)await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.UpMigrator, """
+        var definition = (string?)await NpgsqlTestCommands.ScalarAsync<object?>(fixture.UpMigrator, """
             SELECT pg_get_indexdef(i.indexrelid)
             FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
             WHERE c.relname = 'ix_system_events_tenant_original_id' AND i.indisunique AND i.indisvalid
             """);
 
         definition.Should().NotBeNull().And.Contain("(tenant_id, original_id)");
-        (await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.UpMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.UpMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_system_events_original_id'")).Should().Be(0L);
     }
 
@@ -237,9 +218,9 @@ public class KeySystemEventsOnOriginalIdTests(KeySystemEventsOnOriginalIdFixture
     [Fact]
     public async Task Down_restores_the_plain_index_and_drops_the_unique_one_and_keeps_the_rows()
     {
-        (await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.DownMigrator,
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator,
             "SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_system_events_tenant_original_id'")).Should().Be(0L);
-        (await KeySystemEventsOnOriginalIdFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<object?>(fixture.DownMigrator, """
             SELECT NOT i.indisunique AND i.indisvalid
             FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
             WHERE c.relname = 'ix_system_events_original_id'

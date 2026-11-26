@@ -61,9 +61,17 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             {
                 t.Id,
                 t.Name,
+                t.StaffReach,
                 Caller = t.Members
                     .Where(m => m.SubjectId == callerSubjectId)
-                    .Select(m => new { m.Kind, m.RoleCeilingSlug, m.LimitTo24Hours, m.EndsAt })
+                    .Select(m => new
+                    {
+                        m.Kind,
+                        m.RoleCeilingSlug,
+                        m.LimitTo24Hours,
+                        m.EndsAt,
+                        SitesBlocked = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.Blocked),
+                    })
                     .First(),
                 Managers = t.Members
                     .Where(m => m.Kind == TeamMemberKind.Manager)
@@ -95,15 +103,19 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             isManager ? await LiveStaffInvitesAsync(db, teamId, now, ct) : [],
             isManager ? await LiveAccessLinksAsync(db, teamId, now, ct) : [],
             isManager ? await SitesOfAsync(db, teamId, now, ct) : [],
-            isManager ? TeamSuggestableRoles.All : [],
+            TeamSuggestableRoles.All,
             await db.IsLastManagerAsync(teamId, callerSubjectId, ct),
             await CanDeleteAsync(db, teamId, callerSubjectId, ct),
             team.Caller.Kind,
             team.Caller.Kind == TeamMemberKind.Staff
                 ? new TeamStaffSelf(
                     new TeamStaffNarrowing(team.Caller.RoleCeilingSlug, team.Caller.LimitTo24Hours, Utc(team.Caller.EndsAt)),
-                    MembershipLiveness.HasEnded(team.Caller.EndsAt, now))
-                : null);
+                    MembershipLiveness.HasEnded(team.Caller.EndsAt, now),
+                    team.Caller.SitesBlocked)
+                : null,
+            isManager ? team.StaffReach : null,
+            isManager ? await GroupsOfAsync(db, teamId, now, ct) : [],
+            isManager ? await AccessesOutsideGroupsAsync(db, teamId, now, ct) : 0);
     }
 
     /// <inheritdoc/>

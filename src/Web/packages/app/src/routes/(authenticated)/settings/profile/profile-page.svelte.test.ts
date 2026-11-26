@@ -40,6 +40,12 @@ vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
     return Promise.resolve();
   },
   createTargetRangeSchedule: () => Promise.resolve(),
+  getRawMmolSchedules: () => ({ current: [], loading: false }),
+  dismissRawMmolIsf: () => Promise.resolve(),
+  getTargetRangeScheduleById: () => ({ current: undefined }),
+  getSensitivityScheduleById: () => ({ current: undefined }),
+  updateTargetRangeSchedule: () => Promise.resolve(),
+  updateSensitivitySchedule: () => Promise.resolve(),
 }));
 
 import ProfilePage from "./+page.svelte";

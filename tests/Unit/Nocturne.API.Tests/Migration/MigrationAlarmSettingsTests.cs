@@ -1,10 +1,10 @@
 using System.Net;
-using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Migration;
 using Nocturne.Infrastructure.Data;
+using static Nocturne.API.Tests.Migration.MigrationJobHarness;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -19,16 +19,6 @@ public class MigrationAlarmSettingsTests
           "alarmUrgentHigh":true,"alarmTimeagoWarn":true,
           "thresholds":{"bgHigh":260,"bgTargetTop":180,"bgTargetBottom":72,"bgLow":54}}}
         """;
-
-    private sealed class RoutedNightscout(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(respond(request.RequestUri!.AbsolutePath));
-    }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body = "[]") =>
-        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static async Task<string?> StoredAlarmSettingsAsync(ServiceProvider provider, Guid jobId)
     {

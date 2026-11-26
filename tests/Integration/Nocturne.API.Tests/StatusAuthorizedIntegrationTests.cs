@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -31,7 +32,7 @@ public class StatusAuthorizedIntegrationTests : ApiIntegrationTestBase
         using var client = CreateAuthenticatedClient();
         (await client.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Status Dashboard");
     }
@@ -89,16 +90,10 @@ public class StatusAuthorizedIntegrationTests : ApiIntegrationTestBase
         (await AuthorizedAsync(anonymous, url)).ValueKind.Should().Be(JsonValueKind.Object);
         (await AuthorizedAsync(anonymous, "/api/v1/status.json")).ValueKind.Should().Be(JsonValueKind.Null);
 
-        await using (var conn = await OpenAsync())
-        await using (var cmd = conn.CreateCommand())
+        await using (var conn = await OpenPostgresAsync())
         {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE oauth_grants SET revoked_at = now() WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("tenant", _tenantId.ToString());
-            cmd.Parameters.AddWithValue("subject", _subjectId);
-            await cmd.ExecuteNonQueryAsync();
+            await conn.PinTenantAsync(_tenantId);
+            await conn.ExecuteAsync("UPDATE oauth_grants SET revoked_at = now() WHERE subject_id = @subject;", ("subject", _subjectId));
         }
 
         (await AuthorizedAsync(anonymous, url)).ValueKind.Should().Be(JsonValueKind.Null);
@@ -120,7 +115,7 @@ public class StatusAuthorizedIntegrationTests : ApiIntegrationTestBase
     {
         var slug = $"status-b-{Guid.NewGuid():N}"[..20];
         var otherTenant = await AuthTestHelpers.SeedTenantAsync(Fixture, slug, "Status B");
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (_, otherToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, otherTenant, "Status B User");
 
         using var thisHost = Anonymous();
@@ -135,13 +130,6 @@ public class StatusAuthorizedIntegrationTests : ApiIntegrationTestBase
     }
 
     private HttpClient Anonymous() => Fixture.CreateHttpClient("nocturne-api", "http");
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
 
     private static async Task<JsonElement> AuthorizedAsync(HttpClient client, string url)
     {

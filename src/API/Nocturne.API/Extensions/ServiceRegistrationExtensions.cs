@@ -47,6 +47,7 @@ using Nocturne.API.Services.Jobs;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.NotificationActionHandlers;
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Notifications.External;
 using Nocturne.API.Services.NotificationTemplates;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
@@ -435,6 +436,10 @@ public static class ServiceRegistrationExtensions
 
         services.AddSingleton<IOwnerNoticeLedger, OwnerNoticeLedger>();
 
+        // Notices from the operator and connected apps for members' notification trays
+        services.AddSingleton<IExternalNotificationLedger, ExternalNotificationLedger>();
+        services.AddScoped<IExternalNotificationService, ExternalNotificationService>();
+
         // Release check: notices to tenant owners about new and newly installed releases
         services.Configure<ReleaseCheckOptions>(configuration.GetSection(ReleaseCheckOptions.SectionName));
         services.AddSingleton(RunningRelease.FromAssembly());
@@ -698,7 +703,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<TeamAccessService>();
+        services.AddScoped<SiteNotices>();
         services.AddScoped<TeamRenameAnnouncer>();
+        services.AddScoped<TeamStaffAnnouncer>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
@@ -862,16 +869,7 @@ public static class ServiceRegistrationExtensions
         });
 
         // Food services
-        services.AddScoped<IFoodService, FoodService>();
-        services.AddScoped<IDataEventSink<Food>>(sp =>
-        {
-            var sinks = new List<IDataEventSink<Food>>();
-            var writeBack = sp.GetService<NightscoutFoodWriteBackSink>();
-            if (writeBack is not null) sinks.Add(writeBack);
-            return new CompositeDataEventSink<Food>(
-                sinks,
-                sp.GetService<ILogger<CompositeDataEventSink<Food>>>());
-        });
+        services.AddFoodServices();
         services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService>();
         services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
@@ -963,6 +961,25 @@ public static class ServiceRegistrationExtensions
     }
 
     /// <summary>
+    /// The food catalog's <see cref="IFoodService"/> and the event sink it announces through, which
+    /// writes back to Nightscout when a write-back sink is registered.
+    /// </summary>
+    public static IServiceCollection AddFoodServices(this IServiceCollection services)
+    {
+        services.AddScoped<IFoodService, FoodService>();
+        services.AddScoped<IDataEventSink<Food>>(sp =>
+        {
+            var sinks = new List<IDataEventSink<Food>>();
+            var writeBack = sp.GetService<NightscoutFoodWriteBackSink>();
+            if (writeBack is not null) sinks.Add(writeBack);
+            return new CompositeDataEventSink<Food>(
+                sinks,
+                sp.GetService<ILogger<CompositeDataEventSink<Food>>>());
+        });
+        return services;
+    }
+
+    /// <summary>
     /// Glucose processing, AID detection and the decomposition pipeline. Infrastructure registers
     /// the V4 repositories.
     /// </summary>
@@ -988,11 +1005,14 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ILoopClosedLoopStamper, LoopClosedLoopStamper>();
         services.AddScheduledJob<ProfileVersionsMovedJob>();
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
+        services.AddScheduledJob<RetireInvalidTreatmentsJob>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddScheduledJob<ApsSnapshotCurvesJob>();
         services.AddScheduledJob<TempBasalOriginCorroborationJob>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
+        services.AddScoped<IRawMmolProfileDetector, RawMmolProfileDetector>();
+        services.AddSingleton<RawMmolProfileNotifier>();
 
         return services;
     }

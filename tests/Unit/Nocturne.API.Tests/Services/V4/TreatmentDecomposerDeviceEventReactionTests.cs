@@ -1,23 +1,13 @@
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.API.Tests.Infrastructure;
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -42,39 +32,16 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
 
     public TreatmentDecomposerDeviceEventReactionTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
-        var factory = new TestNocturneDbContextFactory(_context);
-        var audit = Mock.Of<IAuditContext>();
-        var dedup = Mock.Of<IDuplicateLinker>();
-
         var reactor = new Mock<IDeviceEventReactor>();
         reactor
             .Setup(r => r.OnDeletedAsync(It.IsAny<IReadOnlyList<V4Models.DeviceEvent>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyList<V4Models.DeviceEvent> deleted, CancellationToken _) => _deleted.AddRange(deleted))
             .Returns(Task.CompletedTask);
 
-        _decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(factory, dedup, audit, NullLogger<TempBasalRepository>.Instance),
-            new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),
-            new BGCheckRepository(factory, dedup, audit, NullLogger<BGCheckRepository>.Instance),
-            new NoteRepository(factory, dedup, audit, NullLogger<NoteRepository>.Instance),
-            new DeviceEventRepository(factory, dedup, audit, NullLogger<DeviceEventRepository>.Instance),
-            new BolusCalculationRepository(factory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance),
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            Mock.Of<ITreatmentFoodService>(),
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            audit,
-            NullLogger<TreatmentDecomposer>.Instance,
-            reactor.Object);
+        _decomposer = TreatmentDecomposerDoubles.Stored(
+            _context.AsFactory(), Mock.Of<IDuplicateLinker>(), Mock.Of<IAuditContext>(), deviceEventReactor: reactor.Object);
     }
 
     public void Dispose()

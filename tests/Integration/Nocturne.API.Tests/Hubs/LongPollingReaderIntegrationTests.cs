@@ -10,6 +10,7 @@ using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -63,7 +64,7 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
 
         await connection.InvokeAsync("LoadRetro", new { loadedMills = _now.AddMinutes(1).ToUnixTimeMilliseconds() });
 
-        var payload = await retro.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        var payload = await retro.Task.WaitAsync(Eventually.DefaultPatience);
         payload.TryGetProperty("error", out _).Should().BeFalse(payload.GetRawText());
         return payload.GetProperty("entries").EnumerateArray()
             .Select(entry => entry.GetProperty("mills").GetInt64())
@@ -72,8 +73,7 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
 
     private async Task<string> SeedClampedMemberTokenAsync()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (_, token) = await AuthTestHelpers.SeedHistoryClampedSubjectAsync(
             conn, Fixture.TenantId, "Clamped Follower");
         return token;
@@ -132,8 +132,7 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
     {
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, Fixture.TenantId);
         var (excursionId, _) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, Fixture.TenantId, ruleId);
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, Fixture.TenantId, "Caregiver");
         var connection = LongPolling(
             Fixture.TenantHost, headers => headers["Authorization"] = $"Bearer {token}", hub: "alerts");
@@ -141,20 +140,10 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
 
         await connection.InvokeAsync("Acknowledge", "caregiver");
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, false);
-            SELECT actor_subject_id FROM mutation_audit_log WHERE entity_id = @excursion;
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("excursion", excursionId);
-        var subjects = new List<Guid?>();
-        await using (var reader = await cmd.ExecuteReaderAsync())
-        {
-            await reader.NextResultAsync();
-            while (await reader.ReadAsync())
-                subjects.Add(reader.IsDBNull(0) ? null : reader.GetGuid(0));
-        }
+        await conn.PinTenantAsync(Fixture.TenantId);
+        var subjects = await conn.QueryAsync(
+            "SELECT actor_subject_id FROM mutation_audit_log WHERE entity_id = @excursion;",
+            reader => reader.IsDBNull(0) ? default(Guid?) : reader.GetGuid(0), ("excursion", excursionId));
 
         subjects.Should().NotBeEmpty().And.OnlyContain(s => s == subjectId,
             "the long-polling copy of the request never ran AuditContextMiddleware");

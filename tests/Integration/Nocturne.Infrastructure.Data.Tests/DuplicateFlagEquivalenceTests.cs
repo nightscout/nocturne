@@ -31,21 +31,26 @@ namespace Nocturne.Infrastructure.Data.Tests;
 public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Database database)
     : IClassFixture<DuplicateFlagEquivalenceTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
+    // A writer that must stay blocked is watched this long; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan StaysBlockedFor = TimeSpan.FromSeconds(1);
+    // A write that must not wait on a held lock has this long to finish; it is part of the assertion, not a hang guard.
+    private static readonly TimeSpan MustNotWaitLongerThan = TimeSpan.FromSeconds(10);
+
+    public sealed class Database() : MigratedDatabase("duplicate_flag_equivalence")
     {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
         public ServiceProvider Provider { get; private set; } = null!;
 
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("duplicate_flag_equivalence");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
+            await base.InitializeAsync();
             Provider = TenantReaderData.BuildProvider(AppConnectionString);
         }
 
-        public async Task DisposeAsync() => await Provider.DisposeAsync();
+        public override async Task DisposeAsync()
+        {
+            await Provider.DisposeAsync();
+            await base.DisposeAsync();
+        }
     }
 
     private static readonly (string Table, RecordType Type)[] Tables =
@@ -254,10 +259,10 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         var pause = new PauseBeforeFlagWrite();
         var planned = Task.Run(() => SetPrimariesAsync(Context(tenant, pause), [new(copy.Id, true)]));
-        await pause.Reached.WaitAsync(TimeSpan.FromSeconds(30));
+        await pause.Reached.WaitAsync(Eventually.DefaultPatience);
 
         var demoting = Task.Run(() => SetPrimariesAsync(Context(tenant), [new(copy.Id, false), new(primary.Id, true)]));
-        (await Task.WhenAny(demoting, Task.Delay(TimeSpan.FromSeconds(1)))).Should().NotBe(demoting,
+        (await Task.WhenAny(demoting, Task.Delay(StaysBlockedFor))).Should().NotBe(demoting,
             "the first writer holds the copy's link until it commits");
 
         pause.Release();
@@ -285,11 +290,11 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         deleted.Promoted.Should().Equal(later.Copy);
 
         await using var scope = Scope(tenant);
-        var merge = Task.Run(() => Dedup(scope).MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, default));
+        var merge = Task.Run(() => Dedup(scope).MergeAllAsync(RecordType.CarbIntake, default));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
 
         await transaction.CommitAsync();
-        (await merge.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(1);
+        (await merge.WaitAsync(Eventually.DefaultPatience)).Should().Be(1);
 
         (await GroupsWithTwoPrimariesAsync(tenant)).Should().BeEmpty();
         (await MismatchesAsync(tenant)).Should().BeEmpty();
@@ -323,12 +328,12 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         var rowWrite = merge.Database.ExecuteSqlAsync(
             $"UPDATE carb_intakes SET is_duplicate = is_duplicate WHERE id = {later.Primary}");
-        (await Task.WhenAny(rowWrite, Task.Delay(TimeSpan.FromSeconds(10)))).Should().Be(rowWrite,
+        (await Task.WhenAny(rowWrite, Task.Delay(MustNotWaitLongerThan))).Should().Be(rowWrite,
             "the waiting delete holds none of the rows yet");
         await rowWrite;
         await transaction.CommitAsync();
 
-        (await delete.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(later.Copy);
+        (await delete.WaitAsync(Eventually.DefaultPatience)).Promoted.Should().Equal(later.Copy);
         (await MismatchesAsync(tenant)).Should().BeEmpty();
     }
 
@@ -366,7 +371,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         await transaction.CommitAsync();
 
-        (await repick.WaitAsync(TimeSpan.FromSeconds(30))).Should().Equal(next.Id);
+        (await repick.WaitAsync(Eventually.DefaultPatience)).Should().Equal(next.Id);
         (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
             .Should().Equal(next.Id.ToString());
         (await MismatchesAsync(tenant)).Should().BeEmpty();
@@ -401,7 +406,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
 
         await transaction.CommitAsync();
 
-        (await restore.WaitAsync(TimeSpan.FromSeconds(30))).Promoted.Should().Equal(copy.Id);
+        (await restore.WaitAsync(Eventually.DefaultPatience)).Promoted.Should().Equal(copy.Id);
         (await QueryAsync(tenant, "SELECT record_id::text FROM linked_records WHERE is_primary"))
             .Should().Equal(copy.Id.ToString());
         (await MismatchesAsync(tenant)).Should().BeEmpty();
@@ -456,7 +461,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         });
         await Task.WhenAny(promote, PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, promote));
         commit.SetResult();
-        await Task.WhenAll(delete, promote).WaitAsync(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(delete, promote).WaitAsync(Eventually.DefaultPatience);
 
         (await QueryAsync(tenant, """
             SELECT lr.record_id::text FROM linked_records lr JOIN sensor_glucose g ON g.id = lr.record_id
@@ -498,10 +503,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>Holds the first flag statement until <see cref="Release"/>, its links written.</summary>
     private sealed class PauseBeforeFlagWrite : DbCommandInterceptor
@@ -670,7 +672,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
             await test.ExecuteAsync(tenant, correct(second.Id));
 
             await using var scope = test.Scope(tenant);
-            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            var merged = await Dedup(scope).MergeAllAsync(type, default);
             merged.Should().BePositive($"the corrected copy of {type} matches the first");
             Exercised.Add("merged");
             return $"split then merge {type}: {merged}";
@@ -696,7 +698,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         private async Task<string> MergeAsync(RecordType type)
         {
             await using var scope = test.Scope(tenant);
-            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            var merged = await Dedup(scope).MergeAllAsync(type, default);
             if (merged > 0)
                 Exercised.Add("merged");
             return $"merge {type}: {merged}";
@@ -934,7 +936,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await using var conn = new NpgsqlConnection(database.AppConnectionString);
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
-        await SetTenantAsync(conn, tenant);
+        await conn.PinTenantAsync(tenant, local: true);
         await using var cmd = new NpgsqlCommand(sql, conn);
         await using var reader = await cmd.ExecuteReaderAsync();
         var rows = new List<string>();
@@ -948,17 +950,9 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await using var conn = new NpgsqlConnection(database.AppConnectionString);
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
-        await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant, local: true);
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
-    }
-
-    private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
-    {
-        await using var cmd = new NpgsqlCommand("SELECT set_config('app.current_tenant_id', @t, true)", conn);
-        cmd.Parameters.AddWithValue("t", tenant.ToString());
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task<Guid> SeedTenantAsync()
@@ -966,14 +960,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         var tenant = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'duplicate-flag', true, now(), now())
-            """;
-        cmd.Parameters.AddWithValue("id", tenant);
-        cmd.Parameters.AddWithValue("slug", $"dup-flag-{tenant:N}");
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"dup-flag-{tenant:N}", "duplicate-flag");
         return tenant;
     }
 }

@@ -48,9 +48,9 @@ day: how long you were in range, low and high.
 
 ### Low and high events
 
-- **Low Blood Sugar Events** splits your time below 70 mg/dL into below
+- **Low glucose events** splits your time below 70 mg/dL into below
   54 mg/dL and 54-70 mg/dL. **Low episodes** gives the number of separate lows.
-- **High Blood Sugar Events** splits your time above 180 mg/dL into
+- **High glucose events** splits your time above 180 mg/dL into
   180-250 mg/dL and above 250 mg/dL.
 
 ### What Your Data is Telling Us

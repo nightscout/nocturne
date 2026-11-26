@@ -52,14 +52,14 @@ describe("the confirm-it-is-you prompt", () => {
     await expect.element(browserPage.getByText("Confirm it is you")).not.toBeInTheDocument();
   });
 
-  it("cannot be closed while the sign-in shows first recovery codes, which are shown nowhere else", async () => {
+  it("cannot be closed while a sign-in is in flight, since its result has nowhere else to go", async () => {
     render(ConfirmIdentityDialog);
     const asked = confirmIdentity.request();
     const settled = vi.fn();
     void asked.then(settled);
     await expect.element(browserPage.getByRole("button", { name: "Close" })).toBeVisible();
 
-    await browserPage.getByRole("button", { name: "Show recovery codes" }).click();
+    await browserPage.getByRole("button", { name: "Start sign-in" }).click();
 
     await expect.element(browserPage.getByRole("button", { name: "Close" })).not.toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
@@ -72,6 +72,33 @@ describe("the confirm-it-is-you prompt", () => {
     await browserPage.getByRole("button", { name: "Finish sign-in" }).click();
 
     await expect(asked).resolves.toBe(true);
+  });
+
+  it("can be closed again once a sign-in that did not finish has ended", async () => {
+    render(ConfirmIdentityDialog);
+    const asked = confirmIdentity.request();
+    await browserPage.getByRole("button", { name: "Start sign-in" }).click();
+    await expect.element(browserPage.getByRole("button", { name: "Close" })).not.toBeInTheDocument();
+
+    await browserPage.getByRole("button", { name: "Fail sign-in" }).click();
+
+    await browserPage.getByRole("button", { name: "Close" }).click();
+    await expect(asked).resolves.toBe(false);
+  });
+
+  it("is not left locked when it opens again after it was closed with a sign-in in flight", async () => {
+    render(ConfirmIdentityDialog);
+    const first = confirmIdentity.request();
+    await browserPage.getByRole("button", { name: "Start sign-in" }).click();
+    confirmIdentity.settle(false);
+    await expect(first).resolves.toBe(false);
+    await expect.element(browserPage.getByText("Confirm it is you")).not.toBeInTheDocument();
+
+    const second = confirmIdentity.request();
+
+    await expect.element(browserPage.getByRole("button", { name: "Close" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect(second).resolves.toBe(false);
   });
 
   it("tells the caller nothing changed when the person closes it", async () => {

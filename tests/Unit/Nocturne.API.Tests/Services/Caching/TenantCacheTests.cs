@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Caching;
 
@@ -19,8 +20,6 @@ public sealed class TenantCacheTests : IDisposable
     private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(1);
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(5);
-
     private readonly MemoryCache _local = new(new MemoryCacheOptions());
     private readonly ICacheService _distributed;
     private readonly CacheFlights _flights = new();
@@ -50,15 +49,12 @@ public sealed class TenantCacheTests : IDisposable
     private TenantCache Cache(ICategoryReadContext reader, Guid? tenantId = null, bool demo = false)
     {
         var id = tenantId ?? TenantA;
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.Context).Returns(new TenantContext(id, "t", "T", true, IsDemo: false));
-        tenant.Setup(t => t.TenantId).Returns(id);
-        tenant.Setup(t => t.IsResolved).Returns(true);
+        var tenant = SettableTenantAccessor.Resolved(id, "t", "T");
         return new TenantCache(
             _distributed,
             _local,
             _flights,
-            tenant.Object,
+            tenant,
             new ReaderCachePartition(reader),
             Mock.Of<IDemoModeService>(d => d.IsEnabled == demo));
     }
@@ -213,9 +209,9 @@ public sealed class TenantCacheTests : IDisposable
     public async Task Without_a_resolved_tenant_reads_miss_writes_drop_and_removal_does_nothing()
     {
         await WriteAsync(Cache(Owner()), "owner");
-        var tenant = new Mock<ITenantAccessor>();
+        var tenant = new SettableTenantAccessor();
         var unresolved = new TenantCache(
-            _distributed, _local, _flights, tenant.Object, new ReaderCachePartition(Owner()), Mock.Of<IDemoModeService>());
+            _distributed, _local, _flights, tenant, new ReaderCachePartition(Owner()), Mock.Of<IDemoModeService>());
 
         (await ReadAsync(unresolved)).Should().BeNull();
         await WriteAsync(unresolved, "unresolved");
@@ -306,9 +302,9 @@ public sealed class TenantCacheTests : IDisposable
         joinerRuns.Should().Be(0);
         ownerCts.Cancel();
 
-        var ownerRead = () => owner.WaitAsync(Bound);
+        var ownerRead = () => owner.WaitAsync(Eventually.DefaultPatience);
         await ownerRead.Should().ThrowAsync<OperationCanceledException>();
-        (await joiner.WaitAsync(Bound)).Value.Should().Be("joiner");
+        (await joiner.WaitAsync(Eventually.DefaultPatience)).Value.Should().Be("joiner");
         ownerRuns.Should().Be(1);
         joinerRuns.Should().Be(1);
     }
@@ -360,7 +356,7 @@ public sealed class TenantCacheTests : IDisposable
 
         var owner = Cache(Owner()).GetOrSetAsync("family:key", Held(held, () => { }), Ttl);
         var share = await Cache(Share(Scope.GlucoseRead)).GetOrSetAsync(
-            "family:key", () => { shareRuns++; return Task.FromResult(new Box("share")); }, Ttl).WaitAsync(Bound);
+            "family:key", () => { shareRuns++; return Task.FromResult(new Box("share")); }, Ttl).WaitAsync(Eventually.DefaultPatience);
 
         share.Value.Should().Be("share");
         shareRuns.Should().Be(1);
@@ -376,7 +372,7 @@ public sealed class TenantCacheTests : IDisposable
         await failed.Should().ThrowAsync<InvalidOperationException>();
 
         var next = await Cache(Owner()).GetOrSetAsync(
-            "family:key", () => Task.FromResult(new Box("loaded")), Ttl).WaitAsync(Bound);
+            "family:key", () => Task.FromResult(new Box("loaded")), Ttl).WaitAsync(Eventually.DefaultPatience);
 
         next.Value.Should().Be("loaded");
     }
@@ -388,7 +384,7 @@ public sealed class TenantCacheTests : IDisposable
         await Cache(Owner()).RemoveFamilyAsync("family");
 
         var next = await Cache(Owner()).GetOrSetAsync(
-            "family:key", () => Task.FromResult(new Box("new")), Ttl).WaitAsync(Bound);
+            "family:key", () => Task.FromResult(new Box("new")), Ttl).WaitAsync(Eventually.DefaultPatience);
 
         next.Value.Should().Be("new");
     }

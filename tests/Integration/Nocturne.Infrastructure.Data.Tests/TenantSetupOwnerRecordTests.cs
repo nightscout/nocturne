@@ -4,15 +4,7 @@ using Npgsql;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>A migrated database, connected as the migrator.</summary>
-public class TenantSetupOwnerRecordFixture : IAsyncLifetime
-{
-    internal string ConnectionString { get; private set; } = string.Empty;
-
-    public async Task InitializeAsync() =>
-        ConnectionString = (await SharedPostgres.CreateMigratedDatabaseAsync("setup_owner_record")).MigratorConnectionString;
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class TenantSetupOwnerRecordFixture() : MigratedDatabase("setup_owner_record");
 
 /// <summary>
 /// <c>tenants.setup_owner_subject_id</c> on the migrated schema: deleting the subject it names
@@ -24,7 +16,7 @@ public class TenantSetupOwnerRecordTests(TenantSetupOwnerRecordFixture fixture) 
     [Fact]
     public async Task Deleting_the_recorded_subject_sets_the_record_to_null()
     {
-        var connectionString = fixture.ConnectionString;
+        var connectionString = fixture.MigratorConnectionString;
         var tenant = Guid.CreateVersion7();
         var subject = Guid.CreateVersion7();
 

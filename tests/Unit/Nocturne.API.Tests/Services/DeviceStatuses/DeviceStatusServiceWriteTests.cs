@@ -98,6 +98,31 @@ public class DeviceStatusServiceWriteTests
     }
 
     [Fact]
+    public async Task BulkDelete_AFindNamingIsValid_LeavesTheStatusesAlreadyDeleted()
+    {
+        var live = new UploaderSnapshot { Id = Guid.CreateVersion7(), LegacyId = "live-status", Timestamp = DateTime.UtcNow };
+        var deleted = new UploaderSnapshot { Id = Guid.CreateVersion7(), LegacyId = "deleted-status", Timestamp = DateTime.UtcNow.AddMinutes(-5) };
+        _groups
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new HistoryRecord<DeviceStatusGroup>(new(null, null, live, null, live.Timestamp), false),
+                new HistoryRecord<DeviceStatusGroup>(new(null, null, deleted, null, deleted.Timestamp), true),
+            ]);
+        var decomposer = new Mock<IDeviceStatusDecomposer>();
+        decomposer.Setup(d => d.DeleteStoredAsync(It.IsAny<string>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var count = await Service(decomposer.Object)
+            .DeleteDeviceStatusesAsync(FindQuery.ParseDeviceStatus("find[isValid][$ne]=true"));
+
+        count.Should().Be(1);
+        decomposer.Verify(d => d.DeleteStoredAsync("live-status", WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        decomposer.Verify(d => d.DeleteStoredAsync("deleted-status", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Replace_AnUnknownId_ReplacesNothing()
     {
         var replaced = await Service(new Mock<IDeviceStatusDecomposer>(MockBehavior.Strict).Object)

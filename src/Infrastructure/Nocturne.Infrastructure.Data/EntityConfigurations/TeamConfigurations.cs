@@ -18,6 +18,71 @@ internal sealed class TeamEntityConfiguration : IEntityTypeConfiguration<TeamEnt
             .WithOne(m => m.Team)
             .HasForeignKey(m => m.TeamId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        entity.Property(e => e.StaffReach)
+            .HasDefaultValue(TeamStaffReach.EveryPerson)
+            .ValueGeneratedNever();
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_teams_staff_reach",
+            $"staff_reach IN ('{TeamStaffReach.EveryPerson}', '{TeamStaffReach.TheirGroups}')"));
+    }
+}
+
+internal sealed class TeamGroupEntityConfiguration : IEntityTypeConfiguration<TeamGroupEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamGroupEntity> entity)
+    {
+        entity.HasOne(e => e.Team)
+            .WithMany()
+            .HasForeignKey(e => e.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(e => e.People)
+            .WithOne(p => p.TeamGroup)
+            .HasForeignKey(p => p.TeamGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(e => e.Staff)
+            .WithOne(s => s.TeamGroup)
+            .HasForeignKey(s => s.TeamGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.Property(e => e.NameKey)
+            .HasMaxLength(TeamEntity.NameMaxLength)
+            .HasComputedColumnSql("lower(name)", stored: true);
+
+        entity.HasIndex(e => new { e.TeamId, e.NameKey }).IsUnique();
+    }
+}
+
+internal sealed class TeamGroupPersonEntityConfiguration : IEntityTypeConfiguration<TeamGroupPersonEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamGroupPersonEntity> entity)
+    {
+        entity.HasOne(e => e.Tenant)
+            .WithMany()
+            .HasForeignKey(e => e.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TeamGroupId, e.TenantId }).IsUnique();
+
+        entity.HasIndex(e => e.TenantId);
+    }
+}
+
+internal sealed class TeamGroupStaffEntityConfiguration : IEntityTypeConfiguration<TeamGroupStaffEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamGroupStaffEntity> entity)
+    {
+        entity.HasOne(e => e.TeamMember)
+            .WithMany(m => m.GroupPlaces)
+            .HasForeignKey(e => e.TeamMemberId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TeamGroupId, e.TeamMemberId }).IsUnique();
+
+        entity.HasIndex(e => e.TeamMemberId);
     }
 }
 
@@ -136,13 +201,17 @@ internal sealed class TeamTenantAccessEntityConfiguration : IEntityTypeConfigura
             .HasForeignKey(r => r.TeamTenantAccessId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        entity.Property(e => e.TeamManagesStaff)
-            .HasDefaultValue(true)
+        entity.Property(e => e.StaffRule)
+            .HasDefaultValue(TeamStaffRule.TeamDecides)
             .ValueGeneratedNever();
 
         entity.HasIndex(e => new { e.TeamId, e.TenantId }).IsUnique();
 
         entity.HasIndex(e => e.TenantId);
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_team_tenant_access_staff_rule",
+            $"staff_rule IN ('{TeamStaffRule.OwnerApproves}', '{TeamStaffRule.TeamDecides}', '{TeamStaffRule.TeamTrusted}')"));
     }
 }
 
@@ -181,6 +250,53 @@ internal sealed class TeamSiteStaffEntityConfiguration : IEntityTypeConfiguratio
 
         entity.ToTable(t => t.HasCheckConstraint(
             "ck_team_site_staff_status",
-            $"status IN ('{TeamSiteStaffStatus.Pending}', '{TeamSiteStaffStatus.Approved}')"));
+            $"status IN ('{TeamSiteStaffStatus.Pending}', '{TeamSiteStaffStatus.Approved}', '{TeamSiteStaffStatus.Declined}')"));
+    }
+}
+
+internal sealed class TeamSiteDeclineEntityConfiguration : IEntityTypeConfiguration<TeamSiteDeclineEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamSiteDeclineEntity> entity)
+    {
+        entity.HasOne(e => e.TeamTenantAccess)
+            .WithMany()
+            .HasForeignKey(e => e.TeamTenantAccessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.Subject)
+            .WithMany()
+            .HasForeignKey(e => e.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TeamTenantAccessId, e.SubjectId }).IsUnique();
+
+        entity.HasIndex(e => e.SubjectId);
+    }
+}
+
+internal sealed class TeamSiteBlockEntityConfiguration : IEntityTypeConfiguration<TeamSiteBlockEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamSiteBlockEntity> entity)
+    {
+        entity.HasOne(e => e.Tenant)
+            .WithMany()
+            .HasForeignKey(e => e.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.Subject)
+            .WithMany(s => s.TeamSiteBlocks)
+            .HasForeignKey(e => e.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.CreatedBy)
+            .WithMany()
+            .HasForeignKey(e => e.CreatedBySubjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity.HasIndex(e => new { e.TenantId, e.SubjectId }).IsUnique();
+
+        entity.HasIndex(e => e.SubjectId);
+
+        entity.HasIndex(e => e.CreatedBySubjectId);
     }
 }

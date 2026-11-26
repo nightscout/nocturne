@@ -17,13 +17,11 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
-using Nocturne.Tests.Shared.Mocks;
 using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
@@ -39,7 +37,7 @@ public class MetadataPublisherTests
     private readonly Mock<INoteRepository> _mockNoteRepository;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepository;
     private readonly Mock<ITenantOwnerResolver> _mockTenantOwnerResolver;
-    private readonly Mock<ITenantAccessor> _mockTenantAccessor;
+    private readonly SettableTenantAccessor _tenantAccessor;
 
     private static readonly Guid TenantId = Guid.NewGuid();
     private const string OwnerSubjectId = "0199aaaa-bbbb-cccc-dddd-eeeeffff0000";
@@ -54,7 +52,7 @@ public class MetadataPublisherTests
         _mockNoteRepository = new Mock<INoteRepository>();
         _mockSystemEventRepository = new Mock<ISystemEventRepository>();
 
-        _mockTenantAccessor = MockTenantAccessor.Create(TenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(TenantId);
 
         _mockTenantOwnerResolver = new Mock<ITenantOwnerResolver>();
         _mockTenantOwnerResolver
@@ -78,7 +76,7 @@ public class MetadataPublisherTests
             Mock.Of<IStepCountService>(),
             Mock.Of<IHeartRateService>(),
             _mockTenantOwnerResolver.Object,
-            _mockTenantAccessor.Object,
+            _tenantAccessor,
             new ActivityDedupRepository(contexts),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
@@ -220,17 +218,32 @@ public class MetadataPublisherTests
         );
     }
 
-    [Fact]
-    public async Task PublishStateSpansAsync_ReturnsFalse_OnException()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishStateSpansAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
     {
         _mockStateSpanService
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("test error"));
+            .ThrowsAsync(failure);
         var publisher = CreatePublisher();
 
         var result = await publisher.PublishStateSpansAsync(new List<StateSpan> { new() }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishStateSpansAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockStateSpanService
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        var publisher = CreatePublisher();
+
+        var act = () => publisher.PublishStateSpansAsync(new List<StateSpan> { new() }, "test-source", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
 }

@@ -52,17 +52,28 @@ pub(super) fn sensor_age(p: &AgeComparePayload, ctx: &SensorContext) -> ClockLea
 /// For a duration run, a threshold that already held when the run was recorded
 /// is false for that run, so a run entered after the fact does not alert at
 /// once for what it has already passed. A scheduled time is meant to be ahead
-/// of `now`; a start is not.
-pub(super) fn tracker_age(p: &TrackerAgePayload, ctx: &SensorContext) -> ClockLeaf {
-    match ctx.active_trackers.get(&p.tracker_definition_id) {
-        Some(t) if !held_when_recorded(p, t) => decimal(
-            t.reference_at,
-            (!t.scheduled).then_some(ClockAnchor::ActiveTrackers),
-            Unit::Minutes,
-            p.operator,
-            p.minutes,
-        ),
-        _ => ClockLeaf::Fixed(Truth::False),
+/// of `now`; a start is not, and one beyond the tolerance ahead is unknown
+/// before it is held back (engine-semantics.md §5.4).
+pub(super) fn tracker_age(
+    p: &TrackerAgePayload,
+    ctx: &SensorContext,
+    now: DateTime<Utc>,
+) -> ClockLeaf {
+    let Some(t) = ctx.active_trackers.get(&p.tracker_definition_id) else {
+        return ClockLeaf::Fixed(Truth::False);
+    };
+    let leaf = decimal(
+        t.reference_at,
+        (!t.scheduled).then_some(ClockAnchor::ActiveTrackers),
+        Unit::Minutes,
+        p.operator,
+        p.minutes,
+    );
+    let ahead = leaf.elapsed().is_some_and(|e| e.ahead(now).is_some());
+    if held_when_recorded(p, t) && !ahead {
+        ClockLeaf::Fixed(Truth::False)
+    } else {
+        leaf
     }
 }
 

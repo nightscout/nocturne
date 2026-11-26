@@ -12,6 +12,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -72,8 +73,8 @@ public class ClockFaceAlertsController(
         {
             Id = e.Id,
             RuleName = e.AlertRule?.Name ?? string.Empty,
-            Severity = e.AlertRule?.Severity ?? AlertRuleSeverity.Warning,
-            ConditionType = e.AlertRule?.ConditionType ?? AlertConditionType.Threshold,
+            Severity = AlertRuleMapper.Readable(e.AlertRule?.Severity ?? AlertRuleSeverity.Warning),
+            ConditionType = AlertRuleMapper.Readable(e.AlertRule?.ConditionType ?? AlertConditionType.Threshold),
             StartedAt = e.StartedAt,
             Acknowledged = e.AcknowledgedAt is not null,
             SeenHere = seen[e.Id].Any(),

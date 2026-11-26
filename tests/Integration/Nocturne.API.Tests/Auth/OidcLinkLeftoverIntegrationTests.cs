@@ -4,6 +4,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -38,8 +39,8 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
         _providerId = Guid.CreateVersion7();
         _otherProviderId = Guid.CreateVersion7();
-        await using var conn = await OpenAsync();
-        await ExecuteAsync(conn, """
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync("""
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
             VALUES (@provider, 'Leftover IdP', @issuer, @client, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now()),
                    (@other, 'Other IdP', @otherIssuer, @otherClient, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now());
@@ -50,13 +51,13 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.PinTenantAsync(Fixture.TenantId);
+            await conn.ExecuteAsync("""
                 CREATE TEMP TABLE leftover_subjects AS
                     SELECT subject_id FROM subject_oidc_identities
                     WHERE provider_id IN (@provider, @other) AND subject_id <> @owner;
-                SELECT set_config('app.current_tenant_id', @tenantText, false);
                 DELETE FROM tenant_members WHERE subject_id IN (SELECT subject_id FROM leftover_subjects);
                 DELETE FROM subject_roles WHERE assigned_by_id IN (SELECT subject_id FROM leftover_subjects);
                 DELETE FROM oauth_grants WHERE created_by_subject_id IN (SELECT subject_id FROM leftover_subjects);
@@ -64,8 +65,7 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM subjects WHERE id IN (SELECT subject_id FROM leftover_subjects);
                 DELETE FROM oidc_providers WHERE id IN (@provider, @other);
                 """,
-                ("provider", _providerId), ("other", _otherProviderId), ("owner", Fixture.OwnerSubjectId),
-                ("tenantText", Fixture.TenantId.ToString()));
+                ("provider", _providerId), ("other", _otherProviderId), ("owner", Fixture.OwnerSubjectId));
         }
 
         await base.DisposeAsync();
@@ -75,9 +75,9 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
     public async Task A_member_linking_an_identity_an_unclaimed_subject_holds_takes_it_and_the_subject_is_removed()
     {
         var leftover = await CreateLeftoverAsync("leftover-sub");
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO subject_roles (subject_id, role_id, assigned_at)
                 SELECT @subject, id, now() FROM roles ORDER BY name LIMIT 1;
                 """,
@@ -204,7 +204,7 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
     private async Task GiveAsync(Guid subjectId, string held)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var ruleId = Guid.Empty;
         var excursionId = Guid.Empty;
         if (held is "excursion mute" or "alert receipt" or "alert invite it created" or "alert invite it used")
@@ -213,13 +213,13 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
             (excursionId, _) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, Fixture.TenantId, ruleId);
         }
 
-        const string inTenant = "SELECT set_config('app.current_tenant_id', @tenantText, false);";
+        await conn.PinTenantAsync(Fixture.TenantId);
         var sql = held switch
         {
             "inactive" => "UPDATE subjects SET is_active = false WHERE id = @subject;",
             "system subject" => "UPDATE subjects SET is_system_subject = true WHERE id = @subject;",
             "demo subject" => "UPDATE subjects SET is_demo_subject = true WHERE id = @subject;",
-            "membership" => inTenant + """
+            "membership" => """
                 INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, now(), now());
                 """,
@@ -268,58 +268,58 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
                 SELECT @owner, id, now(), @subject FROM roles
                 WHERE id NOT IN (SELECT role_id FROM subject_roles WHERE subject_id = @owner) LIMIT 1;
                 """,
-            "login code" => inTenant + """
+            "login code" => """
                 INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, expires_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), now() + interval '10 minutes');
                 """,
-            "member invite" => inTenant + """
+            "member invite" => """
                 INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), '[]'::jsonb, false, now() + interval '1 day', 0, now());
                 """,
-            "grant" => inTenant + """
+            "grant" => """
                 INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, created_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, 'direct', '{}', now());
                 """,
-            "grant it created" => inTenant + """
+            "grant it created" => """
                 INSERT INTO oauth_grants (id, tenant_id, subject_id, created_by_subject_id, grant_type, scopes, created_at)
                 VALUES (gen_random_uuid(), @tenant, @owner, @subject, 'direct', '{}', now());
                 """,
-            "authorisation code" => inTenant + """
+            "authorisation code" => """
                 INSERT INTO oauth_clients (id, client_id, tenant_id) VALUES (@client, @client::text, @tenant);
                 INSERT INTO oauth_authorization_codes (id, client_entity_id, subject_id, code_hash, scopes, redirect_uri, code_challenge, expires_at, tenant_id)
                 VALUES (gen_random_uuid(), @client, @subject, md5(@subject::text), '{}', 'https://app.example/cb', 'challenge', now() + interval '1 minute', @tenant);
                 """,
-            "excursion mute" => inTenant + """
+            "excursion mute" => """
                 INSERT INTO alert_excursion_mutes (id, tenant_id, subject_id, alert_excursion_id)
                 VALUES (gen_random_uuid(), @tenant, @subject, @excursion);
                 """,
-            "membership request" => inTenant + """
+            "membership request" => """
                 INSERT INTO membership_requests (id, tenant_id, subject_id, status, created_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, 'pending', now());
                 """,
-            "membership request it decided" => inTenant + """
+            "membership request it decided" => """
                 INSERT INTO membership_requests (id, tenant_id, subject_id, status, decided_by_subject_id, decided_at, created_at)
                 VALUES (gen_random_uuid(), @tenant, @owner, 'declined', @subject, now(), now());
                 """,
-            "client device" => inTenant + """
+            "client device" => """
                 INSERT INTO client_devices (id, tenant_id, subject_id, install_id, kind, capabilities)
                 VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), 'app', '{}');
                 """,
-            "device code" => inTenant + """
+            "device code" => """
                 INSERT INTO oauth_device_codes (id, client_id, device_code_hash, user_code, scopes, expires_at, approved_at, subject_id, tenant_id)
                 VALUES (gen_random_uuid(), 'client', md5(@subject::text), left(md5(@subject::text), 8), '{}', now() + interval '10 minutes', now(), @subject, @tenant);
                 """,
-            "alert invite it created" => inTenant + """
+            "alert invite it created" => """
                 INSERT INTO alert_invites (id, tenant_id, created_by, token, alert_rule_channel_id, is_used, expires_at)
                 SELECT gen_random_uuid(), @tenant, @subject, md5(@subject::text), id, false, now() + interval '1 day'
                 FROM alert_rule_channels WHERE alert_rule_id = @rule;
                 """,
-            "alert invite it used" => inTenant + """
+            "alert invite it used" => """
                 INSERT INTO alert_invites (id, tenant_id, created_by, token, alert_rule_channel_id, is_used, used_by, expires_at)
                 SELECT gen_random_uuid(), @tenant, @owner, md5(@subject::text), id, true, @subject, now() + interval '1 day'
                 FROM alert_rule_channels WHERE alert_rule_id = @rule;
                 """,
-            "alert receipt" => inTenant + """
+            "alert receipt" => """
                 INSERT INTO alert_excursion_receipts (id, tenant_id, alert_excursion_id, actor_kind, actor_id, seen_at)
                 VALUES (gen_random_uuid(), @tenant, @excursion, 'Member', @subject, now());
                 """,
@@ -331,8 +331,8 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
                 """,
             _ => throw new ArgumentOutOfRangeException(nameof(held), held, null),
         };
-        await ExecuteAsync(conn, sql,
-            ("subject", subjectId), ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+        await conn.ExecuteAsync(sql,
+            ("subject", subjectId), ("tenant", Fixture.TenantId),
             ("credential", Guid.NewGuid().ToByteArray()), ("other", _otherProviderId),
             ("otherIssuer", _issuer + "/other"), ("owner", Fixture.OwnerSubjectId),
             ("client", Guid.CreateVersion7()), ("excursion", excursionId), ("rule", ruleId));
@@ -340,37 +340,13 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Guid?> LinkedSubjectAsync(string externalId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT subject_id FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub";
-        cmd.Parameters.AddWithValue("issuer", _issuer);
-        cmd.Parameters.AddWithValue("sub", externalId);
-        return await cmd.ExecuteScalarAsync() as Guid?;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<Guid?>("SELECT subject_id FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub", ("issuer", _issuer), ("sub", externalId));
     }
 
     private async Task<long> CountAsync(string sql, Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>(sql, ("subject", subjectId));
     }
 }

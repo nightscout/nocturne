@@ -19,7 +19,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Seeding;
@@ -107,7 +106,7 @@ public class SampleDataLiveFeedTests : IDisposable
             .ReturnsAsync(0);
 
         return new SampleDataLiveFeed(
-            MockTenantAccessor.Create(_tenantId).Object,
+            SettableTenantAccessor.Resolved(_tenantId),
             Factory,
             entries.Object,
             treatments.Object,

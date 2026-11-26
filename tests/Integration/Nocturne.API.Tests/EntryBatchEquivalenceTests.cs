@@ -120,8 +120,7 @@ public class EntryBatchEquivalenceTests : ApiIntegrationTestBase
     /// <summary>Decomposes into emptied tables over the seed's devices and unkeyed reading, and reads them back normalised.</summary>
     private async Task<Dictionary<string, List<string>>> DecomposeAsync(int seed, Func<IEntryService, Task> decompose)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await DecomposedRows.TruncateAsync(conn, Tables);
 
         await WithTenantScopeAsync(async services =>

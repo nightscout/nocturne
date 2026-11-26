@@ -296,15 +296,23 @@ public class EntriesParityTests : ParityTestBase
     [Fact]
     public async Task Read_Exists_ReturnsSameShape()
     {
-        // First create an entry and get its ID
-        await SeedEntrySequenceAsync(count: 1);
+        var entry = new
+        {
+            app = "AAPS",
+            date = TestTimeProvider.GetTestTime().ToUnixTimeMilliseconds(),
+            device = "Libre3",
+            direction = "Flat",
+            filtered = 0,
+            isReadOnly = false,
+            isValid = true,
+            sgv = 100,
+            type = "sgv",
+            unfiltered = 0,
+            units = "mg/dl",
+            utcOffset = 120,
+        };
 
-        // Get the entry from both systems to get the ID
-        var (nsResponse, nocResponse) = await GetBothResponsesAsync("/api/v3/entries?limit=1");
-
-        // This test verifies the structure is the same
-        // In a real scenario, we'd need to use the same ID from seeded data
-        await AssertGetParityAsync("/api/v3/entries?limit=1");
+        await AssertReadByIdParityAsync("entries", entry);
     }
 
     [Fact]

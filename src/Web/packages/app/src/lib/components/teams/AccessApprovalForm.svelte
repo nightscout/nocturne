@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import { Label } from "#lib/components/ui/label/index.js";
   import AccessEndField from "#lib/components/members/AccessEndField.svelte";
-  import PermissionList from "#lib/components/teams/PermissionList.svelte";
+  import TeamAccessTermsFields from "#lib/components/members/TeamAccessTermsFields.svelte";
+  import TeamStaffRuleChoices from "#lib/components/teams/TeamStaffRuleChoices.svelte";
+  import { RULE_TEAM_DECIDES } from "#lib/teams/site-staff.svelte.js";
   import {
     latestAccessEndDay,
     accessEndInstant,
@@ -27,6 +27,7 @@
   let pickedRoleIds = $state<string[] | null>(null);
   let pickedLimit = $state(false);
   let endDay = $state("");
+  let staffRule = $state(RULE_TEAM_DECIDES);
 
   const roleIds = $derived(pickedRoleIds ?? (site.defaultRoleId ? [site.defaultRoleId] : []));
   const limited = $derived(site.limitForced === true || pickedLimit);
@@ -43,10 +44,6 @@
   );
   const canApprove = $derived(roleIds.length > 0 && endIsOffered);
 
-  function toggleRole(roleId: string, checked: boolean) {
-    pickedRoleIds = checked ? [...roleIds, roleId] : roleIds.filter((id) => id !== roleId);
-  }
-
   function approve() {
     if (!canApprove) return;
     onApprove({
@@ -54,6 +51,7 @@
       roleIds,
       limitTo24Hours: limited,
       accessEndsAt: endDay === "" ? undefined : accessEndInstant(endDay),
+      staffRule,
     });
   }
 </script>
@@ -70,50 +68,16 @@
       No role of this site fits this link and your own access, so the team cannot get access here.
     </p>
   {:else}
-    <fieldset class="space-y-2">
-      <legend class="text-sm font-medium">Roles to give the team</legend>
-      {#each site.roles ?? [] as role (role.id)}
-        <div class="space-y-1 rounded-md border p-3">
-          <div class="flex items-center gap-2">
-            <Checkbox
-              id={`team-access-role-${role.id}`}
-              checked={roleIds.includes(role.id ?? "")}
-              onCheckedChange={(checked: boolean) => toggleRole(role.id ?? "", checked === true)}
-            />
-            <Label for={`team-access-role-${role.id}`} variant="option">{role.name}</Label>
-          </div>
-          <p class="text-xs text-muted-foreground">What the team can see and change with this role</p>
-          <PermissionList permissions={role.permissions ?? []} />
-        </div>
-      {/each}
-      {#if roleIds.length === 0}
-        <p class="text-xs text-muted-foreground">Choose at least one role.</p>
-      {/if}
-    </fieldset>
-
-    <div class="flex items-start gap-2 rounded-md border bg-muted/30 p-3">
-      <Checkbox
-        id="team-access-approve-limit"
-        checked={limited}
-        disabled={site.limitForced === true}
-        aria-describedby={site.limitForced ? "team-access-approve-limit-reason" : undefined}
-        onCheckedChange={(checked: boolean) => (pickedLimit = checked === true)}
-      />
-      <div class="flex-1">
-        <label for="team-access-approve-limit" class="text-sm font-medium select-none">
-          Only the last 24 hours
-        </label>
-        {#if site.limitForced}
-          <p id="team-access-approve-limit-reason" class="mt-0.5 text-xs text-muted-foreground">
-            The link or your own access requires this limit.
-          </p>
-        {:else}
-          <p class="mt-0.5 text-xs text-muted-foreground">
-            The team can see only the most recent 24 hours of data.
-          </p>
-        {/if}
-      </div>
-    </div>
+    <TeamAccessTermsFields
+      idPrefix="team-access-approve"
+      roles={site.roles ?? []}
+      {roleIds}
+      onRoleIdsChange={(ids) => (pickedRoleIds = ids)}
+      {limited}
+      onLimitChange={(checked) => (pickedLimit = checked)}
+      limitForced={site.limitForced === true}
+      limitForcedReason="The link or your own access requires this limit."
+    />
 
     <AccessEndField
       id="team-access-approve-end"
@@ -122,6 +86,13 @@
       ceiling={site.latestEnd}
       required={endMustBeChosen}
       limitNote={endNote}
+    />
+
+    <TeamStaffRuleChoices
+      idPrefix="team-access-approve"
+      value={staffRule}
+      onChange={(next) => (staffRule = next)}
+      narrows={false}
     />
 
     <Button type="submit" size="lg" class="w-full" disabled={!canApprove}>Give the team access</Button>

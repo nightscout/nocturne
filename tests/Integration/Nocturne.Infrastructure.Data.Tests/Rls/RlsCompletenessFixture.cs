@@ -19,11 +19,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 /// need row data. Keeping the fixture seedless makes it immune to future
 /// schema drift on the seeded tables.
 /// </summary>
-public class RlsCompletenessFixture : IAsyncLifetime
+public class RlsCompletenessFixture() : MigratedDatabase("rls_completeness")
 {
-    public string AppConnectionString { get; private set; } = string.Empty;
-    public string MigratorConnectionString { get; private set; } = string.Empty;
-
     /// <summary>
     /// Tables the suites in this collection expect the live database to have policied, cascaded
     /// and forced. Deliberately NOT <see cref="ShareRlsPolicy.TenantScopedTableNames"/>: that
@@ -34,13 +31,11 @@ public class RlsCompletenessFixture : IAsyncLifetime
     /// </summary>
     public IReadOnlyList<string> TenantScopedTableNames { get; private set; } = [];
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
         // A clone of the shared migrated template: migrations, the per-category share RLS policies
         // and the tenant-table storage parameters, exactly as the API applies them at startup.
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("rls_completeness");
-        MigratorConnectionString = database.MigratorConnectionString;
-        AppConnectionString = database.AppConnectionString;
+        await base.InitializeAsync();
 
         await using var context = new NocturneDbContext(
             new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(MigratorConnectionString).Options);
@@ -54,8 +49,6 @@ public class RlsCompletenessFixture : IAsyncLifetime
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
     }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 
     public async Task<NpgsqlConnection> OpenAppConnectionAsync()
     {

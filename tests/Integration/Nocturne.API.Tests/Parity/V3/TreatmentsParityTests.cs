@@ -290,6 +290,28 @@ public class TreatmentsParityTests : ParityTestBase
     #region READ - GET /api/v3/treatments/{id}
 
     [Fact]
+    public async Task Read_Exists_ReturnsSameShape()
+    {
+        var treatment = new
+        {
+            app = "AAPS",
+            date = TestTimeProvider.GetTestTime().ToUnixTimeMilliseconds(),
+            eventType = "Correction Bolus",
+            insulin = 0.05,
+            isBasalInsulin = false,
+            isReadOnly = false,
+            isValid = true,
+            pumpId = 1,
+            pumpSerial = "1",
+            pumpType = "OMNIPOD_DASH",
+            type = "SMB",
+            utcOffset = 120,
+        };
+
+        await AssertReadByIdParityAsync("treatments", treatment);
+    }
+
+    [Fact]
     public async Task Read_NotFound_ReturnsSameShape()
     {
         await AssertGetParityAsync("/api/v3/treatments/nonexistent123456789012");

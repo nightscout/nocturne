@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
@@ -94,11 +95,20 @@ public class GuestActivationTenantBudgetIntegrationTests : ApiIntegrationTestBas
         using (perAddress)
         using (tenantWide)
         {
-            (await tenantWide!.Content.ReadAsStringAsync()).Should().Be(await perAddress!.Content.ReadAsStringAsync());
+            (await RefusalWithoutTraceAsync(tenantWide!)).Should().Be(await RefusalWithoutTraceAsync(perAddress!));
             tenantWide.Content.Headers.ContentType?.MediaType.Should().Be(perAddress.Content.Headers.ContentType?.MediaType);
             tenantWide.Headers.RetryAfter.Should().NotBeNull("the per-address refusal says when to try again, and so does this one");
             perAddress.Headers.RetryAfter.Should().NotBeNull();
         }
+    }
+
+    // Every problem document carries its own request's traceId; the rest must match.
+    private static async Task<string> RefusalWithoutTraceAsync(HttpResponseMessage refusal)
+    {
+        var body = JsonNode.Parse(await refusal.Content.ReadAsStringAsync())!.AsObject();
+        body["traceId"].Should().NotBeNull();
+        body.Remove("traceId");
+        return body.ToJsonString();
     }
 
     private async Task<HttpResponseMessage> ActivateFromNewAddressAsync(string slug, string code)
@@ -112,8 +122,7 @@ public class GuestActivationTenantBudgetIntegrationTests : ApiIntegrationTestBas
         var slug = $"{prefix}-{Guid.NewGuid():N}"[..20];
         var tenantId = await AuthTestHelpers.SeedTenantAsync(Fixture, slug, prefix);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, $"{prefix} owner");
         var (_, code) = await AuthTestHelpers.SeedGuestLinkAsync(conn, subjectId);
 

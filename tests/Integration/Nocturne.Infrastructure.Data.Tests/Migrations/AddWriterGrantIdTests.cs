@@ -2,8 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -43,10 +43,7 @@ public class AddWriterGrantIdFixture : IAsyncLifetime
 
         await SeedAsync();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(_migratorConnectionString);
         await using (var context = new NocturneDbContext(options))
             await context.GetService<IMigrator>().MigrateAsync();
 
@@ -61,12 +58,7 @@ public class AddWriterGrantIdFixture : IAsyncLifetime
         await conn.OpenAsync();
         foreach (var tenant in new[] { TenantA, TenantB })
         {
-            await using (var pin = conn.CreateCommand())
-            {
-                pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-                pin.Parameters.AddWithValue("tenant", tenant.ToString());
-                await pin.ExecuteNonQueryAsync();
-            }
+            await conn.PinTenantAsync(tenant);
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
@@ -83,14 +75,12 @@ public class AddWriterGrantIdFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $$"""
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
-              ('{{TenantA}}', 'tenant-a', 'Tenant A', true, now(), now()),
-              ('{{TenantB}}', 'tenant-b', 'Tenant B', true, now(), now());
-            INSERT INTO subjects (id, name) VALUES ('{{Subject}}', 'Owner');
+        await conn.SeedTenantAsync(TenantA, "tenant-a", "Tenant A");
+        await conn.SeedTenantAsync(TenantB, "tenant-b", "Tenant B");
+        await conn.ExecuteAsync($"INSERT INTO subjects (id, name) VALUES ('{Subject}', 'Owner');");
 
-            SELECT set_config('app.current_tenant_id', '{{TenantA}}', false);
+        await conn.PinTenantAsync(TenantA);
+        await conn.ExecuteAsync($$"""
             INSERT INTO oauth_grants (id, subject_id, grant_type, scopes, tenant_id) VALUES
               ('{{GrantInA}}', '{{Subject}}', 'direct', ARRAY['*'], '{{TenantA}}'),
               ('{{LaterGrantInA}}', '{{Subject}}', 'direct', ARRAY['*'], '{{TenantA}}');
@@ -108,18 +98,17 @@ public class AddWriterGrantIdFixture : IAsyncLifetime
               ('{{Guid.CreateVersion7()}}', '{{TenantA}}', 'Bolus', '{{BolusOnlyUpdatedByGrantInA}}', 'update', '{{GrantInA}}', now()),
               ('{{Guid.CreateVersion7()}}', '{{TenantA}}', 'StateSpan', '{{SpanByGrantInA}}', 'create', '{{GrantInA}}', now()),
               ('{{Guid.CreateVersion7()}}', '{{TenantA}}', 'StateSpan', '{{BolusWithoutAuditInA}}', 'create', '{{GrantInA}}', now());
+            """);
 
-            SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
+        await conn.PinTenantAsync(TenantB);
+        await conn.ExecuteAsync($$"""
             INSERT INTO oauth_grants (id, subject_id, grant_type, scopes, tenant_id) VALUES
               ('{{GrantInB}}', '{{Subject}}', 'direct', ARRAY['*'], '{{TenantB}}');
             INSERT INTO boluses (id, tenant_id, insulin, automatic) VALUES
               ('{{BolusByGrantInB}}', '{{TenantB}}', 1, false);
             INSERT INTO mutation_audit_log (id, tenant_id, entity_type, entity_id, action, token_id, created_at) VALUES
               ('{{Guid.CreateVersion7()}}', '{{TenantB}}', 'Bolus', '{{BolusByGrantInB}}', 'create', '{{GrantInB}}', now());
-
-            SELECT set_config('app.current_tenant_id', '', false);
-            """;
-        await cmd.ExecuteNonQueryAsync();
+            """);
     }
 }
 

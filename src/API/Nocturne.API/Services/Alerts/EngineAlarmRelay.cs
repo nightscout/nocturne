@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Identity;
@@ -12,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -82,7 +84,7 @@ internal sealed class EngineAlarmRelay(
             var alarm = Map(payload, useMmol, timeProvider.GetUtcNow())!;
             await broadcastService.BroadcastEngineAlarmAsync(alarm.EventName, alarm.Notify);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Failed to raise the alarm for excursion {ExcursionId}", payload.ExcursionId);
         }
@@ -99,8 +101,8 @@ internal sealed class EngineAlarmRelay(
             var raisedAnAlarm = await db.AlertInstances
                 .AsNoTracking()
                 .OfCondition()
-                .AnyAsync(i => changedExcursionIds.Contains(i.AlertExcursionId)
-                               && i.AlertExcursion!.AlertRule!.Severity != AlertRuleSeverity.Info, ct);
+                .Where(i => changedExcursionIds.Contains(i.AlertExcursionId))
+                .AnyAsync(RaisesAlarmByRule, ct);
             if (!raisedAnAlarm) return;
 
             if (await Alarming(db, timeProvider.GetUtcNow().UtcDateTime).AnyAsync(ct)) return;
@@ -112,7 +114,7 @@ internal sealed class EngineAlarmRelay(
                 Timestamp = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
             });
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogError(ex, "Failed to decide the all-clear after excursions {ExcursionIds} changed",
                 string.Join(",", changedExcursionIds));
@@ -127,7 +129,7 @@ internal sealed class EngineAlarmRelay(
         await using (var db = await contextFactory.CreateAsync(ct))
         {
             top = await Alarming(db, now.UtcDateTime)
-                .OrderByDescending(i => i.AlertExcursion!.AlertRule!.Severity == AlertRuleSeverity.Critical)
+                .OrderByDescending(AlertRuleMapper.SeverityReadsAs(RuleSeverity, AlertRuleSeverity.Critical))
                 .ThenByDescending(i => i.TriggeredAt)
                 .Select(i => new AlarmingExcursion(
                     i.Id,
@@ -146,7 +148,7 @@ internal sealed class EngineAlarmRelay(
 
         var payload = new AlertPayload
         {
-            AlertType = top.ConditionType,
+            AlertType = AlertRuleMapper.Readable(top.ConditionType),
             RuleName = top.RuleName,
             GlucoseValue = fresh?.Mgdl.ToDecimal(),
             Trend = null,
@@ -157,7 +159,7 @@ internal sealed class EngineAlarmRelay(
             TenantId = tenantAccessor.TenantId,
             SubjectName = string.Empty,
             ActiveExcursionCount = 0,
-            Severity = top.Severity,
+            Severity = AlertRuleMapper.Readable(top.Severity),
         };
         return Map(payload, fresh is not null && await glucoseUnits.UsesMmolAsync(ct), now);
     }
@@ -165,8 +167,15 @@ internal sealed class EngineAlarmRelay(
     private sealed record AlarmingExcursion(
         Guid InstanceId, Guid ExcursionId, string RuleName, AlertConditionType ConditionType, AlertRuleSeverity Severity);
 
-    private static bool RaisesAlarm(AlertRuleSeverity severity) =>
-        severity is AlertRuleSeverity.Critical or AlertRuleSeverity.Warning;
+    private static readonly AlertRuleSeverity[] AlarmSeverities = [AlertRuleSeverity.Critical, AlertRuleSeverity.Warning];
+
+    private static bool RaisesAlarm(AlertRuleSeverity severity) => AlarmSeverities.Contains(severity);
+
+    private static readonly Expression<Func<AlertInstanceEntity, AlertRuleSeverity>> RuleSeverity =
+        i => i.AlertExcursion!.AlertRule!.Severity;
+
+    private static readonly Expression<Func<AlertInstanceEntity, bool>> RaisesAlarmByRule =
+        AlertRuleMapper.SeverityReadsAs(RuleSeverity, AlarmSeverities);
 
     /// <summary>
     /// The unresolved instances that keep their excursion sounding. An excursion in hysteresis counts:
@@ -182,8 +191,8 @@ internal sealed class EngineAlarmRelay(
                         && (i.SnoozedUntil == null || i.SnoozedUntil <= now)
                         && i.AlertExcursion!.EndedAt == null
                         && i.AlertExcursion.AcknowledgedAt == null
-                        && i.AlertExcursion.AlertRule!.IsEnabled
-                        && i.AlertExcursion.AlertRule.Severity != AlertRuleSeverity.Info);
+                        && i.AlertExcursion.AlertRule!.IsEnabled)
+            .Where(RaisesAlarmByRule);
 
     /// <summary>
     /// The Nightscout notify for a dispatched excursion, or null for an info rule, which raises no

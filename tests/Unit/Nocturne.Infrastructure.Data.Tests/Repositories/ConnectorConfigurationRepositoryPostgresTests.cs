@@ -22,26 +22,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfigurationRepositoryPostgresTests.Database database)
     : IClassFixture<ConnectorConfigurationRepositoryPostgresTests.Database>
 {
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("connector_config_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("connector_config_repo");
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private ConnectorConfigurationRepository Configurations(Guid scope) => new(new SuppliedContextFactory(() => Context(scope)));
 
@@ -50,14 +34,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'connector-config-repo-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"connector-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"connector-{tenant:N}", "connector-config-repo-test");
         return tenant;
     }
 
@@ -243,11 +220,11 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         await using var saver = new NpgsqlConnection(database.MigratorConnectionString);
         await saver.OpenAsync();
         await using var save = await saver.BeginTransactionAsync();
+        await saver.PinTenantAsync(a, local: true);
         await using (var cmd = saver.CreateCommand())
         {
             cmd.Transaction = save;
             cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, true);
                 UPDATE connector_configurations SET configuration = '{"enabled":true,"region":"us"}'::jsonb
                 WHERE tenant_id = @tenant::uuid AND connector_name = 'glooko'
                 """;
@@ -256,7 +233,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         }
 
         var toggle = Task.Run(() => Configurations(a).SetActiveAsync("glooko", false, "rhys", CancellationToken.None));
-        await WaitForAWriterBlockedByAsync(saver);
+        await PostgresLockWaits.UntilBlockedByAsync(database.MigratorConnectionString, saver.ProcessID, toggle);
         await save.CommitAsync();
         var toggled = await toggle;
 
@@ -344,11 +321,11 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         await using var toggler = new NpgsqlConnection(database.MigratorConnectionString);
         await toggler.OpenAsync();
         await using var toggle = await toggler.BeginTransactionAsync();
+        await toggler.PinTenantAsync(a, local: true);
         await using (var cmd = toggler.CreateCommand())
         {
             cmd.Transaction = toggle;
             cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, true);
                 UPDATE connector_configurations SET configuration = '{"enabled":false,"region":"eu"}'::jsonb
                 WHERE tenant_id = @tenant::uuid AND connector_name = 'glooko'
                 """;
@@ -358,30 +335,13 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
 
         var save = Task.Run(() => Configurations(a).SaveConfigurationAsync(
             "glooko", """{"enabled":true,"region":"us"}""", "erik", CancellationToken.None));
-        await WaitForAWriterBlockedByAsync(toggler);
+        await PostgresLockWaits.UntilBlockedByAsync(database.MigratorConnectionString, toggler.ProcessID, save);
         await toggle.CommitAsync();
         var saved = await save;
 
         var config = JsonNode.Parse(saved.ConfigurationJson)!.AsObject();
         config["region"]!.GetValue<string>().Should().Be("us");
         config["enabled"]!.GetValue<bool>().Should().BeFalse();
-    }
-
-    private async Task WaitForAWriterBlockedByAsync(NpgsqlConnection blocker)
-    {
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM pg_stat_activity WHERE @blocker = ANY(pg_blocking_pids(pid))";
-        cmd.Parameters.Add(new NpgsqlParameter("@blocker", blocker.ProcessID));
-
-        var deadline = DateTime.UtcNow.AddSeconds(15);
-        while ((long)(await cmd.ExecuteScalarAsync())! == 0)
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The writer never waited on the blocking transaction's row lock.");
-            await Task.Delay(25);
-        }
     }
 
     [Fact]

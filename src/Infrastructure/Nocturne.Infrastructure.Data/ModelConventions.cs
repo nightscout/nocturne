@@ -89,6 +89,34 @@ internal static class ModelConventions
                 .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
         }
 
+        // Not partial on deleted_at, unlike the list indexes above, because these reads take deleted
+        // rows too. Without it a deleted-inclusive window read of the largest tenant walks the
+        // instance-wide ix_<table>_timestamp past every other tenant's rows: on a tenant of 100k
+        // bolus calculations, half the instance, 325 ms and 127k buffers for a 100k-row read against
+        // 84 ms and 2k with it. Named for the column, which is start_timestamp on the span tables.
+        foreach (var entity in V4DeletedInclusiveWindowEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var column = entity.Property(nameof(IObservationTimestamped.Timestamp)).Metadata.GetColumnName();
+            if (V4SortedListEntities.Contains(entity.Metadata.ClrType))
+            {
+                // The list index's columns, so a live read keeps the partial list index, the smaller of
+                // the two once any row is deleted (until then they hold the same entries), and only a
+                // read that takes deleted rows needs this one. With fewer columns this index would be
+                // the smaller, and a live read ordered by timestamp alone would walk it past deleted
+                // rows. Named in HasIndex because EF keys an unnamed index by its columns, which the
+                // list index already holds.
+                var name = $"ix_{entity.Metadata.GetTableName()}_tenant_{column}_id_any";
+                entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp), nameof(IIdentified.Id)], name)
+                    .HasDatabaseName(name)
+                    .IsDescending(false, true, true);
+                continue;
+            }
+
+            entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_{column}")
+                .IsDescending(false, true);
+        }
+
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.
         foreach (var entity in LegacyIdKeyedEntities.Select(t => modelBuilder.Entity(t)))
@@ -112,6 +140,21 @@ internal static class ModelConventions
             entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)], name)
                 .HasDatabaseName(name)
                 .HasFilter($"{LegacyIdColumn(entity)} IS NOT NULL AND deleted_by_user");
+        }
+
+        // Every soft-deleted row, for the isValid:false upload paths, which ask whichever way a row
+        // was deleted (GetDeletedLegacyIdsAsync, DecomposedTreatmentTable.DeletedAsync). Without it
+        // the lookup walks every tenant's deleted rows through ix_<table>_deleted_at: 133 ms and 49k
+        // buffers for 200 ids on a tenant of 1.5M sensor_glucose rows, 4% deleted, on an instance
+        // twice that. The tombstone index above cannot be widened to serve it: EF folds the
+        // tombstone arm of WhereBlocksRecreation to a bare deleted_by_user, which only the
+        // user-tombstone index's filter implies.
+        foreach (var entity in DeletedLegacyIdLookupEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var name = $"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id_deleted";
+            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(ILegacyIdentified.LegacyId)], name)
+                .HasDatabaseName(name)
+                .HasFilter($"{LegacyIdColumn(entity)} IS NOT NULL AND deleted_at IS NOT NULL");
         }
 
         // Matches HistoryPage's (sys_updated_at, id) order under the tenant filter, so a poll reads

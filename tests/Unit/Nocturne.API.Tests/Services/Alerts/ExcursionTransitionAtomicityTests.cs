@@ -286,7 +286,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             RuleId, ExcursionCloseReason.Manual, CancellationToken.None);
 
         closed.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual, Now.UtcDateTime));
     }
 
     [NativeFact]

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -20,7 +21,7 @@ public sealed class GoogleHealthConnectorService(
     IConnectorServerResolver<GoogleHealthConnectorConfiguration> serverResolver,
     GoogleHealthClient google,
     GoogleHealthSessionStore sessions,
-    IGoogleHealthReadingWriter writer,
+    [FromKeyedServices(GoogleHealthServiceKeys.Writer)] IGoogleHealthReadingWriter writer,
     IGoogleHealthSyncCoordinator coordinator,
     IConnectorConfigurationService connectorConfigurations,
     ITenantAccessor tenantAccessor,
@@ -459,15 +460,10 @@ public sealed class GoogleHealthConnectorService(
             {
                 if (reconciliationRun != Guid.Empty)
                 {
-                    try
-                    {
-                        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
-                        await writer.AbandonReconciliationAsync(reconciliationRun, cleanup.Token);
-                    }
-                    catch (Exception cleanupException)
-                    {
-                        logger.LogWarning(cleanupException, "Could not discard Google Health reconciliation run {RunId}", reconciliationRun);
-                    }
+                    logger.LogWarning(
+                        ex, "Google Health sync of {DataType} failed at {Stage}; discarding reconciliation run {RunId}",
+                        type, stage, reconciliationRun);
+                    await DiscardReconciliationRunAsync(reconciliationRun);
                 }
 
                 // Provider failures already carry their safe public code. Anything else is a
@@ -482,9 +478,28 @@ public sealed class GoogleHealthConnectorService(
                     code,
                     stage: stage,
                     dataType: type,
-                    providerReason: ex.GetType().Name,
+                    providerReason: (ex is ConnectorStoreUnavailableException { InnerException: { } cause } ? cause : ex).GetType().Name,
                     innerException: ex);
             }
+        }
+    }
+
+    /// <summary>
+    ///     Abandons a run the sync could not finish, so a store that is down or a cleanup that outlasts
+    ///     its own 30 seconds leaves the failure that sent the sync here to be raised. Any other exception
+    ///     is a defect and replaces it.
+    /// </summary>
+    private async Task DiscardReconciliationRunAsync(Guid reconciliationRun)
+    {
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
+        try
+        {
+            await writer.AbandonReconciliationAsync(reconciliationRun, cleanup.Token);
+        }
+        catch (Exception ex) when (ex is ConnectorStoreUnavailableException
+            || (ex is OperationCanceledException && cleanup.IsCancellationRequested))
+        {
+            logger.LogWarning(ex, "Could not discard Google Health reconciliation run {RunId}", reconciliationRun);
         }
     }
 
@@ -575,6 +590,16 @@ public sealed class GoogleHealthConnectorService(
     private void LogFailure(Exception ex, GoogleHealthException error, Guid tenantId) => logger.LogError(ex,
         "Google Health import failed for tenant {TenantId} with code {Code} at stage {Stage} for data type {DataType}; provider status {ProviderStatus}, provider reason {ProviderReason}",
         tenantId, error.Message, error.Stage, error.DataType, error.ProviderStatus, error.ProviderReason);
+}
+
+/// <summary>The keys the Google Health connector's services are registered under.</summary>
+public static class GoogleHealthServiceKeys
+{
+    /// <summary>
+    ///     The <see cref="IGoogleHealthReadingWriter"/> the connector holds: the host's writer with a
+    ///     failure of the database raised as <see cref="ConnectorStoreUnavailableException"/>.
+    /// </summary>
+    public const string Writer = "GoogleHealthConnectorWriter";
 }
 
 public static class GoogleHealthErrorCode

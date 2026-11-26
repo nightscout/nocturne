@@ -10,9 +10,9 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
@@ -213,14 +213,12 @@ public class GoogleHealthAuthTokenProviderTests
         Guid? tenantId = null,
         TimeProvider? clock = null)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(accessor => accessor.IsResolved).Returns(true);
-        tenantAccessor.SetupGet(accessor => accessor.TenantId).Returns(tenantId ?? Guid.NewGuid());
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId ?? Guid.NewGuid());
         return new GoogleHealthAuthTokenProvider(
             new HttpClient(handler),
             cache ?? new ConnectorTokenCache(clock),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             TestPlatform.Options(),
             NullLogger<GoogleHealthAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),

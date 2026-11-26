@@ -12,10 +12,10 @@ title: When the same carbs arrive twice
 Log 45 g of carbs in your loop, and have both the loop and a second app upload
 to Nocturne, and two records arrive describing one plate of food. Nocturne
 notices, groups them, and shows you one meal. This page explains when that
-happens, when it deliberately doesn't, and what to do about the leftovers.
+happens, when it deliberately does not, and what to do about the leftovers.
 
-The same machinery covers boluses, glucose readings, pump events and the rest —
-carbs are just the case people meet first, because carbs are the thing most
+The same machinery covers boluses, glucose readings, pump events and the rest.
+Carbs are just the case people meet first, because carbs are the thing most
 likely to be entered by hand in two places.
 
 ## Linking, not deleting
@@ -46,7 +46,7 @@ however they arrived.
 Clocks disagree. A connector reading your pump's raw clock and a connector
 reading a corrected one can be minutes apart on the same event, and that gap
 grows over time. So when the close rule finds nothing, a second, wider attempt
-runs — but only under conditions strict enough that widening the window cannot
+runs, but only under conditions strict enough that widening the window cannot
 merge two genuinely separate meals:
 
 - The two records are **within 10 minutes**.
@@ -55,7 +55,7 @@ merge two genuinely separate meals:
   A record with no known source, or a second record from an app already in the
   group, is refused.
 - There is **exactly one** candidate group in range. Two possible matches means
-  the record cannot be attributed with confidence, so it isn't.
+  the record cannot be attributed with confidence, so it is not.
 
 The drift rule applies to carbs, boluses, BG checks, temp basals, bolus
 calculations and pump events. It deliberately does not apply to glucose
@@ -65,7 +65,7 @@ minutes is ordinary rather than suspicious.
 <Callout type="info" title="What this means in practice">
 
   Two apps reporting your 45 g lunch, minutes apart, collapse into one meal. Two
-  helpings of 45 g from the same app, half an hour apart, stay two meals — the
+  helpings of 45 g from the same app, half an hour apart, stay two meals. The
   drift rule refuses a second record from an app already in the group, so
   Nocturne never turns your afternoon snack into a copy of your lunch.
 
@@ -79,13 +79,13 @@ Three times, so that a duplicate is caught whichever way it arrives:
   It is best-effort by design: your data is saved first, and a failure to link
   never rejects an upload.
 - **Every couple of minutes, in the background.** A reconciliation pass revisits
-  recently created links and merges groups that ingest could not have seen —
+  recently created links and merges groups that ingest could not have seen,
   most often because two connectors synced out of order, and the second copy
   arrived hours after the first.
 - **On demand, as a full pass.** Under **Site settings > Data Quality**, the
   **Run Deduplication** action walks your entire history. It reports how many
   records it processed, how many groups it created and how many duplicates it
-  found, and it can be cancelled while it runs.
+  found, and it can be canceled while it runs.
 
 <Screenshot id="deduplication-card" />
 
@@ -125,5 +125,5 @@ Everything above is about _different records_ that turn out to describe one
 event. There is a simpler case that never reaches it: the **same app
 re-uploading the same record**, after a backfill or a phone restore. Loop, AAPS
 and connectors attach a stable sync identifier to what they send, and Nocturne
-keys on it — a repeat upload updates the record in place instead of creating a
+keys on it. A repeat upload updates the record in place instead of creating a
 second one. See [carb entries](/docs/food/carbs) for more on sync identifiers.

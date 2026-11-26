@@ -69,8 +69,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     /// </summary>
     private MemberInviteController BuildController(params string[] grantedScopes)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
@@ -88,7 +87,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())
                 == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
-            tenantAccessor.Object,
+            tenantAccessor,
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

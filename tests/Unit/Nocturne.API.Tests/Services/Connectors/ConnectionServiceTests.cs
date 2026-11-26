@@ -19,6 +19,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -643,7 +644,7 @@ public class ConnectionServiceTests
         new(_sourceData.Object, _grants.Object, _health.Object, Mock.Of<IClientDeviceService>(), _dataSources.Object,
             _members.Object, _subjects.Object, Tenant(), _connectorState.Object, new FakeTimeProvider(Now));
 
-    private static ITenantAccessor Tenant() => Mock.Of<ITenantAccessor>(t => t.TenantId == TenantId);
+    private static ITenantAccessor Tenant() => SettableTenantAccessor.Resolved(TenantId);
 
     private void Owns(OAuthGrantRecord grant) =>
         _grants.Setup(g => g.FindOfSubjectAsync(grant.Id, Viewer, It.IsAny<CancellationToken>())).ReturnsAsync(grant);

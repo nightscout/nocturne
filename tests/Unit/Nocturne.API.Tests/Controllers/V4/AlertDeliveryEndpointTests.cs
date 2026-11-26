@@ -11,10 +11,10 @@ using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -25,7 +25,7 @@ public class AlertDeliveryEndpointTests
     private readonly Mock<INocturneDbContextFactory> _contextFactoryMock = new();
     private readonly Mock<IAlertAcknowledgementService> _acknowledgementServiceMock = new();
     private readonly Mock<IAlertDeliveryService> _deliveryServiceMock = new();
-    private readonly Mock<ITenantAccessor> _tenantAccessorMock = new();
+    private readonly SettableTenantAccessor _tenantAccessor = new();
     private readonly Mock<ILogger<AlertsController>> _loggerMock = new();
 
     private AlertsController CreateController()
@@ -35,7 +35,7 @@ public class AlertDeliveryEndpointTests
             _acknowledgementServiceMock.Object,
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
-            _tenantAccessorMock.Object,
+            _tenantAccessor,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -87,6 +87,24 @@ public class AlertDeliveryEndpointTests
     }
 
     [Fact]
+    public async Task MarkFailed_with_a_platform_message_records_that_message_failed()
+    {
+        var deliveryId = Guid.NewGuid();
+        var request = new MarkFailedRequest { Error = "window closed", PlatformMessageId = "wamid.1" };
+        var controller = CreateController();
+
+        var result = await controller.MarkFailed(deliveryId, request, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        _deliveryServiceMock.Verify(
+            s => s.MarkSentMessageFailedAsync(deliveryId, "wamid.1", "window closed", It.IsAny<CancellationToken>()),
+            Times.Once);
+        _deliveryServiceMock.Verify(
+            s => s.MarkFailedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GetPendingDeliveries_ReturnsMatchingDeliveries()
     {
         // This endpoint queries the DbContext directly, so a full test requires
@@ -101,6 +119,69 @@ public class AlertDeliveryEndpointTests
         var method = typeof(AlertsController).GetMethod("GetPendingDeliveries");
         method.Should().NotBeNull();
         method!.ReturnType.Should().Be(typeof(Task<ActionResult<List<PendingDeliveryResponse>>>));
+    }
+
+    [Fact]
+    public async Task GetDeliveryPayload_ReadsBackThePayloadTheDeliveryWasDispatchedWith()
+    {
+        var tenant = Guid.CreateVersion7();
+        var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options) { TenantId = tenant };
+        var payload = new Nocturne.Core.Models.AlertPayload
+        {
+            Kind = Nocturne.Core.Models.Alerts.AlertPayloadKind.Excursion,
+            AlertType = Nocturne.Core.Models.Alerts.AlertConditionType.Threshold,
+            RuleName = "Urgent low",
+            Severity = Nocturne.Core.Models.Alerts.AlertRuleSeverity.Critical,
+            SubjectName = "Alex",
+            GlucoseValue = 54,
+            Trend = "SingleDown",
+            TrendRate = -2.0m,
+            ReadingTimestamp = new DateTime(2026, 11, 26, 3, 0, 0, DateTimeKind.Utc),
+            ExcursionId = Guid.CreateVersion7(),
+            InstanceId = Guid.CreateVersion7(),
+            TenantId = tenant,
+            ActiveExcursionCount = 1,
+        };
+        var delivery = new Nocturne.Infrastructure.Data.Entities.AlertDeliveryEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenant,
+            AlertInstanceId = Guid.CreateVersion7(),
+            ChannelType = Nocturne.Core.Models.Alerts.ChannelType.WhatsAppDm,
+            Destination = "61400000000",
+            Payload = System.Text.Json.JsonSerializer.Serialize(payload),
+            Status = "delivered",
+        };
+        ctx.AlertDeliveries.Add(delivery);
+        await ctx.SaveChangesAsync();
+
+        var found = await new AlertsController(
+            new TestNocturneDbContextFactory(ctx),
+            _acknowledgementServiceMock.Object,
+            _deliveryServiceMock.Object,
+            Mock.Of<IAlertSnoozeService>(),
+            _tenantAccessor,
+            _loggerMock.Object).GetDeliveryPayload(delivery.Id, CancellationToken.None);
+        var missing = await new AlertsController(
+            new TestNocturneDbContextFactory(ctx),
+            _acknowledgementServiceMock.Object,
+            _deliveryServiceMock.Object,
+            Mock.Of<IAlertSnoozeService>(),
+            _tenantAccessor,
+            _loggerMock.Object).GetDeliveryPayload(Guid.CreateVersion7(), CancellationToken.None);
+
+        found.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(payload);
+        missing.Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public void GetDeliveryPayload_RequiresAlertsReadWrite()
+    {
+        typeof(AlertsController).GetMethod(nameof(AlertsController.GetDeliveryPayload))!
+            .GetCustomAttributes(typeof(RequireScopeAttribute), inherit: true)
+            .Cast<RequireScopeAttribute>()
+            .Should().ContainSingle().Which.RequiredScopes.Should().Equal(Scope.AlertsReadWrite);
     }
 
     [Fact]

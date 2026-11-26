@@ -11,8 +11,7 @@
         "direction": "below",
         "value": 70,
         "clear_margin": 5
-      },
-      "hysteresis_minutes": 0
+      }
     }
   ],
   "ticks": [

@@ -967,6 +967,71 @@ public class DeviceStatusProjectionServiceTests
             .Should().Be(4);
     }
 
+    private void ReturnGroupsIncludingDeleted(params HistoryRecord<DeviceStatusGroup>[] rows) =>
+        _groupRepo
+            .Setup(r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, int limit, int offset, bool _, CancellationToken _) =>
+                rows.Skip(offset).Take(limit).ToArray());
+
+    private static HistoryRecord<DeviceStatusGroup> StoredStatus(string legacyId, int minutesAgo, bool deleted)
+    {
+        var uploader = CreateUploaderSnapshot();
+        uploader.LegacyId = legacyId;
+        uploader.CorrelationId = null;
+        uploader.Timestamp = ReferenceTime.AddMinutes(-minutesAgo);
+        return new HistoryRecord<DeviceStatusGroup>(
+            new DeviceStatusGroup(null, null, uploader, null, uploader.Timestamp), deleted);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_IsValidFalse_ReturnsTheDeletedStatusesAndNoLiveOne()
+    {
+        ReturnGroupsIncludingDeleted(
+            StoredStatus(First, 0, deleted: false),
+            StoredStatus(Second, 5, deleted: true),
+            StoredStatus("5f8d0c1e8a7b4c3d9e5f0003", 10, deleted: true));
+
+        var result = await _service.GetMatchingAsync(
+            FindQuery.ParseDeviceStatus("find[isValid]=false"), 10, 0, CancellationToken.None);
+
+        result.Select(s => s.Id).Should().Equal(Second, "5f8d0c1e8a7b4c3d9e5f0003");
+        result.Should().OnlyContain(s => s.IsValid == false);
+    }
+
+    [Fact]
+    public async Task CountMatchingAsync_IsValidFalse_CountsTheDeletedStatusesTheListReturns()
+    {
+        ReturnGroupsIncludingDeleted(
+            StoredStatus(First, 0, deleted: false),
+            StoredStatus(Second, 5, deleted: true));
+        var find = FindQuery.ParseDeviceStatus("find[isValid]=false");
+
+        var count = await _service.CountMatchingAsync(find, CancellationToken.None);
+        var listed = await _service.GetMatchingAsync(find, 10, 0, CancellationToken.None);
+
+        count.Should().Be(1);
+        listed.Should().HaveCount((int)count);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_FindThatDoesNotNameIsValid_ReadsLiveStatusesOnly()
+    {
+        ReturnGroups(StoredStatus(First, 0, deleted: false).Record);
+        ReturnGroupsIncludingDeleted(StoredStatus(Second, 5, deleted: true));
+
+        var result = await _service.GetMatchingAsync(
+            FindQuery.ParseDeviceStatus("find[device][$ne]=other"), 10, 0, CancellationToken.None);
+
+        result.Select(s => s.Id).Should().Equal(First);
+        _groupRepo.Verify(
+            r => r.GetIncludingDeletedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     #endregion
 
     #region GetModifiedSinceAsync

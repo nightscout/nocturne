@@ -50,10 +50,16 @@ public abstract class HealthRecordControllerBase<TModel> : ControllerBase
         await ReadAsync(id, ct) is { } record ? Ok(record) : RecordNotFound(id);
 
     protected async Task<ActionResult<IEnumerable<TModel>>> CreateResponseAsync(
-        IReadOnlyList<TModel> models, CancellationToken ct) =>
-        this.ValidateBulkSize(models, RecordTypeName, $"{RecordTypeNoun} records") is { } invalid
-            ? invalid
-            : Ok(await WriteManyAsync(models, ct));
+        IReadOnlyList<TModel> models, CancellationToken ct)
+    {
+        if (this.ValidateBulkSize(models, RecordTypeName, $"{RecordTypeNoun} records") is { } invalid)
+            return invalid;
+
+        if (await this.ValidateEachAsync(models, RecordTypeName, ct) is { } rejected)
+            return rejected;
+
+        return Ok(await WriteManyAsync(models, ct));
+    }
 
     protected async Task<ActionResult<TModel>> UpdateResponseAsync(string id, TModel model, CancellationToken ct) =>
         await WriteAsync(id, model, ct) is { } updated ? Ok(updated) : RecordNotFound(id);

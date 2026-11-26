@@ -7,6 +7,7 @@ using Nocturne.API.Services.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Uploads;
@@ -224,9 +225,20 @@ internal class TreatmentService : ITreatmentService
         _decomposer.ResolveStoredIdentitiesAsync(treatments, cancellationToken);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+    public Task<TreatmentRepublish> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default) =>
         _decomposer.SelectForRepublishAsync(source, treatments, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<int> RepublishSpansAsync(
+        string source, IReadOnlyList<Treatment> treatments, WriteOrigin origin,
+        CancellationToken cancellationToken = default)
+    {
+        var written = await _decomposer.RepublishSpansAsync(source, treatments, origin, cancellationToken);
+        if (origin == WriteOrigin.Live)
+            await AnnounceCreatedAsync([.. written.Select(t => new StoredTreatment.Unnamed(t) { Updated = true })]);
+        return written.Count;
+    }
 
     private async Task<BulkWrite<Treatment>> CreateAsync(
         IEnumerable<Treatment> treatments, bool splitPreBolus, WriteOrigin origin, CancellationToken cancellationToken)
@@ -287,8 +299,12 @@ internal class TreatmentService : ITreatmentService
                 _logger.LogWarning("Created treatment {Id} did not read back", created.Id);
 
             var announced = readBack?[i] ?? created;
-            // A state span keeps no data source, and the write-back sink tells a connector's own treatments by it.
-            announced.DataSource ??= created.DataSource;
+            // The write-back sink tells a connector's own treatments by the data source. A state span
+            // keeps none, and an upstream edit keeps its record's, so it is announced as the pull's.
+            if (stored[i].UpstreamEdit)
+                announced.DataSource = DataSources.NightscoutConnector;
+            else
+                announced.DataSource ??= created.DataSource;
             served.Add(announced);
             if (stored[i].Updated)
                 updated.Add(announced);
@@ -495,11 +511,12 @@ internal class TreatmentService : ITreatmentService
 
     private async Task<long> DeleteMatchingTreatmentsAsync(string? find, CancellationToken ct)
     {
+        // A find that names isValid also reads deleted treatments, which are already gone.
         var matching = await _store.QueryAsync(
             new TreatmentQuery { Find = find, Count = int.MaxValue }, ct);
 
         long deleted = 0;
-        foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
+        foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id) && t.IsValid != false))
         {
             if (await _store.DeleteAsync(treatment.Id!, ct) is not null)
             {

@@ -54,10 +54,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public const int SystemTimestampGroupSize = 1000;
 
     /// <summary>
-    /// The current UTC time truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores, so
-    /// that a stamp held in memory equals the one read back from its row.
+    /// The context's clock, <see cref="TimeProvider.System"/> unless <see cref="INocturneDbContextFactory"/>
+    /// set the scope's, so a stamp and a service that compares it read one clock.
     /// </summary>
-    public static DateTime UtcNowAtStoredPrecision() => AtStoredPrecision(DateTime.UtcNow);
+    internal TimeProvider Clock { get; set; } = TimeProvider.System;
+
+    /// <summary>
+    /// The context clock's UTC time truncated to the microsecond a PostgreSQL <c>timestamptz</c>
+    /// stores, so that a stamp held in memory equals the one read back from its row.
+    /// </summary>
+    public DateTime NowAtStoredPrecision() => AtStoredPrecision(Clock.GetUtcNow().UtcDateTime);
 
     /// <summary><paramref name="value"/> truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores.</summary>
     public static DateTime AtStoredPrecision(DateTime value) =>
@@ -257,6 +263,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<InstanceKeyCheckEntity> InstanceKeyChecks { get; set; }
 
+    /// <summary>
+    /// Notices senders outside Nocturne sent to members (not tenant-scoped), one per sender, tenant,
+    /// member and key.
+    /// </summary>
+    public DbSet<ExternalNotificationEntity> ExternalNotifications { get; set; }
+
     // In-App Notification entities
 
     public DbSet<InAppNotificationEntity> InAppNotifications { get; set; }
@@ -300,6 +312,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<TeamTenantAccessRoleEntity> TeamTenantAccessRoles { get; set; } = null!;
 
     public DbSet<TeamSiteStaffEntity> TeamSiteStaff { get; set; } = null!;
+
+    public DbSet<TeamSiteDeclineEntity> TeamSiteDeclines { get; set; } = null!;
+
+    public DbSet<TeamSiteBlockEntity> TeamSiteBlocks { get; set; } = null!;
+
+    public DbSet<TeamGroupEntity> TeamGroups { get; set; } = null!;
+
+    public DbSet<TeamGroupPersonEntity> TeamGroupPeople { get; set; } = null!;
+
+    public DbSet<TeamGroupStaffEntity> TeamGroupStaff { get; set; } = null!;
 
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
@@ -630,11 +652,64 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. Implementing<IDuplicateFlagged>().Where(typeof(IV4TimeSeriesEntity).IsAssignableFrom)];
 
     /// <summary>
+    /// V4 record tables a read ranges over one tenant by timestamp with its soft-deleted rows, which
+    /// the partial list indexes leave out: the legacy window read that includes deleted rows
+    /// (<c>ILegacyKeyedRepository.GetIncludingDeletedAsync</c>, on profile activations
+    /// <c>LegacyProfileActivationTable.InWindow</c>, on sensor glucose
+    /// <c>ISensorGlucoseRepository.GetForEntriesIncludingDeletedAsync</c>, and over the device status
+    /// tables <c>IDeviceStatusGroupRepository.GetIncludingDeletedAsync</c>), and on sensor glucose the
+    /// dedup unlinked read.
+    /// </summary>
+    internal static readonly Type[] V4DeletedInclusiveWindowEntities =
+    [
+        typeof(SensorGlucoseEntity),
+        typeof(MeterGlucoseEntity),
+        typeof(CalibrationEntity),
+        typeof(BolusEntity),
+        typeof(CarbIntakeEntity),
+        typeof(TempBasalEntity),
+        typeof(BGCheckEntity),
+        typeof(NoteEntity),
+        typeof(DeviceEventEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ProfileActivationEntity),
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(DeviceStatusExtrasEntity),
+    ];
+
+    /// <summary>
     /// The <see cref="ILegacyIdentified"/> tables, each with the unique legacy-id index and its
     /// user-tombstone companion: <see cref="V4LegacyIdRecordEntities"/> and
     /// <see cref="StateSpanEntity"/>, which carries no decomposition correlation.
     /// </summary>
     internal static readonly Type[] LegacyIdKeyedEntities = Implementing<ILegacyIdentified>();
+
+    /// <summary>
+    /// The <see cref="LegacyIdKeyedEntities"/> an isValid:false upload asks for deleted rows of
+    /// (<c>ILegacyKeyedRepository.GetDeletedLegacyIdsAsync</c>, <c>DecomposedTreatmentTable.DeletedAsync</c>):
+    /// the entry and device status snapshot tables, the decomposed treatment tables, and the therapy
+    /// settings a profile document is found by. Notes are left out, because their unfiltered
+    /// <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
+    /// </summary>
+    internal static readonly Type[] DeletedLegacyIdLookupEntities =
+    [
+        typeof(TherapySettingsEntity),
+        typeof(SensorGlucoseEntity),
+        typeof(MeterGlucoseEntity),
+        typeof(CalibrationEntity),
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(BolusEntity),
+        typeof(TempBasalEntity),
+        typeof(CarbIntakeEntity),
+        typeof(BGCheckEntity),
+        typeof(DeviceEventEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ProfileActivationEntity),
+    ];
 
     /// <summary>
     /// Tables looked up by the decomposition correlation, adding
@@ -938,7 +1013,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     private void UpdateTimestamps()
     {
-        var utcNow = UtcNowAtStoredPrecision();
+        var utcNow = NowAtStoredPrecision();
         // Column types are a relational concept: asking the InMemory provider for one throws.
         var isRelational = Database.IsRelational();
         var stampedUpdated = new Dictionary<Type, int>();
@@ -999,7 +1074,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     {
         if (entry.State is EntityState.Deleted or EntityState.Detached
             || entry.Entity is not IUpstreamFingerprinted { LegacyId: { } legacyId } row
-            || !UpstreamFingerprintScope.TryGet(row.DataSource, legacyId, out var fingerprint)
+            || !UpstreamFingerprintScope.TryGet(row.UpstreamSource, legacyId, out var fingerprint)
             || row.UpstreamFingerprint == fingerprint)
             return;
 

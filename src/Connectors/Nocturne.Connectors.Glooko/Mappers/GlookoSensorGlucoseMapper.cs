@@ -58,29 +58,36 @@ public class GlookoSensorGlucoseMapper
 
         foreach (var egv in Records(egvs, "SSV2 egv"))
         {
-            if (egv.Calculated || egv.SoftDeleted || egv.GlucoseValue is not > 0) continue;
-
-            var date = ParseV2Timestamp(egv.DisplayTime);
-            if (date == null) continue;
-
-            // mg/dL × 100, same integer encoding as the v2 cgm/readings feed.
-            var mgdl = egv.GlucoseValue.Value / 100.0;
-
-            // Prefer Glooko's guid; else the RAW fake-UTC display string (stable across timezone
-            // re-correction, unlike corrected ticks) so a re-sync upserts rather than duplicates.
-            var key = !string.IsNullOrEmpty(egv.Guid)
-                ? LegacyIds.Of("egv", egv.Guid)
-                : LegacyIds.Of("egv_raw", egv.DisplayTime);
-
-            results.Add(new SensorGlucose
+            try
             {
-                Timestamp = date.Value,
-                LegacyId = key,
-                SyncIdentifier = key,
-                Device = _connectorSource,
-                Mgdl = mgdl,
-                Direction = ParseTrendToDirection(egv.TrendArrow),
-            });
+                if (egv.Calculated || egv.SoftDeleted || egv.GlucoseValue is not > 0) continue;
+
+                var date = ParseV2Timestamp(egv.DisplayTime);
+                if (date == null) continue;
+
+                // mg/dL × 100, same integer encoding as the v2 cgm/readings feed.
+                var mgdl = egv.GlucoseValue.Value / 100.0;
+
+                // Prefer Glooko's guid; else the RAW fake-UTC display string (stable across timezone
+                // re-correction, unlike corrected ticks) so a re-sync upserts rather than duplicates.
+                var key = !string.IsNullOrEmpty(egv.Guid)
+                    ? LegacyIds.Of("egv", egv.Guid)
+                    : LegacyIds.Of("egv_raw", egv.DisplayTime);
+
+                results.Add(new SensorGlucose
+                {
+                    Timestamp = date.Value,
+                    LegacyId = key,
+                    SyncIdentifier = key,
+                    Device = _connectorSource,
+                    Mgdl = mgdl,
+                    Direction = ParseTrendToDirection(egv.TrendArrow),
+                });
+            }
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 egv {Guid}", _connectorSource, egv.Guid);
+            }
         }
 
         _logger.LogInformation(

@@ -27,23 +27,9 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     : IClassFixture<OAuthDeviceCodeDecisionPostgresTests.Database>
 {
     private const string ClientId = "app";
-    private static readonly TimeSpan BarrierTimeout = TimeSpan.FromSeconds(30);
     private static readonly IReadOnlySet<string> FullAccess = new HashSet<string> { Scope.FullAccess };
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("oauth_device_code_decision");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("oauth_device_code_decision");
 
     /// <summary>Runs <paramref name="before"/> once, just before the first statement that writes a device code, however it is issued.</summary>
     private sealed class BeforeDecisionWrite(Func<Task> before) : DbCommandInterceptor
@@ -78,12 +64,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     }
 
     private NocturneDbContext Context(Guid tenant, IInterceptor? staged = null) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(staged is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors: staged is null ? [] : [staged]);
 
     private sealed record Seeded(Guid Tenant, Guid Client, Guid Grant, Guid Subject, Guid OtherSubject, string UserCode, SuppliedContextFactory Contexts);
 
@@ -93,14 +74,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'device-code-decision-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"decision-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"decision-{tenant:N}", "device-code-decision-test");
         }
 
         var userCode = tenant.ToString("N")[..8].ToUpperInvariant();
@@ -146,6 +120,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             clients.Object,
             contexts,
             new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            TimeProvider.System,
             NullLogger<OAuthDeviceCodeService>.Instance);
     }
 
@@ -166,7 +141,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             {
                 if (Interlocked.Increment(ref arrived) == 2)
                     bothArrived.SetResult();
-                return bothArrived.Task.WaitAsync(BarrierTimeout);
+                return bothArrived.Task.WaitAsync(Eventually.DefaultPatience);
             })));
     }
 

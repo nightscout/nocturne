@@ -10,8 +10,8 @@ title: Public share link
 # Public share link
 
 Public access turns on a single read-only link that **anyone you give it to can
-open, with no login and no invite**. Because there's no sign-in, treat the link
-itself as the key: anyone who has it can see whatever you've chosen to share.
+open, with no sign-in and no invite**. Because there's no sign-in, treat the link
+itself as the key: anyone who has it can see whatever you have chosen to share.
 
 It is **off until you turn it on**, and you turn it on under
 **Site settings > Sharing & Privacy**:
@@ -24,7 +24,7 @@ It is **off until you turn it on**, and you turn it on under
   ]}
 />
 
-The address pictured belongs to a local test instance; yours will end in your own
+The address pictured belongs to a local test instance. Yours will end in your own
 domain, in the shape `https://<random>.share.<your domain>`.
 
 ## Seeing the link again
@@ -50,7 +50,7 @@ one.
 On some instances Nocturne cannot show you an existing link, and says so on the
 page. That happens if the link was created before this feature existed, if your
 instance has no encryption key set, or if that key has changed since the link was
-made. The link itself keeps working for anyone who has it; only showing it again
+made. The link itself keeps working for anyone who has it. Only showing it again
 is impossible, so regenerating is the only way to get a copy you can send.
 
 </Callout>
@@ -112,19 +112,19 @@ end it:
 - **Switch public access off.** The link stops working immediately.
 - **Regenerate.** Nocturne issues a brand-new link and the old one stops working
   immediately. Use this when a link has spread further than you meant it to, but
-  you still want the daycare (or whoever) to have one; you just have to hand out
+  you still want the daycare (or whoever) to have one. You just have to hand out
   the new address.
 
 <Callout type="warning" title="Anyone with the link can open it">
 
-  There's no sign-in on a public link, and you can't control who it gets forwarded
-  to once it's out. Share the minimum categories the situation actually needs,
+  There's no sign-in on a public link, and you cannot control who it gets forwarded
+  to once it is out. Share the minimum categories the situation actually needs,
   keep the 24-hour window on, and regenerate the link if you ever think it has
   spread too far.
 
 </Callout>
 
 If only one person needs a look, and only once, a
-[temporary guest link](/docs/sharing/guest-links) is the safer choice; it expires
+[temporary guest link](/docs/sharing/guest-links) is the safer choice. It expires
 on its own. If they need ongoing access, give them their own
 [member account](/docs/sharing/members).

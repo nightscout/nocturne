@@ -6,10 +6,11 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.RateLimiting;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.RateLimiting;
@@ -48,7 +49,7 @@ public class GuestActivationLimiterTests : IDisposable
         var refused = await RunAsync(tenant);
 
         refused.Should().NotBeNull();
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.Response.Body = new MemoryStream();
         await refused!.ExecuteResultAsync(new ActionContext(http, new RouteData(), new ActionDescriptor()));
         int.Parse(http.Response.Headers.RetryAfter.ToString())
@@ -74,7 +75,7 @@ public class GuestActivationLimiterTests : IDisposable
         {
             RequestServices = new ServiceCollection()
                 .AddSingleton(_limiter)
-                .AddSingleton(Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId))
+                .AddSingleton<ITenantAccessor>(SettableTenantAccessor.Resolved(tenantId))
                 .BuildServiceProvider(),
         };
         var context = new ActionExecutingContext(

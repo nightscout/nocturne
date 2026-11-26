@@ -57,8 +57,8 @@ public class ConnectorFoodEntryResolutionOrderTests
         await PostgresLockWaits.UntilWaitingAsync(_fx.AppConnectionString, 2, accept, withdraw);
         await hold.CommitAsync();
 
-        (await accept.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(AcceptMatchOutcome.Linked);
-        (await withdraw.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeEmpty();
+        (await accept.WaitAsync(Eventually.DefaultPatience)).Should().Be(AcceptMatchOutcome.Linked);
+        (await withdraw.WaitAsync(Eventually.DefaultPatience)).Should().BeEmpty();
         var stored = await StoredAsync(provider, tenant, entry);
         stored.Status.Should().Be(ConnectorFoodEntryStatus.Matched);
         stored.MatchedCarbIntakeId.Should().Be(carbIntake);
@@ -91,13 +91,10 @@ public class ConnectorFoodEntryResolutionOrderTests
 
     private static async Task HoldAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid tenant, Guid entry)
     {
+        await connection.PinTenantAsync(tenant, local: true);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            SELECT id FROM connector_food_entries WHERE id = @entry FOR UPDATE;
-            """;
-        command.Parameters.Add(new NpgsqlParameter("tenant", tenant.ToString()));
+        command.CommandText = "SELECT id FROM connector_food_entries WHERE id = @entry FOR UPDATE;";
         command.Parameters.Add(new NpgsqlParameter("entry", entry));
         await command.ExecuteNonQueryAsync();
     }

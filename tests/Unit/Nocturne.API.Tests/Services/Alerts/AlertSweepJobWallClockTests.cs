@@ -881,6 +881,120 @@ public class AlertSweepJobWallClockTests
         fixture.Evaluations.Should().Be(2);
     }
 
+    private const string NightWindow =
+        """{"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}""";
+
+    private const string BackstopRan = "The sweep evaluated every enabled rule";
+
+    [NativeFact]
+    public async Task A_sweep_whose_passes_each_measure_from_the_reading_reports_it_once()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.AutoResolving.Add(new AutoResolveExcursionSnapshot(Guid.NewGuid(), Tenant, fixture.Rules[0]));
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.Evaluations.Should().Be(1, "the wall-clock pass measured from the reading");
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_whose_clock_notice_needs_the_reading_reports_it_once()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.AutoResolving.Add(new AutoResolveExcursionSnapshot(Guid.NewGuid(), Tenant, fixture.Rules[0]));
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(true);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.NeedsReadingReport(It.IsAny<DateTime>()), Times.Once);
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_whose_clock_notice_needs_no_report_leaves_the_report_to_the_pass_that_measures_the_reading()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.AutoResolving.Add(new AutoResolveExcursionSnapshot(Guid.NewGuid(), Tenant, fixture.Rules[0]));
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(false);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_with_no_enabled_rule_and_a_clock_notice_needing_no_report_reports_nothing()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Rules.Clear();
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(false);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_with_no_enabled_rule_reports_the_reading_once_when_the_clock_notice_needs_it()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Rules.Clear();
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(true);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_backstop_sweep_reports_the_reading_once()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow)) { NoEvaluationRecorded = true };
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.AutoResolving.Add(new AutoResolveExcursionSnapshot(Guid.NewGuid(), Tenant, fixture.Rules[0]));
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.Logger.Entries.Should().Contain(e => e.Message.Contains(BackstopRan));
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_backstop_sweep_evaluates_a_wall_clock_rule_once()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow)) { NoEvaluationRecorded = true };
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.Logger.Entries.Should().Contain(e => e.Message.Contains(BackstopRan));
+        fixture.Evaluations.Should().Be(1);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_with_no_backstop_evaluates_a_wall_clock_rule_in_its_wall_clock_pass()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.Logger.Entries.Should().NotContain(e => e.Message.Contains(BackstopRan));
+        fixture.Evaluations.Should().Be(1);
+    }
+
     [NativeFact]
     public async Task Without_a_usable_reading_every_sweep_evaluates()
     {
@@ -938,6 +1052,15 @@ public class AlertSweepJobWallClockTests
 
         public Mock<IClockAnomalyNotice> ClockNotice { get; } = new();
 
+        /// <summary>The excursions the auto-resolve pass reads.</summary>
+        public List<AutoResolveExcursionSnapshot> AutoResolving { get; } = [];
+
+        /// <summary>
+        /// When set, no reading is recorded as evaluated, so the sweep's backstop evaluates the
+        /// newest reading once it is past <see cref="AlertSweepJob.LostEvaluationGrace"/>.
+        /// </summary>
+        public bool NoEvaluationRecorded { get; set; }
+
         /// <summary>The context the last evaluation of <see cref="RuleId"/> read.</summary>
         public SensorContext? LastContext => _engine.LastContext;
 
@@ -970,7 +1093,7 @@ public class AlertSweepJobWallClockTests
             var context = new TenantContext(Tenant, "slug", "Slug", true, IsDemo: false);
             await using var scope = TenantJobScope.Open(_services, context, "write");
             await scope.ServiceProvider.GetRequiredService<ICanonicalAlertEvaluator>()
-                .EvaluateAsync(new MovedFacts(facts.ToHashSet()), CancellationToken.None);
+                .EvaluateAsync(new MovedFacts(facts.ToHashSet()), ct: CancellationToken.None);
         }
 
         /// <summary>A reading as the store returns it: stored at its own time unless a test says otherwise.</summary>
@@ -1010,7 +1133,6 @@ public class AlertSweepJobWallClockTests
                 Name = "Wall clock",
                 ConditionType = conditionType,
                 ConditionParams = conditionParams,
-                HysteresisMinutes = 0,
             };
             var snapshot = new AlertRuleSnapshot(
                 RuleId, Tenant, rule.Name, conditionType, rule.ConditionParams,
@@ -1041,6 +1163,9 @@ public class AlertSweepJobWallClockTests
             repository
                 .Setup(x => x.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new EnabledAlertRules(Rules.ToList(), []));
+            repository
+                .Setup(x => x.GetAutoResolveExcursionsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => AutoResolving.ToList());
             repository
                 .Setup(x => x.EnsureInstanceAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() =>
@@ -1135,11 +1260,20 @@ public class AlertSweepJobWallClockTests
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
             services.AddSingleton<AlertEvaluationWatermark>();
             services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
-            services.AddSingleton(EvaluatedReadings.EveryNewest(canonical.Object, Time));
+            services.AddSingleton<IEvaluatedReadingStore>(
+                new UnlessNoneRecorded(EvaluatedReadings.EveryNewest(canonical.Object, Time), () => NoEvaluationRecorded));
 
             _services = services.BuildServiceProvider();
             _sweep = new AlertSweepJob(Logger);
         }
+    }
+
+    private sealed class UnlessNoneRecorded(IEvaluatedReadingStore inner, Func<bool> none) : IEvaluatedReadingStore
+    {
+        public Task<EvaluatedReading?> GetAsync(CancellationToken ct) =>
+            none() ? Task.FromResult<EvaluatedReading?>(null) : inner.GetAsync(ct);
+
+        public Task RecordAsync(EvaluatedReading reading, CancellationToken ct) => inner.RecordAsync(reading, ct);
     }
 
     /// <summary>Counts full evaluations of <see cref="RuleId"/>.</summary>

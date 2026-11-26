@@ -11,6 +11,7 @@ using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -79,6 +80,7 @@ public class TherapySetupServiceTests : IDisposable
         new TargetRangeScheduleRepository(_factory, _audit, NullLogger<TargetRangeScheduleRepository>.Instance),
         TempBasalTestDeps.NoReresolution(),
         Moq.Mock.Of<ILoopClosedLoopStamper>(),
+        Moq.Mock.Of<IProfileProjectionService>(),
         _audit,
         NullLogger<ProfileDecomposer>.Instance);
 

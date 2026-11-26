@@ -1,4 +1,3 @@
-using System.Globalization;
 using Nocturne.API.Services.Health;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -26,6 +25,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services.Migration;
@@ -36,10 +36,18 @@ namespace Nocturne.API.Services.Migration;
 /// </summary>
 public interface IMigrationJobService
 {
+    /// <param name="request">What to import.</param>
+    /// <param name="tenantContext">The tenant the job imports into.</param>
+    /// <param name="starter">
+    /// Who starts it (<see cref="Extensions.HttpContextExtensions.CredentialMakerAsync"/>), the maker of
+    /// every token it adopts; null when no subject starts it, and the tokens then have no maker.
+    /// </param>
+    /// <param name="ct">Cancels the start.</param>
     /// <exception cref="MigrationAlreadyRunningException">Thrown when the tenant already has a job in flight.</exception>
     Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
+        CredentialMaker? starter,
         CancellationToken ct = default
     );
 
@@ -53,7 +61,23 @@ public interface IMigrationJobService
         TestMigrationConnectionRequest request,
         CancellationToken ct = default
     );
-    PendingMigrationConfig GetPendingConfig();
+    /// <summary>
+    /// The instance's configured migration source, with its URL in its
+    /// <see cref="NightscoutAddress.Shown"/> form, to a caller with
+    /// <paramref name="instanceStanding"/>; no pending source to any other.
+    /// </summary>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    PendingMigrationConfig GetPendingConfig(bool instanceStanding);
+
+    /// <summary>
+    /// The Nightscout URL an API-mode request reads: <paramref name="requested"/>, or the configured
+    /// source's when it is blank and the caller has <paramref name="instanceStanding"/>.
+    /// <see cref="GetPendingConfig"/> gives a form only the shown form of the configured URL, so a
+    /// form that keeps it sends none.
+    /// </summary>
+    /// <param name="requested">The URL the request names.</param>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    string? ResolveNightscoutUrl(string? requested, bool instanceStanding);
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
@@ -138,6 +162,7 @@ public class MigrationJobService : IMigrationJobService
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
+        CredentialMaker? starter,
         CancellationToken ct = default
     )
     {
@@ -153,7 +178,7 @@ public class MigrationJobService : IMigrationJobService
         var tenantId = tenantContext.TenantId;
         var sourceDesc =
             request.Mode == MigrationMode.Api
-                ? request.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null
+                ? request.NightscoutUrl is { } url ? NightscoutAddress.Shown(url) : null
                 : $"MongoDB: {request.MongoDatabaseName}";
 
         var jobInfo = new MigrationJobInfo
@@ -167,6 +192,7 @@ public class MigrationJobService : IMigrationJobService
         var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider, _timeProvider)
         {
             StoredRequest = _secrets.Encrypt(System.Text.Json.JsonSerializer.Serialize(request)),
+            Starter = starter,
         };
 
         // One migration per tenant at a time: two runs over the same target race on their inserts.
@@ -374,7 +400,7 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = true,
-                SiteName = NightscoutAddress.Masked(request.NightscoutUrl),
+                SiteName = NightscoutAddress.Shown(request.NightscoutUrl),
                 AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
@@ -478,31 +504,27 @@ public class MigrationJobService : IMigrationJobService
         };
     }
 
-    public PendingMigrationConfig GetPendingConfig()
-    {
-        var migrationMode = _configuration["MIGRATION_MODE"];
+    /// <inheritdoc />
+    public PendingMigrationConfig GetPendingConfig(bool instanceStanding) =>
+        instanceStanding && ConfiguredMigrationSource.Read(_configuration) is { } source
+            ? new PendingMigrationConfig
+            {
+                HasPendingConfig = true,
+                Mode = source.Mode,
+                NightscoutUrl = source.NightscoutUrl is { } url ? NightscoutAddress.Shown(url) : null,
+                HasApiSecret = source.HasApiSecret,
+                HasMongoConnectionString = source.MongoConnectionString is not null,
+                MongoDatabaseName = source.MongoDatabaseName,
+            }
+            : new PendingMigrationConfig { HasPendingConfig = false };
 
-        if (string.IsNullOrEmpty(migrationMode))
-        {
-            return new PendingMigrationConfig { HasPendingConfig = false };
-        }
-
-        var mode = migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase)
-            ? MigrationMode.MongoDb
-            : MigrationMode.Api;
-
-        return new PendingMigrationConfig
-        {
-            HasPendingConfig = true,
-            Mode = mode,
-            NightscoutUrl = _configuration["MIGRATION_NS_URL"] is { Length: > 0 } url ? NightscoutAddress.Display(url) : null,
-            HasApiSecret = !string.IsNullOrEmpty(_configuration["MIGRATION_NS_API_SECRET"]),
-            HasMongoConnectionString = !string.IsNullOrEmpty(
-                _configuration["MIGRATION_MONGO_CONNECTION_STRING"]
-            ),
-            MongoDatabaseName = _configuration["MIGRATION_MONGO_DATABASE_NAME"],
-        };
-    }
+    /// <inheritdoc />
+    public string? ResolveNightscoutUrl(string? requested, bool instanceStanding) =>
+        string.IsNullOrWhiteSpace(requested)
+        && instanceStanding
+        && ConfiguredMigrationSource.Read(_configuration)?.NightscoutUrl is { } configured
+            ? configured
+            : requested;
 
     public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(
         Guid tenantId,
@@ -549,6 +571,12 @@ internal class MigrationJob
     /// <summary>The request as <see cref="MigrationRunEntity.RequestEncrypted"/> holds it, written when the run record is added.</summary>
     public string? StoredRequest { get; init; }
 
+    /// <summary>
+    /// Who started the job, written to <see cref="MigrationRunEntity.StartedBySubjectId"/> and
+    /// <see cref="MigrationRunEntity.StarterAccessEndsAt"/> when the run record is added.
+    /// </summary>
+    public CredentialMaker? Starter { get; init; }
+
     /// <summary>The <see cref="MigrationRunEntity.Revision"/> this job last wrote, or was resumed at.</summary>
     private int _revision;
 
@@ -582,8 +610,6 @@ internal class MigrationJob
     /// after another on the job's own task, so a plain field suffices.
     /// </summary>
     private DateTime? _newestMigratedData;
-
-    private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
     /// The one shape <see cref="MigrationRunEntity.CollectionOutcomes"/> is written and read in.
@@ -930,7 +956,14 @@ internal class MigrationJob
         var revision = run is null ? _revision : _revision + 1;
         if (run is null)
         {
-            run = new MigrationRunEntity { Id = _id, CreatedAt = _info.CreatedAt, RequestEncrypted = StoredRequest };
+            run = new MigrationRunEntity
+            {
+                Id = _id,
+                CreatedAt = _info.CreatedAt,
+                RequestEncrypted = StoredRequest,
+                StartedBySubjectId = Starter?.SubjectId,
+                StarterAccessEndsAt = Starter?.AccessEndsAt,
+            };
             db.MigrationRuns.Add(run);
         }
 
@@ -1133,7 +1166,7 @@ internal class MigrationJob
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
     /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>, a SHA-256 digest of the
     /// Nightscout base for API mode and of the connection string for MongoDB mode. Only non-usable
-    /// digests and the <see cref="NightscoutAddress.Masked"/> URL are stored, never the API secret,
+    /// digests and the <see cref="NightscoutAddress.Shown"/> URL are stored, never the API secret,
     /// a URL's token or path secret, or the connection string themselves.
     /// </summary>
     private async Task<Guid> UpsertSourceAsync(NocturneDbContext db, CancellationToken ct)
@@ -1156,7 +1189,7 @@ internal class MigrationJob
             TenantId = _tenantId,
             Mode = _request.Mode.ToString(),
             SourceIdentifier = identifier,
-            NightscoutUrl = isApi ? NightscoutAddress.Masked(_request.NightscoutUrl!) : null,
+            NightscoutUrl = isApi ? NightscoutAddress.Shown(_request.NightscoutUrl!) : null,
             NightscoutApiSecretHash = isApi && !string.IsNullOrEmpty(_request.NightscoutApiSecret)
                 ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
                 : null,
@@ -1416,7 +1449,8 @@ internal class MigrationJob
             ("treatments", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_treatmentsCollection, pass, token)),
             ("devicestatus", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_deviceStatusCollection, pass, token)),
             ("profile", false, (client, _, token) => MigrateProfilesViaApiAsync(client, token)),
-            ("food", false, (client, _, token) => MigrateFoodViaApiAsync(client, dbContext, token)),
+            ("food", false, (client, _, token) => MigrateFoodViaApiAsync(
+                client, dbContext, scope.ServiceProvider.GetRequiredService<IFoodService>(), token)),
             ("activity", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_activityCollection, pass, token)),
         };
 
@@ -1665,7 +1699,7 @@ internal class MigrationJob
         ReadBodyFromSourceAsync(httpClient, url, label, NightscoutRead.ImportCollection, async (content, token) =>
         {
             await using var stream = await content.ReadAsStreamAsync(token);
-            return await System.Text.Json.JsonSerializer.DeserializeAsync<T[]>(stream, cancellationToken: token) ?? [];
+            return await System.Text.Json.JsonSerializer.DeserializeAsync<T[]>(stream, JsonDefaults.CaseInsensitive, token) ?? [];
         }, ct);
 
     /// <summary>
@@ -1773,7 +1807,7 @@ internal class MigrationJob
                 httpClient, $"api/v1/count/{collectionName}/where?{filter}", collectionName, budget.Token);
 
             // Nightscout returns [{"_id": null, "count": N}], and [] when nothing matches.
-            var results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(content);
+            var results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(content, JsonDefaults.CaseInsensitive);
             return results is { Length: > 0 } && results[0].TryGetProperty("count", out var count)
                 ? count.GetInt64()
                 : 0;
@@ -2028,7 +2062,7 @@ internal class MigrationJob
         {
             try
             {
-                if (System.Text.Json.JsonSerializer.Deserialize<T>(documents[i]) is { } document)
+                if (ReadDocument<T>(documents[i]) is { } document)
                 {
                     parsed.Add(document);
                     continue;
@@ -2052,6 +2086,15 @@ internal class MigrationJob
 
         return ([.. parsed], newlyFailed);
     }
+
+    /// <summary>
+    /// A document as Nightscout serves it, read as <typeparamref name="T"/>. A number in a string, a
+    /// <c>null</c> number and a boolean in a string are read as the connectors read them
+    /// (<see cref="JsonDefaults.CaseInsensitive"/>): a <c>null</c> number is zero, or absent for a
+    /// nullable one.
+    /// </summary>
+    private static T? ReadDocument<T>(System.Text.Json.JsonElement document) where T : class =>
+        System.Text.Json.JsonSerializer.Deserialize<T>(document, JsonDefaults.CaseInsensitive);
 
     /// <summary>
     /// What a paged collection has done so far, carried from one <see cref="ImportPass"/> to the next
@@ -2258,6 +2301,7 @@ internal class MigrationJob
     private async Task MigrateFoodViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
@@ -2292,35 +2336,13 @@ internal class MigrationJob
 
             var foods = parsed.Where(f => f.Id is not { Length: > 0 } id || servedIds.Add(id)).ToArray();
 
+            List<Food> importing = [];
             foreach (var food in foods)
             {
                 try
                 {
-                    if (!await FoodImportBlockedAsync(dbContext, food.Id, food.Name ?? "", food.Type ?? "food", ct))
-                    {
-                        dbContext.Foods.Add(
-                            new Infrastructure.Data.Entities.FoodEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                OriginalId = food.Id,
-                                Type = food.Type ?? "food",
-                                Category = food.Category ?? "",
-                                Subcategory = food.Subcategory ?? "",
-                                Name = food.Name ?? "",
-                                Portion = food.Portion,
-                                Carbs = food.Carbs,
-                                Fat = food.Fat,
-                                Protein = food.Protein,
-                                Energy = food.Energy,
-                                Gi = (Infrastructure.Data.Entities.GlycemicIndex)(food.Gi > 0 ? food.Gi : 2),
-                                Unit = food.Unit ?? "g",
-                                Foods = food.Foods != null ? System.Text.Json.JsonSerializer.Serialize(food.Foods) : null,
-                                HideAfterUse = food.HideAfterUse,
-                                Hidden = food.Hidden,
-                                Position = food.Position,
-                            }
-                        );
-                    }
+                    if (await ImportableAsync(dbContext, food, ct))
+                        importing.Add(food);
                     totalMigrated++;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -2329,7 +2351,7 @@ internal class MigrationJob
                 }
             }
 
-            await dbContext.SaveChangesAsync(ct);
+            await foodService.ImportFoodAsync(importing, ct);
             totalSkipped += documents.Length;
 
             UpdateCollectionProgress(collectionName, 0, totalMigrated, totalFailed, false);
@@ -2417,7 +2439,8 @@ internal class MigrationJob
                     await MigrateMongoDecomposedCollectionAsync(database, s_activityCollection, ct);
                     break;
                 case "devicestatus" or "profile" or "food":
-                    await MigrateMongoCollectionAsync(database, collectionName, dbContext, ct);
+                    await MigrateMongoCollectionAsync(
+                        database, collectionName, dbContext, scope.ServiceProvider.GetRequiredService<IFoodService>(), ct);
                     break;
                 default:
                     _logger.LogWarning("MongoDB migration cannot import the {Collection} collection; skipping it", collectionName);
@@ -2568,6 +2591,7 @@ internal class MigrationJob
         IMongoDatabase database,
         string collectionName,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
@@ -2599,7 +2623,7 @@ internal class MigrationJob
 
                 try
                 {
-                    await TransformAndSaveDocumentAsync(collectionName, doc, dbContext, ct);
+                    await TransformAndSaveDocumentAsync(collectionName, doc, dbContext, foodService, ct);
                     totalMigrated++;
                 }
                 catch (Exception ex)
@@ -2646,6 +2670,7 @@ internal class MigrationJob
         string collectionName,
         BsonDocument doc,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
@@ -2658,7 +2683,7 @@ internal class MigrationJob
                 await TransformProfileAsync(doc, dbContext, ct);
                 break;
             case "food":
-                await TransformFoodAsync(doc, dbContext, ct);
+                await TransformFoodAsync(doc, dbContext, foodService, ct);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(collectionName), collectionName, null);
@@ -2671,20 +2696,9 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        // Convert BSON to JSON, then deserialize to DeviceStatus domain model and decompose
-        var jsonWriterSettings = new MongoDB.Bson.IO.JsonWriterSettings
-        {
-            OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson
-        };
-        var json = doc.ToJson(jsonWriterSettings);
-        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, JsonDefaults.CaseInsensitive);
-
+        var status = ReadDocument<DeviceStatus>(ToNightscoutJson(doc));
         if (status == null)
             return;
-
-        // Set the original ID from MongoDB _id
-        if (doc.Contains("_id"))
-            status.Id = doc["_id"].AsObjectId.ToString();
 
         using var scope = CreateTenantScope();
         await scope.ServiceProvider.GetRequiredService<IDeviceStatusService>()
@@ -2697,47 +2711,17 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("created_at")
-              && UploaderTimestamp.TryParse(doc["created_at"].AsString, out var createdAt)
+        var profile = ReadDocument<Profile>(ToNightscoutJson(doc))!;
+        if (string.IsNullOrEmpty(profile.Id))
+            profile.Id = Guid.CreateVersion7().ToString();
+        profile.DefaultProfile ??= "Default";
+        profile.Store ??= [];
+        if (profile.Mills == 0)
+        {
+            profile.Mills = UploaderTimestamp.TryParse(profile.CreatedAt, out var createdAt)
                 ? createdAt.ToUnixTimeMilliseconds()
-            : _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-
-        var defaultProfile = doc.Contains("defaultProfile") ? doc["defaultProfile"].AsString : "Default";
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-
-        // Build a domain Profile and decompose into V4 records
-        var storeJson = doc.Contains("store") ? doc["store"].ToJson() : "{}";
-        var store = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, ProfileData>>(storeJson)
-            ?? new Dictionary<string, ProfileData>();
-
-        LoopProfileSettings? loopSettings = null;
-        if (doc.Contains("loopSettings"))
-        {
-            loopSettings = System.Text.Json.JsonSerializer.Deserialize<LoopProfileSettings>(doc["loopSettings"].ToJson());
+                : _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         }
-
-        var profile = new Profile
-        {
-            Id = originalId ?? Guid.CreateVersion7().ToString(),
-            DefaultProfile = defaultProfile,
-            StartDate = doc.GetValue("startDate", BsonNull.Value) switch
-            {
-                { IsString: true } value => value.AsString,
-                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
-                _ => null,
-            },
-            Mills = mills,
-            CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
-            Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",
-            Store = store,
-            EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
-            LoopSettings = loopSettings,
-            IsAPNSProduction = doc.Contains("isAPNSProduction") && doc["isAPNSProduction"].IsBoolean
-                ? doc["isAPNSProduction"].AsBoolean
-                : null,
-        };
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
@@ -2747,50 +2731,44 @@ internal class MigrationJob
     private async Task TransformFoodAsync(
         BsonDocument doc,
         NocturneDbContext dbContext,
+        IFoodService foodService,
         CancellationToken ct
     )
     {
-        var name = doc.Contains("name") ? doc["name"].AsString : "";
-        var type = doc.Contains("type") ? doc["type"].AsString : "food";
-
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        if (await FoodImportBlockedAsync(dbContext, originalId, name, type, ct))
+        var food = ReadDocument<Food>(ToNightscoutJson(doc))!;
+        if (!await ImportableAsync(dbContext, food, ct))
             return;
 
-        var entity = new Infrastructure.Data.Entities.FoodEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Type = type,
-            Category = doc.Contains("category") ? doc["category"].AsString : "",
-            Subcategory = doc.Contains("subcategory") ? doc["subcategory"].AsString : "",
-            Name = name,
-            Portion = doc.Contains("portion") ? doc["portion"].ToDouble() : 0,
-            Carbs = doc.Contains("carbs") ? doc["carbs"].ToDouble() : 0,
-            Fat = doc.Contains("fat") ? doc["fat"].ToDouble() : 0,
-            Protein = doc.Contains("protein") ? doc["protein"].ToDouble() : 0,
-            Energy = doc.Contains("energy") ? doc["energy"].ToDouble() : 0,
-            Gi = doc.Contains("gi") ? (Infrastructure.Data.Entities.GlycemicIndex)doc["gi"].ToInt32() : Infrastructure.Data.Entities.GlycemicIndex.Medium,
-            Unit = doc.Contains("unit") ? doc["unit"].AsString : "g",
-            Foods = doc.Contains("foods") ? doc["foods"].ToJson() : null,
-            HideAfterUse = doc.Contains("hideAfterUse") && doc["hideAfterUse"].AsBoolean,
-            Hidden = doc.Contains("hidden") && doc["hidden"].AsBoolean,
-            Position = doc.Contains("position") ? doc["position"].ToInt32() : 99999,
-        };
+        await foodService.ImportFoodAsync([food], ct);
+    }
 
-        dbContext.Foods.Add(entity);
+    /// <summary>
+    /// Gives <paramref name="food"/> the defaults a v1 upload gets for the fields it leaves out, and
+    /// answers whether the migration writes it: not when <see cref="FoodImportBlockedAsync"/> finds it held.
+    /// </summary>
+    private static async Task<bool> ImportableAsync(NocturneDbContext dbContext, Food food, CancellationToken ct)
+    {
+        food.Type ??= "food";
+        food.Category ??= "";
+        food.Subcategory ??= "";
+        food.Name ??= "";
+        food.ApplyUnitAndGiDefaults();
+        return !await FoodImportBlockedAsync(dbContext, food.Id, food.Name, food.Type, ct);
     }
 
     /// <summary>
     /// Whether a migrated food is already held: live, or deleted by the user, whose delete a
     /// re-import must not undo (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
+    /// A food is held under its id as the food write path stores it (<see cref="RecordIdKey.Matching{T}"/>),
+    /// or under its name and type.
     /// </summary>
-    internal static Task<bool> FoodImportBlockedAsync(
-        NocturneDbContext dbContext, string? originalId, string name, string type, CancellationToken ct) =>
-        dbContext.Foods.IncludingDeleted()
-            .Where(f => (originalId != null && f.OriginalId == originalId) || (f.Name == name && f.Type == type))
-            .WhereBlocksRecreation()
-            .AnyAsync(ct);
+    internal static async Task<bool> FoodImportBlockedAsync(
+        NocturneDbContext dbContext, string? originalId, string name, string type, CancellationToken ct)
+    {
+        var held = dbContext.Foods.IncludingDeleted().WhereBlocksRecreation();
+        return (originalId is not null && await held.AnyAsync(RecordIdKey.Matching<FoodEntity>(originalId), ct))
+            || await held.AnyAsync(f => f.Name == name && f.Type == type, ct);
+    }
 
     /// <summary>
     /// Nightscout expects the api-secret header to be the SHA1 hash of the
@@ -2804,6 +2782,20 @@ internal class MigrationJob
 
         var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(apiSecret));
         return Convert.ToHexStringLower(bytes);
+    }
+
+    /// <summary>
+    /// The maker the run record holds for the tokens it adopts. It is read from the record, not from
+    /// <see cref="Starter"/>, so a resumed run stamps the end captured at start, lowered by any cap
+    /// since (<see cref="MemberCreations.CapAsync"/>); null for a run that recorded no starter.
+    /// </summary>
+    private async Task<CredentialMaker?> ReadStarterAsync(NocturneDbContext dbContext, CancellationToken ct)
+    {
+        var run = await dbContext.MigrationRuns.AsNoTracking()
+            .Where(r => r.Id == _id && r.TenantId == _tenantId)
+            .Select(r => new { r.StartedBySubjectId, r.StarterAccessEndsAt })
+            .FirstOrDefaultAsync(ct);
+        return run?.StartedBySubjectId is { } subjectId ? new CredentialMaker(subjectId, run.StarterAccessEndsAt) : null;
     }
 
     private async Task MigrateSubjectsViaApiAsync(
@@ -2850,7 +2842,7 @@ internal class MigrationJob
 
         var subjects = System.Text.Json.JsonSerializer.Deserialize<NightscoutSubject[]>(
             content,
-            s_caseInsensitiveJson) ?? [];
+            JsonDefaults.CaseInsensitive) ?? [];
 
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
@@ -2868,6 +2860,7 @@ internal class MigrationJob
             : HashApiSecret(_request.NightscoutApiSecret);
 
         Guid? deviceSubjectId = null;
+        var starter = await ReadStarterAsync(dbContext, ct);
 
         foreach (var subject in subjects)
         {
@@ -2928,7 +2921,9 @@ internal class MigrationJob
                         subject.Name ?? "Unnamed",
                         [.. scopes],
                         TokenHash: tokenHash,
-                        LegacyTokenDigest: legacyDigest),
+                        LegacyTokenDigest: legacyDigest,
+                        CreatedBySubjectId: starter?.SubjectId,
+                        ExpiresAt: starter?.AccessEndsAt),
                     ct);
 
                 existingHashes.Add(tokenHash);
@@ -3012,7 +3007,7 @@ internal class MigrationJob
                 httpClient, "api/v2/authorization/roles", "roles", ct);
             var roles = System.Text.Json.JsonSerializer.Deserialize<NightscoutRole[]>(
                 content,
-                s_caseInsensitiveJson) ?? [];
+                JsonDefaults.CaseInsensitive) ?? [];
 
             foreach (var role in roles)
             {

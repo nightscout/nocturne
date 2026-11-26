@@ -9,8 +9,10 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Compatibility;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Xunit;
 
@@ -80,6 +82,7 @@ public class CompatibilityManualTestTests
             Mock.Of<IDiscrepancyPersistenceService>(),
             Mock.Of<IDiscrepancyAnalysisRepository>(),
             factory.Object,
+            CredentialRouteRedactor.Create(),
             Options.Create(new CompatibilityProxyConfiguration()),
             logger,
             nightscoutConfig)
@@ -106,6 +109,40 @@ public class CompatibilityManualTestTests
 
         response.Result.Should().BeOfType<OkObjectResult>();
         nightscout.Requests.Should().ContainSingle().Which.RequestUri!.AbsoluteUri.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task The_span_url_of_the_nightscout_side_shows_a_credential_route_by_its_parameter_name()
+    {
+        var nightscout = new RecordingHandler();
+
+        await Controller(new RecordingLogger(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
+        {
+            NightscoutUrl = $"http://{Unanswered}/s3cr3t?token=synthetic-token",
+            QueryPath = "/api/v2/authorization/request/readable-1a2b3c4d5e6f7a8b",
+        });
+
+        var displayed = nightscout.Requests.Should().ContainSingle().Subject.Options
+            .TryGetValue(OutboundTelemetry.DisplayUrl, out var url) ? url : null;
+        displayed.Should().Be($"http://{Unanswered}/…/api/v2/authorization/request/%7BaccessToken%7D");
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/?count=1")]
+    public async Task The_span_url_of_a_request_to_the_base_itself_shows_the_base_marked(string queryPath)
+    {
+        var nightscout = new RecordingHandler();
+
+        await Controller(new RecordingLogger(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
+        {
+            NightscoutUrl = $"http://{Unanswered}/api/v2/s3cr3t?token=synthetic-token",
+            QueryPath = queryPath,
+        });
+
+        nightscout.Requests.Should().ContainSingle().Subject.Options
+            .TryGetValue(OutboundTelemetry.DisplayUrl, out var url).Should().BeTrue();
+        url.Should().Be($"http://{Unanswered}/…");
     }
 
     [Theory]
@@ -142,10 +179,11 @@ public class CompatibilityManualTestTests
     }
 
     [Theory]
-    [InlineData("https://user:pass@ns.example/nightscout/?token=synthetic-token", "ns.example/nightscout")]
-    [InlineData("https://ns.example/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/", "ns.example/AGYL…")]
+    [InlineData("https://user:pass@ns.example/nightscout/?token=synthetic-token", "ns.example/…")]
+    [InlineData("https://ns.example/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/", "ns.example/…")]
+    [InlineData("https://ns.example:8443/?token=synthetic-token", "ns.example:8443")]
     [InlineData("", "")]
-    public void The_configuration_shows_the_nightscout_url_masked(string configured, string expected)
+    public void The_configuration_shows_the_nightscout_url_as_its_host_with_no_path(string configured, string expected)
     {
         var response = Controller(new RecordingLogger(), new NightscoutConnectorConfiguration { Url = configured })
             .GetConfiguration();

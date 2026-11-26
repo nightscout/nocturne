@@ -42,18 +42,6 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     private readonly ConcurrentDictionary<Guid, Pass> _lastPass = new();
 
     /// <summary>
-    /// True when a pass inside the last <see cref="MaxSkipWindow"/> already evaluated exactly this
-    /// reading (<see cref="EvaluatedReading"/>). A <see cref="ReadingTrend"/> derived from an
-    /// earlier reading is not in the key: deriving it costs the read a skipped repeat exists to save,
-    /// and an earlier reading that lands late is judged once <see cref="MaxSkipWindow"/> lapses or
-    /// the next reading arrives.
-    /// </summary>
-    public bool AlreadyEvaluated(Guid tenantId, SensorGlucose reading) =>
-        _lastPass.TryGetValue(tenantId, out var previous)
-        && previous.Reading == EvaluatedReading.Of(reading)
-        && _timeProvider.GetElapsedTime(previous.At) < MaxSkipWindow;
-
-    /// <summary>
     /// Claims the pass over <paramref name="reading"/> for the tenant, unless one inside the last
     /// <see cref="MaxSkipWindow"/> already claimed it. Claimed before the pass dispatches, so a pass
     /// that overlaps it on the same reading stops after its canonical read rather than waiting on, or
@@ -61,8 +49,14 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     /// </summary>
     /// <returns>Whether the caller should evaluate the reading.</returns>
     /// <remarks>
+    /// A claim is keyed by exactly the reading (<see cref="EvaluatedReading"/>). A
+    /// <see cref="ReadingTrend"/> derived from an earlier reading is not in the key: deriving it costs
+    /// the read a skipped repeat exists to save, and an earlier reading that lands late is judged once
+    /// <see cref="MaxSkipWindow"/> lapses or the next reading arrives.
+    /// <para>
     /// <see cref="Guid.Empty"/> means no tenant was in scope; nothing is remembered under it, so
-    /// <see cref="AlreadyEvaluated"/> never matches on that key.
+    /// every claim on it is granted.
+    /// </para>
     /// </remarks>
     public bool TryClaim(Guid tenantId, SensorGlucose reading)
     {

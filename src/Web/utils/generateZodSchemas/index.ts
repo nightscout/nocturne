@@ -329,7 +329,7 @@ function generateZodSchemas(): void {
   for (const input of [OPENAPI_PATH, CLIENT_PATH]) {
     if (!fs.existsSync(input)) {
       console.error(`Not found: ${input}`);
-      console.error("Run 'pnpm run generate-api-client' first to generate the OpenAPI spec and client.");
+      console.error("Run 'pnpm run generate-api' first to generate the OpenAPI spec and client.");
       process.exit(1);
     }
   }

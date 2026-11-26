@@ -716,8 +716,9 @@ public class SubjectRepositoryTests : IDisposable
             db.SaveChanges();
         }
 
-        (await Subjects().DeleteAsync(deleted, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
-        (await Subjects().DeleteAsync(deleted, CancellationToken.None)).Should().BeOfType<SubjectChange.NotFound>();
+        var contexts = new TestNocturneDbContextFactory(_db.CreateContext(_tenant));
+        (await SubjectDeletions.DeleteAsync(contexts, AccountLinkRoutes.Off, deleted, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await SubjectDeletions.DeleteAsync(contexts, AccountLinkRoutes.Off, deleted, CancellationToken.None)).Should().BeOfType<SubjectChange.NotFound>();
 
         await using var check = _db.CreateContext();
         var rows = await check.AuthAuditLog.ToDictionaryAsync(a => a.Id);
@@ -862,9 +863,9 @@ public class SubjectRepositoryTests : IDisposable
         await using var pinned = DbUnitOfWork.Own(_db.CreateContext());
         var cannotPin = () => new SubjectRepository(pinned, AccountLinkRoutes.Off).IsDemoSubjectAsync(created, CancellationToken.None);
         await cannotPin.Should().ThrowAsync<InvalidOperationException>("a unit runs on its own context and pins no other");
-        var cannotDelete = () => new SubjectRepository(pinned, AccountLinkRoutes.Off).DeleteAsync(created, CancellationToken.None);
-        await cannotDelete.Should().ThrowAsync<InvalidOperationException>("a unit's owner commits; the delete's transaction is its own");
         var cannotRemove = () => new SubjectRepository(pinned, AccountLinkRoutes.Off).TryRemoveFactorAsync(created, new SignInFactor.Passkey(Guid.NewGuid()), CancellationToken.None);
         await cannotRemove.Should().ThrowAsync<InvalidOperationException>();
+        var cannotDelete = () => Subjects().DeleteAsync(created, evenLastOwner: false, (_, _) => Task.CompletedTask, CancellationToken.None);
+        await cannotDelete.Should().ThrowAsync<InvalidOperationException>("the delete runs inside the commit of the unit that stages the stop");
     }
 }

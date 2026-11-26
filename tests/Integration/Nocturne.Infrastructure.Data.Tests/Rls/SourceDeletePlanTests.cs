@@ -45,7 +45,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
 
         deleted.Should().Be(Groups);
         recorder.Stamps.Should().HaveCount(2, "one update per chunk of ids");
-        var plan = await PlanTestSupport.ExplainAsync(conn, recorder.Stamps[0]);
+        var plan = await QueryPlans.ExplainAsync(conn, recorder.Stamps[0]);
         plan.Descendants("Relation Name").Should().Equal(
             ["sensor_glucose", "sensor_glucose"], "the update reads its table once: " + plan);
         plan.Descendants("Node Type").Should().NotContain(
@@ -82,14 +82,12 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
     /// A database of its own whose glucose and link tables are never analysed: autovacuum is off on
     /// them, and nothing else in the run writes to it.
     /// </summary>
-    public sealed class NeverAnalysedDatabase : IAsyncLifetime
+    public sealed class NeverAnalysedDatabase() : MigratedDatabase("source_delete_plan")
     {
-        private TestDatabase _database = null!;
-
-        public async Task InitializeAsync()
+        public override async Task InitializeAsync()
         {
-            _database = await SharedPostgres.CreateMigratedDatabaseAsync("source_delete_plan");
-            await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+            await base.InitializeAsync();
+            await using var conn = new NpgsqlConnection(MigratorConnectionString);
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
@@ -99,33 +97,28 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public Task DisposeAsync() => Task.CompletedTask;
-
         /// <summary>
         /// Sends the runtime role's connections to this database, from the next one opened, the plan
         /// of every statement they run as a notice, prepared statements' generic plans included.
         /// </summary>
         public async Task SendPlansAsNoticesAsync()
         {
-            await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
+            await using var conn = new NpgsqlConnection(SuperuserConnectionString);
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                ALTER ROLE nocturne_app IN DATABASE "{_database.Name}" SET session_preload_libraries = 'auto_explain';
-                ALTER ROLE nocturne_app IN DATABASE "{_database.Name}" SET auto_explain.log_min_duration = 0;
-                ALTER ROLE nocturne_app IN DATABASE "{_database.Name}" SET auto_explain.log_level = 'notice';
+                ALTER ROLE nocturne_app IN DATABASE "{Name}" SET session_preload_libraries = 'auto_explain';
+                ALTER ROLE nocturne_app IN DATABASE "{Name}" SET auto_explain.log_min_duration = 0;
+                ALTER ROLE nocturne_app IN DATABASE "{Name}" SET auto_explain.log_level = 'notice';
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
 
-        /// <summary>The runtime role's connection string, for a pool built as the API builds its own.</summary>
-        public string AppConnectionString => _database.AppConnectionString;
-
         public async Task<NpgsqlConnection> OpenAppConnectionAsync(Guid tenant)
         {
-            var conn = new NpgsqlConnection(_database.AppConnectionString);
+            var conn = new NpgsqlConnection(AppConnectionString);
             await conn.OpenAsync();
-            await PlanTestSupport.SetTenantAsync(conn, tenant);
+            await conn.PinTenantAsync(tenant);
             return conn;
         }
 
@@ -133,15 +126,14 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         /// <paramref name="groups"/> duplicate groups for <paramref name="tenant"/>, each a reading from
         /// <c>source-a</c>, its group's primary, and one from <c>source-b</c>.
         /// </summary>
-        public async Task SeedAsync(Guid tenant, int groups)
+        public async Task SeedAsync(Guid tenant, int groups, RecordType linkedType = RecordType.SensorGlucose)
         {
-            await using var conn = new NpgsqlConnection(_database.MigratorConnectionString);
+            await using var conn = new NpgsqlConnection(MigratorConnectionString);
             await conn.OpenAsync();
+            await conn.SeedTenantAsync(tenant, $"srcplan-{tenant:N}", "source-delete-plan-test");
+            await conn.PinTenantAsync(tenant);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@tid, @slug, 'source-delete-plan-test', true, now(), now());
-                SELECT set_config('app.current_tenant_id', @tid::text, false);
                 WITH g AS MATERIALIZED (
                     SELECT gen_random_uuid() AS canonical, gen_random_uuid() AS a, gen_random_uuid() AS b,
                            date_trunc('minute', now()) - make_interval(mins => i) AS ts
@@ -158,9 +150,8 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
                 SELECT gen_random_uuid(), @tid, canonical, @type, b, 'source-b', false, (extract(epoch FROM ts) * 1000)::bigint, now() FROM g;
                 """;
             cmd.Parameters.AddWithValue("tid", tenant);
-            cmd.Parameters.AddWithValue("slug", $"srcplan-{tenant:N}");
             cmd.Parameters.AddWithValue("groups", groups);
-            cmd.Parameters.AddWithValue("type", RecordTypeKeys.Key(RecordType.SensorGlucose));
+            cmd.Parameters.AddWithValue("type", RecordTypeKeys.Key(linkedType));
             await cmd.ExecuteNonQueryAsync();
         }
     }

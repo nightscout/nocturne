@@ -77,7 +77,8 @@ internal class EntryReadService : IEntryStore
         var descending = !query.ReverseResults;
         var sort = query.SortField;
         var (source, excludeDemo) = ResolveDemoFilter();
-        var find = FindQuery.Parse(query.Find);
+        var parsed = FindQuery.Parse(query.Find);
+        var find = query.IncludesDeletedWhenNamed ? parsed : parsed.OnlyValid();
 
         if (ModifiedSearch.CursorFor(find, sort, descending) is { } after)
             return await QueryModifiedAfterAsync(query, after, descending, ct);
@@ -90,7 +91,7 @@ internal class EntryReadService : IEntryStore
         if (find.HasFieldFiltersExcept("type"))
             return await QueryFilteredAsync(find, type, from, to, source, excludeDemo, query.Count, query.Skip, descending, sort, ct);
 
-        return await QueryByTypeAsync(type, from, to, source, excludeDemo, query.Count, query.Skip, descending, sort, ct);
+        return await QueryByTypeAsync(type, from, to, source, excludeDemo, query.Count, query.Skip, descending, sort, includeDeleted: false, ct);
     }
 
     /// <summary>
@@ -107,7 +108,7 @@ internal class EntryReadService : IEntryStore
                 return new ModifiedSearch.Page<Entry>(page.Records, page.CursorMills, page.CursorMills is null);
             },
             entry => entry.IsValid == false,
-            entry => entry.Id,
+            entry => entry.Id is { } id ? $"{entry.Type}:{id}" : null,
             after,
             ModifiedSearch.ArrivesInOrder(query.SortField, descending) ? (long)query.Count + query.Skip : null,
             ModifiedSearch.MaxRead,
@@ -125,16 +126,21 @@ internal class EntryReadService : IEntryStore
             .ToList();
     }
 
+    /// <summary>
+    /// The entries of one window, of <paramref name="type"/> or of every type. With
+    /// <paramref name="includeDeleted"/> it reads the rows stored deleted as well, each served with
+    /// <c>isValid: false</c> (<see cref="FindQuery.ReadsDeleted"/>).
+    /// </summary>
     private async Task<IReadOnlyList<Entry>> QueryByTypeAsync(
         string? type, DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        int count, int skip, bool descending, ReadSortField sort, CancellationToken ct)
+        int count, int skip, bool descending, ReadSortField sort, bool includeDeleted, CancellationToken ct)
     {
         return type switch
         {
-            "sgv" => await QuerySgvAsync(from, to, source, excludeDemo, count, skip, descending, sort, ct),
-            "mbg" => await QueryMbgAsync(from, to, source, excludeDemo, count, skip, descending, ct),
-            "cal" => await QueryCalAsync(from, to, source, excludeDemo, count, skip, descending, ct),
-            null or "" => await QueryAllTypesAsync(from, to, source, excludeDemo, count, skip, descending, sort, ct),
+            "sgv" => await QuerySgvAsync(from, to, source, excludeDemo, count, skip, descending, sort, includeDeleted, ct),
+            "mbg" => await QueryMbgAsync(from, to, source, excludeDemo, count, skip, descending, includeDeleted, ct),
+            "cal" => await QueryCalAsync(from, to, source, excludeDemo, count, skip, descending, includeDeleted, ct),
+            null or "" => await QueryAllTypesAsync(from, to, source, excludeDemo, count, skip, descending, sort, includeDeleted, ct),
             _ => [],
         };
     }
@@ -149,7 +155,7 @@ internal class EntryReadService : IEntryStore
         int count, int skip, bool descending, ReadSortField sort, CancellationToken ct)
     {
         var (matching, truncated) = await FindFilteredFetch.MatchWindowAsync(
-            limit => QueryByTypeAsync(type, from, to, source, excludeDemo, limit, 0, descending, sort, ct),
+            limit => QueryByTypeAsync(type, from, to, source, excludeDemo, limit, 0, descending, sort, find.ReadsDeleted, ct),
             find.Matches, (long)count + skip, MaxFilterFetch);
 
         if (truncated)
@@ -319,7 +325,8 @@ internal class EntryReadService : IEntryStore
             // (bounded) window instead of delegating to per-repo counts.
             var (source, excludeDemo) = ResolveDemoFilter();
             var page = await QueryByTypeAsync(
-                effectiveType, from, to, source, excludeDemo, MaxFilterFetch, 0, descending: true, ReadSortField.Time, ct);
+                effectiveType, from, to, source, excludeDemo, MaxFilterFetch, 0, descending: true, ReadSortField.Time,
+                findQuery.ReadsDeleted, ct);
             return page.Count(findQuery.Matches);
         }
 
@@ -437,20 +444,7 @@ internal class EntryReadService : IEntryStore
                 : !excludeDemo || !DataSources.IsEphemeral(r.Record.DataSource))
             .ToList();
 
-        var entries = visible
-            .Select(r =>
-            {
-                var entry = r.Record switch
-                {
-                    SensorGlucose sg => EntryProjection.FromSensorGlucose(sg),
-                    MeterGlucose mg => EntryProjection.FromMeterGlucose(mg),
-                    _ => EntryProjection.FromCalibration((Calibration)r.Record),
-                };
-                if (r.Deleted)
-                    entry.IsValid = false;
-                return entry;
-            })
-            .ToList();
+        var entries = visible.Select(ToEntry).ToList();
 
         var inPage = page.Select(r => r.Record.Id).ToHashSet();
         var deleted = visible.Where(r => r.Deleted).Select(r => r.Record).OfType<SensorGlucose>().ToList();
@@ -530,53 +524,90 @@ internal class EntryReadService : IEntryStore
 
     private async Task<IReadOnlyList<Entry>> QuerySgvAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        int count, int skip, bool descending, ReadSortField sort, CancellationToken ct)
+        int count, int skip, bool descending, ReadSortField sort, bool includeDeleted, CancellationToken ct)
     {
-        var readings = await ReadCanonicalSgvAsync(from, to, source, excludeDemo, count, skip, descending, sort, ct);
-        return readings.Select(EntryProjection.FromSensorGlucose).ToList();
+        var readings = await ReadCanonicalSgvAsync(from, to, source, excludeDemo, count, skip, descending, sort, includeDeleted, ct);
+        return readings.Select(ToEntry).ToList();
     }
 
-    private async Task<IEnumerable<SensorGlucose>> ReadCanonicalSgvAsync(
+    private async Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> ReadCanonicalSgvAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        int count, int skip, bool descending, ReadSortField sort, CancellationToken ct) =>
-        sort == ReadSortField.Sgv
+        int count, int skip, bool descending, ReadSortField sort, bool includeDeleted, CancellationToken ct)
+    {
+        if (includeDeleted)
+            return await _sgRepo.GetForEntriesIncludingDeletedAsync(
+                from, to, source, count, skip, descending, orderByValue: sort == ReadSortField.Sgv, Canonical(excludeDemo), ct);
+
+        return Live(sort == ReadSortField.Sgv
             ? await _sgRepo.GetForEntriesByValueAsync(from, to, source, count, skip, descending, ct, Canonical(excludeDemo))
             : await _sgRepo.GetForEntriesAsync(
-                from, to, device: null, source, count, skip, descending, null, null, ct, streams: Canonical(excludeDemo));
+                from, to, device: null, source, count, skip, descending, null, null, ct, streams: Canonical(excludeDemo)));
+    }
 
     private async Task<IReadOnlyList<Entry>> QueryMbgAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        int count, int skip, bool descending, CancellationToken ct)
+        int count, int skip, bool descending, bool includeDeleted, CancellationToken ct)
     {
-        // Single-type query: push limit/offset directly to the database
-        var results = await _mgRepo.GetAsync(from, to, device: null, source, count, skip, descending, ct);
-        return ExcludeDemoIfNeeded(results, excludeDemo).Select(EntryProjection.FromMeterGlucose).ToList();
+        var results = await ReadMbgAsync(from, to, source, count, skip, descending, includeDeleted, ct);
+        return ExcludeDemoIfNeeded(results, excludeDemo).Select(ToEntry).ToList();
     }
 
     private async Task<IReadOnlyList<Entry>> QueryCalAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        int count, int skip, bool descending, CancellationToken ct)
+        int count, int skip, bool descending, bool includeDeleted, CancellationToken ct)
     {
-        // Single-type query: push limit/offset directly to the database
-        var results = await _calRepo.GetAsync(from, to, device: null, source, count, skip, descending, ct);
-        return ExcludeDemoIfNeeded(results, excludeDemo).Select(EntryProjection.FromCalibration).ToList();
+        var results = await ReadCalAsync(from, to, source, count, skip, descending, includeDeleted, ct);
+        return ExcludeDemoIfNeeded(results, excludeDemo).Select(ToEntry).ToList();
+    }
+
+    private async Task<IReadOnlyList<HistoryRecord<MeterGlucose>>> ReadMbgAsync(
+        DateTime? from, DateTime? to, string? source, int count, int skip, bool descending, bool includeDeleted,
+        CancellationToken ct) =>
+        includeDeleted
+            ? [.. (await _mgRepo.GetIncludingDeletedAsync(from, to, source, PageEnd(count, skip), descending, ct)).Skip(skip)]
+            : Live(await _mgRepo.GetAsync(from, to, device: null, source, count, skip, descending, ct));
+
+    private async Task<IReadOnlyList<HistoryRecord<Calibration>>> ReadCalAsync(
+        DateTime? from, DateTime? to, string? source, int count, int skip, bool descending, bool includeDeleted,
+        CancellationToken ct) =>
+        includeDeleted
+            ? [.. (await _calRepo.GetIncludingDeletedAsync(from, to, source, PageEnd(count, skip), descending, ct)).Skip(skip)]
+            : Live(await _calRepo.GetAsync(from, to, device: null, source, count, skip, descending, ct));
+
+    private static int PageEnd(int count, int skip) => (int)Math.Min((long)count + skip, int.MaxValue);
+
+    private static List<HistoryRecord<T>> Live<T>(IEnumerable<T> records) =>
+        [.. records.Select(record => new HistoryRecord<T>(record, Deleted: false))];
+
+    private static Entry ToEntry<T>(HistoryRecord<T> row)
+        where T : IV4Record
+    {
+        var entry = row.Record switch
+        {
+            SensorGlucose sg => EntryProjection.FromSensorGlucose(sg),
+            MeterGlucose mg => EntryProjection.FromMeterGlucose(mg),
+            _ => EntryProjection.FromCalibration((Calibration)(object)row.Record),
+        };
+        if (row.Deleted)
+            entry.IsValid = false;
+        return entry;
     }
 
     private async Task<IReadOnlyList<Entry>> QueryAllTypesAsync(
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
-        int count, int skip, bool descending, ReadSortField sort, CancellationToken ct)
+        int count, int skip, bool descending, ReadSortField sort, bool includeDeleted, CancellationToken ct)
     {
         // Multi-type merge requires over-fetching because we interleave across repos before paginating
         var fetchCount = (int)Math.Min((long)count + skip, 100_000);
 
         // Sequential to avoid DbContext thread-safety issues with scoped lifetime
-        var sgResults = await ReadCanonicalSgvAsync(from, to, source, excludeDemo, fetchCount, 0, descending, sort, ct);
-        var mgResults = await _mgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
-        var calResults = await _calRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
+        var sgResults = await ReadCanonicalSgvAsync(from, to, source, excludeDemo, fetchCount, 0, descending, sort, includeDeleted, ct);
+        var mgResults = await ReadMbgAsync(from, to, source, fetchCount, 0, descending, includeDeleted, ct);
+        var calResults = await ReadCalAsync(from, to, source, fetchCount, 0, descending, includeDeleted, ct);
 
-        var entries = sgResults.Select(EntryProjection.FromSensorGlucose)
-            .Concat(ExcludeDemoIfNeeded(mgResults, excludeDemo).Select(EntryProjection.FromMeterGlucose))
-            .Concat(ExcludeDemoIfNeeded(calResults, excludeDemo).Select(EntryProjection.FromCalibration));
+        var entries = sgResults.Select(ToEntry)
+            .Concat(ExcludeDemoIfNeeded(mgResults, excludeDemo).Select(ToEntry))
+            .Concat(ExcludeDemoIfNeeded(calResults, excludeDemo).Select(ToEntry));
 
         // Meter and calibration entries carry no sgv; they order below every reading, as a missing field does.
         var sorted = (sort, descending) switch
@@ -788,11 +819,11 @@ internal class EntryReadService : IEntryStore
     /// Filters out ephemeral (demo/test) records when <paramref name="exclude"/> is <c>true</c>.
     /// Returns the sequence unchanged when filtering is not needed.
     /// </summary>
-    private static IEnumerable<T> ExcludeDemoIfNeeded<T>(IEnumerable<T> results, bool exclude)
-        where T : Core.Models.V4.IV4Record
+    private static IEnumerable<HistoryRecord<T>> ExcludeDemoIfNeeded<T>(IEnumerable<HistoryRecord<T>> results, bool exclude)
+        where T : IV4Record
     {
         return exclude
-            ? results.Where(r => !DataSources.IsEphemeral(r.DataSource))
+            ? results.Where(r => !DataSources.IsEphemeral(r.Record.DataSource))
             : results;
     }
 

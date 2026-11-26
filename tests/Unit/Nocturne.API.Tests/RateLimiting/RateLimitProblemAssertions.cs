@@ -30,9 +30,12 @@ internal static class RateLimitProblemAssertions
         var root = body.RootElement;
 
         root.GetProperty("status").GetInt32().Should().Be(StatusCodes.Status429TooManyRequests);
-        root.GetProperty("title").GetString().Should().NotBeNullOrWhiteSpace();
+        root.GetProperty("type").GetString().Should().Be("https://tools.ietf.org/html/rfc6585#section-4");
+        root.GetProperty("title").GetString().Should().Be("Too Many Requests");
         root.GetProperty("code").GetString().Should().Be("rate_limit_exceeded");
         root.GetProperty("error").GetString().Should().Be("rate_limit_exceeded");
-        root.GetProperty("error_description").GetString().Should().NotBeNullOrWhiteSpace();
+        root.GetProperty("error_description").GetString().Should().Be("Too many requests. Please try again later.");
+        root.GetProperty("detail").GetString().Should().Be("Too many requests. Please try again later.");
+        root.GetProperty("traceId").GetString().Should().NotBeNullOrEmpty();
     }
 }

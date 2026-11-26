@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Extensions;
@@ -53,10 +54,7 @@ public class VerifyContextInterceptorTests
     {
         using var contexts = NpgsqlDataSource.Create(ConnectionString);
         using var other = NpgsqlDataSource.Create(ConnectionString);
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(other)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.Options(other);
 
         var act = () => DatabaseInitializationExtensions.VerifyContextInterceptor(options, contexts);
 

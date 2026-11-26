@@ -42,6 +42,52 @@ public enum MemberHistoryKind
 
     /// <summary>A team's access to the site stopped. <see cref="MemberHistoryEntry.Team"/> names it.</summary>
     TeamAccessStopped,
+
+    /// <summary>
+    /// An owner changed what a team's access to the site gives. <see cref="MemberHistoryEntry.Team"/> names it, and
+    /// <see cref="MemberHistoryEntry.Roles"/>, <see cref="MemberHistoryEntry.HistoryLimit"/> and
+    /// <see cref="MemberHistoryEntry.AccessEndsAt"/> state what it gives after the change.
+    /// </summary>
+    TeamAccessChanged,
+
+    /// <summary>The member was approved as staff of <see cref="MemberHistoryEntry.Team"/> at the site.</summary>
+    TeamStaffApproved,
+
+    /// <summary>The member was declined as staff of <see cref="MemberHistoryEntry.Team"/> at the site.</summary>
+    TeamStaffDeclined,
+
+    /// <summary>
+    /// Who decides which staff of <see cref="MemberHistoryEntry.Team"/> reach the site changed.
+    /// <see cref="MemberHistoryEntry.StaffRule"/> is the new rule, null when the row no longer says.
+    /// </summary>
+    TeamStaffRuleChanged,
+
+    /// <summary>An owner stopped the member reaching the site through any team.</summary>
+    TeamStaffBlocked,
+
+    /// <summary>An owner let the member reach the site through teams again.</summary>
+    TeamStaffUnblocked,
+
+    /// <summary>A manager of <see cref="MemberHistoryEntry.Team"/> put the site in a group, while the team narrows to groups.</summary>
+    TeamGroupPersonAdded,
+
+    /// <summary>A manager of <see cref="MemberHistoryEntry.Team"/> took the site out of a group, while the team narrows to groups.</summary>
+    TeamGroupPersonRemoved,
+
+    /// <summary>A manager of <see cref="MemberHistoryEntry.Team"/> put the member in a group that has the site, while the team narrows to groups.</summary>
+    TeamGroupStaffAdded,
+
+    /// <summary>A manager of <see cref="MemberHistoryEntry.Team"/> took the member out of a group that has the site, while the team narrows to groups.</summary>
+    TeamGroupStaffRemoved,
+
+    /// <summary>A manager of <see cref="MemberHistoryEntry.Team"/> deleted a group that had the site, while the team narrows to groups.</summary>
+    TeamGroupDeleted,
+
+    /// <summary>
+    /// A manager of <see cref="MemberHistoryEntry.Team"/> set which people its staff reach.
+    /// <see cref="MemberHistoryEntry.StaffReach"/> is the new value, null when the row no longer says.
+    /// </summary>
+    TeamStaffReachChanged,
 }
 
 /// <summary>The history limit a member reads under after the change.</summary>
@@ -88,7 +134,7 @@ public record MemberHistoryActor(MemberHistoryActorKind Kind, Guid? SubjectId, s
 /// no longer records it.
 /// </summary>
 /// <param name="At">When the change was recorded.</param>
-/// <param name="Member">The member the change was made to. Null for a change to a role's permissions or a team's access.</param>
+/// <param name="Member">The member the change was made to. Null for a change to a role's permissions, a team's access or its switch.</param>
 /// <param name="Role">The role as recorded: its slug, for a member's role and for a tenant role's permission change.</param>
 /// <param name="Gained">The permissions a role's change added.</param>
 /// <param name="Lost">The permissions a role's change removed.</param>
@@ -103,6 +149,12 @@ public record MemberHistoryActor(MemberHistoryActorKind Kind, Guid? SubjectId, s
 /// </param>
 /// <param name="Team">The team, for a change to a team's access.</param>
 /// <param name="Roles">The role slugs a team's access gives.</param>
+/// <param name="StaffRule">
+/// The <see cref="Nocturne.Core.Models.Identity.TeamStaffRule"/> after a <see cref="MemberHistoryKind.TeamStaffRuleChanged"/> change.
+/// </param>
+/// <param name="StaffReach">
+/// The <see cref="Nocturne.Core.Models.Identity.TeamStaffReach"/> after a <see cref="MemberHistoryKind.TeamStaffReachChanged"/> change.
+/// </param>
 public record MemberHistoryEntry(
     Guid Id,
     DateTime At,
@@ -122,7 +174,9 @@ public record MemberHistoryEntry(
     MemberHistoryPerson? By,
     bool InRecordedJoin,
     MemberHistoryTeam? Team,
-    IReadOnlyList<string>? Roles);
+    IReadOnlyList<string>? Roles,
+    string? StaffRule,
+    string? StaffReach);
 
 /// <summary>A page of <see cref="MemberHistoryEntry"/> changes, with the state of the member it is narrowed to.</summary>
 public class MemberHistoryPage : PaginatedResponse<MemberHistoryEntry>

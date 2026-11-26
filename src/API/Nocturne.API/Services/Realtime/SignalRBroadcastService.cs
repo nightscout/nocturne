@@ -15,6 +15,10 @@ namespace Nocturne.API.Services.Realtime;
 /// Service for broadcasting real-time updates via SignalR, replacing the legacy socket.io server-side broadcasting.
 /// All broadcasts are scoped to the current tenant's SignalR groups to enforce isolation.
 /// </summary>
+/// <remarks>
+/// Every method logs its own failure and returns, so a caller does not wrap it in a try: a SignalR
+/// outage must not break the write that broadcasts.
+/// </remarks>
 /// <seealso cref="SignalRBroadcastService"/>
 /// <seealso cref="DataHub"/>
 /// <seealso cref="AlarmHub"/>
@@ -187,8 +191,7 @@ public interface ISignalRBroadcastService
 /// </summary>
 /// <remarks>
 /// Group names are always prefixed with the tenant ID via <see cref="TenantAwareHub.FormatTenantGroup"/>
-/// to prevent cross-tenant data leakage. Broadcast failures are caught and logged; they never
-/// propagate to the caller so that a SignalR outage cannot break write operations.
+/// to prevent cross-tenant data leakage.
 /// </remarks>
 /// <seealso cref="ISignalRBroadcastService"/>
 /// <seealso cref="DataHub"/>

@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Nocturne.API.Tests.TestDoubles;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Alerts.Corpus;
@@ -9,10 +11,10 @@ using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -60,16 +62,17 @@ public class CanonicalAlertEvaluatorTests
     private static SensorGlucose Latest(DateTime timestamp, double mgdl = 120, double? trendRate = 0.5) =>
         new() { Timestamp = timestamp, CreatedAt = timestamp, Mgdl = mgdl, TrendRate = trendRate };
 
-    private CanonicalAlertEvaluator Evaluator(Guid tenantId, AlertRuleDecisions? decisions = null) =>
+    private CanonicalAlertEvaluator Evaluator(
+        Guid tenantId, AlertRuleDecisions? decisions = null, ILogger<CanonicalAlertEvaluator>? logger = null) =>
         new(_canonical.Object,
             _orchestrator.Object,
             _rules.Object,
-            Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId),
+            SettableTenantAccessor.Resolved(tenantId),
             _watermark,
             decisions ?? _decisions,
             _evaluated.Object,
             _notice.Object,
-            NullLogger<CanonicalAlertEvaluator>.Instance);
+            logger ?? NullLogger<CanonicalAlertEvaluator>.Instance);
 
     private void LatestIs(params SensorGlucose?[] readings)
     {
@@ -248,14 +251,20 @@ public class CanonicalAlertEvaluatorTests
     }
 
     [Fact]
-    public async Task EvaluateAsync_EvaluatesNothingAndRemembersNothingWithNoTenantInScope()
+    public async Task EvaluateAsync_EvaluatesNothingWithNoTenantInScope()
     {
         LatestIs(Latest(Reading));
 
         await Evaluator(Guid.Empty).EvaluateAsync(GlucoseMoved);
 
         VerifyPasses(0);
-        _watermark.AlreadyEvaluated(Guid.Empty, Latest(Reading)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryClaim_RemembersNothingWithNoTenant()
+    {
+        _watermark.TryClaim(Guid.Empty, Latest(Reading)).Should().BeTrue();
+        _watermark.TryClaim(Guid.Empty, Latest(Reading)).Should().BeTrue("no claim is kept under no tenant");
     }
 
     /// <summary>
@@ -323,6 +332,21 @@ public class CanonicalAlertEvaluatorTests
         var act = () => Evaluator(Tenant).EvaluateAsync(GlucoseMoved);
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_LogsATimeoutInsideThePassRatherThanPassingItOnAsACancellation()
+    {
+        LatestIs(Latest(Reading));
+        _orchestrator
+            .Setup(o => o.EvaluateRulesAsync(It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(), It.IsAny<IReadOnlySet<Guid>>(), It.IsAny<SensorContext>(), It.IsAny<long?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TaskCanceledException("The store did not answer in time"));
+        var logger = new ListLogger<CanonicalAlertEvaluator>();
+
+        var act = () => Evaluator(Tenant, logger: logger).EvaluateAsync(GlucoseMoved);
+
+        await act.Should().NotThrowAsync();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception is TaskCanceledException);
     }
 
     /// <summary>
@@ -443,7 +467,7 @@ public class CanonicalAlertEvaluatorTests
         await Evaluator(Tenant).EvaluateAsync(GlucoseMoved);
 
         VerifyPasses(1);
-        _watermark.AlreadyEvaluated(Tenant, Latest(Reading)).Should().BeTrue("the pass completed");
+        _watermark.TryClaim(Tenant, Latest(Reading)).Should().BeFalse("the pass completed, so its claim stands");
     }
 
     [Fact]

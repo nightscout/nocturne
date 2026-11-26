@@ -7,6 +7,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -25,13 +26,12 @@ public sealed class RoleControllerNameCollisionTests
 
     private RoleController BuildController()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>([Scope.RolesManage, "glucose.read"]);
 
-        return new RoleController(_roles.Object, tenantAccessor.Object)
+        return new RoleController(_roles.Object, tenantAccessor)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             ProblemDetailsFactory = new EchoingProblemDetailsFactory(),

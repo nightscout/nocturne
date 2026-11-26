@@ -33,8 +33,8 @@ public class DeviceClockService : IDeviceClockService
     /// <summary>Evidence older than this no longer influences segmentation and is pruned.</summary>
     public const int RetentionDays = IDeviceClockService.RetentionDays;
 
-    private const string SegmentNotificationType = "connector.deviceClockDeviation";
-    private const string ZoneChangeNotificationType = "connector.declaredZoneChanged";
+    internal const string SegmentNotificationType = "connector.deviceClockDeviation";
+    internal const string ZoneChangeNotificationType = "connector.declaredZoneChanged";
     private const string NotificationSource = "device-clock";
 
     private readonly INocturneDbContextFactory _contexts;

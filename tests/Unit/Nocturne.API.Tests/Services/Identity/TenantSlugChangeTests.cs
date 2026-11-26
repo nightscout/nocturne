@@ -43,7 +43,7 @@ public class TenantSlugChangeTests : IDisposable
             Mock.Of<ITenantRoleService>(),
             grantRevocation: null!,
             _time,
-            NullLogger<TenantService>.Instance, AccountLinkRoutes.Off);
+            NullLogger<TenantService>.Instance, AccountLinkRoutes.Off, InertTeamStaff.Announcer());
     }
 
     public void Dispose() => _db.Dispose();

@@ -42,9 +42,11 @@ internal static class StateSpanServiceMockExtensions
                     if (span.OriginalId is { } key && deleted?.Contains(key) == true)
                         return new StateSpanUpsert(Copy(span), null);
 
+                    var previous = rows.Find(r => span.OriginalId is not null && r.OriginalId == span.OriginalId);
                     var stored = Copy(span);
                     stored.Id = span.OriginalId ?? Guid.NewGuid().ToString();
-                    var replaced = rows.RemoveAll(r => span.OriginalId is not null && r.OriginalId == span.OriginalId) > 0;
+                    stored.SupersededById = previous?.SupersededById;
+                    var replaced = previous is not null && rows.Remove(previous);
                     rows.Add(stored);
                     return new StateSpanUpsert(Copy(stored), replaced ? UpsertOutcome.Updated : UpsertOutcome.Created);
                 })]);
@@ -56,8 +58,10 @@ internal static class StateSpanServiceMockExtensions
                     var index = rows.FindIndex(r => r.Id == span.Id);
                     if (index < 0)
                         return null;
-                    rows[index] = Copy(span);
-                    return Copy(span);
+                    var stored = Copy(span);
+                    stored.SupersededById = rows[index].SupersededById;
+                    rows[index] = stored;
+                    return Copy(stored);
                 })]);
         return rows;
     }

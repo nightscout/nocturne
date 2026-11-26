@@ -13,6 +13,8 @@ using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.RateLimiting;
@@ -113,14 +115,13 @@ public class DelegatedConnectorSyncLimiterTests : IDisposable
     /// <returns>The filter's short-circuit result, or null when it let the action run.</returns>
     private async Task<IActionResult?> RunAsync(AuthType authType, Guid tenantId, string connectorId)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.TenantId).Returns(tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(tenantId);
 
         var http = new DefaultHttpContext
         {
             RequestServices = new ServiceCollection()
                 .AddSingleton(_limiter)
-                .AddSingleton(tenantAccessor.Object)
+                .AddSingleton<ITenantAccessor>(tenantAccessor)
                 .AddSingleton(Executor("dexcom"))
                 .AddSingleton(Executor("glooko"))
                 .BuildServiceProvider(),
@@ -158,7 +159,7 @@ public class DelegatedConnectorSyncLimiterTests : IDisposable
 
     private static async Task<HttpContext> ExecuteAsync(IActionResult result)
     {
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.Response.Body = new MemoryStream();
         await result.ExecuteResultAsync(new ActionContext(http, new RouteData(), new ActionDescriptor()));
         return http;

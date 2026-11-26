@@ -167,31 +167,6 @@ public interface ISubjectRepository
     /// </summary>
     Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email, DateTime now, CancellationToken ct);
 
-    /// <summary>
-    /// Deletes the subject, and in the same transaction clears its personal data from the three
-    /// audit trails, leaving the ids that make them a pseudonymous record. In <c>auth_audit_log</c>
-    /// the details go from every row the subject is party to. In all three, the client address, and
-    /// the user agent where the table keeps one, go from every row it acted on, in every tenant.
-    /// They are the actor's, so another subject's on a row about this one are kept.
-    /// <c>actor_name</c> stays on <c>mutation_audit_log</c> and <c>read_access_log</c>, so a
-    /// tenant's owner can still see who changed or read their data. Rows that reference the subject
-    /// go with it by cascade.
-    /// </summary>
-    /// <remarks>
-    /// Refused with <see cref="SubjectChange.LastOwnerOf"/> while an active subject is the last owner
-    /// of any tenant by <c>TenantOwnerFilter.IsLastOwnerAsync</c>, whether or not the tenant has other members: the cascade would remove
-    /// its membership. An inactive subject is never refused, since it counts as no owner. The check
-    /// holds the owner lock of each tenant the subject belongs to, in ascending tenant id, until the
-    /// delete commits.
-    /// <para>
-    /// A team the subject is the only member of is deleted with them. A team with other members is
-    /// refused with <see cref="SubjectChange.LastManagerOf"/> while the subject is its last manager by
-    /// <c>TeamManagerFilter.IsLastManagerAsync</c>. Both hold the manager lock of each team the subject
-    /// belongs to, in ascending team id, until the delete commits.
-    /// </para>
-    /// </remarks>
-    Task<SubjectChange> DeleteAsync(Guid subjectId, CancellationToken ct);
-
     /// <summary>Whether the subject is a demo tenant's visitor; null when there is no such subject.</summary>
     /// <remarks>
     /// On a platform context: the demo refusal guards the tenantless, subject-scoped endpoints,

@@ -167,7 +167,7 @@ public class StaleRuleDecisionSeamTests
             Snapshot(rule), Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
 
         evaluation.AutoResolveTransition.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, fixture.ExcursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, fixture.ExcursionId, ExcursionCloseReason.AutoResolve, T0));
         var state = await fixture.Store.GetTrackerStateAsync(RuleId);
         state.Should().BeEquivalentTo(new { State = "idle", ActiveExcursionId = (Guid?)null, AwaitingRearm = true });
     }
@@ -189,7 +189,7 @@ public class StaleRuleDecisionSeamTests
             preEdit, Glucose(60), AlertEngineOptions.Default, CancellationToken.None);
 
         evaluation.AutoResolveTransition.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, fixture.ExcursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, fixture.ExcursionId, ExcursionCloseReason.AutoResolve, T0));
         var state = await fixture.Store.GetTrackerStateAsync(RuleId);
         state.Should().BeEquivalentTo(new { State = "idle", ActiveExcursionId = (Guid?)null, AwaitingRearm = true });
     }

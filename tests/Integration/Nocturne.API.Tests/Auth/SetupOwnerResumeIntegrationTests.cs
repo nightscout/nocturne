@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -34,7 +35,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -47,7 +48,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 _deactivated.Add(reader.GetGuid(0));
         }
 
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             DELETE FROM passkey_credentials WHERE subject_id IN
                 (SELECT subject_id FROM tenant_members WHERE tenant_id = @tenant);
             """,
@@ -57,9 +58,9 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
     public override async Task DisposeAsync()
     {
         Fixture.LinkRoute.Configured = null;
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 UPDATE subjects SET is_active = false
                 WHERE is_active AND NOT is_system_subject AND NOT is_demo_subject;
                 UPDATE subjects SET is_active = true WHERE id = ANY(@restore);
@@ -152,7 +153,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
 
     private async Task ShapeAsync(Guid subjectId, string shape)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         switch (shape)
         {
             case "no membership":
@@ -162,7 +163,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 break;
             case "owner membership and a live session":
                 await AddMemberAsync(conn, subjectId, "owner");
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO refresh_tokens (id, token_hash, subject_id, issued_at, expires_at, created_at, updated_at)
                     VALUES (gen_random_uuid(), md5(@subject::text), @subject, now(), now() + interval '7 days', now(), now());
                     """,
@@ -170,7 +171,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 break;
             case "owner membership and an authenticator":
                 await AddMemberAsync(conn, subjectId, "owner");
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO totp_credentials (id, subject_id, secret_key, created_at)
                     VALUES (gen_random_uuid(), @subject, '\x00'::bytea, now());
                     """,
@@ -178,7 +179,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 break;
             case "owner membership and another global role":
                 await AddMemberAsync(conn, subjectId, "owner");
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO subject_roles (subject_id, role_id, assigned_at)
                     SELECT @subject, id, now() FROM roles WHERE name = 'readable';
                     """,
@@ -186,16 +187,16 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 break;
             case "owner membership and a live operator recovery code":
                 await AddMemberAsync(conn, subjectId, "owner");
-                await ExecuteAsync(conn, """
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
+                await conn.PinTenantAsync(Fixture.TenantId);
+                await conn.ExecuteAsync("""
                     INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
                     VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), 'OperatorRecovery', now() + interval '1 day', now());
                     """,
-                    ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", subjectId));
+                    ("tenant", Fixture.TenantId), ("subject", subjectId));
                 break;
             case "owner membership and a confirmed address a recovery link can reach":
                 await AddMemberAsync(conn, subjectId, "owner");
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     UPDATE subjects SET email = 'someone-else@example.test', email_confirmed_at = now() WHERE id = @subject;
                     """,
                     ("subject", subjectId));
@@ -203,7 +204,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 break;
             case "owner membership and the admin role, recorded by no owner step":
                 await AddMemberAsync(conn, subjectId, "owner");
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO subject_roles (subject_id, role_id, assigned_at)
                     SELECT @subject, id, now() FROM roles WHERE name = 'admin';
                     """,
@@ -216,45 +217,45 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
 
     private async Task GiveRecordedAsync(Guid subjectId, string held)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         switch (held)
         {
             case "a live session":
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO refresh_tokens (id, token_hash, subject_id, issued_at, expires_at, created_at, updated_at)
                     VALUES (gen_random_uuid(), md5(@subject::text), @subject, now(), now() + interval '7 days', now(), now());
                     """,
                     ("subject", subjectId));
                 break;
             case "a passkey and no membership":
-                await ExecuteAsync(conn, """
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
+                await conn.PinTenantAsync(Fixture.TenantId);
+                await conn.ExecuteAsync("""
                     DELETE FROM tenant_member_roles WHERE tenant_member_id IN
                         (SELECT id FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject);
                     DELETE FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;
                     INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
                     VALUES (gen_random_uuid(), @subject, @credential, @credential, 0, '{}', now());
                     """,
-                    ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+                    ("tenant", Fixture.TenantId),
                     ("subject", subjectId), ("credential", Guid.NewGuid().ToByteArray()));
                 break;
             case "an authenticator":
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     INSERT INTO totp_credentials (id, subject_id, secret_key, created_at)
                     VALUES (gen_random_uuid(), @subject, '\x00'::bytea, now());
                     """,
                     ("subject", subjectId));
                 break;
             case "a live operator recovery code":
-                await ExecuteAsync(conn, """
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
+                await conn.PinTenantAsync(Fixture.TenantId);
+                await conn.ExecuteAsync("""
                     INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
                     VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), 'OperatorRecovery', now() + interval '1 day', now());
                     """,
-                    ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", subjectId));
+                    ("tenant", Fixture.TenantId), ("subject", subjectId));
                 break;
             case "a confirmed address a recovery link can reach":
-                await ExecuteAsync(conn, """
+                await conn.ExecuteAsync("""
                     UPDATE subjects SET email = 'operator@example.test', email_confirmed_at = now() WHERE id = @subject;
                     """,
                     ("subject", subjectId));
@@ -267,17 +268,14 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Guid?> RecordedSetupOwnerAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT setup_owner_subject_id FROM tenants WHERE id = @tenant";
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        return await cmd.ExecuteScalarAsync() is Guid id ? id : null;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<Guid?>("SELECT setup_owner_subject_id FROM tenants WHERE id = @tenant", ("tenant", Fixture.TenantId));
     }
 
     private async Task AddMemberAsync(NpgsqlConnection conn, Guid subjectId, string roleSlug)
     {
-        await ExecuteAsync(conn, """
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
+        await conn.PinTenantAsync(Fixture.TenantId);
+        await conn.ExecuteAsync("""
             WITH member AS (
                 INSERT INTO tenant_members (id, tenant_id, subject_id, username, sys_created_at, sys_updated_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, 'someone-else', now(), now())
@@ -286,7 +284,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
             SELECT gen_random_uuid(), member.id, r.id
             FROM member, tenant_roles r WHERE r.tenant_id = @tenant AND r.slug = @role;
             """,
-            ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+            ("tenant", Fixture.TenantId),
             ("subject", subjectId), ("role", roleSlug));
     }
 
@@ -296,24 +294,18 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
     /// <summary>The subject's names, global roles, and each membership with its username and roles.</summary>
     private async Task<SubjectSnapshot> SnapshotAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        string? name, username;
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT name, username FROM subjects WHERE id = @subject";
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            await reader.ReadAsync();
-            name = reader.IsDBNull(0) ? null : reader.GetString(0);
-            username = reader.IsDBNull(1) ? null : reader.GetString(1);
-        }
+        await using var conn = await OpenPostgresAsync();
+        var (name, username) = (await conn.QueryAsync(
+            "SELECT name, username FROM subjects WHERE id = @subject",
+            reader => (Name: reader.IsDBNull(0) ? null : reader.GetString(0), Username: reader.IsDBNull(1) ? null : reader.GetString(1)),
+            ("subject", subjectId))).First();
 
         var roles = await StringsAsync(conn, """
             SELECT r.name FROM subject_roles sr JOIN roles r ON r.id = sr.role_id
             WHERE sr.subject_id = @subject ORDER BY r.name;
             """, subjectId);
+        await conn.PinTenantAsync(Fixture.TenantId);
         var memberships = await StringsAsync(conn, """
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
             SELECT m.tenant_id::text || ':' || coalesce(m.username, '') || ':' ||
                 coalesce((SELECT string_agg(tr.slug, ',' ORDER BY tr.slug)
                     FROM tenant_member_roles mr JOIN tenant_roles tr ON tr.id = mr.tenant_role_id
@@ -325,39 +317,18 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
 
     private async Task<List<string>> StringsAsync(NpgsqlConnection conn, string sql, Guid subjectId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        cmd.Parameters.AddWithValue("tenantText", Fixture.TenantId.ToString());
-        var values = new List<string>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        do
-        {
-            while (await reader.ReadAsync())
-            {
-                if (reader.GetName(0) != "set_config")
-                    values.Add(reader.GetString(0));
-            }
-        }
-        while (await reader.NextResultAsync());
-        return values;
+        return await conn.QueryAsync(
+            sql, reader => reader.GetString(0), ("subject", subjectId));
     }
 
     private async Task<List<Guid>> ActiveSubjectsNamedAsync(string username)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync("""
             SELECT id FROM subjects
             WHERE username = @username AND is_active AND NOT is_system_subject AND NOT is_demo_subject
             ORDER BY id;
-            """;
-        cmd.Parameters.AddWithValue("username", username);
-        var ids = new List<Guid>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetGuid(0));
-        return ids;
+            """, reader => reader.GetGuid(0), ("username", username));
     }
 
     private static async Task StartOwnerSetupAsync(HttpClient apex, string username, string displayName)
@@ -370,9 +341,8 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
 
     private async Task<List<Guid>> OwnerSubjectIdsAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync("""
             SELECT m.subject_id
             FROM tenant_members m
             JOIN tenant_member_roles mr ON mr.tenant_member_id = m.id
@@ -380,28 +350,6 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
             JOIN subjects s ON s.id = m.subject_id
             WHERE m.tenant_id = @tenant AND r.slug = 'owner' AND s.is_active
             ORDER BY m.subject_id;
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        var ids = new List<Guid>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetGuid(0));
-        return ids;
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+            """, reader => reader.GetGuid(0), ("tenant", Fixture.TenantId));
     }
 }

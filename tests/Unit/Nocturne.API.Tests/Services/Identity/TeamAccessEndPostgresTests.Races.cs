@@ -22,7 +22,7 @@ public partial class TeamAccessEndPostgresTests
         new("Night", "night", null, [Scope.GlucoseRead, Scope.TreatmentsRead, Scope.ReportsRead]);
 
     private Task DeactivateAsync(Guid subject) =>
-        ExecuteAsync($"UPDATE subjects SET is_active = false WHERE id = '{subject}'");
+        NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"UPDATE subjects SET is_active = false WHERE id = '{subject}'");
 
     private async Task IsGoneAsync(Guid subject)
     {

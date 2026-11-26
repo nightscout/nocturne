@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -129,8 +130,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
     private MemberInviteController BuildController(IMemberInviteService invites, params string[] grantedScopes)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
@@ -156,12 +156,12 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
                 new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
                 TimeProvider.System,
                 Mock.Of<ILogger<TenantService>>(),
-                AccountLinkRoutes.Off),
+                AccountLinkRoutes.Off, InertTeamStaff.Announcer()),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
             new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory()), _dbContext.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             Mock.Of<ITenantMemberService>(),
-            tenantAccessor.Object,
+            tenantAccessor,
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

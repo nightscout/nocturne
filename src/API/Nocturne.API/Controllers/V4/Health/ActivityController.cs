@@ -155,6 +155,9 @@ public class ActivityController : ControllerBase
         if (this.ValidateBulkSize(requests, "Activity", "activity records") is { } invalid)
             return invalid;
 
+        if (await this.ValidateEachAsync(requests, "Activity", cancellationToken) is { } rejected)
+            return rejected;
+
         var activityList = requests.Select(MapToActivity).ToList();
 
         var missingScope = ActivityWriteScopeGuard.FindMissingScope(
@@ -173,6 +176,7 @@ public class ActivityController : ControllerBase
     [RequireScope(Scope.TreatmentsReadWrite, Scope.SleepReadWrite)]
     [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Activity>> UpdateActivity(
         string id,

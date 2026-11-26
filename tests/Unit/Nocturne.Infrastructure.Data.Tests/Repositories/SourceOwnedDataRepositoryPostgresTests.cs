@@ -32,28 +32,12 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     private const string Source = "loop-connector";
     private const string OtherSource = "other-connector";
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("source_owned_data_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("source_owned_data_repo");
 
     private NocturneDbContext Context(Guid tenant) => Context(tenant, []);
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>The queries a context runs, with their parameters.</summary>
     private sealed class QueryCapture : DbCommandInterceptor
@@ -76,14 +60,7 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
         var tenant = Guid.NewGuid();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES (@id, @slug, 'source-owned-data-test', true, now(), now())
-            """;
-        cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-        cmd.Parameters.Add(new NpgsqlParameter("@slug", $"source-{tenant:N}"));
-        await cmd.ExecuteNonQueryAsync();
+        await conn.SeedTenantAsync(tenant, $"source-{tenant:N}", "source-owned-data-test");
         return tenant;
     }
 

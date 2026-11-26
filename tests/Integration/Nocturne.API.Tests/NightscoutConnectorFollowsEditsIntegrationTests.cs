@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using Xunit.Abstractions;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Integration;
 
@@ -33,6 +34,7 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
 {
     private readonly FakeNightscoutTreatments _upstream = new("15.0.8");
     private readonly InMemoryConnectorStateStore _state = new();
+    private readonly NightscoutLookups _lookups = new();
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow.AddDays(-3).AddMinutes(-Random.Shared.Next(0, 600));
     private readonly NightscoutConnectorConfiguration _config = new()
     {
@@ -67,6 +69,8 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
             NullLogger<NightscoutConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
+            _lookups,
+            SettableTenantAccessor.Resolved(),
             publisher.Object);
         return await connector.SyncDataAsync(request, _config, CancellationToken.None);
     }
@@ -86,13 +90,19 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
     private async Task CatchUpAsync() =>
         (await SyncAsync(new SyncRequest { DataTypes = [SyncDataType.CarbIntake] })).Success.Should().BeTrue();
 
-    private void AddRecentCarbs() =>
-        _upstream.Add(MongoObjectId.NewObjectId(), DateTimeOffset.UtcNow.AddMinutes(-5), t =>
+    private string AddCarbs(DateTimeOffset at)
+    {
+        var id = MongoObjectId.NewObjectId();
+        _upstream.Add(id, at, t =>
         {
             t["eventType"] = "Carb Correction";
             t["carbs"] = 12;
             t["enteredBy"] = "Loop";
         });
+        return id;
+    }
+
+    private string AddRecentCarbs() => AddCarbs(DateTimeOffset.UtcNow.AddMinutes(-5));
 
     private static void Indefinite(JsonObject t)
     {
@@ -115,14 +125,58 @@ public class NightscoutConnectorFollowsEditsIntegrationTests(ApiIntegrationTestF
         return id;
     }
 
-    /// <summary>Every treatment the v1 read serves within a second of <see cref="_started"/>.</summary>
-    private async Task<List<JsonObject>> ServedAtStartAsync()
+    private Task<List<JsonObject>> ServedAtStartAsync() => ServedNearAsync(_started);
+
+    /// <summary>Every treatment the v1 read serves within a second of <paramref name="at"/>.</summary>
+    private async Task<List<JsonObject>> ServedNearAsync(DateTimeOffset at)
     {
-        var from = _started.AddSeconds(-1).UtcDateTime.ToString("o");
-        var to = _started.AddSeconds(1).UtcDateTime.ToString("o");
+        var from = at.AddSeconds(-1).UtcDateTime.ToString("o");
+        var to = at.AddSeconds(1).UtcDateTime.ToString("o");
         var served = await AuthenticatedClient.GetFromJsonAsync<JsonArray>(
             $"/api/v1/treatments?count=50&find[created_at][$gte]={Uri.EscapeDataString(from)}&find[created_at][$lte]={Uri.EscapeDataString(to)}");
         return served!.Select(t => t!.AsObject()).ToList();
+    }
+
+    /// <summary>
+    /// The only treatment the crawl reads again is the newest, which the store serves under an id of
+    /// its own. The delete pass must still find the source's ids in what it served, or it has no
+    /// treatment to prove the lookup with.
+    /// </summary>
+    [Fact]
+    public async Task A_treatment_deleted_upstream_is_deleted_when_the_store_has_renamed_every_one_the_crawl_read()
+    {
+        var gone = DateTimeOffset.UtcNow.AddHours(-3);
+        var goneId = AddCarbs(gone);
+        AddRecentCarbs();
+        await ImportAsync();
+        (await ServedNearAsync(gone)).Should().ContainSingle();
+
+        _upstream.Remove(goneId);
+        await CatchUpAsync();
+
+        (await ServedNearAsync(gone)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The newest treatment is the canary and is looked up once, by its <c>_id</c> as the source served
+    /// it. One the source served is never looked up as missing, whichever id the store has since given
+    /// it. Only the treatment the source deleted is, by each field it can be found under.
+    /// </summary>
+    [Fact]
+    public async Task A_treatment_the_source_served_is_not_looked_up_as_missing_and_the_one_it_deleted_is()
+    {
+        var gone = DateTimeOffset.UtcNow.AddHours(-3);
+        var goneId = AddCarbs(gone);
+        AddCarbs(DateTimeOffset.UtcNow.AddHours(-2));
+        var recent = AddRecentCarbs();
+        await ImportAsync();
+
+        _upstream.Remove(goneId);
+        await CatchUpAsync();
+
+        (await ServedNearAsync(gone)).Should().BeEmpty();
+        _upstream.IdReads.Select(read => read[(read.LastIndexOf('&') + 1)..]).Should().Equal(
+            $"find[_id]={recent}", $"find[_id]={goneId}", $"find[id]={goneId}", $"find[identifier][$in][0]={goneId}");
     }
 
     [Fact]

@@ -6,6 +6,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -28,18 +29,17 @@ public partial class TeamAccessEndPostgresTests
         instant.ToString("yyyy-MM-dd HH:mm:ss.ffffff'+00'", CultureInfo.InvariantCulture);
 
     private Task SetStaffEndAsync(Guid staff, DateTime end) =>
-        ExecuteAsync($"UPDATE team_members SET ends_at = '{Sql(end)}' WHERE subject_id = '{staff}'");
+        NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_members SET ends_at = '{Sql(end)}' WHERE subject_id = '{staff}'");
 
     private Task SetAccessEndAsync(Site site, Guid access, DateTime end) =>
-        ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE team_tenant_access SET access_ends_at = '{Sql(end)}' WHERE id = '{access}';
             """);
 
     /// <summary>Moves the end of the reason <paramref name="access"/> gives, and the row's, as a build that synced at that end left them.</summary>
     private Task SetReasonEndAsync(Site site, Guid staff, Guid access, DateTime end) =>
-        ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+        NpgsqlTestCommands.ExecuteAsTenantAsync(database.MigratorConnectionString, site.Tenant, $"""
             UPDATE tenant_member_reasons SET access_ends_at = '{Sql(end)}'
              WHERE source_id = '{access}'
                AND tenant_member_id IN (SELECT id FROM tenant_members WHERE tenant_id = '{site.Tenant}' AND subject_id = '{staff}');
@@ -76,6 +76,9 @@ public partial class TeamAccessEndPostgresTests
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, staff, Ct))!.AccessEndsAt.Should().Be(extended);
         (await Members(site.Tenant).IsMemberAsync(site.Tenant, staff, Now, Ct)).Should().BeTrue();
         await RowIsTheSumAsync(site, staff);
+        (await RowsAsync(site.Tenant, staff)).Where(r => r.EventType == AuthAuditEventType.MemberJoined)
+            .Should().HaveCount(2, "the history says the member has access through the team again")
+            .And.OnlyContain(r => r.Team == team.Id);
     }
 
     [Fact]
@@ -137,7 +140,8 @@ public partial class TeamAccessEndPostgresTests
         var access = await FollowAsync(team, site);
         var staff = await NewSubjectAsync("staff");
         var token = await StaffInviteAsync(team, new TeamStaffNarrowing(null, false, Now.AddHours(1)));
-        await ExecuteAsync($"UPDATE team_staff_invites SET staff_ends_at = '{Sql(Passed)}' WHERE token_hash = '{token}'");
+        await NpgsqlTestCommands.ExecuteAsync(
+            database.MigratorConnectionString, $"UPDATE team_staff_invites SET staff_ends_at = '{Sql(Passed)}' WHERE token_hash = '{token}'");
 
         (await Service(Guid.Empty, staff).JoinStaffAsync(token, staff, Ct)).Refusal.Should().Be(TeamInviteRefusal.StaffEndPassed);
 
@@ -179,7 +183,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync($"backfill-ended-{ended}");
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false, end: Now.AddDays(1)));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves, end: Now.AddDays(1)));
         var staff = await JoinStaffAsync(team);
         await ApproveSiteRowsAsync(site);
         await EndAsync(ended, site, staff, access);

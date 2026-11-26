@@ -22,31 +22,14 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
 {
     private static readonly DateTime Now = new(2026, 10, 31, 9, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("oauth_grant_repo");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("oauth_grant_repo");
 
     private NocturneDbContext Context(Guid tenant) => Context(tenant, null);
 
     private NocturneDbContext Context(Guid tenant, StatementRecorder? recorder) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(recorder is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), recorder])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(
+            database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly,
+            interceptors: recorder is null ? [] : [recorder]);
 
     private sealed record Seeded(Guid Tenant, Guid Subject, Guid Grant, string TokenHash);
 
@@ -57,14 +40,7 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'oauth-grant-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"{slug}-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"{slug}-{tenant:N}", "oauth-grant-test");
         }
 
         var subject = Guid.CreateVersion7();

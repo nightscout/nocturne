@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.V4;
 using Moq;
@@ -169,6 +170,67 @@ public class GlookoSsv2SyncTests
         publishedGlucose.Should().HaveCount(2);
         cursorStore.Vendor.Should().ContainKey("/api/v2/cgm/egvs");
         cursorStore.Vendor.Should().NotContainKey("/api/v2/notes");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Ssv2_AFailureReadingTheStoredCursor_IsNotTakenForAFailureOfTheFeed(bool storeDown)
+    {
+        Exception failure = storeDown
+            ? new ConnectorStoreUnavailableException("connection refused", new InvalidOperationException())
+            : new InvalidOperationException("a second operation was started on this context");
+        var handler = new RoutingHandler(_ => Json("{\"lastPage\":true}"));
+        var service = BuildService(handler, new InMemoryConnectorStateStore { BeforeRead = _ => throw failure },
+            CapturePublisher([]));
+
+        var result = await service.SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be(failure.Message);
+        handler.RequestedPaths.Should().BeEmpty("nothing is fetched under a cursor that could not be read");
+    }
+
+    [Fact]
+    public async Task Ssv2_AMalformedEgv_IsDroppedWithAWarning_AndTheOtherEgvsAndFeedsStillLand()
+    {
+        var published = new List<SensorGlucose>();
+        var log = new RecordingLogger();
+        var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
+            ? Json("{\"egvs\":["
+                + "{\"displayTime\":\"0001-01-01T00:00:00.000Z\",\"glucoseValue\":10000,\"guid\":\"bad\"},"
+                + "{\"displayTime\":\"2026-06-02T08:00:00.000Z\",\"glucoseValue\":10000,\"guid\":\"good\"}"
+                + "],\"lastPage\":true,\"lastUpdatedAt\":\"2026-06-03T00:00:00.000Z\",\"lastGuid\":\"g2\"}")
+            : Json("{\"lastPage\":true}"));
+        var config = Config();
+        config.TimezoneOffset = 5;
+        var cursorStore = new InMemoryConnectorStateStore();
+
+        var result = await BuildService(handler, cursorStore, CapturePublisher(published), log)
+            .SyncDataAsync(AllTypesRequest(), config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+        published.Should().ContainSingle().Which.LegacyId.Should().EndWith("good");
+        log.Warnings.Should().ContainSingle(w => w.Message.Contains("Skipped malformed SSV2 egv bad"))
+            .Which.Exception.Should().BeAssignableTo<ArgumentException>();
+        handler.RequestedPaths.Should().Contain(p => p.Contains("/api/v2/foods"),
+            "the feeds after egvs must still be fetched");
+        cursorStore.Vendor.Should().ContainKey("/api/v2/cgm/egvs");
+    }
+
+    [Fact]
+    public async Task Ssv2_AnUnreadableFeedPage_IsStillReportedAsAFailureOfTheFeed()
+    {
+        var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
+            ? Json("{\"egvs\":[")
+            : Json("{\"lastPage\":true}"));
+
+        var result = await BuildService(handler, new InMemoryConnectorStateStore(), CapturePublisher([]))
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().Contain("Failed to fetch Glucose");
     }
 
     [Fact]
@@ -467,17 +529,19 @@ public class GlookoSsv2SyncTests
     };
 
     private static GlookoConnectorService BuildService(
-        RoutingHandler handler, IConnectorStateStore state, Mock<IConnectorPublisher> publisher)
+        RoutingHandler handler, IConnectorStateStore state, Mock<IConnectorPublisher> publisher,
+        ILogger<GlookoConnectorService>? logger = null)
     {
         publisher.SetupGet(p => p.State).Returns(state);
-        return BuildService(handler, publisher.Object);
+        return BuildService(handler, publisher.Object, logger);
     }
 
-    private static GlookoConnectorService BuildService(RoutingHandler handler, IConnectorPublisher publisher) =>
+    private static GlookoConnectorService BuildService(
+        RoutingHandler handler, IConnectorPublisher publisher, ILogger<GlookoConnectorService>? logger = null) =>
         new(
             new HttpClient(handler),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            NullLogger<GlookoConnectorService>.Instance,
+            logger ?? NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             new FixedGlookoTokenProvider(),
             publisher,
@@ -536,6 +600,23 @@ public class GlookoSsv2SyncTests
         return end < 0 ? pathAndQuery[start..] : pathAndQuery[start..end];
     }
 
+    private sealed class RecordingLogger : ILogger<GlookoConnectorService>
+    {
+        private readonly List<(LogLevel Level, string Message, Exception? Exception)> _entries = [];
+
+        public IEnumerable<(string Message, Exception? Exception)> Warnings =>
+            _entries.Where(e => e.Level == LogLevel.Warning).Select(e => (e.Message, e.Exception));
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            _entries.Add((logLevel, formatter(state, exception), exception));
+    }
+
     private sealed class RoutingHandler(Func<string, HttpResponseMessage> route) : HttpMessageHandler
     {
         public List<string> RequestedPaths { get; } = [];
@@ -556,7 +637,7 @@ public class GlookoSsv2SyncTests
         public FixedGlookoTokenProvider()
             : base(new HttpClient(), new ConnectorTokenCache(),
                    new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-                   new FakeTenantAccessor(), NullLogger<GlookoAuthTokenProvider>.Instance,
+                   ResolvedTenant.Accessor(), NullLogger<GlookoAuthTokenProvider>.Instance,
                    Mock.Of<IRetryDelayStrategy>()) { }
 
         protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
@@ -567,14 +648,6 @@ public class GlookoSsv2SyncTests
             return Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 ("_logbook-web_session=sess", DateTime.UtcNow.AddHours(1),
                  new Dictionary<string, string> { ["SessionCookie"] = "_logbook-web_session=sess", ["UserData"] = userData }));
-        }
-
-        private sealed class FakeTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
-            public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
         }
     }
 }

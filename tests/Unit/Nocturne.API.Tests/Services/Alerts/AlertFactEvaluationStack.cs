@@ -33,15 +33,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>A migrated PostgreSQL database for one test class, reached under the runtime role.</summary>
-public sealed class AlertFactEvaluationDatabase : IAsyncLifetime
-{
-    public TestDatabase Created { get; private set; } = null!;
-
-    public async Task InitializeAsync() =>
-        Created = await SharedPostgres.CreateMigratedDatabaseAsync("alert_fact_evaluation");
-
-    public Task DisposeAsync() => Task.CompletedTask;
-}
+public sealed class AlertFactEvaluationDatabase() : MigratedDatabase("alert_fact_evaluation");
 
 /// <param name="SiteChangeAt">The site change reads show to the pass's scope, as the enricher reads it.</param>
 internal sealed record AlertPass(Guid TenantId, IReadOnlyList<AlertRuleSnapshot> Rules, SensorContext Context, DateTime? SiteChangeAt);
@@ -53,8 +45,6 @@ internal sealed record AlertPass(Guid TenantId, IReadOnlyList<AlertRuleSnapshot>
 /// </summary>
 internal sealed class AlertFactEvaluationStack : IDisposable
 {
-    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
-
     public const string SiteAgeOver72Hours = """{"operator":">","value":72}""";
 
     private readonly AlertFactEvaluationDatabase _database;
@@ -67,8 +57,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseNpgsql(database.Created.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor()));
+            .UseTenantInterceptor(database.AppConnectionString));
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
@@ -117,7 +106,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
     {
         while (true)
         {
-            var pass = await _passes.Reader.ReadAsync().AsTask().WaitAsync(Guard);
+            var pass = await _passes.Reader.ReadAsync().AsTask().WaitAsync(Eventually.DefaultPatience);
             if (pass.TenantId == tenant)
                 return pass;
         }
@@ -127,10 +116,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
     public void PassTheDebounce() => Time.Advance(AlertFactEvaluationScheduler.Debounce);
 
     public NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_database.Created.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(_database.AppConnectionString, tenant);
 
     public async Task<(TenantContext Tenant, Guid Rule)> SeedTenantAsync(
         string name,
@@ -138,18 +124,10 @@ internal sealed class AlertFactEvaluationStack : IDisposable
         string conditionParams = """{"direction":"below","value":70}""")
     {
         var tenant = new TenantContext(Guid.NewGuid(), $"{name}-{Guid.NewGuid():N}", name, true, false);
-        await using (var conn = new NpgsqlConnection(_database.Created.MigratorConnectionString))
+        await using (var conn = new NpgsqlConnection(_database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, @name, true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant.TenantId));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", tenant.Slug));
-            cmd.Parameters.Add(new NpgsqlParameter("@name", name));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant.TenantId, tenant.Slug, name);
         }
 
         var rule = Guid.CreateVersion7();

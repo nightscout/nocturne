@@ -57,8 +57,8 @@ Everything below is what Vale cannot decide.
 Lint covers the app (`packages/app`), the CMS, and the portal docs
 (`packages/portal`, paths with `/docs/`). The portal's marketing pages (home,
 features, blog, roadmap) are out of scope: STE deletes persuasion by design.
-The docs pages (`.svx`) are linted as Markdown prose after the strings. Their
-findings are report-only until CI passes `--gate-docs`.
+The docs pages (`.svx`) are linted as Markdown prose after the strings. CI
+passes `--gate-docs`, so their errors fail the run like the app strings.
 
 ## Spelling and terms
 

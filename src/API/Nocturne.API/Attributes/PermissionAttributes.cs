@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nocturne.API.Extensions;
-using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Attributes;
 
@@ -123,27 +122,11 @@ public sealed class RequireInstanceStandingAttribute : Attribute, IAsyncAuthoriz
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
         var httpContext = context.HttpContext;
-        if (!httpContext.IsAuthenticated() || await HoldsInstanceStandingAsync(httpContext))
+        if (!httpContext.IsAuthenticated() || await Services.Auth.InstanceStanding.HeldByAsync(httpContext))
         {
             return;
         }
 
         context.Result = new ForbidResult();
-    }
-
-    private static async Task<bool> HoldsInstanceStandingAsync(HttpContext httpContext) =>
-        httpContext.GetAuthContext()?.IsPlatformAdmin == true
-        || await IsSoleTenantAsync(httpContext);
-
-    private static async Task<bool> IsSoleTenantAsync(HttpContext httpContext)
-    {
-        var tenant = httpContext.RequestServices.GetRequiredService<ITenantAccessor>();
-        if (!tenant.IsResolved)
-        {
-            return false;
-        }
-
-        return await Services.Auth.InstanceStanding.IsOnlyTenantAsync(
-            httpContext.RequestServices.GetRequiredService<ITenantRepository>(), tenant.TenantId, httpContext.RequestAborted);
     }
 }

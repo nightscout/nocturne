@@ -1,6 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Infrastructure.Data.Repositories.Health;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Caching;
 using Nocturne.Connectors.Core.Models;
@@ -20,7 +19,6 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -32,6 +30,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -51,15 +50,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
     /// One migrated database for the class. Every test publishes the same client ids under its own
     /// tenant (<c>NocturneDbContext.ScopeKeyToTenant</c>).
     /// </summary>
-    public sealed class Databases : IAsyncLifetime
-    {
-        public TestDatabase Database { get; private set; } = null!;
-
-        public async Task InitializeAsync() =>
-            Database = await SharedPostgres.CreateMigratedDatabaseAsync("activity_watermark");
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Databases() : MigratedDatabase("activity_watermark");
 
     private const string SourceA = "nightscout-connector";
     private const string SourceB = "glooko-connector";
@@ -75,29 +66,14 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
 
     public async Task InitializeAsync()
     {
-        var database = databases.Database;
         var tenant = Guid.NewGuid();
-        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        await using (var conn = new NpgsqlConnection(databases.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'activity-watermark-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"watermark-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"watermark-{tenant:N}", "activity-watermark-test");
         }
 
-        _context = new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
-        {
-            TenantId = tenant,
-        };
+        _context = TestContexts.Context(databases.AppConnectionString, tenant);
 
         var processing = new Mock<IDocumentProcessingService>();
         processing
@@ -150,7 +126,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             Mock.Of<IStepCountService>(),
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
-            Mock.Of<ITenantAccessor>(),
+            new SettableTenantAccessor(),
             new ActivityDedupRepository(_context.AsFactory()),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),

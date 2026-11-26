@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
@@ -76,8 +77,7 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
             Logger.LogDebug("Published {Count} PatientDevice records for {Source}", list.Count, source);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to publish PatientDevice records for {Source}", source);
             return false;
@@ -98,8 +98,7 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
             RecordSkippedDeleted(skippedDeleted);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to publish device status for {Source}", source);
             return false;

@@ -11,7 +11,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.Core.Models;
 
@@ -56,9 +55,9 @@ public class AlertSetupServiceTests : IDisposable
         setup
             .Setup(t => t.GetDefaultGlucoseUnitsAsync(TenantId, It.IsAny<CancellationToken>()))
             .Returns(async (Guid id, CancellationToken ct) => (await tenants.GetAsync(id, ct))?.DefaultGlucoseUnits);
-        var units = new TenantGlucoseUnits(MockTenantAccessor.Create(TenantId).Object, appearance.Object, setup.Object);
+        var units = new TenantGlucoseUnits(SettableTenantAccessor.Resolved(TenantId), appearance.Object, setup.Object);
 
-        return new(_factory, tenants, units, new TenantMembershipRepository(_factory, AccountLinkRoutes.Off), new SubjectRepository(_factory, AccountLinkRoutes.Off), new AlertRuleRepository(_factory), null!, null!, null!, null!, null!, TimeProvider.System);
+        return new(_factory, tenants, units, new TenantMembershipRepository(_factory, AccountLinkRoutes.Off), new SubjectRepository(_factory, AccountLinkRoutes.Off), new AlertRuleRepository(_factory, TimeProvider.System), null!, null!, null!, null!, null!, TimeProvider.System);
     }
 
     private async Task MigrationRun(

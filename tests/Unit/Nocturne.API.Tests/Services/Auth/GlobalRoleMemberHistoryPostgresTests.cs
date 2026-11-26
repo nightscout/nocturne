@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -33,29 +34,13 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("global_role_member_history");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("global_role_member_history");
 
     private sealed record Scenario(
         Guid Tenant, Guid Person, string Role, SubjectService Service, SubjectDeletion Deletion, MemberHistoryReader History);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Scenario> SeedAsync(string slug)
     {
@@ -64,14 +49,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'global-role-history-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", role));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, role, "global-role-history-test");
         }
 
         await using (var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -100,9 +78,9 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         var service = new SubjectService(
             subjects, audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
         var deletion = new SubjectDeletion(
-            contexts, subjects, members,
+            contexts, subjects, AccountLinkRoutes.Off,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            audit, TimeProvider.System, NullLogger<SubjectDeletion>.Instance);
+            audit, TimeProvider.System, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
         return new Scenario(tenant, person, role, service, deletion, new MemberHistoryReader(contexts));
     }
 

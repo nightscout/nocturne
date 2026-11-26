@@ -14,6 +14,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -80,7 +81,7 @@ public class AlertSweepJobAutoResolveTests
         services.AddSingleton(NoHeldRules.Notice());
         services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
         services.AddSingleton(Mock.Of<IAlertChannelNotice>());
-        services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<IAuditContext, AuditContext>();
 
         await using var provider = services.BuildServiceProvider();

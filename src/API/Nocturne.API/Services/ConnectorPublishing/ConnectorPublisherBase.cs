@@ -6,13 +6,14 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
 /// <summary>
 /// The write shape every connector publisher shares: materialise the batch, skip an empty one,
-/// bulk-create it under system audit attribution, and report a failure as <c>false</c> instead of
-/// propagating it into the connector's sync loop.
+/// bulk-create it under system audit attribution, and report a store failure as <c>false</c>. Any
+/// other exception is a defect and reaches the connector's run.
 /// </summary>
 internal abstract class ConnectorPublisherBase
 {
@@ -91,8 +92,7 @@ internal abstract class ConnectorPublisherBase
                 "Published {Count} {RecordType} records for {Source}", recordList.Count, recordType, source);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, recordList, source);
             return false;
@@ -146,8 +146,7 @@ internal abstract class ConnectorPublisherBase
 
             unheld = identified.Where(r => !KeysOf(r).Any(held.Contains)).ToList();
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to compare recent {RecordType} records with what is stored for {Source}",
                 typeof(TRecord).Name, source);

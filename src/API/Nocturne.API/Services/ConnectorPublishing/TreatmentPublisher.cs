@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.API.Services.V4;
@@ -93,12 +94,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 list.RemoveAll(echoes.Contains);
             }
 
-            var fingerprints = new Dictionary<(string? Source, string LegacyId), string?>();
-            foreach (var treatment in list)
-            {
-                if (treatment.Id is { Length: > 0 } id)
-                    fingerprints[(treatment.DataSource ?? source, id)] = TreatmentDecomposer.UpstreamFingerprint(treatment);
-            }
+            var fingerprints = FingerprintsOf(list, source);
 
             using (PushSystemAudit())
                 await _treatmentService.RekeyClientIdRecordsAsync(source, list, cancellationToken);
@@ -109,15 +105,14 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             RecordRefused(written.Rejected.Count);
             return true;
         }
-        catch (TreatmentBatchFailedException failed) when (!cancellationToken.IsCancellationRequested)
+        catch (TreatmentBatchFailedException failed)
         {
             RecordSkippedDeleted(failed.Written.SkippedDeleted);
             RecordRefused(failed.Written.Rejected.Count);
             Logger.LogError(failed, "Failed to publish treatments for {Source}", source);
             return false;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to publish treatments for {Source}", source);
             return false;
@@ -302,6 +297,20 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Not a treatment type."),
         };
 
+    /// <summary>The fingerprint each of <paramref name="treatments"/> is written under, keyed as <see cref="UpstreamFingerprintScope"/> reads it.</summary>
+    private static Dictionary<(string? Source, string LegacyId), string?> FingerprintsOf(
+        IEnumerable<Treatment> treatments, string source)
+    {
+        var fingerprints = new Dictionary<(string? Source, string LegacyId), string?>();
+        foreach (var treatment in treatments)
+        {
+            if (treatment.Id is { Length: > 0 } id)
+                fingerprints[(treatment.DataSource ?? source, id)] = TreatmentDecomposer.UpstreamFingerprint(treatment);
+        }
+
+        return fingerprints;
+    }
+
     /// <inheritdoc />
     /// <remarks>The conflict rule is <see cref="TreatmentDecomposer.SelectForRepublishAsync"/>'s.</remarks>
     public async Task<int?> PublishRecentTreatmentsAsync(
@@ -309,14 +318,13 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<Treatment> selected;
+        TreatmentRepublish selected;
         try
         {
             using (PushSystemAudit())
                 selected = await _treatmentService.SelectForRepublishAsync(source, treatments.ToList(), cancellationToken);
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to compare recent treatments with what is stored for {Source}", source);
             return null;
@@ -325,7 +333,35 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         if (selected.Count == 0)
             return 0;
 
-        return await PublishTreatmentsAsync(selected, source, origin, cancellationToken) ? selected.Count : null;
+        var spansWritten = await RepublishSpansAsync(selected.Spans, source, origin, cancellationToken);
+        var decomposed = selected.Decompose.Count == 0
+                         || await PublishTreatmentsAsync(selected.Decompose, source, origin, cancellationToken);
+        return spansWritten && decomposed ? selected.Count : null;
+    }
+
+    /// <summary>
+    /// <see cref="ITreatmentService.RepublishSpansAsync"/>, each span stamped with the fingerprint of the
+    /// treatment it is written from.
+    /// </summary>
+    /// <returns>Whether the write succeeded.</returns>
+    private async Task<bool> RepublishSpansAsync(
+        IReadOnlyList<Treatment> treatments, string source, WriteOrigin origin, CancellationToken cancellationToken)
+    {
+        if (treatments.Count == 0)
+            return true;
+
+        try
+        {
+            using (PushSystemAudit())
+            using (UpstreamFingerprintScope.Open(FingerprintsOf(treatments, source)))
+                await _treatmentService.RepublishSpansAsync(source, treatments, origin, cancellationToken);
+            return true;
+        }
+        catch (Exception ex) when (StoreFailure.Is(ex))
+        {
+            Logger.LogError(ex, "Failed to write the changed overrides and temporary targets of {Source}", source);
+            return false;
+        }
     }
 
     /// <inheritdoc />

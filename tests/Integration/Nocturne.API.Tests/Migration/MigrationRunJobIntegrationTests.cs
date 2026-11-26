@@ -60,7 +60,7 @@ public class MigrationRunJobIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task AStartedMigration_IsStoredWithItsRequestEncrypted_AndRequestsItsJob()
     {
-        var job = await Migrations.StartMigrationAsync(Request(), Tenant);
+        var job = await Migrations.StartMigrationAsync(Request(), Tenant, starter: null);
 
         var run = await RunRecordAsync(job.Id);
         run.State.Should().Be(nameof(MigrationJobState.Pending));
@@ -68,14 +68,14 @@ public class MigrationRunJobIntegrationTests : ApiIntegrationTestBase
         (await LedgerRowAsync()).NextDueAt.Should().NotBeNull("the row's job has been asked for");
 
         var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
-            () => Migrations.StartMigrationAsync(Request(), Tenant));
+            () => Migrations.StartMigrationAsync(Request(), Tenant, starter: null));
         refused.JobId.Should().Be(job.Id);
     }
 
     [Fact]
     public async Task TheSchedulersClaim_RunsTheMigrationToItsEnd()
     {
-        var job = await Migrations.StartMigrationAsync(Request(), Tenant);
+        var job = await Migrations.StartMigrationAsync(Request(), Tenant, starter: null);
 
         await RunDueJobsAsync();
 
@@ -89,7 +89,7 @@ public class MigrationRunJobIntegrationTests : ApiIntegrationTestBase
         row.NextDueAt.Should().BeNull("an ended run has no more slices");
         row.Attempts.Should().Be(0, "the run stores its own failure");
 
-        var again = await Migrations.StartMigrationAsync(Request(), Tenant);
+        var again = await Migrations.StartMigrationAsync(Request(), Tenant, starter: null);
         again.Id.Should().NotBe(job.Id);
         (await LedgerRowAsync()).NextDueAt.Should().NotBeNull("a finished row is due again when a new run asks for it");
     }
@@ -97,7 +97,7 @@ public class MigrationRunJobIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task ACancelledMigration_IsNotRunByTheClaimItHadRequested()
     {
-        var job = await Migrations.StartMigrationAsync(Request(), Tenant);
+        var job = await Migrations.StartMigrationAsync(Request(), Tenant, starter: null);
 
         await Migrations.CancelAsync(Fixture.TenantId, job.Id);
         await RunDueJobsAsync();

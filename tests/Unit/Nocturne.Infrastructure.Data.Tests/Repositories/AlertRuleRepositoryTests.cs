@@ -428,7 +428,7 @@ public class AlertRuleRepositoryTests
         await using var seed = Db();
         await using var unit = await DbUnitOfWork.OpenAsync(new TestNocturneDbContextFactory(seed));
 
-        var act = () => new AlertRuleRepository(unit).SetScopeClassAsync(Tenant, RuleScopeClass.Low, [Guid.NewGuid()], CancellationToken.None);
+        var act = () => new AlertRuleRepository(unit, _clock).SetScopeClassAsync(Tenant, RuleScopeClass.Low, [Guid.NewGuid()], CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }

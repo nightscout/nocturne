@@ -7,6 +7,7 @@
  */
 import { EventAnchorKind } from "#lib/api/index.js";
 import { formatList, formatLocale } from "#lib/utils/formatting.js";
+import { withEnglishWords } from "#lib/navigation/report-navigation.svelte.js";
 import type { Weekday } from "./catalogue-vocabulary.js";
 
 /** The word for `id` in `words`, or the id itself when the web has none yet. */
@@ -459,8 +460,10 @@ export function searchTermWords(): Record<string, string[]> {
 
 /** The words of a signal's search keys. */
 export function searchWords(keys: readonly string[], translated: Record<string, string[]> = searchTermWords()): string[] {
-  const found = keys.flatMap((k) => [...(Object.hasOwn(translated, k) ? translated[k] : []), ...(Object.hasOwn(ENGLISH_SEARCH_TERMS, k) ? ENGLISH_SEARCH_TERMS[k] : [])]);
-  return found.filter((word, i) => found.indexOf(word) === i);
+  return withEnglishWords(
+    keys.flatMap((k) => (Object.hasOwn(translated, k) ? translated[k] : [])),
+    keys.flatMap((k) => (Object.hasOwn(ENGLISH_SEARCH_TERMS, k) ? ENGLISH_SEARCH_TERMS[k] : [])),
+  );
 }
 
 /** Each lens's name. */

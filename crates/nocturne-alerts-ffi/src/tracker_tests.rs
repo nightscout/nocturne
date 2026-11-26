@@ -29,11 +29,10 @@ fn close_elapsed(request: &Value) -> Value {
     )
 }
 
-fn process_at(tracker: &Value, met: bool, now: &str, hysteresis_minutes: i32) -> Value {
+fn process_at(tracker: &Value, met: bool, now: &str) -> Value {
     let response = process(&json!({
         "schema_version": 1,
         "tracker": tracker,
-        "config": { "hysteresis_minutes": hysteresis_minutes },
         "condition_met": met,
         "now": now,
     }));
@@ -43,7 +42,7 @@ fn process_at(tracker: &Value, met: bool, now: &str, hysteresis_minutes: i32) ->
 
 #[test]
 fn process_opens_continues_and_enters_hysteresis() {
-    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z", 30);
+    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z");
     assert_eq!(
         opened["transition"],
         json!({ "type": "opened", "excursion_ordinal": 1 })
@@ -58,13 +57,13 @@ fn process_opens_continues_and_enters_hysteresis() {
         })
     );
 
-    let continues = process_at(&opened["tracker"], true, "2026-01-05T12:05:00Z", 30);
+    let continues = process_at(&opened["tracker"], true, "2026-01-05T12:05:00Z");
     assert_eq!(
         continues["transition"],
         json!({ "type": "continues", "excursion_ordinal": 1 })
     );
 
-    let entered = process_at(&continues["tracker"], false, "2026-01-05T12:10:00Z", 30);
+    let entered = process_at(&continues["tracker"], false, "2026-01-05T12:10:00Z");
     assert_eq!(
         entered["transition"],
         json!({ "type": "hysteresis_started", "excursion_ordinal": 1 })
@@ -83,11 +82,11 @@ fn a_stored_confirming_state_reads_as_idle() {
         "last_excursion_ordinal": 6,
     });
 
-    let quiet = process_at(&stored, false, "2026-01-05T12:00:00Z", 0);
+    let quiet = process_at(&stored, false, "2026-01-05T12:00:00Z");
     assert_eq!(quiet["transition"], json!({ "type": "none" }));
     assert_eq!(quiet["tracker"]["state"], json!("idle"));
 
-    let fires = process_at(&stored, true, "2026-01-05T12:00:00Z", 0);
+    let fires = process_at(&stored, true, "2026-01-05T12:00:00Z");
     assert_eq!(
         fires["transition"],
         json!({ "type": "opened", "excursion_ordinal": 7 })
@@ -97,7 +96,7 @@ fn a_stored_confirming_state_reads_as_idle() {
 
 #[test]
 fn force_close_reports_the_excursion_it_closed() {
-    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z", 0);
+    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z");
     let closed = force_close(&json!({
         "schema_version": 1,
         "tracker": opened["tracker"],
@@ -123,7 +122,6 @@ fn process_resolving(tracker: &Value, met: bool, auto_resolve_met: bool, now: &s
     let response = process(&json!({
         "schema_version": 1,
         "tracker": tracker,
-        "config": { "hysteresis_minutes": 0 },
         "condition_met": met,
         "auto_resolve_met": auto_resolve_met,
         "now": now,
@@ -134,7 +132,7 @@ fn process_resolving(tracker: &Value, met: bool, auto_resolve_met: bool, now: &s
 
 #[test]
 fn an_auto_resolve_close_round_trips_awaiting_rearm_until_either_tree_is_false() {
-    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z", 0);
+    let opened = process_at(&Value::Null, true, "2026-01-05T12:00:00Z");
     let closed = force_close(&json!({
         "schema_version": 1,
         "tracker": opened["tracker"],
@@ -149,7 +147,7 @@ fn an_auto_resolve_close_round_trips_awaiting_rearm_until_either_tree_is_false()
 
     let rearmed = process_resolving(&held["tracker"], false, true, "2026-01-05T12:01:00Z");
     assert!(rearmed["tracker"].get("awaiting_rearm").is_none());
-    let reopened = process_at(&rearmed["tracker"], true, "2026-01-05T12:01:30Z", 0);
+    let reopened = process_at(&rearmed["tracker"], true, "2026-01-05T12:01:30Z");
     assert_eq!(
         reopened["transition"],
         json!({ "type": "opened", "excursion_ordinal": 2 })
@@ -162,7 +160,7 @@ fn an_auto_resolve_close_round_trips_awaiting_rearm_until_either_tree_is_false()
     );
     assert!(relapse["tracker"].get("awaiting_rearm").is_none());
 
-    let absent = process_at(&held["tracker"], true, "2026-01-05T12:01:00Z", 0);
+    let absent = process_at(&held["tracker"], true, "2026-01-05T12:01:00Z");
     assert_eq!(absent["transition"]["type"], json!("opened"));
 }
 
@@ -182,13 +180,13 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
         tracker
     };
 
-    let idle = process_at(&stored(None), true, "2026-01-05T12:00:00Z", 0);
+    let idle = process_at(&stored(None), true, "2026-01-05T12:00:00Z");
     assert_eq!(
         idle["transition"],
         json!({ "type": "opened", "excursion_ordinal": 4 })
     );
 
-    let active = process_at(&stored(Some(3)), false, "2026-01-05T12:00:00Z", 30);
+    let active = process_at(&stored(Some(3)), false, "2026-01-05T12:00:00Z");
     assert_eq!(
         active["transition"],
         json!({ "type": "hysteresis_started", "excursion_ordinal": 3 })
@@ -212,7 +210,6 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
     let swept = close_elapsed(&json!({
         "schema_version": 1,
         "tracker": stored(None),
-        "config": { "hysteresis_minutes": 0 },
         "now": "2026-01-05T12:00:00Z",
     }));
     assert_eq!(swept["transition"], json!({ "type": "none" }));
@@ -228,7 +225,7 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
 
 #[test]
 fn force_close_without_an_excursion_changes_nothing() {
-    let idle = process_at(&Value::Null, false, "2026-01-05T12:00:00Z", 0);
+    let idle = process_at(&Value::Null, false, "2026-01-05T12:00:00Z");
     let response = force_close(&json!({
         "schema_version": 1,
         "tracker": idle["tracker"],
@@ -264,16 +261,17 @@ fn close_elapsed_at(tracker: &Value, now: &str) -> Value {
     let response = close_elapsed(&json!({
         "schema_version": 1,
         "tracker": tracker,
-        "config": { "hysteresis_minutes": 30 },
         "now": now,
     }));
     assert_eq!(response["ok"], json!(true), "{}", response["error"]);
     response
 }
 
+/// A start beyond the tolerance ahead of `now` does not close; one within it
+/// does (engine-semantics.md §5.4).
 #[test]
 fn close_elapsed_hysteresis_closes_at_the_window_end() {
-    let tracker = in_hysteresis(Some("2026-01-05T12:05:00Z"));
+    let tracker = in_hysteresis(Some("2026-01-05T12:40:00Z"));
     let held = close_elapsed_at(&tracker, "2026-01-05T12:34:59Z");
     assert_eq!(held["transition"], json!({ "type": "none" }));
     assert_eq!(held["tracker"], tracker);
@@ -295,19 +293,19 @@ fn close_elapsed_hysteresis_closes_at_the_window_end() {
 
 #[test]
 fn close_elapsed_hysteresis_returns_the_adopted_start() {
-    let held = close_elapsed_at(&in_hysteresis(None), "2026-01-05T12:30:00Z");
+    let held = close_elapsed_at(&in_hysteresis(None), "2026-01-05T12:04:00Z");
     assert_eq!(held["transition"], json!({ "type": "none" }));
     assert_eq!(
         held["tracker"]["hysteresis_started_at"],
         json!("2026-01-05T12:10:00Z")
     );
-    let closed = close_elapsed_at(&held["tracker"], "2026-01-05T12:40:00Z");
+    let closed = close_elapsed_at(&held["tracker"], "2026-01-05T12:05:00Z");
     assert_eq!(closed["transition"]["type"], json!("closed"));
 }
 
 #[test]
 fn close_elapsed_hysteresis_leaves_other_states_alone() {
-    let active = process_at(&Value::Null, true, "2026-01-05T12:00:00Z", 0);
+    let active = process_at(&Value::Null, true, "2026-01-05T12:00:00Z");
     let response = close_elapsed_at(&active["tracker"], "2026-01-05T15:00:00Z");
     assert_eq!(response["transition"], json!({ "type": "none" }));
     assert_eq!(response["tracker"], active["tracker"]);
@@ -317,18 +315,17 @@ fn close_elapsed_hysteresis_leaves_other_states_alone() {
 fn tracker_entry_points_reject_unusable_requests() {
     let now = "2026-01-05T12:00:00Z";
     assert_error(
-        &process(&json!({ "schema_version": 2, "config": {}, "condition_met": true, "now": now })),
+        &process(&json!({ "schema_version": 2, "condition_met": true, "now": now })),
         "unsupported schema_version 2",
     );
     assert_error(
-        &process(&json!({ "schema_version": 1, "condition_met": true, "now": now })),
+        &process(&json!({ "schema_version": 1, "now": now })),
         "invalid request envelope",
     );
     assert_error(
         &process(&json!({
             "schema_version": 1,
             "tracker": { "state": "active" },
-            "config": {},
             "condition_met": true,
             "now": now,
         })),
@@ -341,17 +338,10 @@ fn tracker_entry_points_reject_unusable_requests() {
     assert_error(
         &close_elapsed(&json!({
             "schema_version": 1,
-            "config": {},
             "now": "+10000-01-01T00:00:00Z",
         })),
         "now is outside the supported timestamp range",
     );
-}
-
-fn tracker_config(rule: &Value) -> Value {
-    json!({
-        "hysteresis_minutes": rule.get("hysteresis_minutes").cloned().unwrap_or(json!(0)),
-    })
 }
 
 /// Whether the rule's enabled auto-resolve tree at the `auto_resolve` root,
@@ -467,13 +457,21 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                             response["tracker"]["updated_at"].clone(),
                         );
                     }
+                    let instant = |v: Option<&Value>| {
+                        v.and_then(Value::as_str)
+                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                    };
+                    let now = DateTime::parse_from_rfc3339(&tick.at).ok();
+                    let starts_now = instant(Some(&since)) == now;
+                    if starts_now && instant(t.get("updated_at")) > now {
+                        t.insert("updated_at".into(), json!(tick.at));
+                    }
                     t.insert("held_since".into(), since);
                 }
                 let processed = match condition_met {
                     Some(condition_met) => process(&json!({
                         "schema_version": 1,
                         "tracker": shadow,
-                        "config": tracker_config(rule),
                         "condition_met": condition_met,
                         "auto_resolve_met": auto_resolve_met,
                         "now": tick.at,
@@ -481,7 +479,6 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                     None => close_elapsed(&json!({
                         "schema_version": 1,
                         "tracker": shadow,
-                        "config": tracker_config(rule),
                         "now": tick.at,
                     })),
                 };

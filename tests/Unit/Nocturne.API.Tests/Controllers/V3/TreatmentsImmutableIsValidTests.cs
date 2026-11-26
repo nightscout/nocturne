@@ -45,7 +45,7 @@ public class TreatmentsImmutableIsValidTests
         var result = await CreateController().UpdateTreatment(
             "abc", new Treatment { EventType = "Correction Bolus", Insulin = 1, IsValid = false });
 
-        ShouldBeImmutableFieldRefusal(result.Result!);
+        ShouldBeImmutableFieldRefusal(result);
         _treatments.VerifyNoOtherCalls();
     }
 
@@ -85,6 +85,6 @@ public class TreatmentsImmutableIsValidTests
         var result = await CreateController().UpdateTreatment(
             "abc", new Treatment { EventType = "Correction Bolus", Insulin = 1 });
 
-        result.Result.Should().BeOfType<OkObjectResult>();
+        result.Should().BeOfType<OkObjectResult>();
     }
 }

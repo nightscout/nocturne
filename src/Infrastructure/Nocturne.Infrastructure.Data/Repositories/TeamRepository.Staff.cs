@@ -131,22 +131,22 @@ public partial class TeamRepository
 
         var accesses = await db.TeamTenantAccess.AsNoTracking()
             .Where(a => a.TeamId == id)
-            .Select(a => new { a.Id, a.TenantId, a.TeamManagesStaff })
+            .Select(a => new { a.Id, a.TenantId, a.StaffRule })
             .ToListAsync(ct);
         foreach (var access in accesses)
-            db.TeamSiteStaff.Add(NewSiteStaff(access.Id, member.Id, access.TeamManagesStaff));
+            db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, subjectId, access.StaffRule, ct));
 
         TeamAudit.StageStaffAdded(db, id, subjectId, invite.Id);
         await db.SaveChangesAsync(ct);
-        return (new TeamInviteAcceptance(id, null), await TeamReasonChanges.SyncAsync(
-            unit, accesses.Select(a => (a.TenantId, subjectId)), now, ct));
+        return (new TeamInviteAcceptance(id, null), (await TeamReasonChanges.SyncAsync(
+            unit, accesses.Select(a => (a.TenantId, subjectId)), now, ct)).WithStaffNotices(id, accesses.Select(a => a.TenantId)));
     }
 
     /// <summary>
     /// Sets what narrows the staff member <paramref name="staffSubjectId"/>, on <paramref name="unit"/>, which
     /// must not be pinned to a tenant, and saves it. An edit that gives them more than they held
-    /// (<see cref="TeamStaffRules.Widens"/>) returns every approval of theirs that the site, not the team,
-    /// decides to pending. Returns with it the team reasons that bring the staff member's memberships of
+    /// (<see cref="TeamStaffRules.Widens"/>) returns every approval of theirs at a site whose owners approve each
+    /// staff member (<see cref="TeamStaffRule.OwnerApproves"/>) to pending. Returns with it the team reasons that bring the staff member's memberships of
     /// the team's sites into line (<see cref="TeamReasonChanges.SyncAsync"/>), none when nothing changed.
     /// <see cref="TeamStaffChange.NotFound"/> when the caller is not a manager of the team or the subject
     /// is not its staff, and <see cref="TeamStaffChange.EndPassed"/> when the end at <paramref name="now"/>
@@ -179,15 +179,20 @@ public partial class TeamRepository
         member.LimitTo24Hours = narrowing.LimitTo24Hours;
         member.EndsAt = narrowing.EndsAt;
 
+        var sentBack = new List<Guid>();
         if (TeamStaffRules.Widens(before, narrowing))
         {
             var approvedWhereSiteDecides = await db.TeamSiteStaff
                 .Where(s => s.TeamMemberId == member.Id
                     && s.Status == TeamSiteStaffStatus.Approved
-                    && !s.TeamTenantAccess!.TeamManagesStaff)
+                    && s.TeamTenantAccess!.StaffRule == TeamStaffRule.OwnerApproves)
+                .Select(s => new { Row = s, s.TeamTenantAccess!.TenantId })
                 .ToListAsync(ct);
-            foreach (var row in approvedWhereSiteDecides)
-                row.Status = TeamSiteStaffStatus.Pending;
+            foreach (var approved in approvedWhereSiteDecides)
+            {
+                approved.Row.Status = TeamSiteStaffStatus.Pending;
+                sentBack.Add(approved.TenantId);
+            }
         }
 
         TeamAudit.StageStaffChanged(db, teamId, staffSubjectId, before, narrowing);
@@ -197,8 +202,8 @@ public partial class TeamRepository
             .Where(a => a.TeamId == teamId)
             .Select(a => a.TenantId)
             .ToListAsync(ct);
-        return (TeamStaffChange.Changed, await TeamReasonChanges.SyncAsync(
-            unit, sites.Select(site => (site, staffSubjectId)), now, ct));
+        return (TeamStaffChange.Changed, (await TeamReasonChanges.SyncAsync(
+            unit, sites.Select(site => (site, staffSubjectId)), now, ct)).WithStaffNotices(teamId, sentBack));
     }
 
     private static Task<TeamMemberEntity?> StaffMemberAsync(
@@ -206,12 +211,21 @@ public partial class TeamRepository
         db.TeamMembers.FirstOrDefaultAsync(
             m => m.TeamId == teamId && m.SubjectId == subjectId && m.Kind == TeamMemberKind.Staff, ct);
 
-    private static TeamSiteStaffEntity NewSiteStaff(Guid accessId, Guid memberId, bool teamManagesStaff) => new()
+    /// <summary>
+    /// The <c>team_site_staff</c> row of a staff member at a site: declined when an owner of the site
+    /// declined the subject on this access before (<see cref="TeamSiteDeclineEntity"/>), else pending when the
+    /// site's owners approve each staff member (<see cref="TeamStaffRule.OwnerApproves"/>) and approved when
+    /// they do not.
+    /// </summary>
+    private static async Task<TeamSiteStaffEntity> NewSiteStaffAsync(
+        NocturneDbContext db, Guid accessId, Guid memberId, Guid subjectId, string staffRule, CancellationToken ct) => new()
     {
         Id = Guid.CreateVersion7(),
         TeamTenantAccessId = accessId,
         TeamMemberId = memberId,
-        Status = teamManagesStaff ? TeamSiteStaffStatus.Approved : TeamSiteStaffStatus.Pending,
+        Status = await db.TeamSiteDeclines.AnyAsync(d => d.TeamTenantAccessId == accessId && d.SubjectId == subjectId, ct)
+            ? TeamSiteStaffStatus.Declined
+            : staffRule == TeamStaffRule.OwnerApproves ? TeamSiteStaffStatus.Pending : TeamSiteStaffStatus.Approved,
     };
 
     private static TeamStaffNarrowing NarrowingOf(TeamMemberEntity member) =>
@@ -237,8 +251,10 @@ public partial class TeamRepository
                 m.RoleCeilingSlug,
                 m.LimitTo24Hours,
                 m.EndsAt,
-                Approved = db.TeamSiteStaff.Count(s => s.TeamMemberId == m.Id && s.Status == TeamSiteStaffStatus.Approved),
-                Pending = db.TeamSiteStaff.Count(s => s.TeamMemberId == m.Id && s.Status == TeamSiteStaffStatus.Pending),
+                Approved = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.GivesReason),
+                Pending = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.Waits),
+                Blocked = db.TeamSiteStaff.Where(s => s.TeamMemberId == m.Id).Count(TeamReasons.Blocked),
+                InNoGroup = !m.GroupPlaces.Any(),
             })
             .ToListAsync(ct);
         return staff.Select(s => new TeamStaffMember(
@@ -247,7 +263,9 @@ public partial class TeamRepository
             new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
             MembershipLiveness.HasEnded(s.EndsAt, now),
             s.Approved,
-            s.Pending)).ToList();
+            s.Pending,
+            s.Blocked,
+            s.InNoGroup)).ToList();
     }
 
     private static async Task<IReadOnlyList<TeamStaffInviteSummary>> LiveStaffInvitesAsync(

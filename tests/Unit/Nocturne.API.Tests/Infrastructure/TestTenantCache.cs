@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
 using Nocturne.Infrastructure.Cache.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Infrastructure;
 
@@ -27,17 +28,13 @@ public static class TestTenantCache
         local ??= new MemoryCache(new MemoryCacheOptions());
         distributed ??= Distributed(local);
 
-        var tenant = new Mock<ITenantAccessor>();
-        var id = tenantId ?? DefaultTenantId;
-        tenant.Setup(t => t.Context).Returns(new TenantContext(id, "test", "Test", true, IsDemo: false));
-        tenant.Setup(t => t.TenantId).Returns(id);
-        tenant.Setup(t => t.IsResolved).Returns(true);
+        var tenant = SettableTenantAccessor.Resolved(tenantId ?? DefaultTenantId, "test", "Test");
 
         return new TenantCache(
             distributed,
             local,
             flights ?? new CacheFlights(),
-            tenant.Object,
+            tenant,
             Mock.Of<IReaderCachePartition>(p => p.Current == partition),
             Mock.Of<IDemoModeService>(d => d.IsEnabled == demo));
     }

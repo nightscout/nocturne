@@ -111,7 +111,7 @@ public abstract partial class BaseConnectorService<TConfig>
 
     /// <summary>
     ///     Runs <paramref name="read"/> of connector state that the run can do without. A store that is
-    ///     down (<see cref="ConnectorStateUnavailableException"/>) or that times out
+    ///     down (<see cref="ConnectorStoreUnavailableException"/>) or that times out
     ///     (<see cref="ConnectorFaults.IsTimeout"/>) logs a warning and yields <paramref name="fallback"/>.
     ///     Any other exception, and a cancellation <paramref name="cancellationToken"/> asked for, fails the run.
     /// </summary>
@@ -123,7 +123,7 @@ public abstract partial class BaseConnectorService<TConfig>
         {
             return await read();
         }
-        catch (Exception ex) when (ex is ConnectorStateUnavailableException
+        catch (Exception ex) when (ex is ConnectorStoreUnavailableException
                                    || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Could not {Description}", ConnectorSource, description);
@@ -145,7 +145,7 @@ public abstract partial class BaseConnectorService<TConfig>
             await write();
             return true;
         }
-        catch (Exception ex) when (ex is ConnectorStateUnavailableException
+        catch (Exception ex) when (ex is ConnectorStoreUnavailableException
                                    || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Could not {Description}", ConnectorSource, description);

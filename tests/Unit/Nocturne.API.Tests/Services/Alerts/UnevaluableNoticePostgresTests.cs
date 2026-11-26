@@ -10,7 +10,6 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -28,26 +27,10 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
     private const string OtherVersion = "0000000000000000000000000000000000000000000000000000000000000002";
     private static readonly DateTime At = new(2026, 11, 21, 8, 0, 0, DateTimeKind.Utc);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("unevaluable_notice");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("unevaluable_notice");
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>A repository on connections of its own, as one instance of the API has.</summary>
     private AlertRepository Instance(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));
@@ -63,18 +46,8 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
     private async Task<(Guid Tenant, Guid Rule)> SeedAsync()
     {
         var tenant = Guid.NewGuid();
-        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
-        {
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'notice-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"notice-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await NpgsqlTestCommands.SeedTenantAsync(
+            database.MigratorConnectionString, tenant, $"notice-{tenant:N}", "notice-test");
 
         var rule = Guid.CreateVersion7();
         await using var seed = Context(tenant);
@@ -141,8 +114,8 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
 
         (await repository.GetStandingUnevaluableNoticesAsync(null, CancellationToken.None))
             .Should().BeEquivalentTo([
-                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, false),
-                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, false),
+                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, At, false, At),
+                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, At, false, At),
             ]);
         await repository.ResolveInstancesForExcursionAsync(first.ExcursionId, At, "manual", CancellationToken.None);
         (await repository.GetStandingUnevaluableNoticesAsync(rule, CancellationToken.None))
@@ -199,8 +172,9 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         var notice = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!;
         notice.Dispatched.Should().BeFalse();
         var handedBack = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!;
-        (handedBack.ExcursionId, handedBack.InstanceId, handedBack.Dispatched)
-            .Should().Be((notice.ExcursionId, notice.InstanceId, false), "a notice whose dispatch never finished is handed back");
+        (handedBack.ExcursionId, handedBack.InstanceId, handedBack.Dispatched, handedBack.OpenedOwedAt)
+            .Should().Be((notice.ExcursionId, notice.InstanceId, false, (DateTime?)At),
+                "a notice whose dispatch never finished is handed back with the stamp its dispatch is owed at");
 
         await using (var db = Context(tenant))
         {
@@ -214,14 +188,14 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         }
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!.Dispatched
             .Should().BeFalse("a dispatch that died after its first row may still owe another channel");
-        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, CancellationToken.None);
+        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, At, CancellationToken.None);
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!.Dispatched.Should().BeTrue();
         (await repository.GetHomeAssistantInstancesSentExcursionAsync(notice.ExcursionId, CancellationToken.None))
             .Should().Equal("kitchen-ha");
 
         var silenced = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), OtherVersion, At, CancellationToken.None))!;
         await repository.MarkInstanceSuppressedAsync(silenced.InstanceId, "dnd:all", CancellationToken.None);
-        await repository.SettleTransitionAsync(silenced.ExcursionId, ExcursionTransitionType.ExcursionOpened, CancellationToken.None);
+        await repository.SettleTransitionAsync(silenced.ExcursionId, ExcursionTransitionType.ExcursionOpened, At, CancellationToken.None);
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), OtherVersion, At, CancellationToken.None))!.Dispatched.Should().BeTrue();
 
         await using (var db = Context(tenant))

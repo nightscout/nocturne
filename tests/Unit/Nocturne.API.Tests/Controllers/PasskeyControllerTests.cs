@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
@@ -26,7 +27,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using Nocturne.Infrastructure.Data.Repositories;
@@ -55,7 +55,7 @@ public class PasskeyControllerTests : IDisposable
     private readonly RecoverySession _recoverySession;
     private readonly Mock<ISessionService> _sessionService;
     private readonly Mock<ISubjectService> _subjectService;
-    private readonly Mock<ITenantAccessor> _tenantAccessor;
+    private readonly SettableTenantAccessor _tenantAccessor;
     private readonly Mock<ITenantService> _tenantService;
     private readonly Mock<IInAppNotificationService> _notifications = new();
     private readonly Mock<IAuthAuditService> _requestAudit = new();
@@ -82,13 +82,13 @@ public class PasskeyControllerTests : IDisposable
         _recoveryCodeService = new Mock<IRecoveryCodeService>();
         _sessionService = new Mock<ISessionService>();
         _subjectService = new Mock<ISubjectService>();
-        _tenantAccessor = MockTenantAccessor.Create(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var oidcOptions = Options.Create(FixtureCookieOptions());
 
         var jwtService = new Mock<IJwtService>();
         jwtService.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwtService.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwtService.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
         // Login codes are tenant-scoped, so the session's contexts are on the request's tenant, as
         // the request pipeline hands them out.
         _recoverySession = new RecoverySession(
@@ -112,7 +112,7 @@ public class PasskeyControllerTests : IDisposable
             _recoverySession,
             _subjectService.Object,
             _auditService.Object,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             _tenantService.Object,
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
             // property under test, and a mock would assert the mock.
@@ -707,6 +707,55 @@ public class PasskeyControllerTests : IDisposable
         response.SubjectId.Should().Be(subjectId);
     }
 
+    [Theory]
+    [MemberData(nameof(RefusedRegistrations))]
+    public async Task RegisterComplete_WhenSignedInAndTheRegistrationIsRefused_AnswersRegistrationFailed(Exception refusal)
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(refusal);
+
+        var result = await CompleteRegistrationAsync();
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be("Passkey registration failed");
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenSignedInAndTheStoreTimesOut_IsAnErrorAndNotARefusal()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteRegistrationAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenARecoverySessionEnrolsAndTheStoreTimesOut_IsAnErrorAndLeavesTheSessionUsable()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        var session = await GiveRecoverySessionAsync(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("the database did not answer"));
+
+        var act = () => CompleteRegistrationAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        (await IsLiveAsync(session, LoginCodePurpose.RecoverySession)).Should().BeTrue();
+    }
+
     [Fact]
     public async Task RegisterComplete_NoChallengeToken_ReturnsBadRequest()
     {
@@ -926,7 +975,7 @@ public class PasskeyControllerTests : IDisposable
                 _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
             _trustedDevices.Object, _recoveryCodeService.Object, _recoverySession,
             _subjectService.Object, new Mock<IAuthAuditService>().Object,
-            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
+            _tenantAccessor, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
             new SubjectRepository(tenantContexts, AccountLinkRoutes.Off), new TenantRepository(tenantContexts), new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off),
             tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object, TimeProvider.System)
         {
@@ -966,7 +1015,7 @@ public class PasskeyControllerTests : IDisposable
             _trustedDevices.Object, _recoveryCodeService.Object,
             new RecoverySession(failingContexts.Object, _loginCodes, Mock.Of<ITenantMemberService>(), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             _subjectService.Object, new Mock<IAuthAuditService>().Object,
-            _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
+            _tenantAccessor, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
             new SubjectRepository(failingContexts.Object, AccountLinkRoutes.Off), new TenantRepository(failingContexts.Object), new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off),
             failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object, TimeProvider.System)
         {
@@ -1901,7 +1950,7 @@ public class PasskeyControllerTests : IDisposable
             new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             Mock.Of<ISubjectDeletion>(),
             new Mock<IAccessRequestService>().Object,
-            _tenantAccessor.Object,
+            _tenantAccessor,
             new Mock<IInAppNotificationService>().Object,
             Mock.Of<ILogger<AccessRequestController>>());
         var listed = Assert.IsType<OkObjectResult>((await adminList.GetPendingRequests(CancellationToken.None)).Result);
@@ -2165,15 +2214,7 @@ public class PasskeyControllerTests : IDisposable
             _requestAudit.Object,
             TimeProvider.System,
             NullLogger<MembershipRequestService>.Instance, AccountLinkRoutes.Off,
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
-    }
-
-    private sealed class SettableTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer());
     }
 
     /// <summary>
@@ -3231,7 +3272,7 @@ public class PasskeyControllerTests : IDisposable
     public async Task LoginComplete_OnAHostWithNoTenant_AdmitsNoOne()
     {
         var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
-        _tenantAccessor.Setup(a => a.TenantId).Returns(Guid.Empty);
+        _tenantAccessor.SetTenant(new TenantContext(Guid.Empty, "test-tenant", "Test Tenant", true, false));
         _passkeyService
             .Setup(s => s.CompleteAssertionAsync("{}", "assertion-token", Guid.Empty))
             .ReturnsAsync(new PasskeyAssertionResult(subjectId, "rhys", "rhys"));

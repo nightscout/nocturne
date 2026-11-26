@@ -10,15 +10,13 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Treatments;
-using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -54,7 +52,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
 
     public TreatmentServicePreBolusSplitTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _context = _db.CreateContext();
 
         IAuditContext caller = new AuditContext
@@ -87,21 +85,13 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
                 It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
-            bolusRepo, tempBasalRepo,
-            carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            foods.Object,
-            devices.Object,
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            caller,
-            NullLogger<TreatmentDecomposer>.Instance);
+        var decomposer = TreatmentDecomposerDoubles.Build(
+            _context.AsFactory(),
+            bolus: bolusRepo, tempBasal: tempBasalRepo,
+            carbIntake: carbRepo, bgCheck: bgCheckRepo, note: noteRepo, deviceEvent: deviceEventRepo, bolusCalculation: bolusCalcRepo,
+            foods: foods.Object,
+            devices: devices.Object,
+            audit: caller);
 
         var projection = new V4ToLegacyProjectionService(
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,

@@ -33,6 +33,12 @@ public class TeamEntity : ISystemTimestamped
 
     public List<TeamMemberEntity> Members { get; set; } = [];
 
+    /// <summary>A <see cref="Nocturne.Core.Models.Identity.TeamStaffReach"/>.</summary>
+    [Required]
+    [MaxLength(32)]
+    [Column("staff_reach")]
+    public string StaffReach { get; set; } = Nocturne.Core.Models.Identity.TeamStaffReach.EveryPerson;
+
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; }
 
@@ -88,6 +94,9 @@ public class TeamMemberEntity : ISystemTimestamped
     public Guid? CreatedFromStaffInviteId { get; set; }
 
     public TeamStaffInviteEntity? CreatedFromStaffInvite { get; set; }
+
+    /// <summary>The team's groups a staff member is in. None for a manager.</summary>
+    public List<TeamGroupStaffEntity> GroupPlaces { get; set; } = [];
 
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; }

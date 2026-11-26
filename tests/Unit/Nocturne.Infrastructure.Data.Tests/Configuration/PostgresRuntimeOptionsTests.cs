@@ -16,8 +16,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Configuration;
 public class PostgresRuntimeOptionsTests
 {
     /// <summary>
-    /// Reads the context pool the registration actually built. Both pools are registered as
-    /// singleton instances, so this needs no provider and touches nothing else in the graph.
+    /// Reads the context pool the registration actually built. Resolving the two pools touches
+    /// nothing else in the graph.
     /// </summary>
     private static NpgsqlConnectionStringBuilder RegisteredPool(
         IConfiguration? configuration = null,
@@ -33,12 +33,9 @@ public class PostgresRuntimeOptionsTests
         var services = new ServiceCollection();
         services.AddPostgreSqlInfrastructure(connectionString, configuration, configure);
 
-        using var contexts = ((ContextDataSource)services
-            .Single(d => d.ServiceType == typeof(ContextDataSource))
-            .ImplementationInstance!).Source;
-        using var raw = (NpgsqlDataSource)services
-            .Single(d => d.ServiceType == typeof(NpgsqlDataSource))
-            .ImplementationInstance!;
+        using var provider = services.BuildServiceProvider();
+        var contexts = provider.GetRequiredService<ContextDataSource>().Source;
+        var raw = provider.GetRequiredService<NpgsqlDataSource>();
 
         return (new NpgsqlConnectionStringBuilder(contexts.ConnectionString),
             new NpgsqlConnectionStringBuilder(raw.ConnectionString));

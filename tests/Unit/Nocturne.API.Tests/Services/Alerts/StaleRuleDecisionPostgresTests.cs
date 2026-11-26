@@ -44,20 +44,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     private const string ReorderedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":{"direction":"above","value":90}},{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}]}}""";
     private static readonly DateTimeOffset Now = new(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
 
-    public sealed class Database : IAsyncLifetime
-    {
-        public string AppConnectionString { get; private set; } = string.Empty;
-        public string MigratorConnectionString { get; private set; } = string.Empty;
-
-        public async Task InitializeAsync()
-        {
-            var database = await SharedPostgres.CreateMigratedDatabaseAsync("stale_rule_decision");
-            AppConnectionString = database.AppConnectionString;
-            MigratorConnectionString = database.MigratorConnectionString;
-        }
-
-        public Task DisposeAsync() => Task.CompletedTask;
-    }
+    public sealed class Database() : MigratedDatabase("stale_rule_decision");
 
     /// <summary>Runs <paramref name="edit"/> once, before the first transition lock is taken.</summary>
     private sealed class EditBeforeLockRepository(NocturneDbContext context, Func<Task> edit)
@@ -74,10 +61,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<(Guid Tenant, AlertRuleSnapshot Rule, Guid? ExcursionId)> SeedAsync(
         bool active,
@@ -90,14 +74,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
         await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
         {
             await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-                VALUES (@id, @slug, 'stale-rule-test', true, now(), now())
-                """;
-            cmd.Parameters.Add(new NpgsqlParameter("@id", tenant));
-            cmd.Parameters.Add(new NpgsqlParameter("@slug", $"stale-{tenant:N}"));
-            await cmd.ExecuteNonQueryAsync();
+            await conn.SeedTenantAsync(tenant, $"stale-{tenant:N}", "stale-rule-test");
         }
 
         var rule = Guid.CreateVersion7();
@@ -241,7 +218,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
             .ForceCloseAsync(rule, ExcursionCloseReason.AutoResolve, CancellationToken.None);
 
         transition.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve, Now.UtcDateTime));
         (await StoredAsync(tenant)).Should().Be(("idle", (Guid?)null, true, 0));
     }
 
@@ -255,7 +232,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
             .ForceCloseAsync(rule.Id, ExcursionCloseReason.Manual, CancellationToken.None);
 
         transition.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual, Now.UtcDateTime));
         (await StoredAsync(tenant)).Should().Be(("idle", (Guid?)null, false, 0));
     }
 

@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
@@ -35,7 +37,10 @@ public class TeamAccessServiceTests
     private TeamAccessService Service() => new(
         _teams.Object, _members.Object, _roles.Object, new FakeTimeProvider(new DateTimeOffset(Now)),
         new Mock<INocturneDbContextFactory>(MockBehavior.Strict).Object,
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new TeamStaffAnnouncer(
+            _teams.Object, _members.Object, new SiteNotices(Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider()),
+            TimeProvider.System, NullLogger<TeamStaffAnnouncer>.Instance));
 
     /// <summary>
     /// Whether the approval passes every check made before the write: the write opens a unit on the
@@ -76,7 +81,7 @@ public class TeamAccessServiceTests
             .ReturnsAsync(RoleGrantValidation.Valid);
 
     private static TeamAccessGrant Grant(bool limit = false, DateTime? end = null) =>
-        new(SiteId, [Guid.CreateVersion7()], limit, end, true);
+        new(SiteId, [Guid.CreateVersion7()], limit, end, TeamStaffRule.TeamDecides);
 
     public static TheoryData<TeamAccessSuggestion, bool, DateTime?, TeamAccessGrant, TeamAccessRefusal?> Narrowings => new()
     {

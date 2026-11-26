@@ -1,0 +1,62 @@
+﻿{
+  Posted: {
+    StatusCode: 201,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 201,
+      identifier: {Scrubbed},
+      lastModified: {Scrubbed}
+    }
+  },
+  Fetched: {
+    StatusCode: 200,
+    ContentType: application/json; charset=utf-8,
+    Body: {
+      status: 200,
+      result: {
+        _id: {Scrubbed},
+        mills: 1768562100000,
+        date: 1768562100000,
+        created_at: DateTimeOffset_1,
+        srvModified: {Scrubbed},
+        srvCreated: {Scrubbed},
+        utcOffset: 120,
+        uploaderBattery: 87,
+        device: openaps://Pixel 7,
+        uploader: {
+          battery: 87
+        },
+        pump: {
+          battery: {
+            percent: 75
+          },
+          reservoir: 120.5,
+          clock: DateTimeOffset_1,
+          status: {
+            status: normal,
+            timestamp: DateTimeOffset_1
+          }
+        },
+        openaps: {
+          suggested: {
+            timestamp: DateTimeOffset_1,
+            bg: 100,
+            eventualBG: 95,
+            reason: In range,
+            duration: 30,
+            rate: 0.8,
+            temp: absolute
+          },
+          iob: {
+            iob: 1.25,
+            basaliob: 0.4,
+            activity: 0.02,
+            time: DateTimeOffset_1
+          }
+        },
+        app: AAPS,
+        identifier: {Scrubbed}
+      }
+    }
+  }
+}

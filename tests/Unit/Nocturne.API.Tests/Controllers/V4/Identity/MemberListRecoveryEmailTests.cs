@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -58,7 +59,7 @@ public class MemberListRecoveryEmailTests
             grantRevocation: null!,
             TimeProvider.System,
             NullLogger<TenantService>.Instance,
-            AccountLinkRoutes.Of(deliveryConfigured));
+            AccountLinkRoutes.Of(deliveryConfigured), InertTeamStaff.Announcer());
     }
 
     private static async Task<Dictionary<string, bool?>> FlagsAsync(TenantService service) =>
@@ -101,14 +102,13 @@ public class MemberListRecoveryEmailTests
 
     private static MemberInviteController Controller(ITenantService tenantService, params string[] grantedScopes)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.SetupGet(t => t.TenantId).Returns(TenantId);
+        var accessor = SettableTenantAccessor.Resolved(TenantId);
         var http = new DefaultHttpContext();
         http.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
         http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = Guid.NewGuid(), TenantId = TenantId };
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(), tenantService, Mock.Of<ITenantRoleService>(),
-            Mock.Of<ITenantMemberService>(), accessor.Object, Mock.Of<ITenantMembershipRepository>())
+            Mock.Of<ITenantMemberService>(), accessor, Mock.Of<ITenantMembershipRepository>())
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };

@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.Oura;
@@ -89,9 +90,7 @@ public class OuraImportJobServiceTests
         _h.StoreSession = _ => _h.SleepGate.Task;
         var (jobs, root) = _h.Build();
         var first = jobs.Start(OuraImportHarness.Export(), OuraImportHarness.Caller(root));
-        var accessor = new OuraImportHarness.Accessor();
-        accessor.SetTenant(OuraImportHarness.Tenant);
-        var purgeGuard = new OuraImportPurgeGuard(_h.RunGuard, accessor);
+        var purgeGuard = new OuraImportPurgeGuard(_h.RunGuard, new SettableTenantAccessor(OuraImportHarness.Tenant));
 
         var second = () => jobs.Start(OuraImportHarness.Export(), OuraImportHarness.Caller(root));
 

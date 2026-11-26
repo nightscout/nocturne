@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -229,7 +230,7 @@ public class GlookoConnectorServiceReauthTests
                 new HttpClient(),
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-                new FakeTenantAccessor(),
+                ResolvedTenant.Accessor(),
                 NullLogger<GlookoAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>())
         {
@@ -252,14 +253,6 @@ public class GlookoConnectorServiceReauthTests
 
             return Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 ("_logbook-web_session=sess", DateTime.UtcNow.AddHours(1), metadata));
-        }
-
-        private sealed class FakeTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
-            public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
         }
     }
 

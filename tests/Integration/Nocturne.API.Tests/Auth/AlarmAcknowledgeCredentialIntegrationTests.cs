@@ -5,6 +5,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -35,8 +36,7 @@ public class AlarmAcknowledgeCredentialIntegrationTests : ApiIntegrationTestBase
         using var client = CreateAuthenticatedClient();
         (await client.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
 
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Ack Holder");
@@ -50,27 +50,17 @@ public class AlarmAcknowledgeCredentialIntegrationTests : ApiIntegrationTestBase
         _token = JsonSerializer.Deserialize<JsonElement>(body).GetProperty("token").GetString()!;
 
         _importedToken = $"imported-{Guid.NewGuid():N}";
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenantId);
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, is_migrated, created_at)
-                VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, 'imported', @hash, true, now());
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            cmd.Parameters.AddWithValue("grantType", OAuthGrantTypes.Direct);
-            cmd.Parameters.AddWithValue("scopes", ScopeTranslator.FromPermissions(["notifications:*:ack"]).ToArray());
-            cmd.Parameters.AddWithValue("hash", HashUtils.Sha256Hex(_importedToken));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, is_migrated, created_at)
+            VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, 'imported', @hash, true, now());
+            """,
+            ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", subjectId),
+            ("grantType", OAuthGrantTypes.Direct),
+            ("scopes", ScopeTranslator.FromPermissions(["notifications:*:ack"]).ToArray()),
+            ("hash", HashUtils.Sha256Hex(_importedToken)));
     }
 
     [Theory]

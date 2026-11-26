@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -32,7 +33,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_session_ended_from_the_sessions_list_mints_no_direct_grant_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Ending Member");
         var ended = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -57,7 +58,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_cookie_session_ended_from_the_sessions_list_mints_no_direct_grant_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Ending Cookie Member");
         var ended = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -82,7 +83,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_session_ended_from_the_sessions_list_starts_no_passkey_enrolment_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Enrolling Member");
         var ended = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -109,7 +110,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_session_ended_from_the_sessions_list_regenerates_no_recovery_codes()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Recovering Member");
         var ended = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -137,7 +138,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task Signing_out_with_a_rotated_out_refresh_token_ends_its_whole_session_and_no_other()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Signing Out Member");
         using var scope = Fixture.Services.CreateScope();
@@ -168,7 +169,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task Signing_out_with_one_sessions_rotated_out_refresh_token_and_another_sessions_access_token_ends_both_and_no_third()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Split Pair Member");
         using var scope = Fixture.Services.CreateScope();
@@ -198,7 +199,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task Signing_out_with_no_refresh_token_ends_the_session_the_caller_is_signed_in_with_and_no_other()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Bearer Signing Out");
         var signedOut = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -222,7 +223,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_platform_admin_session_ended_from_the_sessions_list_mints_no_tenant_direct_grant()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (adminId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Ending Operator");
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Granted Member");
@@ -260,7 +261,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_session_refreshed_while_its_old_access_token_is_in_flight_is_still_live()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Refreshing Member");
         using var scope = Fixture.Services.CreateScope();
@@ -283,7 +284,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task Credentials_that_are_not_sessions_still_mint_once_the_subjects_session_has_ended()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Delegating Member");
         var session = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);
@@ -296,7 +297,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
         var grantToken = JsonSerializer.Deserialize<JsonElement>(await minted.Content.ReadAsStringAsync())
             .GetProperty("token").GetString()!;
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, tenantId);
-        var channelId = await ScalarAsync<Guid>(conn, "SELECT id FROM alert_rule_channels WHERE alert_rule_id = @key;", ruleId);
+        var channelId = await conn.ScalarInTenantAsync<Guid>("SELECT id FROM alert_rule_channels WHERE alert_rule_id = @key;", ruleId);
         object body = new { alertRuleChannelId = channelId };
         using var anonymousClient = Fixture.CreateHttpClient(ServiceNames.NocturneApi);
         var anonymous = await ShapeOfAsync(await anonymousClient.PostAsJsonAsync("/api/v4/alert-invites", body));
@@ -345,22 +346,9 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     /// <summary>The hashes of the subject's unspent, unvoided recovery codes, in a stable order.</summary>
     private static async Task<List<string>> UsableRecoveryCodesOfAsync(NpgsqlConnection conn, Guid subjectId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            "SELECT code_hash FROM recovery_codes WHERE subject_id = @key AND used_at IS NULL AND invalidated_at IS NULL ORDER BY code_hash;";
-        cmd.Parameters.AddWithValue("key", subjectId);
-        var hashes = new List<string>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            hashes.Add(reader.GetString(0));
-        return hashes;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+        return await conn.QueryAsync(
+            "SELECT code_hash FROM recovery_codes WHERE subject_id = @key AND used_at IS NULL AND invalidated_at IS NULL ORDER BY code_hash;",
+            reader => reader.GetString(0), ("key", subjectId));
     }
 
     /// <summary>The <c>sid</c> a session access token names.</summary>
@@ -374,11 +362,7 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
 
     private static async Task SetPlatformAdminAsync(NpgsqlConnection conn, Guid subjectId, bool isPlatformAdmin)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE subjects SET is_platform_admin = @isPlatformAdmin WHERE id = @id;";
-        cmd.Parameters.AddWithValue("isPlatformAdmin", isPlatformAdmin);
-        cmd.Parameters.AddWithValue("id", subjectId);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("UPDATE subjects SET is_platform_admin = @isPlatformAdmin WHERE id = @id;", ("isPlatformAdmin", isPlatformAdmin), ("id", subjectId));
     }
 
     /// <summary>The status, every header but <c>Date</c>, and the body, as one string to compare.</summary>
@@ -397,28 +381,11 @@ public partial class SessionLivenessCredentialIntegrationTests : ApiIntegrationT
     private static partial Regex TraceId();
 
     private static Task<long> CountRefreshTokensAsync(NpgsqlConnection conn, Guid subjectId, bool revoked) =>
-        ScalarAsync<long>(
-            conn,
-            revoked
+        conn.ScalarInTenantAsync<long>(revoked
                 ? "SELECT count(*) FROM refresh_tokens WHERE subject_id = @key AND revoked_at IS NOT NULL;"
                 : "SELECT count(*) FROM refresh_tokens WHERE subject_id = @key AND revoked_at IS NULL;",
             subjectId);
 
-    private static async Task<T> ScalarAsync<T>(NpgsqlConnection conn, string sql, object key)
-    {
-        await using (var pin = conn.CreateCommand())
-        {
-            pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            pin.Parameters.AddWithValue("tenantId", (await AuthTestHelpers.GetTenantIdAsync(conn)).ToString());
-            await pin.ExecuteNonQueryAsync();
-        }
-
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Parameters.AddWithValue("key", key);
-        return (T)(await cmd.ExecuteScalarAsync())!;
-    }
-
     private static Task<long> CountDirectGrantsOfAsync(NpgsqlConnection conn, Guid subjectId) =>
-        ScalarAsync<long>(conn, "SELECT count(*) FROM oauth_grants WHERE subject_id = @key AND grant_type = 'direct';", subjectId);
+        conn.ScalarInTenantAsync<long>("SELECT count(*) FROM oauth_grants WHERE subject_id = @key AND grant_type = 'direct';", subjectId);
 }

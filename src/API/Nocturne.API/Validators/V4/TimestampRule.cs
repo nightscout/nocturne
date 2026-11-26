@@ -24,6 +24,10 @@ public static class TimestampRule
     public static IRuleBuilderOptions<T, DateTimeOffset> TimestampRequired<T>(this IRuleBuilder<T, DateTimeOffset> rule)
         => rule.Must(timestamp => !IsMissing(timestamp)).WithMessage(Message);
 
+    /// <inheritdoc cref="TimestampRequired{T}(IRuleBuilder{T, DateTimeOffset})"/>
+    public static IRuleBuilderOptions<T, DateTime> TimestampRequired<T>(this IRuleBuilder<T, DateTime> rule)
+        => rule.Must(timestamp => !IsMissing(timestamp)).WithMessage(Message);
+
     /// <summary>A 400 whose detail is <see cref="Message"/>, for a check an action makes itself.</summary>
     public static ObjectResult TimestampRequiredProblem(this ControllerBase controller)
         => controller.Problem(detail: Message, statusCode: 400, title: "Bad Request");

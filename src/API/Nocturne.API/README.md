@@ -185,18 +185,13 @@ To contribute or extend Nocturne, see the main project documentation.
 
 ## TypeScript Client Generation
 
-The API automatically generates TypeScript client code using NSwag whenever the project is built in Debug mode.
+The API build generates the TypeScript client, the Zod schemas and the SvelteKit remote functions. They are not
+committed. The build regenerates them when the client is missing or older than the API's public surface (controllers,
+DTOs, attributes). To force a regeneration:
 
-**Generated Files:**
-
-- `../../Web/packages/api-client/src/nocturne-api-client.ts` - Auto-generated TypeScript client
-
-**Usage in Frontend:**
-
-```typescript
-import { apiClient } from "$lib/api/api-client";
-
-// The client is automatically typed with all your API endpoints
-const entries = await apiClient.rawClient.getEntries();
-const treatments = await apiClient.rawClient.getTreatments();
+```bash
+dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true
 ```
+
+The frontend reads the API through remote functions, not through the client directly. `CLAUDE.md` describes the
+pipeline ("API Client Generation Pipeline") and where its output goes ("Generated Files").

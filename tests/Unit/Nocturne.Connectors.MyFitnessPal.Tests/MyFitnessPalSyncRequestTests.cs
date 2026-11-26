@@ -9,8 +9,8 @@ using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests;
@@ -85,12 +85,12 @@ public class MyFitnessPalSyncRequestTests
 
         var resolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null);
         var http = new HttpClient();
-        var tenant = new Mock<ITenantAccessor>();
+        var tenant = new SettableTenantAccessor();
         var tokenProvider = new MyFitnessPalAuthTokenProvider(
             http,
             new ConnectorTokenCache(),
             resolver,
-            tenant.Object,
+            tenant,
             NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
 

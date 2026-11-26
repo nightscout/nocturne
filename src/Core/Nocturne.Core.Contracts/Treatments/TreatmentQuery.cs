@@ -12,6 +12,12 @@ public sealed record TreatmentQuery
     public string? Find { get; init; }
 
     /// <summary>
+    /// Whether a <see cref="Find"/> that names <c>isValid</c> reads the rows stored deleted, as a v1
+    /// find does. A v3 search sets it false (<see cref="Nocturne.Core.Models.Queries.FindQuery.IncludesDeletedWhenNamed"/>).
+    /// </summary>
+    public bool IncludesDeletedWhenNamed { get; init; } = true;
+
+    /// <summary>
     /// Maximum number of treatments to return. Defaults to 10.
     /// </summary>
     public int Count { get; init; } = 10;

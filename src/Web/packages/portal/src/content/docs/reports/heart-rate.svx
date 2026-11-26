@@ -31,11 +31,11 @@ The actogram has one row for each day. The newest day is at the top.
 
 - **The small dots** are your heart rate. A higher dot means a faster heart
   rate.
-- **The line and the larger dots** are your glucose. The colour of each glucose
+- **The line and the larger dots** are your glucose. The color of each glucose
   dot shows the range of that reading.
 
 Each row covers 48 hours: the day itself, and then the next day in a paler
-colour. This lets you follow an evening into the night without a break.
+color. This lets you follow an evening into the night without a break.
 
 Move the pointer over a row to see the heart rate and the glucose at that time.
 

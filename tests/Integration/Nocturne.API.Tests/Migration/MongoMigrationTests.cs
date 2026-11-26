@@ -3,9 +3,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -202,6 +205,71 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
         (await db.SensorGlucose.CountAsync()).Should().Be(10);
     }
 
+    /// <summary>
+    /// A quickpick is read as Nightscout serves it, so a number stored as a string and the
+    /// <c>hideafteruse</c> flag reach the imported food.
+    /// </summary>
+    [Fact]
+    public async Task MigrateFood_AQuickpickIsImportedAsNightscoutServesIt()
+    {
+        var databaseName = $"nightscout_quickpick_{Guid.NewGuid():N}";
+        await new MongoDB.Driver.MongoClient(_migration.MongoConnectionString).GetDatabase(databaseName)
+            .GetCollection<MongoDB.Bson.BsonDocument>("food")
+            .InsertOneAsync(MongoDB.Bson.BsonDocument.Parse("""
+                {
+                  "_id": { "$oid": "65f0000000000000000000b1" },
+                  "type": "quickpick",
+                  "name": "Breakfast",
+                  "hideafteruse": true,
+                  "hidden": "false",
+                  "position": 1,
+                  "foods": [{ "name": "Toast", "portion": "100", "portions": 2, "carbs": 30, "unit": "g" }]
+                }
+                """));
+
+        var status = await RunMigrationToCompletionAsync(
+            MigrationMode.MongoDb, collections: ["food"], databaseName: databaseName);
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["food"].DocumentsFailed.Should().Be(0);
+        var response = await AuthenticatedClient.GetAsync("/api/v1/food?count=10");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var food = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync()).EnumerateArray().Single();
+        food.GetProperty("_id").GetString().Should().Be("65f0000000000000000000b1");
+        food.GetProperty("hideafteruse").GetString().Should().Be("true");
+        var toast = food.GetProperty("foods").EnumerateArray().Single();
+        toast.GetProperty("portion").GetDouble().Should().Be(100);
+        toast.GetProperty("portions").GetDouble().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task MigrateDeviceStatus_FromMongo_KeepsTheIdAndAReadCreatedAtDate()
+    {
+        var databaseName = $"nightscout_devicestatus_{Guid.NewGuid():N}";
+        var id = ObjectId.GenerateNewId();
+        var createdAt = new DateTime(2026, 2, 2, 2, 40, 5, 123, DateTimeKind.Utc);
+        await new MongoClient(_migration.MongoConnectionString).GetDatabase(databaseName)
+            .GetCollection<BsonDocument>("devicestatus").InsertOneAsync(new BsonDocument
+            {
+                ["_id"] = id,
+                ["device"] = "openaps://phone",
+                ["created_at"] = new BsonDateTime(createdAt),
+                ["uploaderBattery"] = "81",
+            });
+
+        var status = await RunMigrationToCompletionAsync(
+            MigrationMode.MongoDb, collections: ["devicestatus"], databaseName: databaseName);
+
+        status.CollectionProgress["devicestatus"].DocumentsFailed.Should().Be(0);
+        var response = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=10");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stored = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync(), JsonOptions)
+            .EnumerateArray().Should().ContainSingle().Subject;
+        stored.GetProperty("_id").GetString().Should().Be(id.ToString());
+        stored.GetProperty("created_at").GetString().Should().Be("2026-02-02T02:40:05.123Z");
+        stored.GetProperty("uploaderBattery").GetInt32().Should().Be(81);
+    }
+
     #region Helpers
 
     private async Task<List<JsonElement>> GetV3EntriesAsync()
@@ -215,13 +283,14 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
     private async Task<MigrationJobStatus> RunMigrationToCompletionAsync(
         MigrationMode mode,
         List<string>? collections = null,
-        DateTime? startDate = null)
+        DateTime? startDate = null,
+        string databaseName = MigrationTestFixture.DatabaseName)
     {
         var request = new StartMigrationRequest
         {
             Mode = mode,
             MongoConnectionString = _migration.MongoConnectionString,
-            MongoDatabaseName = MigrationTestFixture.DatabaseName,
+            MongoDatabaseName = databaseName,
             Collections = collections ?? [],
             StartDate = startDate,
         };
@@ -232,22 +301,17 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
         jobInfo.Should().NotBeNull();
         await MigrationJobPump.RunAsync(Fixture);
 
-        // Poll until complete
-        MigrationJobStatus? status = null;
-        for (var i = 0; i < 120; i++)
-        {
-            var statusResponse = await AuthenticatedClient.GetAsync(
-                $"/api/v4/migration/{jobInfo!.Id}/status");
-            status = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
-
-            if (status!.State is MigrationJobState.Completed or MigrationJobState.Failed)
-                break;
-
-            await Task.Delay(500);
-        }
-
-        status.Should().NotBeNull();
-        if (status!.State == MigrationJobState.Failed)
+        var status = await Eventually.ValueAsync(
+            "the migration job to complete or fail",
+            async () =>
+            {
+                var statusResponse = await AuthenticatedClient.GetAsync(
+                    $"/api/v4/migration/{jobInfo!.Id}/status");
+                var current = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
+                return current!.State is MigrationJobState.Completed or MigrationJobState.Failed ? current : null;
+            },
+            step: TimeSpan.FromMilliseconds(250));
+        if (status.State == MigrationJobState.Failed)
         {
             Log($"Migration failed: {status.ErrorMessage}");
         }

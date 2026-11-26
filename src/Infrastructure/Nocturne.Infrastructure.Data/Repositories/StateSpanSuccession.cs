@@ -6,9 +6,9 @@ using Nocturne.Infrastructure.Data.Mappers;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// The rule that ends an open span of an exclusive category at the next stored span it conflicts with:
-/// the insert of a span behind a later one (<see cref="StateSpanRepository"/>), and the delete and the
-/// restore of a superseder (<see cref="Extensions.StateSpanSupersessionExtensions"/>), all apply it.
+/// The rule that ends an open span of an exclusive category at the next stored span it conflicts with.
+/// Every write that moves supersession applies it through <see cref="Extensions.StateSpanSupersessionExtensions"/>:
+/// an upload, a fold, the delete and the restore of a superseder, and a replace.
 /// </summary>
 internal static class StateSpanSuccession
 {
@@ -67,7 +67,7 @@ internal static class StateSpanSuccession
 
     /// <summary>
     /// Per key, the first <see cref="Candidates"/> stored live spans a span of that key can follow,
-    /// oldest first: one statement per <see cref="LookupsPerStatement"/> keys.
+    /// oldest first, by start then id: one statement per <see cref="LookupsPerStatement"/> keys.
     /// </summary>
     internal static async Task<Dictionary<(string Category, string? State, DateTime Start), List<StateSpanEntity>>>
         LoadCandidatesAsync(
@@ -82,46 +82,39 @@ internal static class StateSpanSuccession
             for (var i = 0; i < chunk.Length; i++)
             {
                 var lookup = i;
-                var rows = After(db, chunk[i])
+                var rows = After(db, chunk[i], afterId: null)
                     .Take(Candidates)
                     .Select(s => new CandidateRow { Lookup = lookup, Span = s });
                 query = query is null ? rows : query.Concat(rows);
             }
 
             foreach (var group in (await query!.ToListAsync(cancellationToken)).GroupBy(r => r.Lookup))
-                later[chunk[group.Key]] = [.. group.Select(r => r.Span).OrderBy(s => s.StartTimestamp)];
+                later[chunk[group.Key]] = [.. group.Select(r => r.Span).OrderBy(s => s.StartTimestamp).ThenBy(s => s.Id)];
         }
 
         return later;
     }
 
     /// <summary>
-    /// The first stored span that <see cref="Follows"/> <paramref name="open"/>, is
-    /// <paramref name="eligible"/> and starts before <paramref name="before"/>. Reads past
-    /// <paramref name="candidates"/>, the ones <see cref="LoadCandidatesAsync"/> read for its key, only when
-    /// every one was passed over and more may lie before <paramref name="before"/>; null candidates were
-    /// never read.
+    /// The first stored span that <see cref="Follows"/> <paramref name="open"/> and is
+    /// <paramref name="eligible"/>. Reads past <paramref name="candidates"/>, the ones
+    /// <see cref="LoadCandidatesAsync"/> read for its key, only when every one was passed over and more may
+    /// lie beyond them, from the last one's start and id on, so a span sharing its start is not skipped.
     /// </summary>
     internal static async Task<StateSpanEntity?> FirstStoredAsync(
         NocturneDbContext db,
         StateSpanEntity open,
         IDictionary<string, object>? metadata,
-        List<StateSpanEntity>? candidates,
+        List<StateSpanEntity> candidates,
         Func<StateSpanEntity, bool> eligible,
-        DateTime? before,
         CancellationToken cancellationToken)
     {
-        var found = candidates?.Where(eligible).FirstOrDefault(s => Follows(open, metadata, s));
-        if (found is not null)
+        var found = candidates.Where(eligible).FirstOrDefault(s => Follows(open, metadata, s));
+        if (found is not null || candidates.Count < Candidates)
             return found;
-        if (candidates is not null
-            && (candidates.Count < Candidates || (before is { } bound && candidates[^1].StartTimestamp >= bound)))
-            return null;
 
-        var after = candidates is null ? open.StartTimestamp : candidates[^1].StartTimestamp;
-        var further = After(db, Key(open.Category, open.State, after));
-        if (before is { } end)
-            further = further.Where(s => s.StartTimestamp < end);
+        var last = candidates[^1];
+        var further = After(db, Key(open.Category, open.State, last.StartTimestamp), last.Id);
         await foreach (var later in further.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
             if (eligible(later) && Follows(open, metadata, later))
@@ -131,15 +124,24 @@ internal static class StateSpanSuccession
         return null;
     }
 
+    /// <summary>
+    /// The stored spans of <paramref name="key"/>'s line in (start, id) order: those starting after its
+    /// start, or with <paramref name="afterId"/> given, after that position in the order. The same order
+    /// serves PostgreSQL, whose uuid sorts bytewise, SQLite, whose text sorts the same, and
+    /// <see cref="Guid.CompareTo(Guid)"/>.
+    /// </summary>
     private static IQueryable<StateSpanEntity> After(
-        NocturneDbContext db, (string Category, string? State, DateTime Start) key)
+        NocturneDbContext db, (string Category, string? State, DateTime Start) key, Guid? afterId)
     {
         var (category, state, start) = key;
-        var spans = db.StateSpans.AsNoTracking()
-            .Where(s => s.Category == category && s.StartTimestamp > start);
+        var spans = db.StateSpans.AsNoTracking().Where(s => s.Category == category);
+        spans = afterId is { } id
+            ? spans.Where(s => s.StartTimestamp >= start
+                && (s.StartTimestamp > start || s.Id.CompareTo(id) > 0))
+            : spans.Where(s => s.StartTimestamp > start);
         if (state is not null)
             spans = spans.Where(s => s.State == state);
-        return spans.OrderBy(s => s.StartTimestamp);
+        return spans.OrderBy(s => s.StartTimestamp).ThenBy(s => s.Id);
     }
 
     /// <summary>Set by member initialisation, which EF can translate on both sides of a union.</summary>

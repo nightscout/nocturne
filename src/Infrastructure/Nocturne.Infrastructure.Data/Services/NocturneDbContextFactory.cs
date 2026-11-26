@@ -14,7 +14,8 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <remarks>
 /// Resolved from the root provider (a singleton or a hosted service) the factory has no scope, and
 /// its contexts read <see cref="TenantReadContext.FailClosed"/>: no tenant, not a share, no clamp, no
-/// audit actor. A root-resolved factory never reads any request's scope. Background work that needs
+/// audit actor. A root-resolved factory never reads any request's scope. Every context stamps with the
+/// registered <see cref="TimeProvider"/>, the system clock unless a host replaces it. Background work that needs
 /// a tenant's scope state opens a scope with the tenant set and resolves the factory there.
 /// <para>
 /// Each open context holds its own pooled connection while it runs a query, so a caller that runs
@@ -91,6 +92,8 @@ internal sealed class NocturneDbContextFactory(
         ? TenantReadContext.FailClosed
         : services.GetRequiredService<TenantReadContext>();
 
+    private readonly TimeProvider _clock = services.GetRequiredService<TimeProvider>();
+
     public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
         ValueTask.FromResult(Create());
 
@@ -120,6 +123,7 @@ internal sealed class NocturneDbContextFactory(
     {
         var context = contexts.CreateDbContext();
         context.ReadContext = new TenantReadContext(null, null, _readContext.AuditContext);
+        context.Clock = _clock;
         context.TenantId = tenantId;
         return ValueTask.FromResult(context);
     }
@@ -128,6 +132,7 @@ internal sealed class NocturneDbContextFactory(
     {
         var context = contexts.CreateDbContext();
         context.ReadContext = _readContext;
+        context.Clock = _clock;
         return context;
     }
 }

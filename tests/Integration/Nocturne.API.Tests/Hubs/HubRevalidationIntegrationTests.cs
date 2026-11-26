@@ -12,6 +12,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -42,41 +43,23 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
         using var client = CreateAuthenticatedClient();
         (await client.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Revalidation User");
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
     }
 
     private async Task<(Guid GrantId, string Secret)> SeedSecretAsync()
     {
         var secret = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(20));
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return (await AuthTestHelpers.SeedApiSecretGrantAsync(conn, _tenantId, _subjectId, secret), secret);
     }
 
     private async Task ExecuteAsync(string sql, Guid id)
     {
-        await using var conn = await OpenAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = sql;
-            cmd.Parameters.AddWithValue("id", id);
-            (await cmd.ExecuteNonQueryAsync()).Should().BeGreaterThan(0);
-        }
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(_tenantId);
+        (await conn.ExecuteAsync(sql, ("id", id))).Should().BeGreaterThan(0);
     }
 
     private Task RevokeAsync(Guid grantId) =>
@@ -164,7 +147,7 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
     }
 
     private static async Task ShouldCloseAsync(Task closed, string because) =>
-        (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed, because);
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, because);
 
     [Fact]
     public async Task A_connection_whose_api_secret_is_revoked_is_closed_and_a_live_one_stays_open()
@@ -251,18 +234,12 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
         await ShouldCloseAsync(secretClosed, "the api-secret's member's access ended");
         await ShouldCloseAsync(upgradeClosed, "the upgrade credential's member's access ended");
         await ShouldCloseAsync(inBandClosed, "the in-band credential's member's access ended");
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenantId, false);
-            SELECT revoked_at IS NULL FROM oauth_grants WHERE id = @id;
-            """;
-        cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
-        cmd.Parameters.AddWithValue("id", grantId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        (await reader.ReadAsync()).Should().BeTrue();
-        reader.GetBoolean(0).Should().BeTrue("an ended membership revokes nothing");
+        await using var conn = await OpenPostgresAsync();
+        await conn.PinTenantAsync(_tenantId);
+        var unrevoked = await conn.QueryAsync(
+            "SELECT revoked_at IS NULL FROM oauth_grants WHERE id = @id;", reader => reader.GetBoolean(0), ("id", grantId));
+        unrevoked.Should().NotBeEmpty();
+        unrevoked[0].Should().BeTrue("an ended membership revokes nothing");
     }
 
     [Fact]
