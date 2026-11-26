@@ -139,7 +139,7 @@ describe("setup who-for step", () => {
 
   it("asks the patient's name only for someone else", async () => {
     render(SetupPage);
-    const name = page.getByLabelText("What's their name?");
+    const name = page.getByLabelText("What is their name?");
 
     await page.getByRole("radio", { name: /^Me/ }).click();
     await expect.element(name).not.toBeInTheDocument();
@@ -158,7 +158,7 @@ describe("setup who-for step", () => {
     render(SetupPage);
 
     await page.getByRole("radio", { name: new RegExp(label) }).click();
-    await page.getByLabelText("What's their name?").fill(" Sam ");
+    await page.getByLabelText("What is their name?").fill(" Sam ");
     await continueButton().click();
 
     expect(relationship.set).toHaveBeenCalledWith({ relationship: value, patientName: "Sam" });
@@ -195,14 +195,14 @@ describe("setup who-for step", () => {
     await expect
       .element(page.getByRole("radio", { name: /Someone I care for/ }))
       .toHaveAttribute("aria-checked", "true");
-    await expect.element(page.getByLabelText("What's their name?")).toHaveValue("Sam");
+    await expect.element(page.getByLabelText("What is their name?")).toHaveValue("Sam");
   });
 
   it("saves a changed name under the stored answer", async () => {
     relationship.stored = { relationship: "Caregiver", patientName: "Sam" };
     render(SetupPage);
 
-    await page.getByLabelText("What's their name?").fill("Alex");
+    await page.getByLabelText("What is their name?").fill("Alex");
     await continueButton().click();
 
     expect(relationship.set).toHaveBeenCalledWith({ relationship: "Caregiver", patientName: "Alex" });
@@ -215,7 +215,7 @@ describe("setup who-for step", () => {
     relationship.stored = { relationship: "Helper", patientName: "Sam" };
     render(SetupPage);
 
-    await expect.element(page.getByLabelText("What's their name?")).toHaveValue("Sam");
+    await expect.element(page.getByLabelText("What is their name?")).toHaveValue("Sam");
     await continueButton().click();
 
     expect(relationship.set).not.toHaveBeenCalled();

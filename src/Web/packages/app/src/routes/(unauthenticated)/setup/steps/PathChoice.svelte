@@ -44,7 +44,7 @@
           ? "I already run Nightscout. Copy my history across without changing my Nightscout site."
           : voice.kind === "named"
             ? `${voice.name} already has a Nightscout site. Copy ${voice.name}'s history across without changing that site.`
-            : "There's already a Nightscout site. Copy its history across without changing that site.",
+            : "There is already a Nightscout site. Copy its history across without changing that site.",
       bullets: [
         "Point at the existing Nightscout address",
         "Import entries, treatments, and profiles",

@@ -15,7 +15,7 @@ export function rateLimitedError(): string {
 
 /** Shown when the thing an action referred to is no longer on the server. */
 export function missingItemError(): string {
-  return "That item no longer exists. Refresh the page to see what's there now.";
+  return "That item no longer exists. Refresh the page to see what is there now.";
 }
 
 /**

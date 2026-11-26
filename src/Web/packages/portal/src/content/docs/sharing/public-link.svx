@@ -10,7 +10,7 @@ title: Public share link
 # Public share link
 
 Public access turns on a single read-only link that **anyone you give it to can
-open, with no sign-in and no invite**. Because there's no sign-in, treat the link
+open, with no sign-in and no invite**. Because there is no sign-in, treat the link
 itself as the key: anyone who has it can see whatever you have chosen to share.
 
 It is **off until you turn it on**, and you turn it on under
@@ -36,7 +36,7 @@ in your audit log.
 
 The address is a long random code on its own web address, along the lines of
 `k7m2p9x4q1.share.example.com`. That random part is the whole of the security:
-there's no list of shares to browse and nothing to guess your way to. Because
+there is no list of shares to browse and nothing to guess your way to. Because
 anyone holding it gets in, treat it like a password: a password manager is a good
 place to keep it.
 
@@ -55,11 +55,11 @@ is impossible, so regenerating is the only way to get a copy you can send.
 
 </Callout>
 
-## Choosing what's visible
+## Choosing what is visible
 
 You stay in control of two things.
 
-**What's visible.** There are eight categories you can switch on or off
+**What is visible.** There are eight categories you can switch on or off
 independently:
 
 | Category | What it shares |
@@ -106,7 +106,7 @@ chose:
 
 ## Turning it off or replacing it
 
-There's no expiry: the link works until you turn public access off. Two controls
+There is no expiry: the link works until you turn public access off. Two controls
 end it:
 
 - **Switch public access off.** The link stops working immediately.
@@ -117,7 +117,7 @@ end it:
 
 <Callout type="warning" title="Anyone with the link can open it">
 
-  There's no sign-in on a public link, and you cannot control who it gets forwarded
+  There is no sign-in on a public link, and you cannot control who it gets forwarded
   to once it is out. Share the minimum categories the situation actually needs,
   keep the 24-hour window on, and regenerate the link if you ever think it has
   spread too far.
