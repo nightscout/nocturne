@@ -170,7 +170,7 @@
         <HelpCircle class="h-5 w-5" />
         Get support
       </CardTitle>
-      <CardDescription>Need help? Here's how to reach us</CardDescription>
+      <CardDescription>Need help? Here is how to reach us</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <!-- No `fonts`: these sizes are inherited, so there is no class to mirror. -->

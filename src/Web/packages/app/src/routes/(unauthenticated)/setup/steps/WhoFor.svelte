@@ -103,7 +103,7 @@
   {#if asksName}
     <div class="w-full max-w-md">
       <FormField
-        label="What's their name?"
+        label="What is their name?"
         id="patient-name"
         labelVariant="muted"
         description="Setup will say things like “Sam's glucose”. It is saved as their preferred name, and you can change it later in Settings."

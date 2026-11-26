@@ -9,5 +9,7 @@ tokens:
   - '\b\w+n[''’]t\b'
   - '\b\w+[''’](?:ll|re|ve|d)\b'
   - '\b[Ii]t[''’]s\b'
+  # These words have no possessive, so 's after them is always a contraction.
+  - '\b(?:[Tt]here|[Tt]hat|[Ww]hat|[Hh]ere|[Ww]ho|[Ww]here|[Hh]e|[Ss]he)[''’]s\b'
   # "Let's Encrypt" is a product name.
   - '\b[Ll]et[''’]s\b(?! Encrypt)'

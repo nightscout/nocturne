@@ -171,7 +171,7 @@ describe("alerts page", () => {
 
     await vi.waitFor(() =>
       expect(toastError).toHaveBeenCalledWith(
-        "That item no longer exists. Refresh the page to see what's there now."
+        "That item no longer exists. Refresh the page to see what is there now."
       )
     );
   });

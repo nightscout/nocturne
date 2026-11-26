@@ -126,7 +126,7 @@ describe("DeviceSetupItem", () => {
     render(DeviceSetupItem);
 
     await expect
-      .element(page.getByText("We looked at what's connected and think Sam uses these. Is that right?"))
+      .element(page.getByText("We looked at what is connected and think Sam uses these. Is that right?"))
       .toBeVisible();
     const cgm = page.getByTestId("device-slot-cgm");
     await expect.element(cgm.getByText("Dexcom G7", { exact: true }).first()).toBeVisible();
@@ -144,7 +144,7 @@ describe("DeviceSetupItem", () => {
     remote.setup = guessed();
     render(DeviceSetupItem);
 
-    await page.getByTestId("device-slot-pump").getByRole("button", { name: "That's right" }).click();
+    await page.getByTestId("device-slot-pump").getByRole("button", { name: "Yes, this one" }).click();
 
     await vi.waitFor(() =>
       expect(remote.confirmSetupDevice).toHaveBeenCalledWith({

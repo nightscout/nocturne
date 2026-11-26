@@ -82,7 +82,7 @@ The Google sign-in button will appear on your sign-in page immediately.
 
 1. Open your Nocturne sign-in page in a private/incognito window
 2. Select **Sign in with Google**
-3. Sign in with a Google account that's in your test users list (or any account, if you have published the app) and that already has a Nocturne account
+3. Sign in with a Google account that is in your test users list (or any account, if you have published the app) and that already has a Nocturne account
 4. You are redirected back to Nocturne and signed in
 
 A Google sign-in does not create a Nocturne account. See [New accounts and roles](/docs/authentication/oidc#new-accounts-and-roles).

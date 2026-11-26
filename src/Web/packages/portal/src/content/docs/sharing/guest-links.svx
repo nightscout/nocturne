@@ -12,7 +12,7 @@ title: Temporary guest links
 A guest link gives someone a **read-only view of your data without an account**.
 You create it, hand over the link (or the short code inside it), and it lets them
 look. They cannot change anything. It **expires on its own 48 hours after you make
-it** and can only be used **once**, so there's nothing to remember to switch off
+it** and can only be used **once**, so there is nothing to remember to switch off
 afterwards.
 
 You create and manage guest links from **Site settings > Sharing & Privacy**, where
@@ -27,7 +27,7 @@ code out over the phone. The person enters it on the guest page of your instance
 
 <Screenshot id="guest-code-entry" />
 
-Once they enter it, the code is spent. That's the point: a link that has already
+Once they enter it, the code is spent. That is the point: a link that has already
 been used cannot be forwarded on and opened again by somebody else.
 
 You can have **five** active guest links at once (one per person you are sharing

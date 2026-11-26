@@ -37,7 +37,7 @@ For the step-by-step of what signing in actually looks like, see
 
 Passkeys are the default and need no configuration. They are always available. A passkey
 is bound to the user's device or password manager and unlocked with biometrics or a PIN,
-so there's nothing for you to provision and no shared secret to leak.
+so there is nothing for you to provision and no shared secret to leak.
 
 The sign-in screen offers two passkey paths:
 

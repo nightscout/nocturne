@@ -198,7 +198,7 @@
 {/snippet}
 
 {#if !setup}
-  <p class="text-sm text-muted-foreground">Looking at what's connected...</p>
+  <p class="text-sm text-muted-foreground">Looking at what is connected...</p>
 {:else}
   <div class="flex flex-col gap-8" data-testid="device-setup">
     <section class="flex flex-col gap-4" aria-labelledby="devices-heading">
@@ -208,11 +208,11 @@
           <p class="text-sm text-muted-foreground">
             {#if anyGuess}
               {#if voice.kind === "self"}
-                We looked at what's connected and think you use these. Is that right?
+                We looked at what is connected and think you use these. Is that right?
               {:else if voice.kind === "named"}
-                We looked at what's connected and think {voice.name} uses these. Is that right?
+                We looked at what is connected and think {voice.name} uses these. Is that right?
               {:else}
-                We looked at what's connected and think these are in use. Is that right?
+                We looked at what is connected and think these are in use. Is that right?
               {/if}
             {:else if voice.kind === "self"}
               Pick the sensor and pump you use.
@@ -298,7 +298,7 @@
             {/if}
 
             <Button disabled={busy || !selectedId(slot)} onclick={() => confirm(slot)}>
-              {slot.guess && selectedId(slot) === slot.guess.id ? "That's right" : "Use this one"}
+              {slot.guess && selectedId(slot) === slot.guess.id ? "Yes, this one" : "Use this one"}
             </Button>
           </div>
 

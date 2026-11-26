@@ -56,7 +56,7 @@ have turned on the [public share link](/docs/sharing/public-link). A clock is it
 own, separate thing, and turning public access off does not switch a clock off.
 
 The address ends in a long code, like
-`/clock/0c8f3a1e-9b7d-7e42-a1c5-2f6b9d4e8a30`. That code is the key: there's no
+`/clock/0c8f3a1e-9b7d-7e42-a1c5-2f6b9d4e8a30`. That code is the key: there is no
 list of clocks to browse and nothing to guess your way to, so the link works for
 whoever holds it.
 
@@ -72,7 +72,7 @@ whoever holds it.
     </p>
     <ul class="list-disc space-y-1 pl-5">
       <li>
-        <strong>There's no directory.</strong> Clocks are not listed anywhere, so
+        <strong>There is no directory.</strong> Clocks are not listed anywhere, so
         nothing hands out codes and a link only opens a clock if you already have its
         exact one.
       </li>
