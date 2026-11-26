@@ -28,6 +28,9 @@ export const WINDOW_CLOSED_REASON =
 /** Long enough for an alert's send to be remembered after Meta answered it. */
 const EARLY_FAILURE_TTL_MS = 10 * 60 * 1000;
 
+/** Longer than the bot keeps asking Meta to deliver a failed status again; see `NocturneWhatsAppAdapter`. */
+const REPORT_ATTEMPT_TTL_MS = 24 * 60 * 60 * 1000;
+
 /** The alert delivery a sent WhatsApp message carries, so a later failed status can be reported on it. */
 export interface SentAlert {
   deliveryId: string;
@@ -40,6 +43,7 @@ export interface SentAlert {
 const inboundKey = (threadId: string) => `nocturne:whatsapp:last-inbound:${threadId}`;
 const sentKey = (messageId: string) => `nocturne:whatsapp:alert-sent:${messageId}`;
 const earlyFailureKey = (messageId: string) => `nocturne:whatsapp:early-failure:${messageId}`;
+const reportAttemptKey = (messageId: string) => `nocturne:whatsapp:report-attempt:${messageId}`;
 
 /** A failed status for a message no sent alert was remembered for yet; see {@link WhatsAppWindow.rememberEarlyFailure}. */
 export interface EarlyFailure {
@@ -108,6 +112,12 @@ export class WhatsAppWindow {
     const failure = await this.state.get<EarlyFailure>(earlyFailureKey(messageId));
     if (failure) await this.state.delete(earlyFailureKey(messageId));
     return failure;
+  }
+
+  /** When the bot first tried to report a failed status, in epoch milliseconds; `now` when this is the first. */
+  async firstReportAttempt(messageId: string, now: number): Promise<number> {
+    await this.state.setIfNotExists(reportAttemptKey(messageId), now, REPORT_ATTEMPT_TTL_MS);
+    return (await this.state.get<number>(reportAttemptKey(messageId))) ?? now;
   }
 
   /** Forgets a sent alert once its outcome is reported, so a repeated status finds nothing. */

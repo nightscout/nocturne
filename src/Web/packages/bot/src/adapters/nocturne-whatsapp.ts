@@ -16,8 +16,6 @@ interface StatusError {
 interface StatusUpdate {
   id: string;
   status: string;
-  /** Epoch milliseconds Meta stamps the status with, or null when it has none. */
-  timestamp: number | null;
   errors: StatusError[];
 }
 
@@ -66,16 +64,8 @@ function statusUpdates(body: string): StatusUpdate[] {
     .flatMap((status) => {
       const id = field(status, "id");
       const state = field(status, "status");
-      const seconds = Number.parseInt(String(field(status, "timestamp")), 10);
       return typeof id === "string" && typeof state === "string"
-        ? [
-            {
-              id,
-              status: state,
-              timestamp: Number.isFinite(seconds) ? seconds * 1000 : null,
-              errors: list(field(status, "errors")).map(statusError),
-            },
-          ]
+        ? [{ id, status: state, errors: list(field(status, "errors")).map(statusError) }]
         : [];
     });
 }
@@ -89,15 +79,12 @@ function isRefusal(error: unknown): boolean {
 }
 
 /**
- * How long a failure the API keeps refusing for a reason that can pass is delivered again. Meta
- * retries a webhook for days, and the messages in a batch are deduplicated for ten minutes only, so
- * past this the batch's commands and button replies would run again with every retry.
+ * How long, from the bot's first try, a failure the API keeps refusing for a reason that can pass
+ * is asked for again. Meta retries a webhook for days, and the messages in a batch are deduplicated
+ * for ten minutes only, so past this the batch's commands and button replies would run again with
+ * every retry.
  */
 const REPORT_RETRY_MS = 60 * 60 * 1000;
-
-function pastRetrying(status: StatusUpdate): boolean {
-  return status.timestamp !== null && Date.now() - status.timestamp > REPORT_RETRY_MS;
-}
 
 function failureReason(errors: StatusError[]): string {
   if (errors.some((e) => e.code === WINDOW_CLOSED_ERROR_CODE)) return WINDOW_CLOSED_REASON;
@@ -167,6 +154,17 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
     return this.chat ? new WhatsAppWindow(this.chat.getState()) : null;
   }
 
+  /** Whether the bot first tried to report this status over {@link REPORT_RETRY_MS} ago. Unknown is no. */
+  private async pastRetrying(window: WhatsAppWindow, messageId: string): Promise<boolean> {
+    const now = Date.now();
+    try {
+      return now - (await window.firstReportAttempt(messageId, now)) > REPORT_RETRY_MS;
+    } catch (error) {
+      this.logger.warn("Failed to read when a WhatsApp status was first reported", { messageId, error });
+      return false;
+    }
+  }
+
   /** False when a failed alert could not be reported and should be delivered again. */
   private async reportStatuses(body: string): Promise<boolean> {
     const window = this.window();
@@ -187,7 +185,6 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
           await window.rememberEarlyFailure(status.id, { reason: failureReason(status.errors), windowClosed });
           alert = await window.sentAlert(status.id);
           if (!alert) continue;
-          await window.takeEarlyFailure(status.id);
         }
         if (windowClosed) {
           await window.recordClosed(alert.threadId, alert.sentAt);
@@ -200,8 +197,9 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
       } catch (error) {
         this.logger.error("Failed to report a WhatsApp alert's status", { messageId: status.id, error });
         if (status.status !== "failed") continue;
-        // The API refused the report itself (the delivery or its tenant is gone): no retry can land it.
-        if (!isRefusal(error) && !pastRetrying(status)) reported = false;
+        // No retry can land a report the API refused itself (the delivery or its tenant is gone),
+        // and one refused for over an hour is given up.
+        if (!isRefusal(error) && !(await this.pastRetrying(window, status.id))) reported = false;
         else
           await window
             .forgetSent(status.id)
