@@ -16,6 +16,8 @@ interface StatusError {
 interface StatusUpdate {
   id: string;
   status: string;
+  /** Epoch milliseconds Meta stamps the status with, or null when it has none. */
+  timestamp: number | null;
   errors: StatusError[];
 }
 
@@ -64,8 +66,16 @@ function statusUpdates(body: string): StatusUpdate[] {
     .flatMap((status) => {
       const id = field(status, "id");
       const state = field(status, "status");
+      const seconds = Number.parseInt(String(field(status, "timestamp")), 10);
       return typeof id === "string" && typeof state === "string"
-        ? [{ id, status: state, errors: list(field(status, "errors")).map(statusError) }]
+        ? [
+            {
+              id,
+              status: state,
+              timestamp: Number.isFinite(seconds) ? seconds * 1000 : null,
+              errors: list(field(status, "errors")).map(statusError),
+            },
+          ]
         : [];
     });
 }
@@ -76,6 +86,17 @@ const REFUSALS = new Set([400, 404, 409, 410, 422]);
 function isRefusal(error: unknown): boolean {
   const status = field(error, "status");
   return typeof status === "number" && REFUSALS.has(status);
+}
+
+/**
+ * How long a failure the API keeps refusing for a reason that can pass is delivered again. Meta
+ * retries a webhook for days, and the messages in a batch are deduplicated for ten minutes only, so
+ * past this the batch's commands and button replies would run again with every retry.
+ */
+const REPORT_RETRY_MS = 60 * 60 * 1000;
+
+function pastRetrying(status: StatusUpdate): boolean {
+  return status.timestamp !== null && Date.now() - status.timestamp > REPORT_RETRY_MS;
 }
 
 function failureReason(errors: StatusError[]): string {
@@ -166,6 +187,7 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
           await window.rememberEarlyFailure(status.id, { reason: failureReason(status.errors), windowClosed });
           alert = await window.sentAlert(status.id);
           if (!alert) continue;
+          await window.takeEarlyFailure(status.id);
         }
         if (windowClosed) {
           await window.recordClosed(alert.threadId, alert.sentAt);
@@ -179,7 +201,7 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
         this.logger.error("Failed to report a WhatsApp alert's status", { messageId: status.id, error });
         if (status.status !== "failed") continue;
         // The API refused the report itself (the delivery or its tenant is gone): no retry can land it.
-        if (!isRefusal(error)) reported = false;
+        if (!isRefusal(error) && !pastRetrying(status)) reported = false;
         else
           await window
             .forgetSent(status.id)

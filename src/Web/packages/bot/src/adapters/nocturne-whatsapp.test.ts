@@ -86,16 +86,18 @@ const textFrom = (waId: string, sentAt: Date) =>
     ],
   });
 
-const status = (messageId: string, state: string) =>
-  change({ statuses: [{ id: messageId, status: state, timestamp: "1700000000", recipient_id: WA_ID }] });
+const secondsAgo = (ms: number) => String(Math.floor((Date.now() - ms) / 1000));
 
-const failedStatus = (messageId: string, code: number, title: string) =>
+const status = (messageId: string, state: string) =>
+  change({ statuses: [{ id: messageId, status: state, timestamp: secondsAgo(0), recipient_id: WA_ID }] });
+
+const failedStatus = (messageId: string, code: number, title: string, ageMs = 0) =>
   change({
     statuses: [
       {
         id: messageId,
         status: "failed",
-        timestamp: "1700000000",
+        timestamp: secondsAgo(ageMs),
         recipient_id: WA_ID,
         errors: [{ code, title }],
       },
@@ -240,6 +242,28 @@ describe("NocturneWhatsAppAdapter", () => {
 
     expect(response.status).toBe(500);
     await expect(bits.window.sentAlert("wamid.alert")).resolves.not.toBeNull();
+  });
+
+  it("stops asking for a failure the API has refused for over an hour, so the batch's commands do not run again", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    bits.markFailed.mockRejectedValueOnce(Object.assign(new Error("Unauthorized"), { status: 401 }));
+
+    const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message", 2 * 60 * 60 * 1000));
+
+    expect(response.status).toBe(200);
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
+  });
+
+  it("clears its own record of a failure once it finds the alert and reports it", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    // The alert is remembered between the webhook's first read and its write of the early failure.
+    const firstRead = vi.spyOn(WhatsAppWindow.prototype, "sentAlert").mockResolvedValueOnce(null);
+
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(bits.markFailed).toHaveBeenCalledOnce();
+    firstRead.mockRestore();
+    await expect(bits.window.takeEarlyFailure("wamid.alert")).resolves.toBeNull();
   });
 
   describe("addressing", () => {
