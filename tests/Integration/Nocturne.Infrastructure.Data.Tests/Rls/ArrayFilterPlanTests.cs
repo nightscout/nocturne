@@ -201,7 +201,7 @@ public class ArrayFilterPlanTests(SourceDeletePlanTests.NeverAnalysedDatabase db
     private static async Task<NpgsqlConnection> OpenAsync(NpgsqlDataSource source, Guid tenant)
     {
         var conn = await source.OpenConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
         return conn;
     }
 

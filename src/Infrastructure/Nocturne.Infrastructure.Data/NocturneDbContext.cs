@@ -634,11 +634,53 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. Implementing<IDuplicateFlagged>().Where(typeof(IV4TimeSeriesEntity).IsAssignableFrom)];
 
     /// <summary>
+    /// V4 record tables a read ranges over one tenant by timestamp with its soft-deleted rows, which
+    /// the partial list indexes leave out: the legacy treatment window read that includes deleted rows
+    /// (<c>ILegacyKeyedRepository.GetIncludingDeletedAsync</c>, and on profile activations
+    /// <c>LegacyProfileActivationTable.InWindow</c>), and on sensor glucose the dedup unlinked read.
+    /// </summary>
+    internal static readonly Type[] V4DeletedInclusiveWindowEntities =
+    [
+        typeof(SensorGlucoseEntity),
+        typeof(BolusEntity),
+        typeof(CarbIntakeEntity),
+        typeof(TempBasalEntity),
+        typeof(BGCheckEntity),
+        typeof(NoteEntity),
+        typeof(DeviceEventEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ProfileActivationEntity),
+    ];
+
+    /// <summary>
     /// The <see cref="ILegacyIdentified"/> tables, each with the unique legacy-id index and its
     /// user-tombstone companion: <see cref="V4LegacyIdRecordEntities"/> and
     /// <see cref="StateSpanEntity"/>, which carries no decomposition correlation.
     /// </summary>
     internal static readonly Type[] LegacyIdKeyedEntities = Implementing<ILegacyIdentified>();
+
+    /// <summary>
+    /// The <see cref="LegacyIdKeyedEntities"/> an isValid:false upload asks for deleted rows of
+    /// (<c>ILegacyKeyedRepository.GetDeletedLegacyIdsAsync</c>, <c>DecomposedTreatmentTable.DeletedAsync</c>):
+    /// the entry and device status snapshot tables and the decomposed treatment tables. Notes are left
+    /// out, because their unfiltered <c>ix_notes_tenant_legacy_id_any</c> serves the lookup.
+    /// </summary>
+    internal static readonly Type[] DeletedLegacyIdLookupEntities =
+    [
+        typeof(SensorGlucoseEntity),
+        typeof(MeterGlucoseEntity),
+        typeof(CalibrationEntity),
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+        typeof(BolusEntity),
+        typeof(TempBasalEntity),
+        typeof(CarbIntakeEntity),
+        typeof(BGCheckEntity),
+        typeof(DeviceEventEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ProfileActivationEntity),
+    ];
 
     /// <summary>
     /// Tables looked up by the decomposition correlation, adding
