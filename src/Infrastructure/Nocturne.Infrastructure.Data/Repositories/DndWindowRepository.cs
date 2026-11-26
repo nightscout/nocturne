@@ -265,9 +265,8 @@ public class DndWindowRepository : IDndWindowRepository
     /// </summary>
     private static IQueryable<DndWindowEntity> CouldBeActive(
         IQueryable<DndWindowEntity> windows, DndScope? scope, DateTime now) =>
-        windows.Where(w => (scope == null || w.Scope == scope)
-                           && w.ClearedAt == null
-                           && (w.EndsAt == null || w.EndsAt > now));
+        windows.Where(w => (scope == null || w.Scope == scope) && w.ClearedAt == null)
+            .NotEndedBy(w => w.EndsAt, now);
 
     internal static bool IsActive(DndWindowEntity w, DateTime now) =>
         new DndWindowSnapshot(w.Scope, w.StartedAt, w.EndsAt, w.ClearedAt, w.CreatedAt).IsActiveAt(now);
