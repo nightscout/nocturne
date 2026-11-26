@@ -20,6 +20,8 @@ public partial class ConnectorCancelTimeoutRuleTests
     [
         new("GoogleHealthConnectorService.cs", "PerformSyncInternalAsync",
             "an earlier catch in the same try takes the real cancel; a timeout falls to the failure path"),
+        new("GoogleHealthConnectorService.cs", "DiscardReconciliationRunAsync",
+            "the token is the cleanup's own, so its expiry cancels it and IsTimeout would read that timeout as a cancel; nothing else can cancel the call"),
         new("NocturneRemoteConnectorService.cs", "FetchOrFailAsync",
             "rethrows; a timeout already reaches the retry loop, and its text the error"),
     ];

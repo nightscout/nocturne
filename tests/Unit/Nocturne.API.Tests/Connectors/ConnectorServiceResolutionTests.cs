@@ -79,9 +79,11 @@ public class ConnectorServiceResolutionTests
                 continue;
 
             var required = parameter.ParameterType;
+            var key = parameter.GetCustomAttribute<FromKeyedServicesAttribute>()?.Key;
             var registered = services.FirstOrDefault(descriptor =>
-                descriptor.ServiceType == required
-                || (required.IsGenericType && descriptor.ServiceType == required.GetGenericTypeDefinition()));
+                Equals(descriptor.ServiceKey, key)
+                && (descriptor.ServiceType == required
+                    || (required.IsGenericType && descriptor.ServiceType == required.GetGenericTypeDefinition())));
 
             if (registered is not null)
             {
@@ -95,7 +97,10 @@ public class ConnectorServiceResolutionTests
             if ((required.IsInterface || required.IsAbstract) && !IsConnectorOwned(required))
             {
                 var mock = (Mock)Activator.CreateInstance(typeof(Mock<>).MakeGenericType(required))!;
-                services.AddSingleton(required, mock.Object);
+                if (key is null)
+                    services.AddSingleton(required, mock.Object);
+                else
+                    services.AddKeyedSingleton(required, key, mock.Object);
             }
         }
     }

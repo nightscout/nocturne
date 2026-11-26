@@ -246,111 +246,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         GC.SuppressFinalize(this);
     }
 
-    private async Task<DateTime?> FetchLatestEntryTimestampAsync(TConfig config)
-    {
-        if (_publisher is not { IsAvailable: true })
-        {
-            _logger.LogDebug(
-                "API data submitter not available, cannot fetch latest entry timestamp"
-            );
-            return null;
-        }
-
-        // A failed read propagates rather than reading as null: a null watermark means "no prior
-        // data", which triggers an initial backfill, unbounded for connectors with a null
-        // InitialSyncFloor. A transient read failure must fail this cycle (retried next interval),
-        // not be amplified into a full-history recrawl and republish.
-        var timestamp = await _publisher.Glucose.GetLatestEntryTimestampAsync(ConnectorSource);
-        if (timestamp.HasValue)
-            _logger.LogInformation(
-                "Latest entry timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
-                ConnectorSource,
-                timestamp.Value
-            );
-        else
-            _logger.LogDebug(
-                "No existing entries found for {ConnectorSource}",
-                ConnectorSource
-            );
-        return timestamp;
-    }
-
-    private async Task<DateTime?> FetchLatestTreatmentTimestampAsync(TConfig config)
-    {
-        if (_publisher is not { IsAvailable: true })
-        {
-            _logger.LogDebug(
-                "API data submitter not available, cannot fetch latest treatment timestamp"
-            );
-            return null;
-        }
-
-        // A failed read propagates for the reason given in FetchLatestEntryTimestampAsync.
-        var timestamp = await _publisher.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource);
-        if (timestamp.HasValue)
-            _logger.LogInformation(
-                "Latest treatment timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
-                ConnectorSource,
-                timestamp.Value
-            );
-        else
-            _logger.LogDebug(
-                "No existing treatments found for {ConnectorSource}",
-                ConnectorSource
-            );
-        return timestamp;
-    }
-
-    private async Task<DateTime?> FetchLatestDeviceStatusTimestampAsync(TConfig config)
-    {
-        if (_publisher is not { IsAvailable: true })
-        {
-            _logger.LogDebug(
-                "API data submitter not available, cannot fetch latest device status timestamp"
-            );
-            return null;
-        }
-
-        try
-        {
-            return await _publisher.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to fetch latest device status timestamp for {ConnectorSource}",
-                ConnectorSource
-            );
-            return null;
-        }
-    }
-
-    private async Task<DateTime?> FetchLatestActivityTimestampAsync(TConfig config)
-    {
-        if (_publisher is not { IsAvailable: true })
-        {
-            _logger.LogDebug(
-                "API data submitter not available, cannot fetch latest activity timestamp"
-            );
-            return null;
-        }
-
-        try
-        {
-            return await _publisher.Metadata.GetLatestActivityTimestampAsync(ConnectorSource);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to fetch latest activity timestamp for {ConnectorSource}",
-                ConnectorSource
-            );
-            return null;
-        }
-    }
-
     /// <summary>
     ///     The glucose family's resume point: the most recent stored entry (minus the catch-up
     ///     overlap), or <see cref="InitialSyncFloor"/> when none is stored. Combine it with a
@@ -359,7 +254,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// </summary>
     private async Task<DateTime?> CalculateSinceTimestampAsync(TConfig config)
     {
-        var latestEntryTimestamp = await FetchLatestEntryTimestampAsync(config);
+        var latestEntryTimestamp = await FetchLatestWatermarkAsync(
+            "entry", () => _publisher!.Glucose.GetLatestEntryTimestampAsync(ConnectorSource));
 
         return CalculateSinceFromTimestamp(latestEntryTimestamp, "entries");
     }
@@ -370,7 +266,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// </summary>
     private async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config)
     {
-        var latestTreatmentTimestamp = await FetchLatestTreatmentTimestampAsync(config);
+        var latestTreatmentTimestamp = await FetchLatestWatermarkAsync(
+            "treatment", () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource));
 
         return CalculateSinceFromTimestamp(latestTreatmentTimestamp, "treatments");
     }
@@ -382,7 +279,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// </summary>
     private async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
     {
-        var latest = await FetchLatestDeviceStatusTimestampAsync(config);
+        var latest = await FetchLatestWatermarkAsync(
+            "device status", () => _publisher!.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource));
         return TryCalculateCatchUpSince(latest, "device status");
     }
 
@@ -392,7 +290,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// </summary>
     private async Task<DateTime?> CalculateActivityCatchUpSinceAsync(TConfig config)
     {
-        var latest = await FetchLatestActivityTimestampAsync(config);
+        var latest = await FetchLatestWatermarkAsync(
+            "activity", () => _publisher!.Metadata.GetLatestActivityTimestampAsync(ConnectorSource));
         return TryCalculateCatchUpSince(latest, "activity");
     }
 
@@ -404,7 +303,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     private async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config, SyncDataType type)
     {
         var latest = await FetchLatestWatermarkAsync(
-            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource));
+            type.ToString(), () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource));
 
         return CalculateSinceFromTimestamp(latest, type.ToString());
     }
@@ -417,21 +316,35 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     private async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
     {
         var latest = await FetchLatestWatermarkAsync(
-            () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource));
+            "state span", () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource));
 
         return CalculateSinceFromTimestamp(latest, "state spans");
     }
 
     /// <summary>
-    ///     Reads one resume watermark. A failed read propagates for the reason given in
-    ///     <see cref="FetchLatestEntryTimestampAsync"/>.
+    ///     Reads one resume watermark of <paramref name="family"/>. A failed read propagates rather than
+    ///     reading as null: a null watermark means "no prior data", which triggers an initial backfill,
+    ///     unbounded for a connector with a null <see cref="InitialSyncFloor"/>, and for device status and
+    ///     activity the whole history. A transient read failure must fail this cycle (retried next
+    ///     interval), not be amplified into a full-history recrawl and republish.
     /// </summary>
-    private async Task<DateTime?> FetchLatestWatermarkAsync(Func<Task<DateTime?>> read)
+    private async Task<DateTime?> FetchLatestWatermarkAsync(string family, Func<Task<DateTime?>> read)
     {
         if (_publisher is not { IsAvailable: true })
+        {
+            _logger.LogDebug(
+                "API data submitter not available, cannot fetch latest {Family} timestamp", family);
             return null;
+        }
 
-        return await read();
+        var timestamp = await read();
+        if (timestamp.HasValue)
+            _logger.LogInformation(
+                "Latest {Family} timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
+                family, ConnectorSource, timestamp.Value);
+        else
+            _logger.LogDebug("No existing {Family} records found for {ConnectorSource}", family, ConnectorSource);
+        return timestamp;
     }
 
     /// <summary>
