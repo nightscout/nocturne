@@ -12,6 +12,7 @@
     STAFF_DECLINED,
     STAFF_PENDING,
   } from "#lib/teams/site-staff.svelte.js";
+  import { REACH_THEIR_GROUPS } from "#lib/teams/staff-reach.svelte.js";
   import type { TenantTeamAccess } from "@nocturne/api-client";
 
   interface Props {
@@ -26,10 +27,11 @@
   let { team, canDecide, busy, onChange }: Props = $props();
 
   const current = $derived(team.staffRule ?? RULE_TEAM_DECIDES);
-  const reachable = $derived((team.staff ?? []).filter((s) => !s.blocked));
+  const narrows = $derived(team.staffReach === REACH_THEIR_GROUPS);
+  const reachable = $derived((team.staff ?? []).filter((s) => !s.blocked && !s.outsideTeamGroups));
   const waiting = $derived(reachable.filter((s) => s.status === STAFF_PENDING).length);
   const declined = $derived(reachable.filter((s) => s.status === STAFF_DECLINED).length);
-  const anyStopped = $derived(reachable.length < (team.staff ?? []).length);
+  const anyStopped = $derived((team.staff ?? []).some((s) => s.blocked));
   const leavesTrust = $derived(current === RULE_TEAM_TRUSTED);
 
   // A radio takes the choice when it takes focus, and a closing dialog gives focus back to what opened it,
@@ -65,6 +67,7 @@
       value={target ?? current}
       onChange={(next) => (target = next === current ? null : next)}
       disabled={busy !== null}
+      {narrows}
     />
     {#if busy === "rule"}
       <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -87,11 +90,22 @@
             <span class="block space-y-1">
               {#if target === RULE_OWNER_APPROVES}
                 <span class="block">
-                  Each new staff member of {team.teamName} waits for your approval. Approved staff keep their access.
+                  {#if narrows}
+                    Each new staff member of {team.teamName} in a group with this site waits for your approval.
+                    Approved staff stay approved.
+                  {:else}
+                    Each new staff member of {team.teamName} waits for your approval. Approved staff keep their access.
+                  {/if}
                 </span>
               {:else if target === RULE_TEAM_TRUSTED}
                 <span class="block">
-                  {#if anyStopped}
+                  {#if narrows && anyStopped}
+                    Every staff member of {team.teamName} that you did not stop and that is in a group with this site
+                    can see this site. You get no notices about them.
+                  {:else if narrows}
+                    Every staff member of {team.teamName} that is in a group with this site can see this site. You get
+                    no notices about them.
+                  {:else if anyStopped}
                     Every staff member of {team.teamName} that you did not stop can see this site. You get no notices
                     about them.
                   {:else}
@@ -115,7 +129,14 @@
                   </span>
                 {/if}
               {:else}
-                <span class="block">New staff of {team.teamName} can see this site at once.</span>
+                <span class="block">
+                  {#if narrows}
+                    New staff of {team.teamName} can see this site as soon as the team puts them in a group with this
+                    site.
+                  {:else}
+                    New staff of {team.teamName} can see this site at once.
+                  {/if}
+                </span>
                 {#if waiting > 0}
                   <span class="block">
                     {plural(waiting, ["# waiting staff member is approved.", "# waiting staff members are approved."])}
@@ -147,6 +168,15 @@
       </div>
     {/if}
   </div>
+{:else if current === RULE_TEAM_TRUSTED && narrows && anyStopped}
+  <p class="text-sm text-muted-foreground">
+    This site trusts the whole team. Every staff member that the site did not stop and that is in a group with this
+    site can see this site.
+  </p>
+{:else if current === RULE_TEAM_TRUSTED && narrows}
+  <p class="text-sm text-muted-foreground">
+    This site trusts the whole team. Every staff member that is in a group with this site can see this site.
+  </p>
 {:else if current === RULE_TEAM_TRUSTED && anyStopped}
   <p class="text-sm text-muted-foreground">
     This site trusts the whole team. Every staff member that the site did not stop can see this site.

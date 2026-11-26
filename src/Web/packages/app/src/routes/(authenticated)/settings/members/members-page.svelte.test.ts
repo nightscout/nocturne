@@ -845,7 +845,7 @@ describe("members page listing the people an owner stopped", () => {
     await dialog.getByRole("button", { name: "Let back in" }).click();
 
     await vi.waitFor(() => expect(mocks.unblockTeamStaff).toHaveBeenCalledWith(wrenId));
-    await expect.element(browserPage.getByText("This person can see this site through teams again.")).toBeVisible();
+    await expect.element(browserPage.getByText("You let this person back in. Each team gives them what it gave before.")).toBeVisible();
   });
 
   it("words a refusal to let a person back in", async () => {

@@ -25,7 +25,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// narrows the team's access their next request reads the narrower access; and when the site stops the
 /// access their next request is refused. Either way their hub connection closes on revalidation.
 /// Where the site decides its staff, an owner's approval and decline of one staff member do the same, and an
-/// owner's stop of one person through every team does under every rule.
+/// owner's stop of one person through every team does under every rule. While the team's staff reach only the
+/// people in their groups, a manager taking a staff member out of their only group shared with the site does too.
 /// </summary>
 [Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
@@ -393,6 +394,67 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
 
         Access((await MembersAsync(ownerOnSite)).Single(m => m.GetProperty("subjectId").GetGuid() == staff)).Should().Be(direct);
         (await staffOnSite.GetAsync("/api/v1/entries.json?count=1")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_staff_member_taken_out_of_their_only_group_with_the_site_is_refused_and_closed_and_reads_again_once_put_back()
+    {
+        var (manager, _) = await SeedSubjectAsync("Grouping Manager");
+        var (owner, _) = await SeedSubjectAsync("Grouping Owner", owner: true);
+        var staff = await SeedBareSubjectAsync("Grouped Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        var staffSession = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
+        Guid tenantId;
+        await using (var conn = await OpenPostgresAsync())
+            tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
+
+        var created = await managerClient.PostAsJsonAsync($"/api/v4/me/teams/{teamId}/groups", new { name = "Ward" });
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        var groupId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var taken = await managerClient.PostAsJsonAsync($"/api/v4/me/teams/{teamId}/groups", new { name = " WARD " });
+        taken.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await taken.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_group_name_taken");
+        var blank = await managerClient.PostAsJsonAsync($"/api/v4/me/teams/{teamId}/groups", new { name = "  " });
+        blank.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await blank.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_group_name_invalid");
+        var unknown = await managerClient.PutAsJsonAsync($"/api/v4/me/teams/{teamId}/staff-reach", new { staffReach = "nobody" });
+        unknown.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await unknown.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_staff_reach_invalid");
+        using (var staffAtApex = await SessionAtApexAsync(staff))
+            (await staffAtApex.PostAsync($"/api/v4/me/teams/{teamId}/groups/{groupId}/staff/{staff}", null))
+                .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        (await managerClient.PostAsync($"/api/v4/me/teams/{teamId}/groups/{groupId}/people/{tenantId}", null))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await managerClient.PostAsync($"/api/v4/me/teams/{teamId}/groups/{groupId}/staff/{staff}", null))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await managerClient.PutAsJsonAsync($"/api/v4/me/teams/{teamId}/staff-reach", new { staffReach = TeamStaffReach.TheirGroups }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var team = await managerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/{teamId}");
+        team.GetProperty("staffReach").GetString().Should().Be(TeamStaffReach.TheirGroups);
+        team.GetProperty("groups").EnumerateArray().Single().GetProperty("people").EnumerateArray().Single()
+            .GetProperty("tenantId").GetGuid().Should().Be(tenantId);
+        var closed = await SubscribedHubAsync(staffSession);
+
+        (await managerClient.DeleteAsync($"/api/v4/me/teams/{teamId}/groups/{groupId}/staff/{staff}"))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await managerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/{teamId}"))
+            .GetProperty("staff").EnumerateArray().Single().GetProperty("inNoGroup").GetBoolean().Should().BeTrue();
+        await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, "no group of the team holds both");
+
+        (await managerClient.PostAsync($"/api/v4/me/teams/{teamId}/groups/{groupId}/staff/{staff}", null))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
+        await SubscribedHubAsync(staffSession);
     }
 
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)

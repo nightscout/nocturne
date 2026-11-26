@@ -26,7 +26,7 @@
     error = null;
     try {
       await unblockTeamStaff(subjectId);
-      onSuccess("This person can see this site through teams again.");
+      onSuccess("You let this person back in. Each team gives them what it gave before.");
     } catch (err) {
       error = describeRemoteError(
         err,

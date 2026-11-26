@@ -4,16 +4,19 @@ import { describe, expect, it, vi } from "vitest";
 import type { TenantTeamAccess, TenantTeamStaff } from "@nocturne/api-client";
 import TeamStaffRule from "./TeamStaffRule.svelte";
 
-const staffMember = (n: number, status: string, blocked = false): TenantTeamStaff => ({
+const staffMember = (n: number, status: string, blocked = false, outsideTeamGroups = false): TenantTeamStaff => ({
   subjectId: `0000000${n}-0000-0000-0000-000000000000`,
   displayName: `Staff ${n}`,
   status,
   blocked,
+  outsideTeamGroups,
 });
 
-function teamWith(staffRule: string, staff: TenantTeamStaff[] = []): TenantTeamAccess {
-  return { teamId: "44444444-4444-4444-4444-444444444444", teamName: "Clinic", staffRule, staff };
+function teamWith(staffRule: string, staff: TenantTeamStaff[] = [], staffReach = "every_person"): TenantTeamAccess {
+  return { teamId: "44444444-4444-4444-4444-444444444444", teamName: "Clinic", staffRule, staffReach, staff };
 }
+
+const narrowed = (staffRule: string, staff: TenantTeamStaff[] = []) => teamWith(staffRule, staff, "their_groups");
 
 function show(team: TenantTeamAccess, canDecide = true) {
   const onChange = vi.fn();
@@ -42,6 +45,17 @@ describe("TeamStaffRule", () => {
     await expect.element(chosen()).toBeChecked();
     expect(page.getByRole("radio").elements()).toHaveLength(3);
     await expect.element(teamTrusted()).toHaveTextContent("you cannot decline one person");
+  });
+
+  it("words the three choices for every staff member while staff see every person", async () => {
+    show(teamWith("team_decides"));
+
+    await expect.element(ownerApproves()).toHaveTextContent("Each new staff member waits for your approval.");
+    await expect
+      .element(teamDecides())
+      .toHaveTextContent("New staff can see this site at once. You get a notice, and you can decline anyone.");
+    await expect.element(teamTrusted()).toHaveTextContent("Every staff member can see this site.");
+    expect(page.getByText("in a group with this site", { exact: false }).elements()).toHaveLength(0);
   });
 
   it("asks first, naming how many wait, before letting the team decide approves them", async () => {
@@ -230,5 +244,116 @@ describe("TeamStaffRule", () => {
     await expect
       .element(page.getByText("This site trusts the whole team. Every staff member that the site did not stop can see this site."))
       .toBeVisible();
+  });
+});
+
+describe("TeamStaffRule while the team limits its staff to their groups", () => {
+  it("words each choice for the staff in a group with this site, and no choice for every staff member", async () => {
+    show(narrowed("team_decides"));
+
+    await expect
+      .element(ownerApproves())
+      .toHaveTextContent("Each new staff member in a group with this site waits for your approval.");
+    await expect
+      .element(teamDecides())
+      .toHaveTextContent(
+        "New staff in a group with this site can see it at once. You get a notice, and you can decline anyone.",
+      );
+    await expect
+      .element(teamTrusted())
+      .toHaveTextContent(
+        "Every staff member in a group with this site can see it. You get no notices about them, and you cannot decline one person.",
+      );
+    for (const unqualified of [
+      "Each new staff member waits for your approval.",
+      "New staff can see this site at once. You get a notice, and you can decline anyone.",
+      "Every staff member can see this site. You get no notices about them, and you cannot decline one person.",
+    ])
+      expect(page.getByText(unqualified, { exact: true }).elements(), unqualified).toHaveLength(0);
+  });
+
+  it("says in the approval confirmation that only new staff in a group with this site wait", async () => {
+    show(narrowed("team_decides"));
+
+    await choose(ownerApproves);
+
+    await expect
+      .element(page.getByRole("alertdialog"))
+      .toHaveTextContent(
+        "Each new staff member of Clinic in a group with this site waits for your approval. Approved staff stay approved.",
+      );
+  });
+
+  it("counts no staff member outside the groups among those who get access, and says only staff in a group can see the site", async () => {
+    show(
+      narrowed("owner_approves", [
+        staffMember(1, "pending", false, true),
+        staffMember(2, "pending"),
+        staffMember(3, "declined", false, true),
+        staffMember(4, "pending", false, true),
+      ]),
+    );
+
+    await choose(teamTrusted);
+    const dialog = page.getByRole("alertdialog");
+    await expect
+      .element(dialog)
+      .toHaveTextContent(
+        "Every staff member of Clinic that is in a group with this site can see this site. You get no notices about them.",
+      );
+    await expect.element(dialog).toHaveTextContent("1 waiting staff member gets access while you trust the whole team.");
+    await expect.element(dialog).not.toHaveTextContent("declined");
+  });
+
+  it("says in one sentence that only staff not stopped and in a group can see the site", async () => {
+    show(narrowed("owner_approves", [staffMember(1, "pending", true), staffMember(2, "approved")]));
+
+    await choose(teamTrusted);
+
+    await expect
+      .element(page.getByRole("alertdialog"))
+      .toHaveTextContent(
+        "Every staff member of Clinic that you did not stop and that is in a group with this site can see this site. You get no notices about them.",
+      );
+  });
+
+  it("counts no staff member outside the groups among those who lose access when it stops trusting the whole team", async () => {
+    show(
+      narrowed("team_trusted", [
+        staffMember(1, "pending", false, true),
+        staffMember(2, "pending"),
+        staffMember(3, "declined", false, true),
+      ]),
+    );
+
+    await choose(ownerApproves);
+    const dialog = page.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("1 waiting staff member loses access until you approve them.");
+    await expect.element(dialog).not.toHaveTextContent("declined");
+  });
+
+  it("says new staff can see the site once the team puts them in a group, and counts only the waiting in a group", async () => {
+    show(narrowed("owner_approves", [staffMember(1, "pending", false, true), staffMember(2, "pending")]));
+
+    await choose(teamDecides);
+    const dialog = page.getByRole("alertdialog");
+    await expect
+      .element(dialog)
+      .toHaveTextContent("New staff of Clinic can see this site as soon as the team puts them in a group with this site.");
+    await expect.element(dialog).not.toHaveTextContent("at once");
+    await expect.element(dialog).toHaveTextContent("1 waiting staff member is approved.");
+  });
+
+  it.each([
+    ["no stopped staff", [], "This site trusts the whole team. Every staff member that is in a group with this site can see this site."],
+    [
+      "a stopped staff member",
+      [staffMember(1, "approved", true)],
+      "This site trusts the whole team. Every staff member that the site did not stop and that is in a group with this site can see this site.",
+    ],
+  ])("tells a reader who is not an owner, with %s, that only staff in a group can see the site", async (_, staff, sentence) => {
+    show(narrowed("team_trusted", staff), false);
+
+    await expect.element(page.getByText(sentence)).toBeVisible();
   });
 });

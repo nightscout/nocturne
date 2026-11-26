@@ -27,7 +27,7 @@
   {/snippet}
   {#snippet description()}
     {name} gets back what each team gives them at this site. If they have approval, or you trust the whole
-    team, they see this site's data again. If they wait for approval and you do not trust the whole team, they
-    wait again. If they have a decline and you do not trust the whole team, they stay out.
+    team, they see this site's data again. If a team limits its staff to their groups, they must also be in a group
+    with this site. If they wait for approval and you do not trust the whole team, they wait again. If they have a decline and you do not trust the whole team, they stay out.
   {/snippet}
 </ConfirmDialog>

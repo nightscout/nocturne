@@ -1,6 +1,7 @@
 <script lang="ts">
   import UsersRound from "@lucide/svelte/icons/users-round";
   import TeamAccessCard from "#lib/components/members/TeamAccessCard.svelte";
+  import { REACH_THEIR_GROUPS } from "#lib/teams/staff-reach.svelte.js";
   import type { TenantRoleDto, TenantTeamAccess } from "@nocturne/api-client";
 
   interface Props {
@@ -45,6 +46,8 @@
     onSuccess,
   }: Props = $props();
 
+  const anyNarrows = $derived(teams.some((t) => t.staffReach === REACH_THEIR_GROUPS));
+
   let followedId: string | null = null;
 
   $effect(() => {
@@ -68,7 +71,12 @@
         Teams
       </h2>
       <p class="text-sm text-muted-foreground">
-        Staff are the people who work for a team. Approved staff can see this site through the team.
+        {#if anyNarrows}
+          Staff are the people who work for a team. Approved staff can see this site through the team. When a team
+          limits its staff to their groups, only its staff in a group with this site can see it, as this site allows.
+        {:else}
+          Staff are the people who work for a team. Approved staff can see this site through the team.
+        {/if}
       </p>
     </div>
     {#each teams as team (team.teamId)}

@@ -8,9 +8,11 @@
 
   interface Props {
     sites: TeamSiteAccess[];
+    /** The team's staff see only the people in their groups. */
+    narrowsToGroups: boolean;
   }
 
-  let { sites }: Props = $props();
+  let { sites, narrowsToGroups }: Props = $props();
 </script>
 
 <Card.Root>
@@ -43,7 +45,10 @@
             </p>
             {#if !site.hasEnded}
               <p class="text-sm text-muted-foreground">
-                {#if site.staffRule === RULE_TEAM_TRUSTED}
+                {#if site.staffRule === RULE_TEAM_TRUSTED && narrowsToGroups}
+                  The site trusts the whole team. Every staff member that the site did not stop and that is in a group
+                  with this site can see this site.
+                {:else if site.staffRule === RULE_TEAM_TRUSTED}
                   The site trusts the whole team. Every staff member that the site did not stop can see this site.
                 {:else if site.staffRule === RULE_OWNER_APPROVES}
                   An owner of the site must approve each staff member.

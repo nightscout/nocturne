@@ -63,7 +63,7 @@
                 <Badge variant="outline">Stopped</Badge>
               {:else if member.status === STAFF_APPROVED}
                 <Badge variant="secondary">Approved</Badge>
-              {:else if member.status === STAFF_PENDING && trusted}
+              {:else if member.status === STAFF_PENDING && (trusted || member.outsideTeamGroups)}
                 <Badge variant="outline">Not approved</Badge>
               {:else if member.status === STAFF_PENDING && canDecide}
                 <Badge variant="warning">Waits for your approval</Badge>
@@ -75,6 +75,10 @@
             </div>
             {#if member.blocked}
               <p class="text-xs text-muted-foreground">Cannot see this site through any team.</p>
+            {:else if member.outsideTeamGroups}
+              <p class="text-xs text-muted-foreground">
+                Not in a group with this site, so they cannot see it through the team.
+              </p>
             {:else if trusted && member.status !== STAFF_APPROVED && canDecide}
               <p class="text-xs text-muted-foreground">Can see this site while you trust the whole team.</p>
             {:else if trusted && member.status !== STAFF_APPROVED}

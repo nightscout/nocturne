@@ -33,23 +33,43 @@ internal static class TeamReasons
     /// <summary>
     /// Whether a staff member's row at a site gives them the team's reason there: when an owner approved
     /// them, or whatever their row says when the site trusts the whole team (<see cref="TeamStaffRule.TeamTrusted"/>),
-    /// and never while the site has stopped them (<see cref="Blocked"/>), whatever the rule.
+    /// and never while the site has stopped them (<see cref="Blocked"/>), whatever the rule. While the team
+    /// narrows to groups (<see cref="TeamStaffReach.TheirGroups"/>), only when they also share one of its
+    /// groups with the site (<see cref="SharesGroup"/>): a group narrows which of the staff the site's own
+    /// decisions let through, and lifts none of them.
     /// </summary>
     /// <remarks>
     /// This is the one test of it: the sync, the startup check and the counts every page reads all go by it.
+    /// The stop and the group are written out again in <see cref="Waits"/>, <see cref="Blocked"/> and
+    /// <see cref="SharesGroup"/>, since a query cannot call one expression from another.
     /// </remarks>
     internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> GivesReason = s =>
         (s.Status == TeamSiteStaffStatus.Approved || s.TeamTenantAccess!.StaffRule == TeamStaffRule.TeamTrusted)
-        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId)
+        && (s.TeamTenantAccess!.Team!.StaffReach == TeamStaffReach.EveryPerson
+            || s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
+                && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
 
     /// <summary>
     /// Whether a staff member's row at a site waits for an owner's approval: pending, at a site that does not
-    /// trust the whole team and has not stopped them, so no owner is told a stopped person waits.
+    /// trust the whole team and has not stopped them, and while the team narrows to groups, in a group with
+    /// them. So no owner is told that a person waits who would reach nothing once approved.
     /// </summary>
     internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> Waits = s =>
         s.Status == TeamSiteStaffStatus.Pending
         && s.TeamTenantAccess!.StaffRule != TeamStaffRule.TeamTrusted
-        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId);
+        && !s.TeamMember!.Subject!.TeamSiteBlocks.Any(b => b.TenantId == s.TeamTenantAccess!.TenantId)
+        && (s.TeamTenantAccess!.Team!.StaffReach == TeamStaffReach.EveryPerson
+            || s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
+                && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId)));
+
+    /// <summary>
+    /// Whether the staff member of a row and its site are in one group of the team, which is what
+    /// <see cref="GivesReason"/> asks of them while the team narrows to groups.
+    /// </summary>
+    internal static readonly Expression<Func<TeamSiteStaffEntity, bool>> SharesGroup = s =>
+        s.TeamMember!.GroupPlaces.Any(g => g.TeamGroup!.TeamId == s.TeamMember.TeamId
+            && g.TeamGroup.People.Any(p => p.TenantId == s.TeamTenantAccess!.TenantId));
 
     /// <summary>
     /// Whether the site of a staff member's row has stopped them reaching it through any team

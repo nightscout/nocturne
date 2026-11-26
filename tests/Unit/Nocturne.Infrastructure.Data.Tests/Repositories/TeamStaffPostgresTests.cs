@@ -864,7 +864,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var current = (await Teams().GetAsync(team, manager, Now, default))!.Staff.Should().ContainSingle().Subject;
         var ended = (await Teams().GetAsync(team, manager, Now.AddHours(2), default))!.Staff.Should().ContainSingle().Subject;
 
-        current.Should().Be(new TeamStaffMember(staff, current.DisplayName, new TeamStaffNarrowing(RoleSeeds.Viewer, true, end), false, 1, 2, 0));
+        current.Should().Be(new TeamStaffMember(staff, current.DisplayName, new TeamStaffNarrowing(RoleSeeds.Viewer, true, end), false, 1, 2, 0, true));
         current.DisplayName.Should().StartWith("staff-");
         ended.HasEnded.Should().BeTrue();
     }

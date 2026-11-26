@@ -346,6 +346,14 @@ public class V4WriteScopeGatingTests
             ["TeamsController.UpdateStaff"] = NotDataCategory.OwnTeams,
             // A manager removes any staff member, and a staff member only their own row, which is leaving.
             ["TeamsController.RemoveStaff"] = NotDataCategory.OwnTeams,
+            ["TeamsController.CreateGroup"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RenameGroup"] = NotDataCategory.OwnTeams,
+            ["TeamsController.DeleteGroup"] = NotDataCategory.OwnTeams,
+            ["TeamsController.AddGroupPerson"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RemoveGroupPerson"] = NotDataCategory.OwnTeams,
+            ["TeamsController.AddGroupStaff"] = NotDataCategory.OwnTeams,
+            ["TeamsController.RemoveGroupStaff"] = NotDataCategory.OwnTeams,
+            ["TeamsController.SetStaffReach"] = NotDataCategory.OwnTeams,
             // The invite token is what admits the caller to the team.
             ["TeamsController.AcceptInvite"] = NotDataCategory.CapabilityToken,
             ["TeamsController.AcceptStaffInvite"] = NotDataCategory.CapabilityToken,

@@ -246,7 +246,7 @@ public class TeamStaffAnnouncerTests
     }
 
     private static TenantTeamAccess Access(Guid team) =>
-        new(team, "Ward", [], false, null, false, null, null, DateTime.UtcNow, TeamStaffRule.OwnerApproves, []);
+        new(team, "Ward", [], false, null, false, null, null, DateTime.UtcNow, TeamStaffRule.OwnerApproves, TeamStaffReach.EveryPerson, []);
 
     [Fact]
     public void The_waiting_the_joined_and_the_rename_notice_each_have_a_source_of_their_own()

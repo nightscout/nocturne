@@ -307,4 +307,42 @@ public static class AuthAuditEventType
     /// names the tenant, no team, and targets that person.
     /// </summary>
     public const string TeamStaffUnblocked = "team_staff_unblocked";
+
+    /// <summary>Event type when a manager makes a group in a team. The details hold the group and its name.</summary>
+    public const string TeamGroupCreated = "team_group_created";
+
+    /// <summary>Event type when a manager renames a team's group. The details hold the group, the old and the new name.</summary>
+    public const string TeamGroupRenamed = "team_group_renamed";
+
+    /// <summary>
+    /// Event type when a manager deletes a team's group. The team's row holds its name; while the team narrows
+    /// to groups, each site in it has a row too, naming the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamGroupDeleted = "team_group_deleted";
+
+    /// <summary>
+    /// Event type when a manager puts a site in a team's group. The team's row holds the group and the site;
+    /// while the team narrows to groups, the site has a row too, naming the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamGroupPersonAdded = "team_group_person_added";
+
+    /// <summary>Event type when a manager takes a site out of a team's group, recorded as <see cref="TeamGroupPersonAdded"/> is.</summary>
+    public const string TeamGroupPersonRemoved = "team_group_person_removed";
+
+    /// <summary>
+    /// Event type when a manager puts a staff member in a team's group. The team's row targets the staff
+    /// member and holds the group; while the team narrows to groups, each site in it has a row too, naming
+    /// the tenant and the team, and targeting the staff member.
+    /// </summary>
+    public const string TeamGroupStaffAdded = "team_group_staff_added";
+
+    /// <summary>Event type when a manager takes a staff member out of a team's group, recorded as <see cref="TeamGroupStaffAdded"/> is.</summary>
+    public const string TeamGroupStaffRemoved = "team_group_staff_removed";
+
+    /// <summary>
+    /// Event type when a manager sets which people a team's staff reach (<c>TeamStaffReach</c>). The team's row
+    /// and one row for each site the team follows, naming the tenant and the team with no target, hold the
+    /// new value.
+    /// </summary>
+    public const string TeamStaffReachChanged = "team_staff_reach_changed";
 }

@@ -5671,6 +5671,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("StaffReach")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("every_person")
+                        .HasColumnName("staff_reach");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -5687,7 +5694,117 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("CreatedBySubjectId");
 
-                    b.ToTable("teams");
+                    b.ToTable("teams", t =>
+                        {
+                            t.HasCheckConstraint("ck_teams_staff_reach", "staff_reach IN ('every_person', 'their_groups')");
+                        });
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_key")
+                        .HasComputedColumnSql("lower(name)", true);
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId", "NameKey")
+                        .IsUnique();
+
+                    b.ToTable("team_groups");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupPersonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_group_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TeamGroupId", "TenantId")
+                        .IsUnique();
+
+                    b.ToTable("team_group_people");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupStaffEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_group_id");
+
+                    b.Property<Guid>("TeamMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_member_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamMemberId");
+
+                    b.HasIndex("TeamGroupId", "TeamMemberId")
+                        .IsUnique();
+
+                    b.ToTable("team_group_staff");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamInviteEntity", b =>
@@ -12255,6 +12372,55 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("CreatedBy");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamEntity", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupPersonEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", "TeamGroup")
+                        .WithMany("People")
+                        .HasForeignKey("TeamGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TeamGroup");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupStaffEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", "TeamGroup")
+                        .WithMany("Staff")
+                        .HasForeignKey("TeamGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamMemberEntity", "TeamMember")
+                        .WithMany("GroupPlaces")
+                        .HasForeignKey("TeamMemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TeamGroup");
+
+                    b.Navigation("TeamMember");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamInviteEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "CreatedBy")
@@ -13173,6 +13339,18 @@ namespace Nocturne.Infrastructure.Data.Migrations
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamEntity", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamGroupEntity", b =>
+                {
+                    b.Navigation("People");
+
+                    b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamMemberEntity", b =>
+                {
+                    b.Navigation("GroupPlaces");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessEntity", b =>

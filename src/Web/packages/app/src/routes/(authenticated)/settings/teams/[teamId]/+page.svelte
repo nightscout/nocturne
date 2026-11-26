@@ -41,6 +41,8 @@
   import AccessLinksSection from "#lib/components/teams/AccessLinksSection.svelte";
   import TeamSitesSection from "#lib/components/teams/TeamSitesSection.svelte";
   import TeamStaffSection from "#lib/components/teams/TeamStaffSection.svelte";
+  import TeamGroupsSection from "#lib/components/teams/TeamGroupsSection.svelte";
+  import { REACH_EVERY_PERSON, REACH_THEIR_GROUPS } from "#lib/teams/staff-reach.svelte.js";
   import StaffInvitesSection from "#lib/components/teams/StaffInvitesSection.svelte";
   import StaffNarrowing from "#lib/components/teams/StaffNarrowing.svelte";
 
@@ -554,18 +556,28 @@
         teamName={team.name ?? ""}
         staff={team.staff ?? []}
         roles={team.suggestableRoles ?? []}
+        narrowsToGroups={team.staffReach === REACH_THEIR_GROUPS}
+      />
+      <TeamGroupsSection
+        {teamId}
+        groups={team.groups ?? []}
+        staffReach={team.staffReach ?? REACH_EVERY_PERSON}
+        accessesOutsideGroups={team.accessesOutsideGroups ?? 0}
+        sites={team.sites ?? []}
+        staff={team.staff ?? []}
       />
       <StaffInvitesSection
         {teamId}
         invites={team.staffInvites ?? []}
         roles={team.suggestableRoles ?? []}
+        narrowsToGroups={team.staffReach === REACH_THEIR_GROUPS}
       />
       <AccessLinksSection
         {teamId}
         links={team.accessLinks ?? []}
         roles={team.suggestableRoles ?? []}
       />
-      <TeamSitesSection sites={team.sites ?? []} />
+      <TeamSitesSection sites={team.sites ?? []} narrowsToGroups={team.staffReach === REACH_THEIR_GROUPS} />
     {/if}
 
     {#if isManager && team.canDelete}

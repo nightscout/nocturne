@@ -283,6 +283,9 @@ describe("TeamStaffList stopped staff", () => {
       .toHaveTextContent("If they have approval, or you trust the whole team, they see this site's data again.");
     await expect
       .element(dialog)
+      .toHaveTextContent("If a team limits its staff to their groups, they must also be in a group with this site.");
+    await expect
+      .element(dialog)
       .toHaveTextContent("If they wait for approval and you do not trust the whole team, they wait again.");
     await expect
       .element(dialog)
@@ -309,5 +312,55 @@ describe("TeamStaffList stopped staff", () => {
 
     await expect.element(row("Ari")).toHaveTextContent("Stopped");
     expect(page.getByRole("button").elements()).toHaveLength(0);
+  });
+});
+
+describe("TeamStaffList staff outside the team's groups", () => {
+  const outside = (member: TenantTeamStaff): TenantTeamStaff => ({ ...member, outsideTeamGroups: true });
+  const narrowed = (staff: TenantTeamStaff[], staffRule: string): TenantTeamAccess => ({
+    ...teamWith(staff),
+    staffRule,
+    staffReach: "their_groups",
+  });
+  const line = "Not in a group with this site, so they cannot see it through the team.";
+
+  it.each(["owner_approves", "team_decides", "team_trusted"])(
+    "says that a staff member outside the groups cannot see the site, and never that they can, under the rule %s",
+    async (staffRule) => {
+      const staff = [outside(waiting), outside(approved), outside(declined)];
+      show(staff, { team: narrowed(staff, staffRule) });
+
+      for (const name of ["Wren", "Ari", "Dee"]) {
+        await expect.element(row(name)).toHaveTextContent(line);
+      }
+      expect(page.getByText("Can see this site", { exact: false }).elements()).toHaveLength(0);
+    },
+  );
+
+  it("says Not approved, not that they wait, for a waiting staff member outside the groups, and keeps Approve and Decline", async () => {
+    const staff = [outside(waiting), approved];
+    show(staff, { team: narrowed(staff, "owner_approves") });
+
+    await expect.element(row("Wren")).toHaveTextContent("Not approved");
+    expect(row("Wren").getByText("Waits for", { exact: false }).elements()).toHaveLength(0);
+    await expect.element(page.getByRole("button", { name: "Approve Wren" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Decline Wren" })).toBeVisible();
+    expect(row("Ari").getByText(line).elements()).toHaveLength(0);
+  });
+
+  it("says Not approved, not that they wait for an owner, to a reader who is not an owner", async () => {
+    const staff = [outside(waiting)];
+    show(staff, { team: narrowed(staff, "owner_approves"), canDecide: false });
+
+    await expect.element(row("Wren")).toHaveTextContent("Not approved");
+    expect(row("Wren").getByText("Waits for", { exact: false }).elements()).toHaveLength(0);
+  });
+
+  it("says that a stopped staff member outside the groups cannot see the site through any team", async () => {
+    const staff = [{ ...outside(approved), blocked: true }];
+    show(staff, { team: narrowed(staff, "team_trusted") });
+
+    await expect.element(row("Ari")).toHaveTextContent("Cannot see this site through any team.");
+    expect(row("Ari").getByText(line).elements()).toHaveLength(0);
   });
 });

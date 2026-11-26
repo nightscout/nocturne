@@ -25,9 +25,11 @@
     teamId: string;
     invites: TeamStaffInviteSummary[];
     roles: TeamSuggestableRole[];
+    /** The team's staff see only the people in their groups. */
+    narrowsToGroups: boolean;
   }
 
-  let { teamId, invites, roles }: Props = $props();
+  let { teamId, invites, roles, narrowsToGroups }: Props = $props();
 
   const now = new Now(60_000);
 
@@ -96,8 +98,14 @@
   <Card.Header>
     <Card.Title>Invite staff</Card.Title>
     <Card.Description>
-      A staff member works for the team and sees the sites that the team has access to and that let
-      them in. A staff member cannot manage the team. A link stops working when the manager who made it leaves the team.
+      {#if narrowsToGroups}
+        A staff member works for the team and sees the sites that the team has access to, that let them in and that
+        have a group with them. A staff member cannot manage the team. A link stops working when the manager who made
+        it leaves the team.
+      {:else}
+        A staff member works for the team and sees the sites that the team has access to and that let
+        them in. A staff member cannot manage the team. A link stops working when the manager who made it leaves the team.
+      {/if}
     </Card.Description>
   </Card.Header>
   <Card.Content class="space-y-5">

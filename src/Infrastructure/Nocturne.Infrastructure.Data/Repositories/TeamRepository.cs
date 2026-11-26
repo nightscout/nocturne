@@ -61,6 +61,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             {
                 t.Id,
                 t.Name,
+                t.StaffReach,
                 Caller = t.Members
                     .Where(m => m.SubjectId == callerSubjectId)
                     .Select(m => new
@@ -111,7 +112,10 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
                     new TeamStaffNarrowing(team.Caller.RoleCeilingSlug, team.Caller.LimitTo24Hours, Utc(team.Caller.EndsAt)),
                     MembershipLiveness.HasEnded(team.Caller.EndsAt, now),
                     team.Caller.SitesBlocked)
-                : null);
+                : null,
+            isManager ? team.StaffReach : null,
+            isManager ? await GroupsOfAsync(db, teamId, now, ct) : [],
+            isManager ? await AccessesOutsideGroupsAsync(db, teamId, now, ct) : 0);
     }
 
     /// <inheritdoc/>
