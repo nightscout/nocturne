@@ -8,7 +8,7 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 /// <summary>
 /// A test-only <see cref="INocturneDbContextFactory"/> that creates fresh
 /// <see cref="NocturneDbContext"/> instances per call, sharing the same underlying
-/// data store (EF InMemory database name or SQLite connection), tenant and read context
+/// data store (EF InMemory database name or SQLite connection), tenant, read context and clock
 /// as the seed context, read when each context is created.
 /// A repository's <c>await using</c> disposes what it is handed, which leaves the store alone: EF
 /// closes no connection it did not open, and an InMemory database outlives its contexts. The
@@ -66,7 +66,7 @@ public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory, ID
     {
         var ctx = new NocturneDbContext(_options)
         {
-            ReadContext = _source.ReadContext, TenantId = Guid.Empty, SubjectId = subjectId,
+            ReadContext = _source.ReadContext, Clock = _source.Clock, TenantId = Guid.Empty, SubjectId = subjectId,
         };
         return ValueTask.FromResult(Prepared(ctx));
     }
@@ -91,13 +91,13 @@ public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory, ID
     public NocturneDbContext CreateUndisposed() =>
         Prepared(new UndisposedNocturneDbContext(_options)
         {
-            ReadContext = _source.ReadContext, TenantId = _source.TenantId,
+            ReadContext = _source.ReadContext, Clock = _source.Clock, TenantId = _source.TenantId,
         });
 
     private ValueTask<NocturneDbContext> Create(Guid tenantId) =>
         ValueTask.FromResult(Prepared(new NocturneDbContext(_options)
         {
-            ReadContext = _source.ReadContext, TenantId = tenantId,
+            ReadContext = _source.ReadContext, Clock = _source.Clock, TenantId = tenantId,
         }));
 
     /// <summary>

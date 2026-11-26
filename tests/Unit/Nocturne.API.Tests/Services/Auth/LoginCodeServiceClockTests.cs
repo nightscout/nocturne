@@ -16,15 +16,18 @@ public class LoginCodeServiceClockTests : IDisposable
 {
     private static readonly DateTimeOffset Start = new(2030, 6, 1, 9, 0, 0, TimeSpan.Zero);
     private static readonly LoginCodePurpose Purpose = LoginCodePurpose.Login;
+    private static readonly LoginCodePurpose EmailPurpose = LoginCodePurpose.EmailRecovery;
+    private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
 
-    private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqlite();
     private readonly FakeTimeProvider _time = new(Start);
+    private readonly SqliteTestDatabase _db;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
     private readonly LoginCodeService _codes;
 
     public LoginCodeServiceClockTests()
     {
+        _db = TestDbContextFactory.CreateSqlite().WithClock(_time);
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
         _codes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, _time);
@@ -45,6 +48,13 @@ public class LoginCodeServiceClockTests : IDisposable
     {
         await using var db = _db.CreateContext(_tenantId);
         return await _codes.IssueAsync(db, _subjectId, Purpose, null, null, new AuthAuditActor(null, "test"));
+    }
+
+    private async Task<LoginCode?> IssueEmailedAsync()
+    {
+        await using var db = _db.CreateContext(_tenantId);
+        return await _codes.IssueEmailedAsync(
+            db, _subjectId, EmailPurpose, "rhys@example.com", null, null, new AuthAuditActor(null, "test"));
     }
 
     private async Task<RedeemedLoginCode?> RedeemAsync(string code)
@@ -108,5 +118,35 @@ public class LoginCodeServiceClockTests : IDisposable
         await using var db = _db.CreateContext(_tenantId);
         db.LoginCodes.Count(c => c.SubjectId == _subjectId).Should().Be(1, "the expired code is dropped");
         (await FindLiveAsync(first.Code)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task IssueEmailedAsync_RefusesACodeWithinTheIntervalAndAllowsOneOnceTheClockPassesIt()
+    {
+        (await IssueEmailedAsync()).Should().NotBeNull();
+
+        _time.Advance(LoginCodeService.EmailInterval - Second);
+        (await IssueEmailedAsync()).Should().BeNull("the last code is inside the interval");
+
+        _time.Advance(2 * Second);
+        (await IssueEmailedAsync()).Should().NotBeNull("the interval has passed");
+    }
+
+    [Fact]
+    public async Task IssueEmailedAsync_StopsAtTheWindowCapAndResumesOnceTheFirstCodeLeavesTheWindow()
+    {
+        for (var sent = 0; sent < LoginCodeService.EmailsPerWindow; sent++)
+        {
+            (await IssueEmailedAsync()).Should().NotBeNull();
+            _time.Advance(LoginCodeService.EmailInterval + Second);
+        }
+
+        (await IssueEmailedAsync()).Should().BeNull("the window already holds its cap");
+
+        _time.Advance(Start + LoginCodeService.EmailWindow - Second - _time.GetUtcNow());
+        (await IssueEmailedAsync()).Should().BeNull("the first code is still inside the window");
+
+        _time.Advance(2 * Second);
+        (await IssueEmailedAsync()).Should().NotBeNull("the first code has left the window");
     }
 }

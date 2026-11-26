@@ -145,7 +145,24 @@ public sealed class SqliteTestDatabase : IDisposable
 
     public NocturneDbContext CreateContext() => CreateContext(TenantId);
 
-    public NocturneDbContext CreateContext(Guid tenantId) => new(Options) { TenantId = tenantId };
+    public NocturneDbContext CreateContext(Guid tenantId) =>
+        new(Options) { TenantId = tenantId, Clock = Clock };
+
+    /// <summary>
+    /// The clock every context this database creates stamps rows from, the system clock unless
+    /// <see cref="WithClock"/> replaced it.
+    /// </summary>
+    public TimeProvider Clock { get; private set; } = TimeProvider.System;
+
+    /// <summary>
+    /// Makes every context created from here on stamp rows from <paramref name="clock"/>, so a service
+    /// on that clock and the stamps it compares read one time.
+    /// </summary>
+    public SqliteTestDatabase WithClock(TimeProvider clock)
+    {
+        Clock = clock;
+        return this;
+    }
 
     /// <summary>
     /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>

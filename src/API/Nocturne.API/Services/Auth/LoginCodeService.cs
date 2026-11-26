@@ -333,7 +333,6 @@ public class LoginCodeService : ILoginCodeService
             CodeHash = HashUtils.Sha256Hex(code),
             Purpose = purpose,
             Email = email,
-            CreatedAt = now,
             ExpiresAt = now.Add(LifetimeOf(purpose)),
         };
 
