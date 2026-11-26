@@ -3985,6 +3985,27 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("owner_notices");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PageViewCountEntity", b =>
+                {
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<string>("RouteId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("route_id");
+
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint")
+                        .HasColumnName("count");
+
+                    b.HasKey("Date", "RouteId")
+                        .HasName("pk_page_view_counts");
+
+                    b.ToTable("page_view_counts");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PasskeyCredentialEntity", b =>
                 {
                     b.Property<Guid>("Id")

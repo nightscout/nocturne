@@ -76,3 +76,13 @@ internal sealed class InstanceKeyCheckEntityConfiguration : IEntityTypeConfigura
             .ValueGeneratedNever();
     }
 }
+
+internal sealed class PageViewCountEntityConfiguration : IEntityTypeConfiguration<PageViewCountEntity>
+{
+    public void Configure(EntityTypeBuilder<PageViewCountEntity> entity)
+    {
+        entity
+            .HasKey(c => new { c.Date, c.RouteId })
+            .HasName("pk_page_view_counts");
+    }
+}

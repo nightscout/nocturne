@@ -158,7 +158,10 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     {
         id: "configuration",
         title: "Configuration",
-        items: [{ href: "/docs/configuration", label: "Configuration guide" }],
+        items: [
+            { href: "/docs/configuration", label: "Configuration guide" },
+            { href: "/docs/page-counts", label: "Page counts" },
+        ],
     },
     {
         id: "observability",

@@ -62,6 +62,7 @@ export const DOCS_HERO: Record<string, DocsHero> = {
   'alerts/email': { artwork: 'alarm-bell', palette: 'moonlight' },
   configuration: { artwork: 'spanner', palette: 'slate', wrap: false },
   observability: { artwork: 'distant-mountains', palette: 'slate' },
+  'page-counts': { artwork: 'shield', palette: 'slate' },
   sdks: { artwork: 'magnifying-glass', palette: 'water' },
   'windows-widget': { artwork: 'phone', palette: 'slate' },
   'windows-widget-privacy': { artwork: 'shield', palette: 'water' },

@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { onMount } from "svelte";
+  import { afterNavigate } from "$app/navigation";
   import { ModeWatcher } from "mode-watcher";
   import { illustrations } from "#lib/stores/illustrations.svelte.js";
   import NavigationProgress from "#lib/components/ui/NavigationProgress.svelte";
@@ -11,6 +12,7 @@
   import EmergencyOverlay from "#lib/components/settings/alarm-preview/EmergencyOverlay.svelte";
   import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import { sendPageView } from "#lib/telemetry/page-view-beacon.js";
 
   const activeAlarm = $derived(alarmState.getActiveAlarm());
   const alarmIsFlashing = $derived(alarmState.getIsFlashing());
@@ -58,6 +60,8 @@
   onMount(() => {
     document.documentElement.dataset.hydrated = "";
   });
+
+  afterNavigate(sendPageView);
 </script>
 
 <ModeWatcher />

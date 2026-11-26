@@ -49,6 +49,8 @@ public class HistoryClampLiftPremiseTests
         // dedup_reconcile_state has no recency column, so no clamp reads it, and its insert does nothing
         // on conflict as a plain command.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/DuplicateReconciler.cs",
+        // page_view_counts is a platform table no policy covers, and its upsert runs as a plain command.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/PageViewCountRepository.cs",
         // job_ledger is a platform table no policy covers, and its upserts run as plain commands.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/JobLedgerRepository.cs",
         // alert_evaluated_readings is unclamped, and its upsert runs as a plain command in a job scope.

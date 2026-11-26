@@ -64,6 +64,12 @@
           "description": "Space-separated origins allowed to embed the signed-in app in an iframe, e.g. https://ha.example.com:8123 for a Home Assistant dashboard. Leave empty to forbid it; share links can always be embedded."
         },
         {
+          "name": "PAGE_COUNTS_ENABLED",
+          "label": "Count page views",
+          "default": "false",
+          "description": "true to count how often each page of the app is opened per day, summed across all sites, with nothing about who opened it. Off by default; update your privacy policy before turning it on."
+        },
+        {
           "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "label": "OpenTelemetry OTLP endpoint",
           "description": "Collector URL to export metrics/traces/logs to, e.g. http://otel-collector:4317. Leave empty to disable telemetry."

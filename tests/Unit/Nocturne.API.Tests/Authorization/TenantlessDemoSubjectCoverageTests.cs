@@ -123,6 +123,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["SetupController.OwnerOidc"] = FirstRunOnly,
             ["SetupController.OidcCallback"] = FirstRunOnly,
 
+            ["PageViewController.RecordPageView"] = "adds one to an instance-wide count of a known route id; reads no session and stores nothing about the caller or the tenant",
             ["StatusController.GetStatus"] = "reports the deployment's version, settings and setup state to any caller, signed in or not; reads no session",
             ["SupportController.AcceptRelayedIssue"] = "files the posted form as a GitHub issue on the operator's PAT, for another instance's server; reads no session and names no tenant, and is 404 unless the instance opted in to relaying",
             ["SupportController.GetSupportConfig"] = "returns the operator's own support and billing links from deployment configuration; reads no session and names no tenant",

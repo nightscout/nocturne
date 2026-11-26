@@ -263,6 +263,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<InstanceKeyCheckEntity> InstanceKeyChecks { get; set; }
 
+    public DbSet<PageViewCountEntity> PageViewCounts { get; set; }
+
     /// <summary>
     /// Notices senders outside Nocturne sent to members (not tenant-scoped), one per sender, tenant,
     /// member and key.

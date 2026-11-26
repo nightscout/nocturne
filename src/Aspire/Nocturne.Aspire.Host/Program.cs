@@ -296,6 +296,15 @@ class Program
                 "Allowed frame ancestors",
                 "Space-separated origins allowed to embed the signed-in app in an iframe, e.g. https://ha.example.com:8123 for a Home Assistant dashboard. Leave empty to forbid it; share links can always be embedded.");
 
+        // Aggregate page counts (docs/operations/page-counts.md). One value for both containers, so
+        // the API never counts what the web app does not send, and the web app never sends what the
+        // API would ignore.
+        var pageCountsEnabled = builder.AddParameter("page-counts-enabled", "false", secret: false)
+            .WithPublishMetadata(
+                "Count page views",
+                "true to count how often each page of the app is opened per day, summed across all sites, with nothing about who opened it. Off by default; update your privacy policy before turning it on.",
+                defaultValue: "false");
+
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
         // values. Empty-string defaults let AppHost start cleanly; the
@@ -407,6 +416,7 @@ class Program
 
         var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
         apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+        apiEnvironment.WithEnvironment("Telemetry__PageCounts__Enabled", pageCountsEnabled);
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
@@ -499,6 +509,7 @@ class Program
                 .WithEnvironment("DISCORD_CLIENT_SECRET", discordClientSecret)
                 .WithEnvironment("BASE_DOMAIN", baseDomain)
                 .WithEnvironment("ALLOWED_FRAME_ANCESTORS", allowedFrameAncestors)
+                .WithEnvironment("PUBLIC_PAGE_COUNTS_ENABLED", pageCountsEnabled)
                 // NOTE: BOT_LINK_HMAC_SECRET is not injected — oauth-state.ts
                 // reuses INSTANCE_KEY (already wired above) to sign the
                 // Discord OAuth2 state parameter. See src/Web/packages/app/

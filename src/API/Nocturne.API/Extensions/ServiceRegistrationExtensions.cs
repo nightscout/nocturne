@@ -50,6 +50,7 @@ using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Notifications.External;
 using Nocturne.API.Services.NotificationTemplates;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Services.Telemetry;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -122,6 +123,12 @@ public static class ServiceRegistrationExtensions
     /// inline so the action's attribute and the registration read the same value.
     /// </summary>
     public const string ConnectorVerifyRateLimitPolicy = "connector-verify";
+
+    /// <summary>
+    /// Rate-limiting policy for the page-view beacon, named here so the action's attribute and the
+    /// registration read the same value.
+    /// </summary>
+    public const string PageViewRateLimitPolicy = "page-view";
 
     /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
@@ -209,6 +216,10 @@ public static class ServiceRegistrationExtensions
         // ScalarAuthProvider.MaxRedirectUris entries, and both the tenant resolution and the
         // client id are cached, so a flood mostly costs the page render.
         (DocsRateLimitPolicy, 30, TimeSpan.FromMinutes(1)),
+        // The page-view beacon: one permit per page a person opens. A household or clinic behind
+        // one NAT shares the bucket, so the ceiling is far above one person clicking through the
+        // app; what it bounds is a script inflating the counts.
+        (PageViewRateLimitPolicy, 120, TimeSpan.FromMinutes(1)),
     ];
 
     /// <summary>
@@ -383,6 +394,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITimeQueryService, TimeQueryService>();
 
         services.Configure<DbSizeOptions>(configuration.GetSection(DbSizeOptions.SectionName));
+        services.Configure<PageCountsOptions>(configuration.GetSection(PageCountsOptions.SectionName));
+        services.AddSingleton<PageViewCounter>();
+        services.AddHostedService<PageViewCountFlusher>();
         services.AddScoped<IStoreSizeReader, StoreSizeReader>();
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
