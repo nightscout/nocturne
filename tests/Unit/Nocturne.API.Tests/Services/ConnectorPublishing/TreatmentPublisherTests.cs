@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
@@ -163,16 +164,98 @@ public class TreatmentPublisherTests
         written.Should().ContainSingle().Which.Id.Should().Be("aaps-2");
     }
 
-    [Fact]
-    public async Task PublishTreatmentsAsync_ReturnsFalse_OnException()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishTreatmentsAsync_ReturnsFalse_OnAStoreFailure(Exception failure)
     {
         _mockTreatmentService
             .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("test error"));
+            .ThrowsAsync(failure);
 
         var result = await _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishTreatmentsAsync_Propagates_ADefect(Exception defect)
+    {
+        _mockTreatmentService
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishRecentTreatmentsAsync_ReportsAFailure_WhenTheSelectionHitsAStoreFailure(Exception failure)
+    {
+        _mockTreatmentService
+            .Setup(d => d.SelectForRepublishAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var written = await _publisher.PublishRecentTreatmentsAsync(
+            [new Treatment { Id = "t-1" }], "nightscout-connector", WriteOrigin.Live);
+
+        written.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishRecentTreatmentsAsync_Propagates_ADefectInTheSelection(Exception defect)
+    {
+        _mockTreatmentService
+            .Setup(d => d.SelectForRepublishAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishRecentTreatmentsAsync(
+            [new Treatment { Id = "t-1" }], "nightscout-connector", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishRecentTreatmentsAsync_ReportsAFailure_WhenTheSpanWriteHitsAStoreFailure(Exception failure)
+    {
+        var shortened = new Treatment { Id = "ov-1", EventType = "Temporary Override", Duration = 30 };
+        _mockTreatmentService
+            .Setup(d => d.SelectForRepublishAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TreatmentRepublish([], [shortened]));
+        _mockTreatmentService
+            .Setup(s => s.RepublishSpansAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var written = await _publisher.PublishRecentTreatmentsAsync([shortened], "nightscout-connector", WriteOrigin.Live);
+
+        written.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task PublishRecentTreatmentsAsync_Propagates_ADefectInTheSpanWrite(Exception defect)
+    {
+        var shortened = new Treatment { Id = "ov-1", EventType = "Temporary Override", Duration = 30 };
+        _mockTreatmentService
+            .Setup(d => d.SelectForRepublishAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TreatmentRepublish([], [shortened]));
+        _mockTreatmentService
+            .Setup(s => s.RepublishSpansAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _publisher.PublishRecentTreatmentsAsync([shortened], "nightscout-connector", WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
     [Fact]

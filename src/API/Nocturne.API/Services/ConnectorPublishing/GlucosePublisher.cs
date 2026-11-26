@@ -64,8 +64,7 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
             RecordSkippedDeleted(written.SkippedDeleted);
             return true;
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             Logger.LogError(ex, "Failed to publish entries for {Source}", source);
             return false;

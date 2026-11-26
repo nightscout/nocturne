@@ -140,14 +140,14 @@ public class RecentActivityPublishTests : IDisposable
     }
 
     [Fact]
-    public async Task A_failed_lookup_writes_nothing_and_reports_the_failure()
+    public async Task A_lookup_that_hits_a_defect_propagates_it_and_writes_nothing()
     {
         var publisher = Publisher();
         _context.Dispose();
 
-        var written = await publisher.PublishRecentActivityAsync([Activity("act-late")], Source, WriteOrigin.Live);
+        var act = () => publisher.PublishRecentActivityAsync([Activity("act-late")], Source, WriteOrigin.Live);
 
-        written.Should().BeNull();
+        await act.Should().ThrowAsync<ObjectDisposedException>();
         _activities.VerifyNoOtherCalls();
     }
 
@@ -164,16 +164,30 @@ public class RecentActivityPublishTests : IDisposable
         written.Should().Be(1, "the other two were skipped by the write, e.g. as user-deleted");
     }
 
-    [Fact]
-    public async Task A_failed_write_reports_the_failure()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task A_write_that_hits_a_store_failure_reports_the_failure(Exception failure)
     {
         _activities
             .Setup(s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("synthetic"));
+            .ThrowsAsync(failure);
 
         var written = await Publisher().PublishRecentActivityAsync([Activity("act-late")], Source, WriteOrigin.Live);
 
         written.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task A_write_that_hits_a_defect_propagates_it(Exception defect)
+    {
+        _activities
+            .Setup(s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => Publisher().PublishRecentActivityAsync([Activity("act-late")], Source, WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 
     private void MarkDeletedByUser(object row)

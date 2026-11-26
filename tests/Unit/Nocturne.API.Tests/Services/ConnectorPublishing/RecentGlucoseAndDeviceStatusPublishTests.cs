@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -159,14 +160,15 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         decomposed.Should().Equal("ds-late");
     }
 
-    [Fact]
-    public async Task A_failed_lookup_writes_nothing_and_reports_the_failure()
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task A_lookup_that_hits_a_store_failure_writes_nothing_and_reports_the_failure(Exception failure)
     {
         var deviceStatuses = new Mock<IDeviceStatusService>();
         deviceStatuses.Setup(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>())).Returns(true);
         var aps = new Mock<IApsSnapshotRepository>();
         aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("synthetic"));
+            .ThrowsAsync(failure);
         var publisher = DevicePublisher(
             deviceStatuses.Object, aps.Object, Mock.Of<IPumpSnapshotRepository>(), Mock.Of<IUploaderSnapshotRepository>());
 
@@ -174,6 +176,26 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
             [new DeviceStatus { Id = "ds-late" }], Source, WriteOrigin.Live);
 
         written.Should().BeNull();
+        deviceStatuses.Verify(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>()));
+        deviceStatuses.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.Defects), MemberType = typeof(StoreFailureTests))]
+    public async Task A_lookup_that_hits_a_defect_propagates_it(Exception defect)
+    {
+        var deviceStatuses = new Mock<IDeviceStatusService>();
+        deviceStatuses.Setup(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>())).Returns(true);
+        var aps = new Mock<IApsSnapshotRepository>();
+        aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        var publisher = DevicePublisher(
+            deviceStatuses.Object, aps.Object, Mock.Of<IPumpSnapshotRepository>(), Mock.Of<IUploaderSnapshotRepository>());
+
+        var act = () => publisher.PublishRecentDeviceStatusAsync(
+            [new DeviceStatus { Id = "ds-late" }], Source, WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
         deviceStatuses.Verify(d => d.HasLegacyKeyedSnapshot(It.IsAny<DeviceStatus>()));
         deviceStatuses.VerifyNoOtherCalls();
     }
