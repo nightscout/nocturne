@@ -2,13 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
@@ -183,38 +177,33 @@ public class ImportedRoleDefinitionIntegrationTests
     /// </summary>
     public sealed class NightscoutAuthorizationSource : IAsyncLifetime
     {
-        private WebApplication? _app;
+        private FakeNightscout? _source;
 
         public string Url { get; private set; } = "";
 
         public async Task InitializeAsync()
         {
-            var builder = WebApplication.CreateBuilder();
-            builder.WebHost.UseUrls("http://127.0.0.1:0");
-            builder.Logging.SetMinimumLevel(LogLevel.Warning);
-            _app = builder.Build();
-
-            _app.MapGet("/api/v1/status", () => Results.Json(new { status = "ok", name = "Nightscout", version = "15.0.0" }));
-            _app.MapGet("/api/v2/authorization/roles", () => Results.Json(new object[]
+            _source = await FakeNightscout.StartAsync(new Dictionary<string, Func<HttpContext, Task<string>>>
             {
-                new { name = "readable", permissions = new[] { "*:*:read" } },
-                new { name = CustomRole, permissions = new[] { "api:treatments:*" } },
-                new { name = ReservedSpelling, permissions = new[] { "api:entries:read" } },
-            }));
-            _app.MapGet("/api/v2/authorization/subjects", () => Results.Json(new object[]
-            {
-                new { _id = "5f1a00000000000000000101", name = "Reader", roles = new[] { "readable", CustomRole }, accessToken = "reader-0123456789abcdef" },
-                new { _id = "5f1a00000000000000000102", name = "Operator", roles = new[] { ReservedSpelling }, accessToken = "operator-0123456789abcdef" },
-            }));
-
-            await _app.StartAsync();
-            Url = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
+                ["/api/v2/authorization/roles"] = FakeNightscout.Body(JsonSerializer.Serialize(new object[]
+                {
+                    new { name = "readable", permissions = new[] { "*:*:read" } },
+                    new { name = CustomRole, permissions = new[] { "api:treatments:*" } },
+                    new { name = ReservedSpelling, permissions = new[] { "api:entries:read" } },
+                })),
+                ["/api/v2/authorization/subjects"] = FakeNightscout.Body(JsonSerializer.Serialize(new object[]
+                {
+                    new { _id = "5f1a00000000000000000101", name = "Reader", roles = new[] { "readable", CustomRole }, accessToken = "reader-0123456789abcdef" },
+                    new { _id = "5f1a00000000000000000102", name = "Operator", roles = new[] { ReservedSpelling }, accessToken = "operator-0123456789abcdef" },
+                })),
+            });
+            Url = _source.Url;
         }
 
         public async Task DisposeAsync()
         {
-            if (_app is not null)
-                await _app.DisposeAsync();
+            if (_source is not null)
+                await _source.DisposeAsync();
         }
     }
 }

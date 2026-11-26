@@ -49,7 +49,7 @@ internal static class FlexibleNumberReader
 
             case JsonTokenType.StartObject:
             case JsonTokenType.StartArray:
-                reader.Skip();
+                reader.TrySkip();
                 return null;
 
             default:
@@ -87,7 +87,7 @@ internal static class FlexibleNumberReader
 
             case JsonTokenType.StartObject:
             case JsonTokenType.StartArray:
-                reader.Skip();
+                reader.TrySkip();
                 return null;
 
             default:
@@ -115,7 +115,7 @@ internal static class FlexibleNumberReader
 
             case JsonTokenType.StartObject:
             case JsonTokenType.StartArray:
-                reader.Skip();
+                reader.TrySkip();
                 return null;
 
             default:
@@ -146,7 +146,7 @@ internal static class FlexibleNumberReader
 
             case JsonTokenType.StartObject:
             case JsonTokenType.StartArray:
-                reader.Skip();
+                reader.TrySkip();
                 return null;
 
             default:

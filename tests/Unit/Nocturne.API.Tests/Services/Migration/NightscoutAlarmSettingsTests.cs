@@ -45,11 +45,24 @@ public class NightscoutAlarmSettingsTests
     }
 
     [Fact]
-    public void LeavesOutAValueThatIsNotTheRightType()
+    public void ReadsANumberAndASwitchSentAsStrings()
     {
         const string body = """
-            {"settings":{"alarmUrgentLow":"on","alarmLow":1,"alarmHigh":null,"alarmTimeagoWarn":true,
-              "thresholds":{"bgLow":"55","bgTargetBottom":null,"bgTargetTop":true,"bgHigh":{}}}}
+            {"settings":{"alarmUrgentLow":"on","alarmLow":"true","alarmHigh":"false","alarmUrgentHigh":1,"alarmTimeagoWarn":"0",
+              "thresholds":{"bgLow":"55","bgTargetBottom":"72.5","bgTargetTop":180,"bgHigh":"260"}}}
+            """;
+
+        NightscoutAlarmSettings.Parse(body).Should().Be(new NightscoutAlarmSettings(
+            BgLow: 55, BgTargetBottom: 72.5m, BgTargetTop: 180, BgHigh: 260,
+            AlarmUrgentLow: true, AlarmLow: true, AlarmHigh: false, AlarmUrgentHigh: true, AlarmTimeagoWarn: false));
+    }
+
+    [Fact]
+    public void LeavesOutAValueThatCannotBeRead()
+    {
+        const string body = """
+            {"settings":{"alarmUrgentLow":"maybe","alarmLow":null,"alarmHigh":2,"alarmTimeagoWarn":true,
+              "thresholds":{"bgLow":"soon","bgTargetBottom":null,"bgTargetTop":true,"bgHigh":{}}}}
             """;
 
         NightscoutAlarmSettings.Parse(body).Should().Be(new NightscoutAlarmSettings(

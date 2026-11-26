@@ -1,4 +1,3 @@
-using System.Globalization;
 using Nocturne.API.Services.Health;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -611,8 +610,6 @@ internal class MigrationJob
     /// after another on the job's own task, so a plain field suffices.
     /// </summary>
     private DateTime? _newestMigratedData;
-
-    private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
     /// The one shape <see cref="MigrationRunEntity.CollectionOutcomes"/> is written and read in.
@@ -1702,7 +1699,7 @@ internal class MigrationJob
         ReadBodyFromSourceAsync(httpClient, url, label, NightscoutRead.ImportCollection, async (content, token) =>
         {
             await using var stream = await content.ReadAsStreamAsync(token);
-            return await System.Text.Json.JsonSerializer.DeserializeAsync<T[]>(stream, cancellationToken: token) ?? [];
+            return await System.Text.Json.JsonSerializer.DeserializeAsync<T[]>(stream, JsonDefaults.CaseInsensitive, token) ?? [];
         }, ct);
 
     /// <summary>
@@ -1810,7 +1807,7 @@ internal class MigrationJob
                 httpClient, $"api/v1/count/{collectionName}/where?{filter}", collectionName, budget.Token);
 
             // Nightscout returns [{"_id": null, "count": N}], and [] when nothing matches.
-            var results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(content);
+            var results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(content, JsonDefaults.CaseInsensitive);
             return results is { Length: > 0 } && results[0].TryGetProperty("count", out var count)
                 ? count.GetInt64()
                 : 0;
@@ -2090,9 +2087,14 @@ internal class MigrationJob
         return ([.. parsed], newlyFailed);
     }
 
-    /// <summary>A document as Nightscout serves it, read as <typeparamref name="T"/>.</summary>
+    /// <summary>
+    /// A document as Nightscout serves it, read as <typeparamref name="T"/>. A number in a string, a
+    /// <c>null</c> number and a boolean in a string are read as the connectors read them
+    /// (<see cref="JsonDefaults.CaseInsensitive"/>): a <c>null</c> number is zero, or absent for a
+    /// nullable one.
+    /// </summary>
     private static T? ReadDocument<T>(System.Text.Json.JsonElement document) where T : class =>
-        System.Text.Json.JsonSerializer.Deserialize<T>(document);
+        System.Text.Json.JsonSerializer.Deserialize<T>(document, JsonDefaults.CaseInsensitive);
 
     /// <summary>
     /// What a paged collection has done so far, carried from one <see cref="ImportPass"/> to the next
@@ -2694,20 +2696,9 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        // Convert BSON to JSON, then deserialize to DeviceStatus domain model and decompose
-        var jsonWriterSettings = new MongoDB.Bson.IO.JsonWriterSettings
-        {
-            OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson
-        };
-        var json = doc.ToJson(jsonWriterSettings);
-        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, JsonDefaults.CaseInsensitive);
-
+        var status = ReadDocument<DeviceStatus>(ToNightscoutJson(doc));
         if (status == null)
             return;
-
-        // Set the original ID from MongoDB _id
-        if (doc.Contains("_id"))
-            status.Id = doc["_id"].AsObjectId.ToString();
 
         using var scope = CreateTenantScope();
         await scope.ServiceProvider.GetRequiredService<IDeviceStatusService>()
@@ -2720,48 +2711,17 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("created_at")
-              && UploaderTimestamp.TryParse(doc["created_at"].AsString, out var createdAt)
+        var profile = ReadDocument<Profile>(ToNightscoutJson(doc))!;
+        if (string.IsNullOrEmpty(profile.Id))
+            profile.Id = Guid.CreateVersion7().ToString();
+        profile.DefaultProfile ??= "Default";
+        profile.Store ??= [];
+        if (profile.Mills == 0)
+        {
+            profile.Mills = UploaderTimestamp.TryParse(profile.CreatedAt, out var createdAt)
                 ? createdAt.ToUnixTimeMilliseconds()
-            : _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-
-        var defaultProfile = doc.Contains("defaultProfile") ? doc["defaultProfile"].AsString : "Default";
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-
-        // Build a domain Profile and decompose into V4 records
-        var storeJson = doc.Contains("store") ? doc["store"].ToJson() : "{}";
-        var store = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, ProfileData>>(storeJson)
-            ?? new Dictionary<string, ProfileData>();
-
-        LoopProfileSettings? loopSettings = null;
-        if (doc.Contains("loopSettings"))
-        {
-            loopSettings = System.Text.Json.JsonSerializer.Deserialize<LoopProfileSettings>(doc["loopSettings"].ToJson());
+                : _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         }
-
-        var profile = new Profile
-        {
-            Id = originalId ?? Guid.CreateVersion7().ToString(),
-            DefaultProfile = defaultProfile,
-            StartDate = doc.GetValue("startDate", BsonNull.Value) switch
-            {
-                { IsString: true } value => value.AsString,
-                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
-                _ => null,
-            },
-            Mills = mills,
-            CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
-            Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",
-            Store = store,
-            EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
-            LoopSettings = loopSettings,
-            IsAPNSProduction = doc.Contains("isAPNSProduction") && doc["isAPNSProduction"].IsBoolean
-                ? doc["isAPNSProduction"].AsBoolean
-                : null,
-            IsValid = IsValidOf(doc),
-        };
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
@@ -2781,9 +2741,6 @@ internal class MigrationJob
 
         await foodService.ImportFoodAsync([food], ct);
     }
-
-    private static bool? IsValidOf(BsonDocument doc) =>
-        doc.TryGetValue("isValid", out var isValid) && isValid.IsBoolean ? isValid.AsBoolean : null;
 
     /// <summary>
     /// Gives <paramref name="food"/> the defaults a v1 upload gets for the fields it leaves out, and
@@ -2885,7 +2842,7 @@ internal class MigrationJob
 
         var subjects = System.Text.Json.JsonSerializer.Deserialize<NightscoutSubject[]>(
             content,
-            s_caseInsensitiveJson) ?? [];
+            JsonDefaults.CaseInsensitive) ?? [];
 
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
@@ -3050,7 +3007,7 @@ internal class MigrationJob
                 httpClient, "api/v2/authorization/roles", "roles", ct);
             var roles = System.Text.Json.JsonSerializer.Deserialize<NightscoutRole[]>(
                 content,
-                s_caseInsensitiveJson) ?? [];
+                JsonDefaults.CaseInsensitive) ?? [];
 
             foreach (var role in roles)
             {
