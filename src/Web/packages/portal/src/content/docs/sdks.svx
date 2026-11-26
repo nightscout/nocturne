@@ -11,7 +11,7 @@ title: SDKs
 
 Official Nocturne SDKs are generated from the **V4 API** OpenAPI specification and
 published to each language's standard package registry. They give you typed models
-and request methods for the V4 API surface, so you don't have to hand-write HTTP
+and request methods for the V4 API surface, so you do not have to hand-write HTTP
 requests like the examples in the [Connecting your app](/docs/connecting-apps) guide.
 
 ## Supported languages
@@ -42,7 +42,7 @@ generated README on the package's registry page (linked above).
 <Callout type="tip" title="No SDK for your stack?">
 
   Every SDK is generated from the same OpenAPI document. You can point any OpenAPI
-  generator at the V4 spec to produce a client in a language we don't publish yet,
+  generator at the V4 spec to produce a client in a language we do not publish yet,
   or call the API directly over HTTP as shown in the
   [Connecting your app](/docs/connecting-apps) guide.
 

@@ -27,7 +27,7 @@ Caddy. To use your own proxy, install with the
 reverse proxy there.
 
 Nocturne needs three request headers from your proxy to work. Everything else on
-this page is ordinary reverse-proxy configuration; the headers are the part that
+this page is ordinary reverse-proxy configuration. The headers are the part that
 is easy to miss, and missing them produces the confusing failures listed under
 Troubleshooting below.
 
@@ -55,7 +55,7 @@ for them.
 
 ## DNS and certificates
 
-Nocturne is multi-tenant: the apex domain serves the marketing and login pages,
+Nocturne is multi-tenant: the apex domain serves the marketing and sign-in pages,
 every tenant gets its own subdomain of `BASE_DOMAIN`, and public share links sit
 one label deeper again, at `{token}.share.example.com`. Your proxy has to
 terminate all three.
@@ -64,7 +64,7 @@ terminate all three.
   an IP address. It does *not* have to be a registrable root domain:
   `nocturne.example.com` is fine, and tenants are then
   `tenant.nocturne.example.com`. An IP address is what to avoid: WebAuthn refuses
-  an IP as a relying-party ID, so passkey login stops working, and tenant
+  an IP as a relying-party ID, so passkey sign-in stops working, and tenant
   subdomains have nowhere to live.
 - DNS needs an **A** record for the apex and a wildcard **A** record for
   `*.example.com`. A DNS wildcard answers at any depth, so that one record
@@ -104,10 +104,10 @@ three:
 <Callout type="danger" title="nginx does not send these by default">
 
   nginx's default is <code>proxy_set_header Host $proxy_host</code> (the literal
-  <code>proxy_pass</code> target, e.g. <code>192.168.1.10:8080</code>) and it
+  <code>proxy_pass</code> target, for example, <code>192.168.1.10:8080</code>) and it
   sends no <code>X-Forwarded-*</code> headers at all. A stock
   <code>proxy_pass</code> with no <code>proxy_set_header</code> lines gets you a
-  login page that loads and a login attempt that 403s.
+  sign-in page that loads and a sign-in attempt that 403s.
 
 </Callout>
 
@@ -172,7 +172,7 @@ server {
 
 nginx's `*.example.com` matches at any depth, so the `server_name` above already
 covers share hosts, as does the DNS wildcard. The certificate is the one that
-does not stretch; it still needs `*.share.example.com` as a second SAN.
+does not stretch. It still needs `*.share.example.com` as a second SAN.
 
 If nginx listens on a non-standard port, use `$http_host` in place of `$host` for
 both host headers so the port survives.
@@ -210,7 +210,7 @@ Use that older form only on Traefik v2. If you are on v3 and want to keep it, ad
 `traefik.http.routers.nocturne.rulesyntax: "v2"` so v3 parses the rule the old
 way.
 
-The v3 pattern matches at any depth, so it covers share hosts; the certificate is
+The v3 pattern matches at any depth, so it covers share hosts. The certificate is
 what needs the second SAN. The resolver must be configured for DNS-01, or neither
 wildcard will issue.
 
@@ -273,10 +273,10 @@ issuance for arbitrary names.
 <Callout type="info" title="Share links need their own site block">
 
   The <code>ask</code> endpoint also authorizes a
-  <code>&#123;token&#125;.share.example.com</code> host when the token resolves to an
+  `{token}.share.example.com` host when the token resolves to an
   active share link, so on-demand issuance covers share links. A Caddy
   site-address wildcard matches exactly one label, though, so
-  <code>*.example.com</code> alone never matches a share host; a deployment
+  <code>*.example.com</code> alone never matches a share host. A deployment
   that hands out share links needs a <code>*.share.example.com</code> block
   with the same <code>tls &#123; on_demand &#125;</code> and
   <code>reverse_proxy</code> as the wildcard block above.
@@ -315,10 +315,10 @@ left unread. Declare all of them, or none.
 
 | Symptom | Cause |
 |---------|-------|
-| Login, or anything that writes, returns **403** with `Cross-site remote requests are forbidden` | `X-Forwarded-Proto` and `X-Forwarded-Host` are missing or wrong, so the reconstructed origin does not match the browser's. A client posting a form content type sees `Cross-site POST form submissions are forbidden` instead; same cause. |
+| Sign-in, or anything that writes, returns **403** with `Cross-site remote requests are forbidden` | `X-Forwarded-Proto` and `X-Forwarded-Host` are missing or wrong, so the reconstructed origin does not match the browser's. A client posting a form content type sees `Cross-site POST form submissions are forbidden` instead. The cause is the same. |
 | The page shows **HTTPS Required** | You reached the site over plain HTTP on something other than `localhost`. Passkey registration needs a secure context, so finish the TLS setup before running first-run setup. |
 | **SSL error** connecting to port 8080 | Something is speaking TLS to the gateway. It serves plain HTTP only. |
-| **502 Bad Gateway** | Check your proxy's error log; it names the cause. See below. |
+| **502 Bad Gateway** | Check your proxy's error log. It names the cause. See below. |
 | Tenant subdomains 404 or fail TLS while the apex works | No wildcard DNS record, or a certificate that does not cover `*.example.com`. |
 | Tenant subdomains work but **share links** fail TLS | The certificate covers `*.example.com` only, which matches one label. Add `*.share.example.com` as a second SAN. The DNS wildcard already answers at that depth. |
 

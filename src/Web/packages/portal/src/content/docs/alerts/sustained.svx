@@ -16,7 +16,7 @@ first day. An alert on every one of those readings teaches people to ignore
 alerts.
 
 **Add “for at least”**, in a row's **...** menu, adds a **for at least N min** box to
-the row. The row then only counts once its condition has been true **for that
+the row. The row then only counts once its condition is true **for that
 long without a break**.
 
 <Screenshot id="alert-rule-sustained-low" />
@@ -72,7 +72,7 @@ reading arrives and the condition is still true, the time without readings
 counts towards the clock, so the rule can alert on the very first reading back.
 
 While readings are missing, glucose rules cannot alert at all. That is why
-every setup that relies on alerts should also have a **Signal loss** rule (see
+every setup that relies on alerts also needs a **Signal loss** rule (see
 [Conditions](/docs/alerts/conditions#signal-loss)).
 
 <Callout type="info" title="The simulator and Replay fill gaps with the last reading">

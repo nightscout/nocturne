@@ -19,7 +19,7 @@ for example from your phone or your pump.
 ### One card for each device
 
 Each device that sends status reports gets its own card. The badge at the top
-right of the card shows the battery level now. The colour of the battery icon
+right of the card shows the battery level now. The color of the battery icon
 shows the status: normal, warning or urgent.
 
 Each card shows:

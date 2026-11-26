@@ -115,7 +115,7 @@ Every condition, with what it means and when to use it, is on the
 
 Channels are where the alert goes. A rule can have several, and they are all
 sent at the same moment. A rule with no channels still fires and is still
-recorded in alert history; it just does not notify anyone.
+recorded in alert history. It does not notify anyone.
 
 <Screenshot id="alert-rule-channels" />
 
@@ -123,7 +123,7 @@ recorded in alert history; it just does not notify anyone.
 |---------|----------------------|
 | **In-app** | The Nocturne notification center of the member chosen as the channel's recipient. A new channel goes to you unless you pick someone else on the site. |
 | **Discord**, **Slack**, **Telegram**, **WhatsApp** | A direct message to a linked account, or a post in a channel or group the Nocturne bot has joined. See [Chat bots](/docs/bots). |
-| **Email** | An email to an address you choose. Needs email set up first; see [Email alerts](/docs/alerts/email). |
+| **Email** | An email to an address you choose. Needs email set up first. See [Email alerts](/docs/alerts/email). |
 | **Webhook** | A message sent to a web address you control, for connecting other systems. |
 | **Device** | An instruction sent to a device you have registered with Nocturne. |
 
@@ -149,7 +149,7 @@ you what the message is:
 | `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. `MetBy` gives what made the condition true. It is there for a forecast, eventual glucose or carbs needed condition, and for a glucose condition that compares with a target. Each item has `Kind`, `Curve`, `OffsetMinutes` (minutes ahead) and `Value` (see [Forecast curves](#forecast-curves)). A condition that compares with a target or the latest glucose also gives `Limit`, the limit it compared with. It gives `LimitFact` (`target_low`, `target_high` or `latest_glucose`) and `LimitOffset`, the amount added in mg/dL. `LimitOffset` is left out when it is 0 (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). |
 | `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
 | `held` | The rule has waited 24 hours for missing data. As for `unevaluable`, and `HeldFacts` lists each missing data source as `Fact` and `Reason`. |
-| `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data has been missing for 24 hours. |
+| `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data stayed missing for 24 hours. |
 
 The other fields are the same for both kinds: `RuleName`, `Severity`,
 `AlertType`, `ExcursionId`, `InstanceId`, `TenantId`, `SubjectName` and
@@ -165,7 +165,7 @@ closes by itself as soon as its condition stops being true.
 <Screenshot id="alert-rule-auto-resolve" />
 
 Auto-resolve is for "stop telling me once this has happened". For example: a
-high alert that should stop once glucose has been coming down steadily for 15
+high alert that you want to stop once glucose comes down steadily for 15
 minutes, even though it is still above the line. How it behaves, including what
 happens if things get worse again, is on
 [When an alert fires](/docs/alerts/when-an-alert-fires#auto-resolve).
@@ -178,7 +178,7 @@ alert at the same moment it would have closed anyway.
 
 Snoozing silences an alert for a while. Smart snooze keeps extending that
 snooze, a few minutes at a time, while conditions you choose hold. The usual use
-is "I have treated this low; stay quiet while glucose is climbing back".
+is "I have treated this low. Stay quiet while glucose is climbing back".
 
 <Screenshot id="alert-rule-smart-snooze" />
 
@@ -434,7 +434,7 @@ The panel on the right has two ways to check a rule before you rely on it:
 
 - **Send a test alert** sends a real test alert to every channel on the saved
   rule, marked as a test. Use it to check the alert actually reaches the phone
-  or chat it should.
+  or chat where you want it.
 - **Replay a past day** runs the rule, including changes you have not
   saved yet, against your own past readings, and shows when it would have
   fired. Nothing is sent. See [Testing rules](/docs/alerts/testing).
@@ -444,7 +444,7 @@ Pick one to replay that day.
 
 <Callout type="tip" title="Test with a real alert once">
 
-  Replay proves the condition is right; only a real test alert proves the alert
+  Replay proves the condition is right. Only a real test alert proves the alert
   reaches you. After creating or changing an important rule, press **Send a test
   alert** and check it arrives where you expect, including on a locked phone.
 

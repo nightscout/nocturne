@@ -9,7 +9,7 @@ title: Trackers
 
 # Trackers
 
-A tracker keeps count of how long something has been in use, or how long until
+A tracker keeps count of how long something is in use, or how long until
 something is due, and reminds you when it matters. The obvious use is the kit
 you wear: a CGM sensor, an infusion site, an insulin reservoir, a pump battery.
 The same idea works for anything with a lifespan or a date: a transmitter, a
@@ -24,7 +24,7 @@ they are built differently.
 
 <Callout type="warning" title="A reminder, not a safety system">
 
-  A tracker tells you how long something has been running. It cannot tell you
+  A tracker tells you how long something is running. It cannot tell you
   whether a sensor is reading accurately, whether a site is absorbing insulin
   properly, or how much insulin is really left in your pump. Treat its
   notifications as reminders. Keep your pump's and CGM's own alarms switched on,
@@ -60,7 +60,7 @@ showing the time since. That design has limits that trackers remove.
 | **What you can track** | Four fixed things: cannula, sensor, insulin, battery. | Anything. Each tracker has a category (sensor, cannula, pod, reservoir, battery, consumable, appointment, reminder or custom), and you can have as many as you like. |
 | **How long things last** | Info, warning and urgent ages are set once for each pill, usually in server settings. | Each tracker has its own expected lifespan and up to four notification steps. |
 | **Reminders before the end** | Counted forwards from the start only. | A step can count forwards from the start or backwards from the expected end, such as "24 hours before this sensor ends". If you change the lifespan, those steps move with it. |
-| **Getting the reminder** | A coloured pill, plus the separate Nightscout alarms. | Every step becomes an alert rule, so it can use the same channels as your other alerts, and you can acknowledge it. |
+| **Getting the reminder** | A colored pill, plus the separate Nightscout alarms. | Every step becomes an alert rule, so it can use the same channels as your other alerts, and you can acknowledge it. |
 | **Dates, not ages** | Not possible. | An **event** tracker counts down to a set date and time. Use it for appointments and refills. |
 | **Why it ended** | Not recorded. The next change just resets the clock. | You choose a reason when you complete a tracker, such as completed, failed, fell off or replaced early, and can add notes. The history keeps all of it. |
 | **Notes** | None. | Start notes like "left arm" or a lot number, and completion notes like "sensor error on day 8". |

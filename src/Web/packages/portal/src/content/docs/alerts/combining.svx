@@ -17,13 +17,13 @@ warning worth waking up for. This page covers the ways to combine conditions:
 
 The simulators on this page run Nocturne's real alert engine on made-up
 readings. Under the graph, each condition gets its own line showing when it was
-true; below those, **Whole rule is true** is the combined result, and
+true. Below those, **Whole rule is true** is the combined result, and
 **Alerting** is when the alert was sounding.
 
 ## All of (AND)
 
 With **all of** at the top of the condition, the rule is true only while
-**every** row is true at the same moment. Each row is labelled **AND**.
+**every** row is true at the same moment. Each row is labeled **AND**.
 
 Here are two rules on the same afternoon, where glucose falls fast during
 exercise:
@@ -46,7 +46,7 @@ meaningful.
 ## Any of (OR)
 
 With **any of** at the top, the rule is true while **at least one** row is true.
-Each row is labelled **OR**.
+Each row is labeled **OR**.
 
 **Any of** makes a rule broader, and it is easy to make it too broad. Here is the
 same pair of conditions with **any of** instead of **all of**:
@@ -104,7 +104,7 @@ outside that window.
 
 <Callout type="warning" title="NOT over missing data is true">
 
-  Most conditions are simply not true when the data they need is missing. NOT
+  Most conditions are not true when the data they need is missing. NOT
   turns that into true. "NOT pump suspended" is true on a site where the pump
   has never reported anything, and "NOT glucose below 70" is true while there is
   no reading at all. Check what NOT will do when data is missing before relying

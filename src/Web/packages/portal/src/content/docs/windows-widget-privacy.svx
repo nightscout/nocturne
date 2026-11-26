@@ -42,7 +42,7 @@ on your server.
 The widget communicates **directly** between your PC and the Nocturne server you
 enter during setup. There are no intermediary servers. Your diabetes data is
 fetched over the network solely to render the widget and is held only transiently
-in memory for display; it is not written to disk and is not transmitted anywhere
+in memory for display. It is not written to disk and is not transmitted anywhere
 else.
 
 The Nightscout Foundation operates no servers in this flow and receives no data.
@@ -53,7 +53,7 @@ infrastructure you control.
 
 The widget signs in using the OAuth 2.0 Device Authorization flow
 ([RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628)). You approve a short
-code on your Nocturne site; no password or long-lived token is ever entered into
+code on your Nocturne site. No password or long-lived token is ever entered into
 or stored by the widget.
 
 The resulting access and refresh tokens are stored locally and encrypted using the
@@ -66,11 +66,11 @@ refresh the session.
 You can disconnect at any time:
 
 - Choose **Sign out** in the widget's customize panel, which revokes the tokens and
-  deletes them from Windows Credential Manager; or
+  deletes them from Windows Credential Manager, or
 - Revoke the "Nocturne Windows Widget" authorization from your Nocturne account's
   connected-apps settings at any time.
 
-Uninstalling the widget removes the application; signing out first ensures the
+Uninstalling the widget removes the application. Signing out first makes sure that the
 stored tokens are also revoked on the server.
 
 ## Telemetry, analytics, and advertising

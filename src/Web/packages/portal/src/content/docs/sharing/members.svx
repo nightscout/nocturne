@@ -10,7 +10,7 @@ title: Member accounts and invites
 # Member accounts and invites
 
 For someone who needs ongoing access, invite them as a **member**. They get their
-own login and you choose a **role** that decides what they can see and do. Unlike
+own sign-in and you choose a **role** that decides what they can see and do. Unlike
 a public or guest link, a member is a named person you can see in a list, change,
 and remove.
 
@@ -28,8 +28,8 @@ From then on they have access until you change their role or remove them.
 Two things to know about the link:
 
 - **It expires.** By default an invite is good for 7 days. If it lapses before
-  they use it, create another one; nothing is lost.
-- **Treat it as private.** Until it's accepted, whoever opens the link can claim
+  they use it, create another one. Nothing is lost.
+- **Treat it as private.** Until it is accepted, whoever opens the link can claim
   that role. Send it directly to the person, not to a group chat.
 
 ## Roles
@@ -43,7 +43,7 @@ access:
 | Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
 | Caretaker | Everything a Clinician sees. They can also log treatments, manage alerts, and set up data sources: connect, change, sync, and remove them. For someone who actively helps day to day. |
 | Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
-| Owner | You. Full control of the account; can't be removed. |
+| Owner | You. Full control of the account. Nobody can remove the owner. |
 
 If a role is close but not quite right, you can give an individual member extra
 **permissions** on top of it, without changing what the role means for everyone
@@ -58,15 +58,15 @@ works.
 <Callout type="tip" title="When to use it: a teacher and a school nurse">
 
   At school, two people need access for the whole term, and they need different
-  things. Invite the <strong>teacher as a Viewer</strong>; they just need to
+  things. Invite the <strong>teacher as a Viewer</strong>. They just need to
   glance at the current glucose during class. Invite the
   <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
   or manage an alert if they step in. A Caretaker can also set up data sources.
   If the nurse must not do that, give them a role of your own without data source
   setup, or remove data source setup from the Caretaker role, which changes it for
   every Caretaker. Each has their
-  own login, you can see them in your member list, and when the year ends you
-  remove them in one click.
+  own sign-in, you can see them in your member list, and when the year ends you
+  remove them in one step.
 
 </Callout>
 
@@ -108,15 +108,15 @@ Inviting someone is one direction: you reach out and hand them a link.
 **Membership requests** are the other direction: you let people **ask you** for
 access, and nothing is granted until you approve it.
 
-The toggle lives on **Site settings > Sharing & Privacy**. While it's on, your sign-in
+The toggle lives on **Site settings > Sharing & Privacy**. While it is on, your sign-in
 page shows a **Request membership** link. Someone who lands on your instance types their name
 and a short note saying who they are, presses **Send request**, and makes a passkey. It
-**never grants access on its own**; it waits for approval.
+**never grants access on its own**. It waits for approval.
 
 You review requests **in place, on Site settings > Sharing & Privacy**, the same page
 as the toggle, and you get a notification for each new one. Each one shows who asked, their
-note, and when. Tick the roles they should have and approve to add them as a member, or deny
-it. It's the same roles as an invite; the only difference is who started the conversation.
+note, and when. Tick the roles you want them to have and approve to add them as a member, or deny
+it. It is the same roles as an invite. The only difference is who started the conversation.
 
 For what the person on the other side sees, and how to word the note, see
 [Request membership](/docs/authentication/request-membership).
@@ -133,5 +133,5 @@ For what the person on the other side sees, and how to word the note, see
 ## Removing a member
 
 Change a member's role to a narrower one, or remove them entirely, from the member
-list on **Site settings > Sharing & Privacy**. Removal takes effect immediately; their
+list on **Site settings > Sharing & Privacy**. Removal takes effect immediately. Their
 own account still exists, it just no longer reaches your data.

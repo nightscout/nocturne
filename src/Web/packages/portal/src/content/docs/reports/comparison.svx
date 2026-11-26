@@ -42,7 +42,7 @@ some figures, such as the Glycemic Risk Index. A higher value is better for
 others, such as time in range. A change in a percentage is shown in percentage
 points (pp).
 
-### Time in Range — stacked comparison
+### Time in Range: stacked comparison
 
 Two bars show how the time in each period divides across five ranges: very
 low, low, in range, high and very high. Move the pointer over a bar to see each

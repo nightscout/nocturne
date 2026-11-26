@@ -18,7 +18,7 @@ connect to your Oura account.
    and request a data export. Oura can take some hours to prepare it.
 2. When the export is ready, download the ZIP file. Do not unpack it.
 3. In Nocturne, open **Site settings > Connectors & Apps** and choose **Oura**.
-4. Select the ZIP file and click **Import**.
+4. Select the ZIP file and select **Import**.
 
 Nocturne shows how many sleep sessions, heart rate readings and days of steps it imported.
 

@@ -14,16 +14,16 @@ creating OAuth credentials in Google Cloud Console and registering them in Noctu
 
 ## 1. Create a Google Cloud project
 
-If you don't already have a Google Cloud project:
+If you do not already have a Google Cloud project:
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
-2. Click the project dropdown at the top and select **New Project**
-3. Name it something like `Nocturne` and click **Create**
+2. Select the project dropdown at the top and select **New Project**
+3. Name it something like `Nocturne` and select **Create**
 
 ## 2. Configure the OAuth consent screen
 
 1. In the sidebar, go to **APIs & Services > OAuth consent screen**
-2. Click **Get started**
+2. Select **Get started**
 3. Fill in the required fields:
    - **App name**: `Nocturne` (or your instance name)
    - **User support email**: your email address
@@ -34,8 +34,8 @@ If you don't already have a Google Cloud project:
 
 <Callout type="info" title="Testing vs Production">
 
-  While the consent screen is in **Testing** status, only users you've explicitly
-  added as test users can sign in. Once you're ready, click **Publish App** to
+  While the consent screen is in **Testing** status, only users you have explicitly
+  added as test users can sign in. Once you are ready, select **Publish App** to
   allow any Google account. Publishing requires a brief review by Google.
 
 </Callout>
@@ -43,7 +43,7 @@ If you don't already have a Google Cloud project:
 ## 3. Create OAuth credentials
 
 1. Go to **APIs & Services > Credentials**
-2. Click **Create Credentials > OAuth client ID**
+2. Select **Create Credentials > OAuth client ID**
 3. Select **Web application** as the application type
 4. Name it `Nocturne`
 5. Under **Authorized redirect URIs**, add:
@@ -52,10 +52,10 @@ If you don't already have a Google Cloud project:
 https://your-instance.com/api/auth/oidc/callback
 ```
 
-Replace `your-instance.com` with your actual Nocturne domain (e.g. `rhys.nocturne.run`).
+Replace `your-instance.com` with your actual Nocturne domain (for example, `rhys.nocturne.run`).
 
-6. Click **Create**
-7. Copy the **Client ID** and **Client secret**; you'll need both in the next step
+6. Select **Create**
+7. Copy the **Client ID** and **Client secret**. You will need both in the next step
 
 ## 4. Add the provider in Nocturne
 
@@ -63,7 +63,7 @@ Replace `your-instance.com` with your actual Nocturne domain (e.g. `rhys.nocturn
 
 1. Sign in to your Nocturne instance as a platform admin
 2. Go to **Platform > Administration** (`/settings/admin`) and open the **Identity Providers** tab
-3. Click **Add Provider** and fill in:
+3. Select **Add Provider** and fill in:
 
 | Field | Value |
 |-------|-------|
@@ -74,16 +74,16 @@ Replace `your-instance.com` with your actual Nocturne domain (e.g. `rhys.nocturn
 | **Icon** | `google` |
 | **Button Color** | `#4285F4` |
 
-4. Click **Save**
+4. Select **Save**
 
-The Google sign-in button will appear on your login page immediately.
+The Google sign-in button will appear on your sign-in page immediately.
 
 ## 5. Test it
 
-1. Open your Nocturne login page in a private/incognito window
-2. Click **Sign in with Google**
-3. Sign in with a Google account that's in your test users list (or any account, if you've published the app) and that already has a Nocturne account
-4. You should be redirected back to Nocturne and signed in
+1. Open your Nocturne sign-in page in a private/incognito window
+2. Select **Sign in with Google**
+3. Sign in with a Google account that's in your test users list (or any account, if you have published the app) and that already has a Nocturne account
+4. You are redirected back to Nocturne and signed in
 
 A Google sign-in does not create a Nocturne account. See [New accounts and roles](/docs/authentication/oidc#new-accounts-and-roles).
 

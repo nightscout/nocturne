@@ -10,7 +10,7 @@ title: Passkeys, recovery codes and the authenticator app
 # Passkeys, recovery codes and the authenticator app
 
 Nocturne has no passwords. This page walks through what signing in actually looks like, and
-the two fallbacks that keep an account reachable when the usual device isn't to hand.
+the two fallbacks that keep an account reachable when the usual device is not to hand.
 
 ## Signing in with a passkey
 
@@ -22,14 +22,14 @@ password to be guessed, reused or leaked.
 There are two ways in, both on the sign-in page:
 
 - **Sign in with passkey**: the main button. Your device offers the passkeys it holds for
-  this instance and you pick one. You don't need to type a username.
+  this instance and you pick one. You do not need to type a username.
 - **Sign in with username**: you type your username first, then unlock the passkey
-  registered to that account. Use this when the first button doesn't offer the account you
+  registered to that account. Use this when the first button does not offer the account you
   wanted, which usually means the passkey lives on a different device.
 
 <Callout type="info" title="Browser support">
 
-  Passkeys need a browser that supports them. On a browser that doesn't, the sign-in screen
+  Passkeys need a browser that supports them. On a browser that does not, the sign-in screen
   says so and points you at a recovery code or a different browser instead, so an account is
   never stranded.
 
@@ -56,7 +56,7 @@ code. Both have to succeed.
 
 <Callout type="info" title="It applies to every sign-in">
 
-  The authenticator step follows a passkey and a social login provider alike. Any extra step
+  The authenticator step follows a passkey and a social sign-in provider alike. Any extra step
   the provider has of its own comes first, and Nocturne still needs its own code afterwards.
 
 </Callout>
@@ -64,17 +64,17 @@ code. Both have to succeed.
 ### Setting one up
 
 Go to **My settings > Account** and choose the authenticator app option. Nocturne shows a QR
-code; scan it with your authenticator app, then type the six-digit code the app produces to
+code. Scan it with your authenticator app, then type the six-digit code the app produces to
 confirm the two are in step:
 
 <Screenshot id="totp-setup" />
 
-Scan the code with the app before leaving the page; it isn't shown again afterwards.
+Scan the code with the app before leaving the page. It is not shown again afterwards.
 
 ### Signing in afterwards
 
-From then on, sign in as usual with your passkey or your social login provider and a second
-screen asks for the current code from your app. Open the app, read the six digits, type them in.
+From then on, sign in as usual with your passkey or your social sign-in provider and a second
+screen needs the current code from your app. Open the app, read the six digits, type them in.
 
 <Screenshot id="totp-challenge" />
 
@@ -98,7 +98,7 @@ The person who runs the instance can set a different number of days, or turn the
 
 <Callout type="warning" title="Keep a way back in">
 
-  If you enrol an authenticator app, make sure you still have your recovery codes. Losing
+  If you enroll an authenticator app, make sure you still have your recovery codes. Losing
   the phone that holds both your passkey and your authenticator app, with no recovery code
   saved, means losing the account.
 
@@ -107,23 +107,23 @@ The person who runs the instance can set a different number of days, or turn the
 ## Recovery codes
 
 **Recovery codes** are a short list of one-time codes issued when your account is set up.
-Each one works once and then is spent. They exist for the day the usual device isn't
-available: lost, broken, or simply left at home.
+Each one works once and then is spent. They exist for the day the usual device is not
+available: lost, broken, or left at home.
 
 To use one, follow the **Use a recovery code** link on the sign-in page and enter
-a code you haven't used yet.
+a code you have not used yet.
 
 Store them somewhere you can reach without the device you normally sign in with: a password
 manager on another device, or printed and kept somewhere safe. A copy saved only on the
-phone that holds your passkey is no help when that phone is the thing you've lost.
+phone that holds your passkey is no help when that phone is the thing you have lost.
 
-## If you're locked out
+## If you are locked out
 
 Work through, in order:
 
 1. **Another device.** A passkey saved in a password manager or synced through your phone
    or laptop account is often already on your other devices.
 2. **A recovery code.** Any unused code gets you in, and once in you can register a fresh
-   passkey on the device you're holding.
+   passkey on the device you are holding.
 3. **The instance owner.** On an instance someone else runs, the owner can remove and re-invite your
    member account. See [Member accounts and invites](/docs/sharing/members).

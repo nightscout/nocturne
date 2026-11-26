@@ -10,17 +10,17 @@ title: Connecting your app
 # Connecting your app to Nocturne
 
 This guide walks you through connecting your app to a Nocturne instance using OAuth 2.0.
-By the end, you'll have a working integration that can read glucose entries on behalf of a user.
+By the end, you will have a working integration that can read glucose entries on behalf of a user.
 
 Nocturne uses **OAuth 2.0 Authorization Code with PKCE** (Proof Key for Code Exchange).
-Every client is a public client; there are no client secrets. PKCE replaces the secret,
+Every client is a public client. There are no client secrets. PKCE replaces the secret,
 which makes this flow safe for desktop apps and SPAs. For mobile apps or devices
 with limited input, see the [Device Authorization flow guide](/docs/connecting-apps/device-flow).
 
 <Callout type="tip" title="Prefer an SDK for API calls?">
 
   The code below uses raw HTTP requests to show the OAuth flow end to end. Once you
-  have an access token, you don't have to hand-write API calls; official SDKs for
+  have an access token, you do not have to hand-write API calls. Official SDKs for
   the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
 
 </Callout>
@@ -59,7 +59,7 @@ const registration = await response.json();
 
 Every registration creates a new client, even for the same `software_id`, so each install of
 your app has its own `client_id` and the user can revoke it on its own. Store the `client_id`
-with the tokens; you'll need it for every authorization request and every refresh. Register
+with the tokens. You will need it for every authorization request and every refresh. Register
 again only when you start a fresh sign-in. A client that has not been used to sign in within
 24 hours is removed.
 
@@ -67,7 +67,7 @@ again only when you start a fresh sign-in. A client that has not been used to si
 
   Popular diabetes apps (Trio, Loop, AAPS, xDrip+) are listed in Nocturne's known-app
   directory: a registration with their <code>software_id</code> and the redirect URIs the
-  directory lists gets a branded consent screen with their logo. If you'd like your app added to
+  directory lists gets a branded consent screen with their logo. If you want your app added to
   this list, open an issue on the Nocturne GitHub repository.
 
 </Callout>
@@ -136,7 +136,7 @@ If they approve, Nocturne redirects back to your `redirect_uri` with an authoriz
 glucotracker://oauth/callback?code=abc123&state=...
 ```
 
-If they deny, you'll receive an error instead:
+If they deny, you will receive an error instead:
 
 ```
 glucotracker://oauth/callback?error=access_denied&state=...
@@ -185,7 +185,7 @@ const tokens = await tokenResponse.json();
 
 </Callout>
 
-The authorization code is single-use: if the exchange fails, you'll get an
+The authorization code is single-use: if the exchange fails, you will get an
 `invalid_grant` error and the user will need to re-authorize.
 
 ## 4. Make API calls
@@ -225,7 +225,7 @@ and `pagination` carries `limit`, `offset`, and `total` for paging with
 `?limit=&offset=`.
 
 If the token has expired, the API returns `401 Unauthorized`. If the token lacks the
-required scope for an endpoint, you'll get `403 Forbidden`.
+required scope for an endpoint, you will get `403 Forbidden`.
 
 ## 5. Refresh tokens
 
@@ -282,7 +282,7 @@ Scopes control what your app can access. Request only what you need.
 
 <OAuthScopeTable />
 
-A `readwrite` scope always implies `read`; you don't need to request both.
+A `readwrite` scope always implies `read`. You do not need to request both.
 
 <Callout type="info" title="Scope expansion">
 

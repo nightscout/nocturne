@@ -14,14 +14,14 @@ OAuth 2.0 Device Authorization Grant ([RFC 8628](https://datatracker.ietf.org/do
 For web apps or desktop apps that can open a browser, see the
 [Authorization Code + PKCE guide](/docs/connecting-apps).
 
-Nocturne uses the Device Authorization flow for apps that either can't easily open a
+Nocturne uses the Device Authorization flow for apps that either cannot easily open a
 redirect-based browser flow or run on devices with limited input. The user authorizes
 on a separate device (phone, computer) by entering a short code.
 
 <Callout type="tip" title="Prefer an SDK for API calls?">
 
   The code below uses raw HTTP requests to show the device flow end to end. Once you
-  have an access token, you don't have to hand-write API calls; official SDKs for
+  have an access token, you do not have to hand-write API calls. Official SDKs for
   the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
 
 </Callout>
@@ -51,7 +51,7 @@ const { client_id } = await response.json();
 
 Every registration creates a new client, even for the same `software_id`, so each install of
 your app has its own `client_id` and the user can revoke it on its own. Store the `client_id`
-with the tokens; you'll need it for every authorization request and every refresh. Register
+with the tokens. You will need it for every authorization request and every refresh. Register
 again only when you start a fresh sign-in. A client that has not been used to sign in within
 24 hours is removed.
 
@@ -102,7 +102,7 @@ The response contains everything you need to guide the user through authorizatio
 ## 3. Display the code to the user
 
 Show the `user_code` prominently in your app. If possible, offer a button that opens
-`verification_uri_complete` in a browser; the code is pre-filled so the user just
+`verification_uri_complete` in a browser. The code is pre-filled so the user just
 needs to sign in and approve.
 
 ## 4. Poll for the token
@@ -180,7 +180,7 @@ const entries = await fetch(
 ```
 
 If the token has expired, the API returns `401 Unauthorized`. If the token lacks the
-required scope for an endpoint, you'll get `403 Forbidden`.
+required scope for an endpoint, you will get `403 Forbidden`.
 
 ## 6. Refresh tokens
 
@@ -237,7 +237,7 @@ Scopes control what your app can access. Request only what you need.
 
 <OAuthScopeTable />
 
-A `readwrite` scope always implies `read`; you don't need to request both.
+A `readwrite` scope always implies `read`. You do not need to request both.
 
 <Callout type="info" title="Scope expansion">
 

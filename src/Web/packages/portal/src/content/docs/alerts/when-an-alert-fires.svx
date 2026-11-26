@@ -24,7 +24,7 @@ acknowledging, snoozing and Do not disturb each do.
 Nocturne sends the alert **once**, when it fires. It does not repeat it on its
 own while the alert stays open. It sends it again only when a snooze runs out
 and the alert is still there. If you want someone else told when nobody
-responds, build that as its own rule; see
+responds, build that as its own rule. See
 [Example rules](/docs/alerts/recipes#tell-someone-else-if-nobody-responds).
 
 ## How an alert ends
@@ -72,8 +72,8 @@ glucose to go back below 250 first.
 <Callout type="warning" title="Think about what auto-resolve hides">
 
   Auto-resolve ends an alert while the thing it warns about is still true.
-  Choose an auto-resolve condition that really means the situation is being
-  dealt with, and test it with Replay (see
+  Choose an auto-resolve condition that really means that the situation is
+  being handled, and test it with Replay (see
   [Testing rules](/docs/alerts/testing)) before relying on it.
 
 </Callout>
@@ -121,7 +121,7 @@ while glucose is climbing back.
 - With smart snooze on and **no** conditions, Nocturne only extends snoozes on
   rules that compare glucose with a value, and only while glucose is clearly
   heading back: for a low alert, up more than 4 mg/dL (0.2 mmol/L) in 5 minutes
-  or more than 10 mg/dL (0.6 mmol/L) in 10 minutes; for a high alert, down more
+  or more than 10 mg/dL (0.6 mmol/L) in 10 minutes. For a high alert, down more
   than 1 mg/dL in 5 minutes or more than 2 mg/dL in 10 minutes. Every other
   alert is sent again when its snooze ends.
 

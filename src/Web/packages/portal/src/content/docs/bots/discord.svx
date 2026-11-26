@@ -9,15 +9,15 @@ title: Discord Bot
 # Discord Bot
 
 Connect a Discord application so people can run `/bg` and receive alerts in Discord. This
-page covers the Discord-specific steps; for account linking, alert delivery, and the Admin
+page covers the Discord-specific steps. For account linking, alert delivery, and the Admin
 UI / environment-variable workflow that all platforms share, see
 [Chat Bots](/docs/bots).
 
 ## 1. Create a Discord application
 
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and
-   click **New Application**.
-2. Give it a name (e.g. *Nocturne*) and create it.
+   select **New Application**.
+2. Give it a name (for example, *Nocturne*) and create it.
 
 ## 2. Collect the credentials
 
@@ -27,12 +27,12 @@ From the application you just created:
 |-------|------------------|
 | **Application ID** | **General Information** tab |
 | **Public Key** | **General Information** tab |
-| **Bot Token** | **Bot** tab: click **Reset Token** and copy the value |
+| **Bot Token** | **Bot** tab: select **Reset Token** and copy the value |
 
 <Callout type="warning" title="Save the bot token now">
 
-  Discord shows the bot token only once when it's generated. If you lose it, reset it again
-  on the <strong>Bot</strong> tab; note that resetting invalidates the previous token.
+  Discord shows the bot token only once when it is generated. If you lose it, reset it again
+  on the <strong>Bot</strong> tab. Note that resetting invalidates the previous token.
 
 </Callout>
 
@@ -50,7 +50,7 @@ At **Platform > Administration > Integrations**, fill in the **Discord** card:
 | **Public Key** | The public key from step 2 |
 | **Application ID** | The application ID from step 2 |
 
-Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
+Turn **Enabled** on, select **Save**, and restart the Nocturne web service.
 
 ### Option B: Environment variables
 

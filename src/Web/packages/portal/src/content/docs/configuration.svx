@@ -26,7 +26,7 @@ Nocturne has two layers of configuration:
 ## Environment variables
 
 The [install script](/docs/installation/install-script) sets the required ones
-and keeps them in `/opt/nocturne/.env`; edit that file to change the others.
+and keeps them in `/opt/nocturne/.env`. Edit that file to change the others.
 Otherwise set these in the `.env` file you copy from `.env.example`
 ([Docker Compose](/docs/installation/docker-compose)) or in the deployment form
 when you launch the [Portainer](/docs/installation/portainer) template. All
@@ -39,8 +39,8 @@ so it always matches the current images:
 
 <Callout type="info" title="This list stays current automatically">
 
-  The block above is the real <code>.env.example</code> from the release bundle;
-  there is no separate hand-maintained list to drift out of date. A few optional
+  The block above is the real <code>.env.example</code> from the release bundle.
+  There is no separate hand-maintained list to drift out of date. A few optional
   integrations (email alerts, extra OpenTelemetry tuning) read additional
   variables that are documented in their own guides rather than shipped in the
   example.
@@ -51,13 +51,13 @@ so it always matches the current images:
 
 These have no default and must be set before the first start:
 
-- **`BASE_DOMAIN`**: the hostname every tenant subdomain hangs off (e.g.
+- **`BASE_DOMAIN`**: the hostname every tenant subdomain hangs off (for example,
   `example.com`, or `nocturne.example.com` if Nocturne itself lives under a
   subdomain). At least two labels, and not an IP address. Each tenant gets a
   subdomain generated from this.
 - **`INSTANCE_KEY`**: minimum 32 characters. Used for JWT signing and
-  service-to-service authentication. Treat it like a password and keep it stable;
-  changing it invalidates existing sessions.
+  service-to-service authentication. Treat it like a password and keep it stable.
+  Changing it invalidates existing sessions.
 - **The four PostgreSQL passwords**: `POSTGRES_PASSWORD`,
   `POSTGRES_MIGRATOR_PASSWORD`, `POSTGRES_APP_PASSWORD`, and
   `POSTGRES_WEB_PASSWORD`.
@@ -67,7 +67,7 @@ These have no default and must be set before the first start:
   The PostgreSQL passwords are used once, when the database volume is first
   created, to provision the runtime roles. Changing them later does **not** re-key
   an existing database. Use a long random value for <code>INSTANCE_KEY</code> and
-  each password; the install pages include a generator.
+  each password. The install pages include a generator.
 
 </Callout>
 
@@ -79,15 +79,15 @@ can bypass it, so it uses three non-privileged roles instead of one superuser:
 | Role | Password variable | Purpose |
 |------|-------------------|---------|
 | `nocturne_migrator` | `POSTGRES_MIGRATOR_PASSWORD` | Owns the schema, runs migrations |
-| `nocturne_app` | `POSTGRES_APP_PASSWORD` | Runtime API connection; cannot bypass RLS |
-| `nocturne_web` | `POSTGRES_WEB_PASSWORD` | Bot-framework state; cannot bypass RLS |
+| `nocturne_app` | `POSTGRES_APP_PASSWORD` | Runtime API connection, which cannot bypass RLS |
+| `nocturne_web` | `POSTGRES_WEB_PASSWORD` | Bot-framework state, which cannot bypass RLS |
 
 `POSTGRES_USERNAME` and `POSTGRES_PASSWORD` are the bootstrap superuser the
 bundled Postgres container uses on first start to create those three roles.
 
 Running against a managed database (RDS, Cloud SQL, Supabase, Neon) or an existing
 server instead of the bundled container? See
-[Bring Your Own PostgreSQL](/docs/installation/byo-postgres); you create the
+[Bring Your Own PostgreSQL](/docs/installation/byo-postgres). You create the
 roles yourself and point Nocturne at them with connection strings.
 
 ### Optional
@@ -103,8 +103,8 @@ roles yourself and point Nocturne at them with connection strings.
 | **WhatsApp** | `WHATSAPP_*` | The WhatsApp bot. See [WhatsApp](/docs/bots/whatsapp). |
 | **PostgreSQL storage** | `POSTGRES_DATA_PATH` | Optional Docker Compose bind-data override only. See [Docker Compose installation](/docs/installation/docker-compose). Portainer's stack editor does not apply Compose override files. |
 
-Leave any of these blank or commented out if you don't use them;
-nothing here is required for a working install.
+Leave any of these blank or commented out if you do not use them.
+Nothing here is required for a working install.
 
 ### Loop remote commands
 
@@ -145,7 +145,7 @@ unreleased work, not for an instance you rely on.
 ### The in-app support form
 
 The **Report a problem** form in Nocturne files your report as a **public**
-issue on GitHub. It works out of the box, with nothing to configure:
+issue on GitHub. It works by default, with nothing to configure:
 
 - **Default (no GitHub token set):** your instance forwards the report to
   `nocturne.run`, which files it on
@@ -192,5 +192,5 @@ environment, and can change at any time without a restart:
 - **Sharing and public links**: see [Sharing your data](/docs/sharing).
 - **Email alerts (Resend)**: configured from the admin UI, or optionally via
   environment variables. See [Email Alerts](/docs/alerts/email).
-- **Sign-in providers**: passkeys are always on; Google, GitHub, and generic
+- **Sign-in providers**: passkeys are always on. Google, GitHub, and generic
   OIDC are enabled per instance. See [Authentication](/docs/authentication).

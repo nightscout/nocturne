@@ -16,8 +16,8 @@ was actually on the plate.
 
 A meal event is a group of records that share a correlation identifier: the carb
 entries, the boluses correlated with them, and any food attributions hanging off
-those carbs. When you bolus for food — from your pump, your loop, or in Nocturne
-— the insulin and the carbs are written as separate records that point at the
+those carbs. When you bolus for food (from your pump, your loop, or in Nocturne),
+the insulin and the carbs are written as separate records that point at the
 same event, and the Meals page reassembles them.
 
 A carb entry with nothing correlated to it is still a meal event. It appears on
@@ -26,19 +26,19 @@ bolusing. Uncorrelated entries are never collapsed together, so two of them ten
 minutes apart stay two events.
 
 Each event carries its totals: total carbs, total insulin, how much of the carbs
-has been attributed to specific foods, and how much has not.
+is attributed to specific foods, and how much is not.
 
 ## The Meals page
 
 Meals are grouped by day, newest first, with per-day carb totals. Each row shows
 the time, a label, the carbs and the insulin. The label is the food's name when
 one food is attributed, a summary when several are, and otherwise the meal name
-for that time of day — Breakfast, Lunch, Snack, Dinner, Late Night.
+for that time of day: Breakfast, Lunch, Snack, Dinner, Late Night.
 
 Expanding a row shows the attribution lines and the controls to change them. The
 toolbar gives you a date range, sorting on any column, a search box, a filter by
-food, and an **unattributed only** filter — the one you want when you sit down
-to catch up on a week of unlabelled carbs.
+food, and an **unattributed only** filter, which is the one you want when you sit down
+to catch up on a week of unlabeled carbs.
 
 From an expanded row you can add a food, edit a line, unlink a line, and add or
 edit the insulin for the meal.
@@ -50,22 +50,22 @@ food_, contributing _this many grams_. Each line holds:
 
 | Field | Meaning |
 |-------|---------|
-| **Food** | The catalog entry, or nothing, for carbs you can't or won't name. |
+| **Food** | The catalog entry, or nothing, for carbs you cannot or will not name. |
 | **Portions** | How many of the food's defined portions you ate. |
 | **Carbs** | Grams this line contributes. Defaults from the food, editable. |
 | **Time offset** | Minutes from the carb entry's time, for food eaten later. |
 | **Note** | Free text. |
 
-Add up the lines and you have the meal's **attributed** carbs; the rest are
+Add up the lines and you have the meal's **attributed** carbs. The rest are
 **unspecified**. Both numbers are shown, and they are allowed to disagree in
-either direction. You bolused for 60 g and can only account for 45 g of it —
-that is a 15 g unspecified remainder, not an error, and Nocturne will not
+either direction. You bolused for 60 g and can only account for 45 g of it.
+That is a 15 g unspecified remainder, not an error, and Nocturne will not
 silently rewrite either figure.
 
 <Callout type="info" title="Attribution never changes your carbs">
 
   Adding, editing or removing an attribution line does not touch the carb entry's
-  total. The total is what you dosed against and stays as recorded; attributions
+  total. The total is what you dosed against and stays as recorded. Attributions
   only describe it. If the total itself is wrong, edit the carb entry.
 
 </Callout>
@@ -84,7 +84,7 @@ into two apps.
 Each imported entry starts as **pending** and is compared against your carb
 entries. An entry matches a carb entry when both are true:
 
-- Their times are within the **match window** — 30 minutes by default.
+- Their times are within the **match window**: 30 minutes by default.
 - Their carb amounts are close enough: within **10 g**, or within **20%**.
   Either one passing is enough.
 
@@ -108,7 +108,7 @@ configurable per instance through the connector's matching settings.
 <Callout type="tip" title="MyFitnessPal times are approximate">
 
   MyFitnessPal does not report a usable timestamp for a food entry, so Nocturne
-  infers the time from the meal name — breakfast, lunch, dinner. That is why the
+  infers the time from the meal name: breakfast, lunch, dinner. That is why the
   default window is a generous 30 minutes, and why reviewing before accepting is
   worth it when the meal was late.
 
@@ -130,5 +130,5 @@ meal twice from the same uploader and the second call finds the existing bolus
 and reuses its correlation rather than creating a second meal.
 
 Two _different_ apps reporting the same meal is a different problem, and is
-handled separately — see
+handled separately. See
 [When the same carbs arrive twice](/docs/food/deduplication).

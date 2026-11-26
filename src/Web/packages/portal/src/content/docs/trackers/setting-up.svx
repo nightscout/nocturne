@@ -10,7 +10,7 @@ title: Setting up a tracker
 # Setting up a tracker
 
 You set up each tracker once, as a **definition**: what it is, how long it
-should last, and when to remind you. After that you start and complete it as
+is meant to last, and when to remind you. After that you start and complete it as
 often as you change the thing it tracks.
 
 Definitions live on the **Trackers** page, on the
@@ -18,7 +18,7 @@ Definitions live on the **Trackers** page, on the
 
 ## Making a tracker
 
-Press **New tracker**. Nocturne asks for it in three steps:
+Press **New tracker**. The editor has three steps:
 
 1. **Type.** Choose what you want to track: a CGM sensor, an infusion site, a
    pod, a reservoir, a pump battery, an appointment or a reminder. The type
@@ -215,7 +215,7 @@ at all, the low reservoir alert stays quiet rather than guessing.
 
 A preset is a saved way of starting a tracker, with notes filled in. Make them
 on the **Presets** tab with **New Preset**. Give it a name, pick the tracker,
-and optionally write the start notes it should use.
+and optionally write the start notes for it to use.
 
 Presets suit anything you rotate. For example, "Sensor, left arm" and "Sensor,
 right arm", both starting the same sensor tracker. The history then shows which
@@ -230,4 +230,4 @@ unanswered, the tracker's rule is kept but switched off. That way the rule built
 on it visibly stops, instead of quietly never firing again.
 
 To stop using a tracker but keep its history, complete it, set its dashboard
-visibility to **Off**, and don't start it again.
+visibility to **Off**, and do not start it again.

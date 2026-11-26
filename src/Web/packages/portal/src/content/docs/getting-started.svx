@@ -87,7 +87,7 @@ to it, is offered as a tile you pick from:
 
 The same choices are there later, under **Site settings > Connectors & Apps**.
 
-Pick the one your readings come from, and Nocturne asks for whatever that
+Pick the one your readings come from, and enter whatever that
 service needs to sign in. For Dexcom that is the account you already use with
 the Dexcom Share app:
 
