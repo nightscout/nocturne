@@ -268,6 +268,8 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
       sentId = (await this.sendTemplate(card.threadId, message)).id;
     } catch (error) {
       this.logger.error("The WhatsApp alert template failed", { deliveryId: card.deliveryId, error });
+      // Nothing went out, so a retry that the report below may need is free to send it.
+      await window.releaseFallback(cardId);
       await alerts.markFailed(card.deliveryId, {
         error: error instanceof Error ? error.message : String(error),
         platformMessageId: cardId,

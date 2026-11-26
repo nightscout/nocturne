@@ -320,6 +320,24 @@ describe("NocturneWhatsAppAdapter", () => {
     expect(bits.markDelivered).not.toHaveBeenCalled();
   });
 
+  it("tries the template again when Meta refused it and the failure could not be recorded", async () => {
+    const refused = Object.assign(new Error("Template name does not exist in the translation"), { status: 400 });
+    const sendTemplate = vi.fn().mockRejectedValue(refused);
+    bits.adapter.sendTemplate = sendTemplate as never;
+    bits.markFailed.mockRejectedValueOnce(new Error("API restarting"));
+    await bits.window.rememberSent("wamid.alert", { ...SENT, fallback: true });
+
+    const first = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+    const again = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect([first.status, again.status]).toEqual([500, 200]);
+    expect(sendTemplate).toHaveBeenCalledTimes(2);
+    expect(bits.markFailed).toHaveBeenLastCalledWith("delivery-1", {
+      error: "Template name does not exist in the translation",
+      platformMessageId: "wamid.alert",
+    });
+  });
+
   it("does not send the template twice when recording it as sent fails", async () => {
     const sendTemplate = vi.fn().mockResolvedValue({ id: "wamid.template", threadId: THREAD, raw: {} });
     bits.adapter.sendTemplate = sendTemplate as never;

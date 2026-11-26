@@ -136,6 +136,11 @@ export class WhatsAppWindow {
     return await this.state.setIfNotExists(fallbackKey(cardId), true, SENT_TTL_MS);
   }
 
+  /** Gives up a claim whose template did not go out, so a retry of the webhook can send it. */
+  async releaseFallback(cardId: string): Promise<void> {
+    await this.state.delete(fallbackKey(cardId));
+  }
+
   /** Forgets a sent alert once its outcome is reported, so a repeated status finds nothing. */
   async forgetSent(messageId: string): Promise<void> {
     await this.state.delete(sentKey(messageId));
