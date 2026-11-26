@@ -36,7 +36,7 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
             TrendRate = i % 2 == 0 ? 1.5 : null, Noise = i % 2 == 0 ? 2 : null,
             Filtered = i % 2 == 0 ? 12345 : null, Unfiltered = i % 2 == 0 ? 23456 : null,
             Delta = i % 2 == 0 ? -1.5 : null, Rssi = i % 2 == 0 ? 100 : null,
-            AdditionalProperties = new() { ["ignored"] = "legacy projection does not read this" },
+            AdditionalProperties = new() { ["units"] = "mg/dl" },
             SmoothedMgdl = 101, UnsmoothedMgdl = 99,
         }), WriteOrigin.Backfill);
 
@@ -46,7 +46,8 @@ public class SensorGlucoseEntryReadTests(V4GoldenFixture fixture)
         LegacyJson(slim).Should().Be(LegacyJson(full));
         LegacyJson(CanonicalGlucoseStream.Select(slim, [primary])).Should()
             .Be(LegacyJson(CanonicalGlucoseStream.Select(full, [primary])));
-        slim.Should().OnlyContain(r => r.AdditionalProperties == null && r.SmoothedMgdl == null);
+        slim.Should().OnlyContain(r => r.SmoothedMgdl == null);
+        slim.Select(r => r.AdditionalProperties?["units"].ToString()).Should().AllBe("mg/dl");
 
         // The stored stream decision reads back as the rule over the whole window.
         var canonical = await repo.GetForEntriesAsync(start, start.AddMinutes(25), null, null, 100,

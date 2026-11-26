@@ -39,11 +39,16 @@ internal static class V4RecordHeaderMapper
         model.LegacyId = entity.LegacyId;
         model.CreatedAt = entity.SysCreatedAt;
         model.ModifiedAt = entity.SysUpdatedAt;
-        model.AdditionalProperties = MapperHelpers.DeserializeJson<Dictionary<string, object?>>(
-            entity.AdditionalPropertiesJson
-        );
+        model.AdditionalProperties = ReadAdditionalProperties(entity.AdditionalPropertiesJson);
         return model;
     }
+
+    /// <summary>
+    /// The uploaded fields a record keeps in <c>additional_properties_json</c>, read the one way for
+    /// a full entity and for a column projection that selects only that column.
+    /// </summary>
+    public static Dictionary<string, object?>? ReadAdditionalProperties(string? json) =>
+        MapperHelpers.DeserializeJson<Dictionary<string, object?>>(json);
 
     /// <summary>
     /// Overwrite a tracked entity's header from the model. The id and the system timestamps are

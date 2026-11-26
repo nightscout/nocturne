@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -524,6 +525,53 @@ public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGo
         var v3 = await CaptureResponse(await Client.GetAsync($"/api/v3/entries/{id}"));
 
         await Verify(new { V1 = v1, V3 = v3 }).DontScrubDateTimes().ScrubMembers("_id", "identifier", "srvModified", "srvCreated");
+    }
+
+    [Fact]
+    public async Task PostThenList_AapsSgv_ServesTheKeptFieldsOnEveryRead()
+    {
+        var payload = new
+        {
+            app = "AAPS",
+            date = 1768563315863L,
+            device = "Libre3",
+            direction = "Flat",
+            filtered = 0,
+            isReadOnly = false,
+            isValid = true,
+            sgv = 100,
+            type = "sgv",
+            unfiltered = 0,
+            units = "mg/dl",
+            utcOffset = 120,
+        };
+
+        var posted = await PostJsonAsync("/api/v1/entries", payload);
+        posted.EnsureSuccessStatusCode();
+        using var body = JsonDocument.Parse(await posted.Content.ReadAsStringAsync());
+        var id = body.RootElement[0].GetProperty("_id").GetString();
+
+        var byId = await Client.GetAsync($"/api/v1/entries/{id}");
+        var list = await Client.GetAsync("/api/v1/entries");
+        var current = await Client.GetAsync("/api/v1/entries/current");
+        var v3List = await Client.GetAsync("/api/v3/entries");
+        var v3ById = await Client.GetAsync($"/api/v3/entries/{id}");
+
+        var expected = JsonNode.Parse(await byId.Content.ReadAsStringAsync())!.AsArray().Single()!;
+        expected["units"]!.GetValue<string>().Should().Be("mg/dl");
+        expected["isReadOnly"]!.GetValue<bool>().Should().BeFalse();
+        JsonNode.DeepEquals(Single(await list.Content.ReadAsStringAsync()), expected).Should().BeTrue();
+        JsonNode.DeepEquals(Single(await current.Content.ReadAsStringAsync()), expected).Should().BeTrue();
+
+        var v3Expected = JsonNode.Parse(await v3ById.Content.ReadAsStringAsync())!["result"]!;
+        var v3Listed = JsonNode.Parse(await v3List.Content.ReadAsStringAsync())!["result"]!.AsArray().Single()!;
+        JsonNode.DeepEquals(v3Listed, v3Expected).Should().BeTrue();
+
+        await Verify(new { List = await CaptureResponse(list), Current = await CaptureResponse(current), V3List = await CaptureResponse(v3List) })
+            .DontScrubDateTimes()
+            .ScrubMembers("_id", "identifier", "srvModified", "srvCreated");
+
+        static JsonNode Single(string json) => JsonNode.Parse(json)!.AsArray().Single()!;
     }
 
     [Fact]
