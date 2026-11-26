@@ -30,6 +30,22 @@ public static class ObservationWindow
         return rows;
     }
 
+    /// <summary>
+    /// The rows whose <paramref name="at"/> is at or after <paramref name="from"/> and before
+    /// <paramref name="to"/>, either optional: the window a cursor-paged read takes, so the next page
+    /// starts at the instant this one stopped before.
+    /// </summary>
+    public static IQueryable<TEntity> InHalfOpenWindow<TEntity, TValue>(
+        this IQueryable<TEntity> rows, Expression<Func<TEntity, TValue>> at, TValue? from, TValue? to)
+        where TValue : struct
+    {
+        if (from.HasValue)
+            rows = rows.Where(Compare(at, () => from.Value, Expression.GreaterThanOrEqual));
+        if (to.HasValue)
+            rows = rows.Where(Compare(at, () => to.Value, Expression.LessThan));
+        return rows;
+    }
+
     // The bound is read off a closure so EF sends it as a parameter, not a literal per window.
     private static Expression<Func<TEntity, bool>> Compare<TEntity, TValue>(
         Expression<Func<TEntity, TValue>> at,
