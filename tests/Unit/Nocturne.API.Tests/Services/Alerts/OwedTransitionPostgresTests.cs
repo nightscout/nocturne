@@ -24,6 +24,7 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -90,6 +91,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public readonly Mock<IInAppNotificationService> Notifications = new();
         public readonly FakeTimeProvider Time = new(Opened);
         public IReadOnlySet<DndScope> Dnd = new HashSet<DndScope>();
+        public IReadOnlyList<SensorGlucose> Recent = [];
 
         public AlertRepository Repository() => new(new SuppliedContextFactory(Context));
 
@@ -106,6 +108,14 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             await using var db = Context();
             var row = await db.AlertInstances.SingleAsync(i => i.Id == instance);
             row.SnoozedUntil = until ?? Time.GetUtcNow().UtcDateTime;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SmartSnoozeAsync()
+        {
+            await using var db = Context();
+            var row = await db.AlertRules.SingleAsync(r => r.Id == Rule.Id);
+            row.ClientConfiguration = """{"snooze":{"smartSnooze":true}}""";
             await db.SaveChangesAsync();
         }
 
@@ -138,6 +148,9 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
             var tenantAccessor = Mock.Of<ITenantAccessor>(a => a.TenantId == Id);
             var canonical = new Mock<ICanonicalGlucoseService>();
+            canonical
+                .Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => Recent);
 
             return new ServiceCollection()
                 .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
@@ -215,7 +228,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
         public Task HandleOpenedAsync(IServiceProvider process, Guid excursion) =>
             process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
-                Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
+                Rule, excursion, Opened, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
                 Id, late: false, metBy: [], callerCloses: false, CancellationToken.None);
 
         public Task SweepAsync(IServiceProvider process, DateTimeOffset at) =>
@@ -254,6 +267,25 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Func<Task>? AfterResolveInstances;
         public Func<Task>? BeforeEndLapsedSnooze;
         public Func<Task>? AfterEndLapsedSnooze;
+        public Func<Task>? BeforeSettle;
+        public Func<Task>? AfterSnoozedRead;
+
+        public override async Task SettleTransitionAsync(
+            Guid excursionId, ExcursionTransitionType kind, DateTime owedAt, CancellationToken ct)
+        {
+            if (BeforeSettle is { } before)
+                await before();
+            await base.SettleTransitionAsync(excursionId, kind, owedAt, ct);
+        }
+
+        public override async Task<IReadOnlyList<SnoozedInstanceSnapshot>> GetExpiredSnoozedInstancesAsync(
+            DateTime asOf, CancellationToken ct)
+        {
+            var snoozed = await base.GetExpiredSnoozedInstancesAsync(asOf, ct);
+            if (snoozed.Count > 0 && AfterSnoozedRead is { } after)
+                await after();
+            return snoozed;
+        }
 
         public override async Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct)
         {
@@ -472,7 +504,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         };
 
         var dying = process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
-            tenant.Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
+            tenant.Rule, excursion, Opened, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
             tenant.Id, late: false, metBy: [], callerCloses: false, dies.Token);
         await dying.Invoking(async t => await t).Should().ThrowAsync<OperationCanceledException>();
         (await tenant.DeliveriesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("pending");
@@ -693,6 +725,124 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
             taken.Count(t => t).Should().Be(1, $"one taker wins the {kind}");
         }
+    }
+
+    [Fact]
+    public async Task An_opening_a_sweep_took_up_while_its_evaluation_settled_stays_owed_to_the_sweep()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        var dispatching = tenant.Hooked();
+        dispatching.BeforeSettle = async () =>
+        {
+            dispatching.BeforeSettle = null;
+            (await tenant.Repository().TakeUpOwedTransitionAsync(
+                excursion, ExcursionTransitionType.ExcursionOpened, Opened, AfterLease.UtcDateTime, CancellationToken.None))
+                .Should().BeTrue();
+        };
+
+        await tenant.HandleOpenedAsync(tenant.Process(dispatching), excursion);
+
+        (await tenant.OwedAsync(excursion)).Should().Be(((DateTime?)AfterLease.UtcDateTime, (DateTime?)null),
+            "the evaluation settles only the stamp it set, and the sweep now holds the opening");
+        await tenant.Repository().SettleTransitionAsync(
+            excursion, ExcursionTransitionType.ExcursionOpened, AfterLease.UtcDateTime, CancellationToken.None);
+        (await tenant.OwedAsync(excursion)).Should().Be((null, null));
+    }
+
+    [Fact]
+    public async Task An_opening_a_sweep_took_up_while_a_resume_that_held_it_settled_stays_owed_to_the_sweep()
+    {
+        var (tenant, excursion, instance) = await OpenedAndLapsedAsync();
+        var renotifiedAt = tenant.Time.GetUtcNow().UtcDateTime;
+        var takenUpAt = renotifiedAt + AlertSweepJob.OwedTransitionLease + TimeSpan.FromSeconds(1);
+        var resuming = tenant.Hooked();
+        resuming.BeforeSettle = async () =>
+        {
+            resuming.BeforeSettle = null;
+            (await tenant.Repository().TakeUpOwedTransitionAsync(
+                excursion, ExcursionTransitionType.ExcursionOpened, renotifiedAt, takenUpAt, CancellationToken.None))
+                .Should().BeTrue();
+        };
+
+        (await ResumeAsync(tenant.Process(resuming), instance)).Should().BeTrue();
+
+        (await tenant.OwedAsync(excursion)).Should().Be(((DateTime?)takenUpAt, (DateTime?)null),
+            "the resume settles only the opening it held");
+    }
+
+    [Fact]
+    public async Task A_close_owed_again_while_its_first_run_settled_stays_owed()
+    {
+        var tenant = await SeedAsync();
+        var excursion = await tenant.OpenAsync();
+        await tenant.HandleOpenedAsync(tenant.Process(), excursion);
+        var close = await tenant.CloseAsync(Opened.AddMinutes(1));
+        var owedAgainAt = Opened.AddMinutes(2);
+        var closing = tenant.Hooked();
+        closing.BeforeSettle = async () =>
+        {
+            closing.BeforeSettle = null;
+            (await tenant.Repository().OweCloseIfEndedAsync(excursion, owedAgainAt, CancellationToken.None)).Should().BeTrue();
+        };
+
+        await tenant.Process(closing).GetRequiredService<IExcursionResolutionHandler>()
+            .HandleClosedAsync(close, tenant.Id, CancellationToken.None);
+
+        (await tenant.OwedAsync(excursion)).Should().Be(((DateTime?)null, (DateTime?)owedAgainAt),
+            "a send that ran during the close owes the close again, and the first run settles only its own");
+    }
+
+    /// <summary>
+    /// Readings that rise out of the rule's low over the ten minutes to the clock, which the
+    /// trend gate reads as recovering, so the snooze pass extends a lapsed snooze.
+    /// </summary>
+    private static async Task<(Tenant Tenant, Guid Excursion, Guid Instance)> RecoveringAndLapsedAsync(
+        Func<Task<(Tenant Tenant, Guid Excursion, Guid Instance)>> opened)
+    {
+        var (tenant, excursion, instance) = await opened();
+        await tenant.SmartSnoozeAsync();
+        var now = tenant.Time.GetUtcNow().UtcDateTime;
+        tenant.Recent =
+        [
+            new SensorGlucose { Id = Guid.NewGuid(), Timestamp = now.AddMinutes(-1), Mgdl = 52 },
+            new SensorGlucose { Id = Guid.NewGuid(), Timestamp = now.AddMinutes(-6), Mgdl = 45 },
+            new SensorGlucose { Id = Guid.NewGuid(), Timestamp = now.AddMinutes(-11), Mgdl = 40 },
+        ];
+        return (tenant, excursion, instance);
+    }
+
+    [Fact]
+    public async Task A_lapsed_snooze_on_a_recovering_low_is_extended()
+    {
+        var (tenant, excursion, _) = await RecoveringAndLapsedAsync(() => OpenedAndLapsedAsync());
+        var now = tenant.Time.GetUtcNow();
+
+        await tenant.SweepAsync(tenant.Process(), now);
+
+        var row = (await tenant.InstancesAsync(excursion)).Single();
+        (row.SnoozedUntil, row.SnoozeCount).Should().Be(
+            ((DateTime?)now.UtcDateTime.AddMinutes(SmartSnoozeConfig.DefaultExtendMinutes), 1));
+        tenant.Sends.Should().Be(1, "an extended snooze keeps the alert silent");
+    }
+
+    [Fact]
+    public async Task An_extension_that_lands_after_a_resume_ended_the_snooze_writes_nothing()
+    {
+        var (tenant, excursion, instance) = await RecoveringAndLapsedAsync(() => OpenedAndLapsedAsync());
+        var sweeping = tenant.Hooked();
+        sweeping.AfterSnoozedRead = async () =>
+        {
+            sweeping.AfterSnoozedRead = null;
+            (await ResumeAsync(tenant.Process(), instance)).Should().BeTrue();
+        };
+
+        await tenant.SweepAsync(tenant.Process(sweeping), tenant.Time.GetUtcNow());
+
+        var row = (await tenant.InstancesAsync(excursion)).Single();
+        (row.SnoozedUntil, row.SnoozeCount).Should().Be(((DateTime?)null, 0),
+            "the resume ended the lapse the sweep read, so the sweep does not snooze the alert it re-notified");
+        tenant.Sends.Should().Be(2, "the opening and the resume's re-notification");
     }
 
     [Fact]
@@ -1462,7 +1612,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         var process = tenant.Process();
 
         await process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
-            tenant.Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
+            tenant.Rule, excursion, Opened, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
             tenant.Id, late: false, metBy: [], callerCloses: true, CancellationToken.None);
 
         tenant.Sends.Should().Be(1);

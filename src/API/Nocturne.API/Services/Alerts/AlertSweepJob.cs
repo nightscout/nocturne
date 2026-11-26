@@ -257,7 +257,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                     "Finishing the close of excursion {ExcursionId}, which its evaluation left unfinished",
                     transition.ExcursionId);
                 await resolutionHandler.HandleClosedAsync(
-                    new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, transition.ExcursionId),
+                    new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, transition.ExcursionId, OwedAt: sweep.Now),
                     sweep.TenantId, ct);
                 continue;
             }
@@ -277,7 +277,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                     transition.ExcursionId);
                 if (transition.EndedAt is not null)
                     await resolutionHandler.CloseAgainIfEndedAsync(transition.ExcursionId, sweep.TenantId, ct);
-                await sweep.Repository.SettleTransitionAsync(transition.ExcursionId, transition.Kind, ct);
+                await sweep.Repository.SettleTransitionAsync(transition.ExcursionId, transition.Kind, sweep.Now, ct);
                 continue;
             }
 
@@ -286,7 +286,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 transition.ExcursionId, rule.Id);
             context ??= await OwedDispatchContextAsync(sweep, owed, rules, ct);
             await openedHandler.HandleOpenedAsync(
-                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], callerCloses: false, ct);
+                rule, transition.ExcursionId, sweep.Now, context, sweep.TenantId, late: true, metBy: [], callerCloses: false, ct);
         }
     }
 
@@ -436,15 +436,16 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
 
             if (extend)
             {
-                await sweep.Repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
-                    tenantId,
-                    instance.InstanceId,
-                    SnoozedUntil: now.AddMinutes(cfg.ExtendMinutes),
-                    SnoozeCount: instance.SnoozeCount + 1), ct);
-
-                logger.LogInformation(
-                    "Smart snooze extended instance {InstanceId} by {Minutes}m (count: {Count}/{Max}, reason: {Reason})",
-                    instance.InstanceId, cfg.ExtendMinutes, instance.SnoozeCount + 1, cfg.MaxCount, reason);
+                if (await sweep.Repository.ExtendLapsedSnoozeAsync(
+                        instance.InstanceId, instance.SnoozedUntil, now.AddMinutes(cfg.ExtendMinutes),
+                        instance.SnoozeCount + 1, ct))
+                    logger.LogInformation(
+                        "Smart snooze extended instance {InstanceId} by {Minutes}m (count: {Count}/{Max}, reason: {Reason})",
+                        instance.InstanceId, cfg.ExtendMinutes, instance.SnoozeCount + 1, cfg.MaxCount, reason);
+                else
+                    logger.LogInformation(
+                        "The lapsed snooze on alert instance {InstanceId} was ended or replaced by another run or a new snooze; not extended",
+                        instance.InstanceId);
             }
             else
             {

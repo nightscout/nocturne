@@ -59,7 +59,7 @@ public class AutoResolveSeamTests
         var resolved = await engine.EvaluateAutoResolveAsync(Snapshot(rule), Glucose(100), CancellationToken.None);
 
         resolved.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, opened.Transition.ExcursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, opened.Transition.ExcursionId, ExcursionCloseReason.AutoResolve, T0));
         var state = await repository.GetTrackerStateAsync(RuleId);
         state.Should().BeEquivalentTo(new { State = "idle", ActiveExcursionId = (Guid?)null });
     }

@@ -37,10 +37,11 @@ public interface IExcursionOpenedHandler
     /// excursion has ended by the time its instance is taken is settled without a send. The
     /// evaluation that opened the excursion sends it even when the same evaluation's auto-resolve
     /// has already closed it; <c>callerCloses</c> is that evaluation, whose close runs once this
-    /// returns and so after the sends, and the close is then not run here as well.
+    /// returns and so after the sends, and the close is then not run here as well. <c>owedAt</c> is the
+    /// stamp the caller recorded or took up the opening's work at, which this settles.
     /// </remarks>
     Task HandleOpenedAsync(
-        AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late,
+        AlertRuleSnapshot rule, Guid excursionId, DateTime owedAt, SensorContext context, Guid tenantId, bool late,
         IReadOnlyList<AlertMetPoint> metBy, bool callerCloses, CancellationToken ct);
 }
 
@@ -55,7 +56,7 @@ internal sealed class ExcursionOpenedHandler(
     : IExcursionOpenedHandler
 {
     public async Task HandleOpenedAsync(
-        AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late,
+        AlertRuleSnapshot rule, Guid excursionId, DateTime owedAt, SensorContext context, Guid tenantId, bool late,
         IReadOnlyList<AlertMetPoint> metBy, bool callerCloses, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -102,6 +103,6 @@ internal sealed class ExcursionOpenedHandler(
                 await resolutionHandler.CloseAgainIfEndedAsync(excursionId, tenantId, ct);
         }
 
-        await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionOpened, ct);
+        await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionOpened, owedAt, ct);
     }
 }

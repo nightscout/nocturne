@@ -1641,7 +1641,7 @@ identified by `(rule, excursion, kind)`. A host MUST:
 2. then act on it, every step safe to run again: an opening's instance is the one an earlier
    attempt raised, a channel whose delivery is recorded as delivered or refused is not sent
    again, and one with no answer recorded is;
-3. then mark the record done;
+3. then mark the record done, only while it still holds the stamp that run set or took up;
 4. on start, and periodically after, act on every record still owed whose last attempt is older
    than a lease, taking it up first so that two workers do not both act on it.
 
@@ -1667,7 +1667,7 @@ done, unless the opening is already owed, so the sweep finishes a run that dies 
 Its lapsed snooze ends in the same write that owes the opening and records the start of the
 re-notification, and only while the snooze is still the one that lapsed, so of two resumes of one
 lapse one sends. A run that dies before that write leaves the snooze lapsed for the next sweep, which
-decides it again (a smart snooze may then extend it). Owed delivery is judged per send: a rerun sends
+decides it again (a smart snooze may then extend it, only while the lapse it read still stands). Owed delivery is judged per send: a rerun sends
 what the instance's latest send, the opening or the latest re-notification, left without an answer,
 counting only the delivery rows written since that send started. So a re-notification the run lost
 is sent again, and a channel that answered it is not. A
@@ -1685,7 +1685,8 @@ taken up again each lease, until one of the two cases applies; its excursion clo
 at the hold bound (§6.4). An owed `ExcursionClosed` is always
 finished. A late alert is built from the context when it is sent, and
 carries that reading's time. The backend records the work owed on the excursion row
-(`opened_owed_at`, `closed_owed_at`), leases it for 2 minutes, and finishes it from the alert
+(`opened_owed_at`, `closed_owed_at`), leases it for 2 minutes, clears a stamp only while it still holds
+the value the settling run set or took up, and finishes it from the alert
 sweep (`AlertSweepJob`), whose first run after a start is the start's pass.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while

@@ -910,7 +910,8 @@ public class ExcursionTrackerTests
             SnapshotOf(_defaultRule), ExcursionCloseReason.AutoResolve, CancellationToken.None);
 
         result.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve,
+            _timeProvider.GetUtcNow().UtcDateTime));
     }
 
     [NativeFact]

@@ -13,7 +13,8 @@ namespace Nocturne.API.Services.Alerts;
 /// periodic run): stamps <c>resolution_reason</c> on instances, expires their
 /// pending deliveries, deletes members' mutes of the excursion, broadcasts
 /// <c>alert_resolved</c>, archives the in-app notifications and clears the alarm, then records
-/// that the close owes no more work (<see cref="IAlertRepository.SettleTransitionAsync"/>).
+/// that the close it was handed owes no more work, while its stamp still holds
+/// (<see cref="IAlertRepository.SettleTransitionAsync"/>).
 /// </summary>
 /// <remarks>
 /// The tracker is the single owner of <see cref="Nocturne.Core.Models.AlertTrackerState"/>
@@ -58,13 +59,14 @@ internal sealed class ExcursionResolutionHandler(
 {
     public async Task<bool> CloseAgainIfEndedAsync(Guid excursionId, Guid tenantId, CancellationToken ct)
     {
-        if (!await repository.OweCloseIfEndedAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct))
+        var owedAt = timeProvider.GetUtcNow().UtcDateTime;
+        if (!await repository.OweCloseIfEndedAsync(excursionId, owedAt, ct))
             return false;
 
         logger.LogInformation(
             "Excursion {ExcursionId} has ended; its close runs again for what was sent while it closed", excursionId);
         await HandleClosedAsync(
-            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId), tenantId, ct);
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, OwedAt: owedAt), tenantId, ct);
         return true;
     }
 
@@ -131,7 +133,8 @@ internal sealed class ExcursionResolutionHandler(
             : [InAppProvider.NotificationTypeFor(rule)];
         await ArchiveInAppNotificationsAsync(excursionId, notificationTypes, ct);
         await alarmRelay.ClearIfQuietAsync([excursionId], ct);
-        await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, ct);
+        if (transition.OwedAt is { } owedAt)
+            await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, owedAt, ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",

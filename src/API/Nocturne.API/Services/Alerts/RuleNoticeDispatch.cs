@@ -52,7 +52,8 @@ internal static class RuleNoticeDispatch
             rule.Name, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass, dnd.ActiveDndScopes, notice.InstanceId,
             inputs.Channels, payload(inputs.Tenant, inputs.ActiveExcursionCount), repository, deliveryService, logger, ct);
         await resolutionHandler.CloseAgainIfEndedAsync(notice.ExcursionId, tenantId, ct);
-        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, ct);
+        if (notice.OpenedOwedAt is { } owedAt)
+            await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, owedAt, ct);
     }
 
     /// <summary>
@@ -68,8 +69,9 @@ internal static class RuleNoticeDispatch
         TimeProvider timeProvider,
         CancellationToken ct)
     {
-        await repository.EndNoticeAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct);
+        var at = timeProvider.GetUtcNow().UtcDateTime;
+        await repository.EndNoticeAsync(excursionId, at, ct);
         await resolutionHandler.HandleClosedAsync(
-            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, reason), tenantId, ct);
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, reason, at), tenantId, ct);
     }
 }

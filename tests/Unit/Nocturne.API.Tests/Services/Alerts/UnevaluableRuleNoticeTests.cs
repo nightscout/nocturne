@@ -149,6 +149,19 @@ public class UnevaluableRuleNoticeTests
             }
             return await base.RecordUnevaluableNoticeAsync(rule, conditionVersion, at, ct);
         }
+
+        /// <summary>The settle's compare-and-set as a tracked save, since the in-memory store runs no <c>ExecuteUpdate</c>.</summary>
+        public override async Task SettleTransitionAsync(
+            Guid excursionId, ExcursionTransitionType kind, DateTime owedAt, CancellationToken ct)
+        {
+            await using var db = await contexts.CreateAsync(ct);
+            var excursion = await db.AlertExcursions.SingleAsync(e => e.Id == excursionId, ct);
+            if (kind == ExcursionTransitionType.ExcursionOpened && excursion.OpenedOwedAt == owedAt)
+                excursion.OpenedOwedAt = null;
+            if (kind == ExcursionTransitionType.ExcursionClosed && excursion.ClosedOwedAt == owedAt)
+                excursion.ClosedOwedAt = null;
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     private void BodyCannotBeEvaluated(string body) =>

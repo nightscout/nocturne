@@ -135,12 +135,6 @@ public record AlertInstanceSnapshot(Guid Id, Guid TenantId, Guid AlertExcursionI
 public record OpenedInstance(Guid Id, bool Suppressed);
 
 /// <summary>
-/// Request to update an existing alert instance (snooze, status change).
-/// </summary>
-public record UpdateAlertInstanceRequest(Guid TenantId, Guid Id, string? Status = null,
-    DateTime? SnoozedUntil = null, int? SnoozeCount = null);
-
-/// <summary>
 /// Snapshot of an <see cref="AlertExcursion"/> in the hysteresis cooldown period, used to check if cooldown has elapsed.
 /// </summary>
 public record HysteresisExcursionSnapshot(Guid Id, Guid TenantId, Guid AlertRuleId, DateTime? HysteresisStartedAt);
@@ -158,16 +152,16 @@ public record ExcursionRuleSnapshot(
 
 /// <summary>
 /// A standing notice about a rule (that it cannot be evaluated, or that its hold reached the
-/// bound) and whether it was dispatched.
+/// bound), whether it was dispatched, and the stamp its dispatch is owed at, null when it owes none.
 /// </summary>
-public record NoticeRecorded(Guid ExcursionId, Guid InstanceId, bool Dispatched);
+public record NoticeRecorded(Guid ExcursionId, Guid InstanceId, bool Dispatched, DateTime? OpenedOwedAt);
 
 /// <summary>
 /// A notice that a rule's hold reached the bound that still stands: the rule, the instant the hold
-/// it is for began, and whether it was dispatched.
+/// it is for began, whether it was dispatched, and the stamp its dispatch is owed at.
 /// </summary>
 public record StandingHeldNotice(
-    Guid ExcursionId, Guid InstanceId, Guid AlertRuleId, DateTime HeldSince, bool Dispatched);
+    Guid ExcursionId, Guid InstanceId, Guid AlertRuleId, DateTime HeldSince, bool Dispatched, DateTime? OpenedOwedAt);
 
 /// <summary>
 /// A rule's hold as its stored tracker state records it: when it began, when the state was last
@@ -187,10 +181,12 @@ public record HeldRuleState(Guid AlertRuleId, DateTime HeldSince, DateTime Updat
 
 /// <summary>
 /// A notice that a rule cannot be evaluated that still stands: the rule, the version of its
-/// condition the notice was sent for, when it was recorded, and whether it was dispatched.
+/// condition the notice was sent for, when it was recorded, whether it was dispatched, and the stamp
+/// its dispatch is owed at.
 /// </summary>
 public record StandingUnevaluableNotice(
-    Guid ExcursionId, Guid InstanceId, Guid AlertRuleId, string ConditionVersion, DateTime StartedAt, bool Dispatched);
+    Guid ExcursionId, Guid InstanceId, Guid AlertRuleId, string ConditionVersion, DateTime StartedAt, bool Dispatched,
+    DateTime? OpenedOwedAt);
 
 /// <summary>
 /// Pairing of an open excursion with its owning rule, restricted to rules
@@ -218,7 +214,7 @@ public record TenantAlertContext(Guid TenantId, string? SubjectName, string? Slu
 /// Snapshot of a snoozed alert instance, combining instance and rule data for post-snooze re-evaluation.
 /// </summary>
 public record SnoozedInstanceSnapshot(Guid InstanceId, Guid TenantId, Guid AlertExcursionId,
-    string Status, int SnoozeCount,
+    string Status, DateTime SnoozedUntil, int SnoozeCount,
     Guid AlertRuleId, AlertConditionType ConditionType, string ConditionParams, string ClientConfiguration);
 
 /// <summary>

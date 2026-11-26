@@ -238,7 +238,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
             .ForceCloseAsync(rule, ExcursionCloseReason.AutoResolve, CancellationToken.None);
 
         transition.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve, Now.UtcDateTime));
         (await StoredAsync(tenant)).Should().Be(("idle", (Guid?)null, true, 0));
     }
 
@@ -252,7 +252,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
             .ForceCloseAsync(rule.Id, ExcursionCloseReason.Manual, CancellationToken.None);
 
         transition.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual));
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.Manual, Now.UtcDateTime));
         (await StoredAsync(tenant)).Should().Be(("idle", (Guid?)null, false, 0));
     }
 

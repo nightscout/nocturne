@@ -266,18 +266,18 @@ public class AlertRepository : IAlertRepository
 
     /// <inheritdoc/>
     public virtual async Task SettleTransitionAsync(
-        Guid excursionId, ExcursionTransitionType kind, CancellationToken ct)
+        Guid excursionId, ExcursionTransitionType kind, DateTime owedAt, CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
+        var held = NocturneDbContext.AtStoredPrecision(owedAt);
 
-        var excursion = await context.AlertExcursions.FirstOrDefaultAsync(e => e.Id == excursionId, ct);
-        if (excursion is null)
-            return;
+        var excursion = context.AlertExcursions.Where(e => e.Id == excursionId);
         if (kind == ExcursionTransitionType.ExcursionOpened)
-            excursion.OpenedOwedAt = null;
+            await excursion.Where(e => e.OpenedOwedAt == held)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OpenedOwedAt, (DateTime?)null), ct);
         else
-            excursion.ClosedOwedAt = null;
-        await context.SaveChangesAsync(ct);
+            await excursion.Where(e => e.ClosedOwedAt == held)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.ClosedOwedAt, (DateTime?)null), ct);
     }
 
     /// <inheritdoc/>
@@ -331,6 +331,25 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<bool> ExtendLapsedSnoozeAsync(
+        Guid instanceId, DateTime lapsedUntil, DateTime snoozedUntil, int snoozeCount, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        return await context.ExecuteInTransactionAsync(
+            async token => await context.AlertInstances.OfCondition(includeTest: true)
+                .Where(i => i.Id == instanceId && i.SnoozedUntil == lapsedUntil)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.SnoozedUntil, snoozedUntil)
+                    .SetProperty(i => i.SnoozeCount, snoozeCount), token) == 1,
+            verifySucceeded: async (extended, token) =>
+                !extended
+                || await context.AlertInstances.OfCondition(includeTest: true).AnyAsync(
+                    i => i.Id == instanceId && i.SnoozedUntil == snoozedUntil && i.SnoozeCount == snoozeCount, token),
+            ct: ct);
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(
         Guid excursionId, CancellationToken ct)
     {
@@ -378,29 +397,6 @@ public class AlertRepository : IAlertRepository
                     .SetProperty(i => i.ResolvedAt, resolvedAt)
                     .SetProperty(i => i.ResolutionReason, resolutionReason), token);
         }, ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task UpdateInstanceAsync(
-        UpdateAlertInstanceRequest request, CancellationToken ct)
-    {
-        await using var context = await _contexts.CreateForTenantAsync(request.TenantId, ct);
-
-        var entity = await context.AlertInstances
-            .FirstOrDefaultAsync(i => i.Id == request.Id, ct);
-
-        if (entity == null) return;
-
-        if (request.Status is not null)
-            entity.Status = request.Status;
-
-        if (request.SnoozedUntil is { } snoozedUntil)
-            entity.SnoozedUntil = snoozedUntil;
-
-        if (request.SnoozeCount.HasValue)
-            entity.SnoozeCount = request.SnoozeCount.Value;
-
-        await context.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -579,7 +575,7 @@ public class AlertRepository : IAlertRepository
             rule.Id,
             e => e.UnevaluableConditionVersion = conditionVersion,
             async (context, token) => await Standing(context, rule.Id, conditionVersion).FirstOrDefaultAsync(token) is { } n
-                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
+                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched, n.OpenedOwedAt)
                 : null,
             at,
             (context, token) => context.AlertRules.AnyAsync(r => r.Id == rule.Id
@@ -598,7 +594,7 @@ public class AlertRepository : IAlertRepository
             rule.Id,
             e => e.UnevaluableConditionVersion = conditionVersion,
             async (context, token) => await Standing(context, rule.Id, conditionVersion).FirstOrDefaultAsync(token) is { } n
-                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
+                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched, n.OpenedOwedAt)
                 : null,
             at,
             async (context, token) => (await context.Database
@@ -622,7 +618,7 @@ public class AlertRepository : IAlertRepository
                 e.UnevaluableConditionVersion = $"held:{heldSince:O}";
             },
             async (context, token) => await StandingHeld(context, ruleId, heldSince).FirstOrDefaultAsync(token) is { } n
-                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
+                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched, n.OpenedOwedAt)
                 : null,
             at,
             async (context, token) =>
@@ -675,7 +671,7 @@ public class AlertRepository : IAlertRepository
             context.AlertInstances.Add(instance);
             await context.SaveChangesAsync(token);
 
-            return new NoticeRecorded(excursion.Id, instance.Id, Dispatched: false);
+            return new NoticeRecorded(excursion.Id, instance.Id, Dispatched: false, excursion.OpenedOwedAt);
         },
         verifySucceeded: async (recorded, token) =>
             recorded is not null
@@ -722,7 +718,8 @@ public class AlertRepository : IAlertRepository
                 i.AlertExcursion.UnevaluableConditionVersion!,
                 i.AlertExcursion.StartedAt,
                 i.AlertExcursion.OpenedOwedAt == null
-                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
+                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id)),
+                i.AlertExcursion.OpenedOwedAt));
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<StandingHeldNotice>> GetStandingHeldNoticesAsync(
@@ -747,7 +744,8 @@ public class AlertRepository : IAlertRepository
                 i.AlertExcursion!.AlertRuleId,
                 i.AlertExcursion.HeldSince!.Value,
                 i.AlertExcursion.OpenedOwedAt == null
-                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
+                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id)),
+                i.AlertExcursion.OpenedOwedAt));
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<HeldRuleState>> GetHeldRuleStatesAsync(CancellationToken ct)
@@ -800,7 +798,7 @@ public class AlertRepository : IAlertRepository
                 r => r.Id,
                 (x, r) => new SnoozedInstanceSnapshot(
                     x.Instance.Id, x.Instance.TenantId, x.Instance.AlertExcursionId,
-                    x.Instance.Status, x.Instance.SnoozeCount,
+                    x.Instance.Status, x.Instance.SnoozedUntil!.Value, x.Instance.SnoozeCount,
                     r.Id, AlertRuleMapper.Readable(r.ConditionType), r.ConditionParams, r.ClientConfiguration))
             .ToListAsync(ct);
     }

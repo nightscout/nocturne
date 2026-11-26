@@ -205,35 +205,6 @@ public class AlertRepositoryTenantScopingTests
     }
 
     [Fact]
-    public async Task UpdateInstanceAsync_FromAScopeWithNoTenant_UpdatesTheRequestsTenantOnly()
-    {
-        var options = NewStore();
-        var rule = NewRule(TenantA, "Low");
-        var instanceA = Guid.NewGuid();
-        var instanceB = Guid.NewGuid();
-        var snoozedUntil = new DateTime(2026, 1, 5, 13, 0, 0, DateTimeKind.Utc);
-        await SeedAsync(options, ctx =>
-        {
-            ctx.AlertRules.Add(rule);
-            ctx.AlertInstances.AddRange(
-                new AlertInstanceEntity { Id = instanceA, TenantId = TenantA, TriggeredAt = DateTime.UtcNow },
-                new AlertInstanceEntity { Id = instanceB, TenantId = TenantB, TriggeredAt = DateTime.UtcNow });
-        });
-        var repo = Repository(options, scopeTenant: Guid.Empty);
-
-        await repo.UpdateInstanceAsync(
-            new UpdateAlertInstanceRequest(TenantA, instanceA, "acknowledged", snoozedUntil, 2), CancellationToken.None);
-        await repo.UpdateInstanceAsync(
-            new UpdateAlertInstanceRequest(TenantA, instanceB, "acknowledged", snoozedUntil, 2), CancellationToken.None);
-
-        await using var read = new NocturneDbContext(options) { TenantId = Guid.Empty };
-        var instances = await read.AlertInstances.IgnoreQueryFilters()
-            .ToDictionaryAsync(i => i.Id, i => (i.Status, i.SnoozedUntil, i.SnoozeCount), CancellationToken.None);
-        instances[instanceA].Should().Be(("acknowledged", (DateTime?)snoozedUntil, 2));
-        instances[instanceB].Should().Be(("triggered", (DateTime?)null, 0));
-    }
-
-    [Fact]
     public async Task GetTenantAlertContextAsync_FromAScopeWithNoTenant_ReadsTheGivenTenantsPatientName()
     {
         var options = NewStore();

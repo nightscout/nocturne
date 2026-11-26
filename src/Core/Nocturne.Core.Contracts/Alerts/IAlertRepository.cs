@@ -105,8 +105,12 @@ public interface IAlertRepository
     Task<bool> TakeUpOwedTransitionAsync(
         Guid excursionId, ExcursionTransitionType kind, DateTime seen, DateTime now, CancellationToken ct);
 
-    /// <summary>Records that the work <paramref name="kind"/> of <paramref name="excursionId"/> owed is done.</summary>
-    Task SettleTransitionAsync(Guid excursionId, ExcursionTransitionType kind, CancellationToken ct);
+    /// <summary>
+    /// Records that the work <paramref name="kind"/> of <paramref name="excursionId"/> owed is done
+    /// while it is still owed as of <paramref name="owedAt"/>, the stamp the caller set or took up, so
+    /// work owed again or taken up since stays owed.
+    /// </summary>
+    Task SettleTransitionAsync(Guid excursionId, ExcursionTransitionType kind, DateTime owedAt, CancellationToken ct);
 
     /// <summary>
     /// Records that the close of <paramref name="excursionId"/> owes its work again, taken up at
@@ -125,6 +129,15 @@ public interface IAlertRepository
     /// </summary>
     Task<LapsedSnoozeEnd> EndLapsedSnoozeAsync(
         Guid instanceId, DateTime lapsedUntil, DateTime? renotifyAt, CancellationToken ct);
+
+    /// <summary>
+    /// Extends the snooze of <paramref name="instanceId"/> to <paramref name="snoozedUntil"/>, counted
+    /// as <paramref name="snoozeCount"/>, while it still holds the lapsed value
+    /// <paramref name="lapsedUntil"/>, so an extension never re-snoozes an alert a resume or a new
+    /// snooze wrote since. False when it no longer holds it.
+    /// </summary>
+    Task<bool> ExtendLapsedSnoozeAsync(
+        Guid instanceId, DateTime lapsedUntil, DateTime snoozedUntil, int snoozeCount, CancellationToken ct);
 
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
@@ -164,14 +177,6 @@ public interface IAlertRepository
     /// </summary>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid excursionId, CancellationToken ct);
-
-    /// <summary>
-    /// Updates an existing alert instance of <see cref="UpdateAlertInstanceRequest.TenantId"/> (e.g.,
-    /// advancing its escalation step or snooze state).
-    /// </summary>
-    /// <remarks>The sweep calls it once per tenant.</remarks>
-    /// <param name="request">The update request containing the fields to change.</param>
-    Task UpdateInstanceAsync(UpdateAlertInstanceRequest request, CancellationToken ct);
 
     /// <summary>
     /// Expires all pending (unsent) deliveries for the specified alert instances,
