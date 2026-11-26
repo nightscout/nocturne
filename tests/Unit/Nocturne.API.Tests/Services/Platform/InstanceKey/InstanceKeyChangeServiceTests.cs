@@ -65,7 +65,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton(_database.ContextFactory);
-        services.AddScoped<ITenantAccessor, StubTenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(sp => _database.ContextFactory.AsNocturneFactory(sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped(_ => owners.Object);
         services.AddScoped(_ => repository.Object);
@@ -623,14 +623,5 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             lock (Entries)
                 Entries.Add((logLevel, formatter(state, exception)));
         }
-    }
-
-    private sealed class StubTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

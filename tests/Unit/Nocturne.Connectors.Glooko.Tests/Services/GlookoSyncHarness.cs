@@ -11,7 +11,6 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -225,7 +224,7 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
             new HttpClient(),
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            new FakeTenantAccessor(),
+            ResolvedTenant.Accessor(),
             NullLogger<GlookoAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             clock)
@@ -255,14 +254,6 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
                 ["SessionCookie"] = cookie,
                 ["UserData"] = userData,
             }));
-    }
-
-    private sealed class FakeTenantAccessor : ITenantAccessor
-    {
-        public bool IsResolved => true;
-        public Guid TenantId => Guid.Empty;
-        public TenantContext? Context => null;
-        public void SetTenant(TenantContext context) { }
     }
 }
 

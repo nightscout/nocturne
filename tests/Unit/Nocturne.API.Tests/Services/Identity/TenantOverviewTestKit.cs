@@ -13,14 +13,6 @@ namespace Nocturne.API.Tests.Services.Identity;
 /// </summary>
 internal static class TenantOverviewTestKit
 {
-    public sealed class RecordingTenantAccessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public TenantContext? Context { get; private set; }
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     public static DbContextOptions<NocturneDbContext> NewOptions() =>
         new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())

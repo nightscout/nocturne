@@ -11,11 +11,9 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
 
@@ -26,7 +24,7 @@ public class TenantSetupMiddlewareTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly IDbContextFactory<NocturneDbContext> _dbFactory;
-    private readonly Mock<ITenantAccessor> _tenantAccessor;
+    private readonly SettableTenantAccessor _tenantAccessor;
 
     /// <summary>
     /// Hands the middleware contexts over the test's own SQLite connection.
@@ -61,7 +59,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        _tenantAccessor = MockTenantAccessor.Create(_tenantId);
+        _tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
     }
 
     public void Dispose()
@@ -98,7 +96,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.Body = new MemoryStream();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -140,7 +138,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -151,12 +149,12 @@ public class TenantSetupMiddlewareTests : IDisposable
     public async Task WhenTenantNotResolved_CallsNext()
     {
         // Arrange — unresolved tenant
-        _tenantAccessor.Setup(t => t.IsResolved).Returns(false);
+        var unresolved = new SettableTenantAccessor();
         var nextCalled = false;
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, unresolved, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -212,7 +210,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -260,7 +258,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Request.Path = "/api/v1/entries";
         ctx.Response.Body = new MemoryStream();
 
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         nextCalled.Should().BeTrue();
         ctx.Response.StatusCode.Should().NotBe(503);
@@ -326,7 +324,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -395,7 +393,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -436,7 +434,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -457,7 +455,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.SetEndpoint(CreateEndpoint(new AllowDuringSetupAttribute()));
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -472,7 +470,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.SetEndpoint(CreateEndpoint());
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -487,7 +485,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         // (no SetEndpoint call)
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -508,7 +506,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.Body = new MemoryStream();
 
         // Act — tenant is resolved (simulating single-tenant auto-resolution)
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -549,7 +547,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -607,7 +605,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue("OIDC identity alone should satisfy the setup check");
@@ -649,7 +647,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -730,7 +728,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act — middleware checks tenant B
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue(
@@ -795,7 +793,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert — should pass through cleanly, no 503, no recovery mode
         nextCalled.Should().BeTrue();
@@ -828,7 +826,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -857,7 +855,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Request.Headers[ServiceNames.Headers.InstanceService] = "nocturne-setup-agent";
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor(key));
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor(key));
 
         // Assert
         nextCalled.Should().BeTrue("a trusted instance-key caller must reach config endpoints during setup");
@@ -901,7 +899,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Request.Headers[ServiceNames.Headers.InstanceService] = "nocturne-setup-agent";
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor(key));
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor(key));
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -920,7 +918,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         // no X-Instance-Service marker
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor(key));
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor(key));
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -935,7 +933,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Request.Headers[ServiceNames.Headers.InstanceService] = "nocturne-setup-agent";
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor("bootstrap-key"));
+        await mw.InvokeAsync(ctx, _tenantAccessor, new TenantMembershipRepository(_dbFactory.AsNocturneFactory(), AccountLinkRoutes.Off), ValidatorFor("bootstrap-key"));
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);

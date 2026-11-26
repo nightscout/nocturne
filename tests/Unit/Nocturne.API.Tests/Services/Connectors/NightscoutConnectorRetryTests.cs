@@ -8,7 +8,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -42,7 +42,7 @@ public class NightscoutConnectorRetryTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object);
+            SettableTenantAccessor.Resolved());
 
         return (service, config);
     }

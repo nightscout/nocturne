@@ -13,7 +13,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using Nocturne.Infrastructure.Data.Repositories;
@@ -50,7 +49,7 @@ public sealed class AccessRequestControllerTests : IDisposable
             new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _subjectDeletion.Object,
             _accessRequests.Object,
-            MockTenantAccessor.Create(_tenantId).Object,
+            SettableTenantAccessor.Resolved(_tenantId),
             _notifications.Object,
             NullLogger<AccessRequestController>.Instance)
         {

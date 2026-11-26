@@ -4,7 +4,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -18,15 +18,15 @@ public class TenantGlucoseUnitsTests
 {
     private readonly Mock<ITenantAppearanceReader> _appearance = new();
     private readonly Mock<ITenantService> _tenants = new();
-    private ITenantAccessor _accessor = MockTenantAccessor.Create().Object;
+    private ITenantAccessor _accessor = SettableTenantAccessor.Resolved();
 
     private TenantGlucoseUnits Units(string? appearanceUnits, string? setupDefault)
     {
         _appearance
-            .Setup(a => a.GetTenantAppearanceAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .Setup(a => a.GetTenantAppearanceAsync(SettableTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences { GlucoseUnits = appearanceUnits });
         _tenants
-            .Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .Setup(t => t.GetDefaultGlucoseUnitsAsync(SettableTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(setupDefault);
         return new TenantGlucoseUnits(_accessor, _appearance.Object, _tenants.Object);
     }

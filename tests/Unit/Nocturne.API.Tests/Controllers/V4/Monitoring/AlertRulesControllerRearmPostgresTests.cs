@@ -18,7 +18,6 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -127,7 +126,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
             new SubjectRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
             new AlertRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
             new AlertRuleRepository(new SuppliedContextFactory(() => Context(tenant, failure)), TimeProvider.System),
-            MockTenantAccessor.Create(tenant).Object,
+            SettableTenantAccessor.Resolved(tenant),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

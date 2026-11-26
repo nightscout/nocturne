@@ -11,7 +11,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -324,7 +324,7 @@ public class NightscoutBackfillReconcileTests
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
                 _lookups,
-                MockTenantAccessor.Create().Object,
+                SettableTenantAccessor.Resolved(),
                 publisher.Object);
         }
     }

@@ -19,7 +19,6 @@ using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -2158,7 +2157,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             _extrasRepo,
             _sensorStateRepo,
             _stateSpanServiceMock.Object,
-            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()));
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, SettableTenantAccessor.Resolved(), DeviceDateClockDoubles.Utc()));
     }
 
     private static V4Models.PatientDevice MakeDatedPatientDevice() => new()

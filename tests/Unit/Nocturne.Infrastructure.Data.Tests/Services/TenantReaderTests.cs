@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
@@ -13,16 +14,8 @@ public class TenantReaderTests
 {
     private static readonly TenantContext Tenant = new(Guid.NewGuid(), "t", "T", true, false);
 
-    private sealed class Accessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
-    }
-
     private static ServiceProvider Scope() => new ServiceCollection()
-        .AddSingleton<ITenantAccessor>(new Accessor())
+        .AddSingleton<ITenantAccessor>(new SettableTenantAccessor())
         .AddSingleton<ICategoryReadContext>(new CategoryReadContext())
         .BuildServiceProvider();
 

@@ -13,7 +13,7 @@ using Xunit;
 using Nocturne.Core.Contracts.V4;
 using SyncDataType = Nocturne.Connectors.Core.Models.SyncDataType;
 using SyncRequest = Nocturne.Connectors.Core.Models.SyncRequest;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -78,7 +78,7 @@ public class NightscoutConnectorPaginationTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisher);
     }
 
@@ -392,7 +392,7 @@ public class NightscoutConnectorPaginationTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisherMock.Object);
 
         var request = new Nocturne.Connectors.Core.Models.SyncRequest
@@ -628,7 +628,7 @@ public class NightscoutConnectorPaginationTests
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             publisherMock.Object);
 
         var request = new Nocturne.Connectors.Core.Models.SyncRequest

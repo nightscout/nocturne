@@ -11,7 +11,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
@@ -501,7 +501,7 @@ public class NightscoutTreatmentReconcileTests
         /// <summary>What the connector remembers of its lookups; give two harnesses one to share it.</summary>
         public NightscoutLookups LookupMemory { get; init; } = new();
 
-        public Guid Tenant { get; init; } = MockTenantAccessor.DefaultTenantId;
+        public Guid Tenant { get; init; } = SettableTenantAccessor.DefaultTenantId;
 
         public string Url { get; init; } = $"https://{Guid.NewGuid():N}.ns.example";
 
@@ -671,7 +671,7 @@ public class NightscoutTreatmentReconcileTests
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
                 LookupMemory,
-                MockTenantAccessor.Create(Tenant).Object,
+                SettableTenantAccessor.Resolved(Tenant),
                 publisher.Object,
                 new FakeTimeProvider(At));
         }

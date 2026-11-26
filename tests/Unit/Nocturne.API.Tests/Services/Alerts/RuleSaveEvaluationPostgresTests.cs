@@ -34,7 +34,6 @@ using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -200,7 +199,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
                 new SubjectRepository(Contexts, AccountLinkRoutes.Off),
                 new AlertRepository(Contexts),
                 new AlertRuleRepository(Contexts, TimeProvider.System),
-                MockTenantAccessor.Create(Id).Object,
+                SettableTenantAccessor.Resolved(Id),
                 Mock.Of<IAlertReferenceService>(),
                 Mock.Of<IAlertDeliveryService>(),
                 Classifier(),

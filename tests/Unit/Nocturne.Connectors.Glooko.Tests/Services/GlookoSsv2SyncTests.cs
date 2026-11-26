@@ -637,7 +637,7 @@ public class GlookoSsv2SyncTests
         public FixedGlookoTokenProvider()
             : base(new HttpClient(), new ConnectorTokenCache(),
                    new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-                   new FakeTenantAccessor(), NullLogger<GlookoAuthTokenProvider>.Instance,
+                   ResolvedTenant.Accessor(), NullLogger<GlookoAuthTokenProvider>.Instance,
                    Mock.Of<IRetryDelayStrategy>()) { }
 
         protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
@@ -648,14 +648,6 @@ public class GlookoSsv2SyncTests
             return Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 ("_logbook-web_session=sess", DateTime.UtcNow.AddHours(1),
                  new Dictionary<string, string> { ["SessionCookie"] = "_logbook-web_session=sess", ["UserData"] = userData }));
-        }
-
-        private sealed class FakeTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
-            public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
         }
     }
 }

@@ -591,7 +591,7 @@ public class TenantOverviewServiceTests
             sp.GetRequiredService<ICategoryReadContext>(),
             contextClampSeen));
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
-        services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
         services.AddScoped(sp =>
         {

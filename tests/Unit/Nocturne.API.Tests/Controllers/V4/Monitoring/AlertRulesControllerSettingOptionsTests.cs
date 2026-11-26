@@ -11,7 +11,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -34,7 +33,7 @@ public class AlertRulesControllerSettingOptionsTests
             new SubjectRepository(factory, AccountLinkRoutes.Off),
             new AlertRepository(factory),
             new AlertRuleRepository(factory, TimeProvider.System),
-            MockTenantAccessor.Create(db.TenantId).Object,
+            SettableTenantAccessor.Resolved(db.TenantId),
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),

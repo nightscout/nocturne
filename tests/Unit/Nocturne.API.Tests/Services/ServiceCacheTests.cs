@@ -20,7 +20,6 @@ using Nocturne.Infrastructure.Cache.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
 
@@ -35,14 +34,14 @@ public class ServiceCacheTests
     private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<StatusService>> _mockStatusLogger;
-    private readonly Mock<ITenantAccessor> _mockTenantAccessor;
+    private readonly SettableTenantAccessor _tenantAccessor;
 
     public ServiceCacheTests()
     {
         _mockCacheService = new Mock<ICacheService>();
         _mockDemoModeService = new Mock<IDemoModeService>();
         _mockStatusLogger = new Mock<ILogger<StatusService>>();
-        _mockTenantAccessor = MockTenantAccessor.Create();
+        _tenantAccessor = SettableTenantAccessor.Resolved();
 
         _mockDemoModeService.Setup(x => x.IsEnabled).Returns(false);
     }
@@ -102,9 +101,9 @@ public class ServiceCacheTests
             new CollectionLastModifiedReader(tenantDbContextFactory.Object),
             new TenantRepository(tenantDbContextFactory.Object), new SubjectRepository(tenantDbContextFactory.Object, AccountLinkRoutes.Off), new RoleRepository(tenantDbContextFactory.Object), new OidcProviderRepository(tenantDbContextFactory.Object),
             httpContextAccessor,
-            _mockTenantAccessor.Object,
+            _tenantAccessor,
             TestPublicAccessCache.Create(),
-            new TenantGlucoseUnits(_mockTenantAccessor.Object, appearanceReader.Object, _tenants.Object),
+            new TenantGlucoseUnits(_tenantAccessor, appearanceReader.Object, _tenants.Object),
             new GlucoseStatusClassifier(mockConfiguration, NullLogger<GlucoseStatusClassifier>.Instance),
             NoAlertRules(),
             Mock.Of<ICategoryReadContext>(),
@@ -197,9 +196,9 @@ public class ServiceCacheTests
             new CollectionLastModifiedReader(tenantDbContextFactory.Object),
             new TenantRepository(tenantDbContextFactory.Object), new SubjectRepository(tenantDbContextFactory.Object, AccountLinkRoutes.Off), new RoleRepository(tenantDbContextFactory.Object), new OidcProviderRepository(tenantDbContextFactory.Object),
             httpContextAccessor,
-            _mockTenantAccessor.Object,
+            _tenantAccessor,
             TestPublicAccessCache.Create(),
-            new TenantGlucoseUnits(_mockTenantAccessor.Object, appearanceReader.Object, _tenants.Object),
+            new TenantGlucoseUnits(_tenantAccessor, appearanceReader.Object, _tenants.Object),
             new GlucoseStatusClassifier(mockConfiguration, NullLogger<GlucoseStatusClassifier>.Instance),
             NoAlertRules(),
             Mock.Of<ICategoryReadContext>(),

@@ -3,6 +3,7 @@ using Moq;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -42,7 +43,7 @@ internal sealed class RecordingNotices
     public IServiceProvider Services()
     {
         var services = new ServiceCollection();
-        services.AddScoped<ITenantAccessor, Accessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped(provider =>
         {
             Guid? Tenant() => provider.GetRequiredService<ITenantAccessor>().Context?.TenantId;
@@ -98,16 +99,5 @@ internal sealed class RecordingNotices
             return notifications.Object;
         });
         return services.BuildServiceProvider();
-    }
-
-    private sealed class Accessor : ITenantAccessor
-    {
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-
-        public bool IsResolved => Context is not null;
-
-        public TenantContext? Context { get; private set; }
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

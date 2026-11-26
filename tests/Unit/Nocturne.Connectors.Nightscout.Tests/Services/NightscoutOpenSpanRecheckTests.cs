@@ -13,7 +13,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -569,7 +569,7 @@ public class NightscoutOpenSpanRecheckTests
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
                 _lookups,
-                MockTenantAccessor.Create().Object,
+                SettableTenantAccessor.Resolved(),
                 publisher.Object,
                 Clock);
         }

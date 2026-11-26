@@ -34,7 +34,7 @@ public class GoogleHealthWorkerTests
         services.AddSingleton(ConfiguredPlatform);
         services.AddSingleton(tenantService.Object);
         services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
-        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         services.AddScoped<IConnectorSyncService>(provider =>
         {
             var accessor = provider.GetRequiredService<ITenantAccessor>();
@@ -123,7 +123,7 @@ public class GoogleHealthWorkerTests
         services.AddSingleton(tenants.Object);
         services.AddSingleton(configurations.Object);
         services.AddSingleton(sync.Object);
-        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
@@ -209,7 +209,7 @@ public class GoogleHealthWorkerTests
         services.AddSingleton(tenants.Object);
         services.AddSingleton(sync.Object);
         services.AddSingleton(configurations.Object);
-        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
@@ -258,7 +258,7 @@ public class GoogleHealthWorkerTests
         services.AddSingleton(sync.Object);
         services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
         services.AddSingleton<IGoogleHealthPlatformSettings>(ConfiguredPlatform);
-        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
@@ -299,7 +299,7 @@ public class GoogleHealthWorkerTests
         services.AddSingleton(Mock.Of<ITenantService>());
         services.AddSingleton(sync.Object);
         services.AddSingleton(configurations.Object);
-        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
             coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
@@ -336,13 +336,5 @@ public class GoogleHealthWorkerTests
             armed.Writer.TryWrite(true);
             return timer;
         }
-    }
-
-    private sealed class TenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-        public void SetTenant(TenantContext context) => Context = context;
     }
 }

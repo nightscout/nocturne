@@ -191,7 +191,7 @@ public sealed class DeduplicationAnnouncementTests : IDisposable
 
     private DeduplicationAdmin Sliced(IDuplicateLinker linker) =>
         new(Contexts(), linker, DeduplicationModules.Reconciler(Contexts()), NullLogger<DeduplicationAdmin>.Instance,
-            new DeduplicationModules.FixedTenantAccessor(new TenantContext(TenantId, "test", "Test", true, false)),
+            new SettableTenantAccessor(new TenantContext(TenantId, "test", "Test", true, false)),
             new CategoryReadContext(), _changes) { SliceLength = TimeSpan.Zero };
 
     /// <summary>

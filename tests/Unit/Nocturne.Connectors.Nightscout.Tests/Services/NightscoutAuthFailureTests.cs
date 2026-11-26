@@ -12,7 +12,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Outbound;
 using Xunit;
 using Nocturne.Tests.Shared.Connectors;
-using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -246,7 +246,7 @@ public class NightscoutAuthFailureTests
             Mock.Of<IRetryDelayStrategy>(),
             registration.Object,
             new NightscoutLookups(),
-            MockTenantAccessor.Create().Object,
+            SettableTenantAccessor.Resolved(),
             Mock.Of<IConnectorPublisher>());
     }
 

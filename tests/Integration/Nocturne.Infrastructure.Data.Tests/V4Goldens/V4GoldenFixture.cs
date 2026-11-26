@@ -24,7 +24,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 public class V4GoldenFixture : IAsyncLifetime
 {
     private ServiceProvider? _provider;
-    private readonly TestTenantAccessor _accessor = new();
+    private readonly SettableTenantAccessor _accessor = new();
 
     public string MigratorConnectionString { get; private set; } = string.Empty;
 

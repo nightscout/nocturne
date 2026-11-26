@@ -57,17 +57,6 @@ internal static class MigrationJobHarness
     public static HttpMessageHandler Serving(string path, string body) =>
         Serving(new Dictionary<string, string> { [path] = body });
 
-    private sealed class FixedTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-
-        public bool IsResolved => Context is not null;
-
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-
-        public void SetTenant(TenantContext? tenant) => Context = tenant;
-    }
-
     /// <summary>Marks what it encrypts, so a test can tell stored ciphertext from plaintext, and reads only that back.</summary>
     internal sealed class MarkingSecrets : ISecretEncryptionService
     {
@@ -168,7 +157,7 @@ internal static class MigrationJobHarness
             })
             .AddDataServices()
             .AddSingleton(AccountLinkRoutes.Off)
-            .AddScoped<ITenantAccessor, FixedTenantAccessor>()
+            .AddScoped<ITenantAccessor, SettableTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(handler))
             .AddSingleton(entries.Object)

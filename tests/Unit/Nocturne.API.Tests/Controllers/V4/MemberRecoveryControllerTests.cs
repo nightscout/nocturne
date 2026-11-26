@@ -14,7 +14,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
 
@@ -68,7 +67,7 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         return new MemberRecoveryController(
             contexts,
             new TenantMembershipRepository(contexts, linkRoute),
-            MockTenantAccessor.Create(_tenantId).Object,
+            SettableTenantAccessor.Resolved(_tenantId),
             _roles.Object,
             new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute), TimeProvider.System), linkRoute),
             _recoveryCodes.Object,

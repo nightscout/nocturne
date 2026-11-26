@@ -683,7 +683,7 @@ public class CompressionLowDetectionServiceTests
                     });
 
             var services = new ServiceCollection();
-            services.AddScoped<ITenantAccessor, RecordingTenantAccessor>();
+            services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
             services.AddScoped(sp =>
             {
                 var tenantId = sp.GetRequiredService<ITenantAccessor>().TenantId;
@@ -740,15 +740,6 @@ public class CompressionLowDetectionServiceTests
         }
 
         public void Dispose() => _provider.Dispose();
-    }
-
-    private sealed class RecordingTenantAccessor : ITenantAccessor
-    {
-        public TenantContext? Context { get; private set; }
-        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
-        public bool IsResolved => Context is not null;
-
-        public void SetTenant(TenantContext context) => Context = context;
     }
 
     /// <summary>

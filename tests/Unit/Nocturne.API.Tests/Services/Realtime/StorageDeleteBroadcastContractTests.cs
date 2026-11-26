@@ -26,7 +26,6 @@ using Nocturne.Core.Models.Extensions;
 using Nocturne.API.Services.Caching;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Realtime;
@@ -72,7 +71,7 @@ public class StorageDeleteBroadcastContractTests
                 StubHub<AlertHub>(),
                 StubHub<HomeAssistantHub>(),
                 StubHub<OverviewHub>(),
-                MockTenantAccessor.Create().Object,
+                SettableTenantAccessor.Resolved(),
                 Options.Create(_protocol),
                 NullLogger<SignalRBroadcastService>.Instance
             );
@@ -135,7 +134,7 @@ public class StorageDeleteBroadcastContractTests
                 .Should()
                 .Be(
                     TenantAwareHub.FormatTenantGroup(
-                        MockTenantAccessor.DefaultTenantId.ToString(),
+                        SettableTenantAccessor.DefaultTenantId.ToString(),
                         payload.GetProperty("colName").GetString()!
                     ),
                     "the SignalR group and the payload's colName select the same audience and must agree"
