@@ -441,7 +441,11 @@ public class AlertRulesController : ControllerBase
         if (channel is null)
             return NotFound();
 
-        if (!ChannelDestinations.IsTypedIn(channel.ChannelType, channel.RecipientSubjectId))
+        // Judged as the rule editor shows it: a typed WhatsApp number a member has since linked goes
+        // to that member, so its typed-in stamps decide nothing and there is nothing to keep.
+        var states = await AlertChannelStates.LoadAsync(
+            [channel], _tenantAccessor.TenantId, _time.GetUtcNow().UtcDateTime, _members, _contextFactory, ct);
+        if (!states.Of(channel).TypedIn)
             return Problem(detail: KeepMemberChannelDetail, statusCode: StatusCodes.Status400BadRequest);
 
         if (HttpContext?.GetSubjectId() is not { } subjectId)

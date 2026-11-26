@@ -859,6 +859,26 @@ public class AlertRulesControllerChannelDestinationTests
     }
 
     [Fact]
+    public async Task A_typed_whatsapp_number_a_member_has_linked_cannot_be_kept()
+    {
+        var (controller, db) = CreateController();
+        var rule = await SeedStoppedRuleAsync(db, Guid.CreateVersion7());
+        var channel = await db.AlertRuleChannels.SingleAsync(c => c.ChannelType == ChannelType.DiscordChannel);
+        channel.ChannelType = ChannelType.WhatsAppDm;
+        channel.Destination = "+" + WhatsAppWaId;
+        await db.SaveChangesAsync();
+        await LinkIdentityAsync(db, "whatsapp", WhatsAppWaId);
+        db.ChangeTracker.Clear();
+        ActAs(controller, Subject);
+
+        var result = await controller.KeepChannel(rule.Id, channel.Id, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        (await db.AlertRuleChannels.AsNoTracking().SingleAsync(c => c.Id == channel.Id)).AddedBySubjectId
+            .Should().NotBe(Subject, "the link decides the channel, so its typed-in stamps are not written again");
+    }
+
+    [Fact]
     public async Task A_stopped_whatsapp_number_no_link_names_can_be_kept()
     {
         var (controller, db) = CreateController();
