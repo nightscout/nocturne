@@ -27,4 +27,7 @@
     <ProjectReference Include="..\..\..\src\API\Nocturne.API\Nocturne.API.csproj" />
     <ProjectReference Include="..\..\Shared\Nocturne.Tests.Shared\Nocturne.Tests.Shared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Nocturne.API.Tests\TestDoubles\CredentialRouteRedactor.cs" Link="TestDoubles\CredentialRouteRedactor.cs" />
+  </ItemGroup>
 </Project>

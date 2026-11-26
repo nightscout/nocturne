@@ -251,6 +251,7 @@ public class CompatibilityController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ManualTestResult>> TestApiComparison(
         [FromBody] ManualTestRequest request,
+        [FromServices] CredentialPathRedactor credentialRoutes,
         CancellationToken cancellationToken = default
     )
     {
@@ -270,6 +271,11 @@ public class CompatibilityController : ControllerBase
         }
 
         var queryPath = request.QueryPath.StartsWith("/") ? request.QueryPath : "/" + request.QueryPath;
+        if (credentialRoutes.CarriesCredentialRoute(queryPath))
+        {
+            return Problem(detail: CredentialPathRedactor.CredentialRouteMessage, statusCode: 400, title: "Bad Request");
+        }
+
         if (!address.TryFor(queryPath, out var nightscoutUrl))
         {
             return Problem(detail: NightscoutAddress.OutsideBaseMessage, statusCode: 400, title: "Bad Request");

@@ -18,7 +18,8 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>.
+/// Controlled by <see cref="CompatibilityProxyConfiguration.Enabled"/>. A path that
+/// <see cref="CredentialPathRedactor.CarriesCredentialRoute"/> is never compared.
 /// </para>
 /// <para>
 /// Uses <see cref="IRequestCloningService"/> to snapshot the request before the pipeline
@@ -76,13 +77,20 @@ public class CompatibilityProxyMiddleware
             return;
         }
 
+        var redactor = context.RequestServices.GetRequiredService<CredentialPathRedactor>();
+        if (redactor.CarriesCredentialRoute(context.Request.Path.ToString()))
+        {
+            await _next(context);
+            return;
+        }
+
         // Clone the request BEFORE calling next (body may be consumed)
         var cloningService = context.RequestServices.GetRequiredService<IRequestCloningService>();
         var clonedRequest = await cloningService.CloneRequestAsync(context.Request);
 
         // Capture the path before the background task (HttpContext will be disposed)
         // The path is compared and stored as well as logged, so it keeps its full length; line breaks are stripped.
-        var path = context.RequestServices.GetRequiredService<IRequestPathRedactor>()
+        var path = redactor
             .Redact(context.Request.Path.ToString())
             .Replace("\r", "").Replace("\n", "");
 

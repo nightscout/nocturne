@@ -105,26 +105,10 @@ public class CompatibilityManualTestTests
         {
             NightscoutUrl = nightscoutUrl,
             QueryPath = queryPath,
-        });
+        }, CredentialRouteRedactor.Create());
 
         response.Result.Should().BeOfType<OkObjectResult>();
         nightscout.Requests.Should().ContainSingle().Which.RequestUri!.AbsoluteUri.Should().Be(expected);
-    }
-
-    [Fact]
-    public async Task The_span_url_of_the_nightscout_side_shows_a_credential_route_by_its_parameter_name()
-    {
-        var nightscout = new RecordingHandler();
-
-        await Controller(new RecordingLogger(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
-        {
-            NightscoutUrl = $"http://{Unanswered}/s3cr3t?token=synthetic-token",
-            QueryPath = "/api/v2/authorization/request/readable-1a2b3c4d5e6f7a8b",
-        });
-
-        var displayed = nightscout.Requests.Should().ContainSingle().Subject.Options
-            .TryGetValue(OutboundTelemetry.DisplayUrl, out var url) ? url : null;
-        displayed.Should().Be($"http://{Unanswered}/…/api/v2/authorization/request/%7BaccessToken%7D");
     }
 
     [Theory]
@@ -138,7 +122,7 @@ public class CompatibilityManualTestTests
         {
             NightscoutUrl = $"http://{Unanswered}/api/v2/s3cr3t?token=synthetic-token",
             QueryPath = queryPath,
-        });
+        }, CredentialRouteRedactor.Create());
 
         nightscout.Requests.Should().ContainSingle().Subject.Options
             .TryGetValue(OutboundTelemetry.DisplayUrl, out var url).Should().BeTrue();
@@ -156,7 +140,7 @@ public class CompatibilityManualTestTests
         {
             NightscoutUrl = nightscoutUrl,
             QueryPath = queryPath,
-        });
+        }, CredentialRouteRedactor.Create());
 
         response.Result.Should().BeOfType<OkObjectResult>();
         logger.Value("NightscoutOrigin").Should().Be($"http://{Unanswered}");
@@ -171,7 +155,7 @@ public class CompatibilityManualTestTests
         {
             NightscoutUrl = "ftp://ns.example/nightscout",
             QueryPath = "/api/v1/status",
-        });
+        }, CredentialRouteRedactor.Create());
 
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
@@ -205,11 +189,37 @@ public class CompatibilityManualTestTests
         {
             NightscoutUrl = $"http://{Unanswered}/nightscout",
             QueryPath = queryPath,
-        });
+        }, CredentialRouteRedactor.Create());
 
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutAddress.OutsideBaseMessage);
+        logger.States.Should().BeEmpty("nothing is fetched");
+        nightscout.Requests.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("http", "/api/v2/authorization/request/noc_synthetictoken")]
+    [InlineData("http", "api/v2/authorization/request/noc_synthetictoken?count=1")]
+    [InlineData("http", "/api/v2/authorization/x/../request/noc_synthetictoken")]
+    [InlineData("http", "/api/v2//authorization/request/noc_synthetictoken")]
+    [InlineData("https", "https:api/v2/authorization/request/noc_synthetictoken")]
+    [InlineData("http", "/api/v4/alert-invites/noc_synthetictoken")]
+    public async Task A_query_path_that_holds_a_nocturne_credential_is_refused(string scheme, string queryPath)
+    {
+        var logger = new RecordingLogger();
+        var nightscout = new RecordingHandler();
+
+        var response = await Controller(logger, nightscout: nightscout).TestApiComparison(new ManualTestRequest
+        {
+            NightscoutUrl = $"{scheme}://{Unanswered}/nightscout",
+            QueryPath = queryPath,
+        }, CredentialRouteRedactor.Create());
+
+        var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be(CredentialPathRedactor.CredentialRouteMessage);
         logger.States.Should().BeEmpty("nothing is fetched");
         nightscout.Requests.Should().BeEmpty();
     }
