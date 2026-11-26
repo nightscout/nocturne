@@ -1302,8 +1302,9 @@ msgstr "Personalizado"
 msgid "Telegram"
 msgstr "Telegram"
 
-#~ msgid "WhatsApp"
-#~ msgstr "WhatsApp"
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "WhatsApp"
+msgstr "WhatsApp"
 
 #~ msgid "No notification channels are currently available."
 #~ msgstr ""
@@ -31433,9 +31434,8 @@ msgstr "ID del canal"
 msgid "Chat ID"
 msgstr "ID del chat"
 
-#: src/lib/components/alerts/channelText.svelte.ts
-msgid "Phone (E.164)"
-msgstr "Teléfono (E.164)"
+#~ msgid "Phone (E.164)"
+#~ msgstr "Teléfono (E.164)"
 
 #: src/lib/components/alerts/channelText.svelte.ts
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
@@ -31465,9 +31465,8 @@ msgstr "Enviado a la cuenta de Telegram que has vinculado."
 msgid "Add the bot to the group, then use its chat ID (a negative number) or the group's @username."
 msgstr "Añade el bot al grupo y utiliza su ID de chat (un número negativo) o el @nombredeusuario del grupo."
 
-#: src/lib/components/alerts/channelText.svelte.ts
-msgid "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code."
-msgstr "Incluye el signo + y el código de país. Sin el signo +, WhatsApp antepone el código de país del número de empresa remitente."
+#~ msgid "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code."
+#~ msgstr "Incluye el signo + y el código de país. Sin el signo +, WhatsApp antepone el código de país del número de empresa remitente."
 
 #: src/lib/components/alerts/channelText.svelte.ts
 msgid "A channel ID is 17-20 digits."
@@ -31481,9 +31480,8 @@ msgstr "El ID del canal comienza por C, G o D."
 msgid "A group chat ID is a negative number, or an @username."
 msgstr "El ID del chat de grupo es un número negativo o un @nombredeusuario."
 
-#: src/lib/components/alerts/channelText.svelte.ts
-msgid "A phone number starts with + and a country code, digits only."
-msgstr "El número de teléfono comienza por + y el código de país, seguido solo de cifras."
+#~ msgid "A phone number starts with + and a country code, digits only."
+#~ msgstr "El número de teléfono comienza por + y el código de país, seguido solo de cifras."
 
 #. 0: channelDestinationLabel(meta.type) ?? channelLabel(meta.type)
 #: src/lib/components/alerts/channelText.svelte.ts
@@ -33936,11 +33934,9 @@ msgstr "Hidratos de carbono diarios medios"
 msgid "Select any day to view detailed report"
 msgstr "Selecciona cualquier día para ver el informe detallado"
 
-#. 0: platformLabel(o.platform!)
-#: src/lib/components/alerts/ChannelsSection.svelte
 #, python-brace-format
-msgid "{0} not linked. Connect it in Connectors & apps to enable delivery."
-msgstr "{0} no está vinculado. Conéctalo en Conectores y aplicaciones para habilitar el envío."
+#~ msgid "{0} not linked. Connect it in Connectors & apps to enable delivery."
+#~ msgstr "{0} no está vinculado. Conéctalo en Conectores y aplicaciones para habilitar el envío."
 
 #: src/lib/components/alerts/DndPanel.svelte
 msgid "<0/> Disable"
@@ -51624,3 +51620,20 @@ msgid "One site you would see through this team stopped your access."
 msgid_plural "# sites you would see through this team stopped your access."
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Send /connect to the Nocturne WhatsApp number to enable delivery."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Connect it in Connectors & apps to enable delivery."
+msgstr ""
+
+#. 0: platformLabel(o.platform!); 1: linkInstruction(o.platform!)
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "{0} not linked. {1}"
+msgstr ""
+
+#: src/lib/components/alerts/channelText.svelte.ts
+msgid "Sent to the WhatsApp account you linked."
+msgstr ""
