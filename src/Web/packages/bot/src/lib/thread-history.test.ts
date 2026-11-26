@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PostgresStateAdapter } from "@chat-adapter/state-pg";
 import { purgeThreadHistory } from "./thread-history.js";
 
@@ -14,13 +14,19 @@ vi.mock("@chat-adapter/state-pg", async (original) => {
 });
 
 describe("purgeThreadHistory", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    query.mockReset();
+  });
+
   it("deletes every thread history list from the bot's state and lets go of the connection", async () => {
     query.mockResolvedValue({ rows: [] });
     const disconnect = vi.spyOn(PostgresStateAdapter.prototype, "disconnect");
 
     await purgeThreadHistory("postgres://nobody@localhost/state");
 
-    expect(query).toHaveBeenCalledWith("DELETE FROM chat_state_lists WHERE list_key LIKE $1", ["msg-history:%"]);
+    const deletes = query.mock.calls.filter(([sql]) => String(sql).startsWith("DELETE"));
+    expect(deletes).toEqual([["DELETE FROM chat_state_lists WHERE list_key LIKE $1", ["msg-history:%"]]]);
     expect(disconnect).toHaveBeenCalledOnce();
   });
 
@@ -32,6 +38,6 @@ describe("purgeThreadHistory", () => {
     const disconnect = vi.spyOn(PostgresStateAdapter.prototype, "disconnect");
 
     await expect(purgeThreadHistory("postgres://nobody@localhost/state")).rejects.toThrow("connection reset");
-    expect(disconnect).toHaveBeenCalled();
+    expect(disconnect).toHaveBeenCalledOnce();
   });
 });

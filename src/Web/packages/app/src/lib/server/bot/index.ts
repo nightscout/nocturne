@@ -1,7 +1,6 @@
 import {
 	createBot,
 	registerAllCommands,
-	purgeThreadHistory,
 	AlertDeliveryHandler,
 	type BotOptions,
 	type PlatformCredentials,
@@ -11,6 +10,7 @@ import { DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_
 import { createServerApiClient, getApiBaseUrl } from "#lib/server/api-client-factory.js";
 import { getHashedInstanceKey } from "#lib/server/instance-key.js";
 import { fetchDecryptedPlatformCredentials } from "./platform-credentials";
+import { botPostgresUrl } from "./state-url";
 import type { PlatformCredentials as ApiPlatformCredentials } from "#lib/api/index.js";
 
 type Bot = ReturnType<typeof createBot>;
@@ -109,27 +109,6 @@ function buildPlatformConfig(
 		return builder.fromDb(db.fields ?? {});
 	}
 	return builder.fromEnv();
-}
-
-/**
- * The bot's state database. The bot adapter expects a postgresql:// URL, not the .NET-style
- * ConnectionStrings__nocturne-postgres value (which is Host=...;Port=...;Database=... key/value
- * format and causes the pg client to resolve literal strings like "base" as hostnames). Aspire
- * injects NOCTURNE_POSTGRES_URI pointing at the nocturne_web role — a least-privileged role that
- * owns only its own chat_state_* tables and cannot touch tenant-scoped tables. Fall back to
- * DATABASE_URL for non-Aspire deployments.
- */
-function botPostgresUrl(): string {
-	return process.env.NOCTURNE_POSTGRES_URI ?? process.env.DATABASE_URL ?? "";
-}
-
-/** Deletes the thread history the bot kept in its state before it stopped keeping any. */
-export async function purgeKeptThreadHistory(): Promise<void> {
-	const url = botPostgresUrl();
-	if (!url) return;
-	await purgeThreadHistory(url).catch((err: unknown) => {
-		console.warn("[bot] could not delete the kept thread history:", err);
-	});
 }
 
 async function initBot(): Promise<Bot> {

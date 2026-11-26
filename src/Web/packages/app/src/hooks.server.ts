@@ -425,8 +425,8 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
 /** Runs once at server start, before the first request. Nothing here may delay that request. */
 export const init: ServerInit = () => {
   if (building) return;
-  import("#lib/server/bot/index.js")
-    .then((bot) => bot.purgeKeptThreadHistory())
+  import("#lib/server/bot/thread-history.js")
+    .then((history) => history.purgeKeptThreadHistory())
     .catch((err: unknown) => console.warn("[bot] could not load the bot to delete its kept thread history:", err));
 };
 

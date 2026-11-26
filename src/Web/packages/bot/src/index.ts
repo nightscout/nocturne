@@ -3,7 +3,6 @@ export { AlertDeliveryHandler } from "./alerts/deliver.js";
 export { AlertCard, AcknowledgedCard, ActiveAlertsCard } from "./cards/alert.js";
 export { GlucoseCard } from "./cards/glucose.js";
 export { registerAllCommands } from "./commands/index.js";
-export { purgeThreadHistory } from "./lib/thread-history.js";
 export { DISCORD_COMMAND_MANIFEST, type SlashCommandDefinition } from "./commands/manifest.js";
 export { createStateToken, resolveStateToken } from "./lib/state-tokens.js";
 export {
