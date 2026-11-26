@@ -108,13 +108,14 @@ export class AlertDeliveryHandler {
   }
 
   /**
-   * Whether the window is known to be closed. The bot's state connects when the bot initializes,
-   * which a dispatch may be the first to ask for; a state that cannot be read leaves the window
-   * unknown, and the alert is sent.
+   * Whether the window is known to be closed. A dispatch may be the first to read the bot's state,
+   * so it connects the state alone: initializing the bot would start the adapters, and Telegram's
+   * polling loop would keep this dispatch's request context for the life of the process. A state
+   * that cannot be read leaves the window unknown, and the alert is sent.
    */
   private async knownClosed(window: WhatsAppWindow, threadId: string): Promise<boolean> {
     try {
-      await this.bot.initialize();
+      await this.bot.getState().connect();
       return await window.isClosed(threadId, Date.now());
     } catch (err) {
       logger.error("Could not read the WhatsApp window; sending the alert:", err);

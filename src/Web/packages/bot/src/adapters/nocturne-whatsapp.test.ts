@@ -128,12 +128,16 @@ describe("NocturneWhatsAppAdapter", () => {
   });
 
   it("marks an alert failed when Meta later fails it for the closed window", async () => {
+    await bits.window.recordInbound(THREAD, SENT.sentAt - 23 * HOUR);
     await bits.window.rememberSent("wamid.alert", SENT);
 
     await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
 
     expect(bits.scopedApiFactory).toHaveBeenCalledWith("acme");
-    expect(bits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", { error: WINDOW_CLOSED_REASON });
+    expect(bits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
+      error: WINDOW_CLOSED_REASON,
+      platformMessageId: "wamid.alert",
+    });
     await expect(bits.window.isClosed(THREAD, Date.now())).resolves.toBe(true);
   });
 
@@ -144,6 +148,7 @@ describe("NocturneWhatsAppAdapter", () => {
 
     expect(bits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
       error: "WhatsApp did not deliver the alert: Message undeliverable (error 131026).",
+      platformMessageId: "wamid.alert",
     });
     await expect(bits.window.isClosed(THREAD, Date.now())).resolves.toBe(false);
   });
@@ -177,6 +182,34 @@ describe("NocturneWhatsAppAdapter", () => {
     expect(first.status).toBe(500);
     expect(again.status).toBe(200);
     expect(bits.markFailed).toHaveBeenCalledTimes(2);
+    await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
+  });
+
+  it("keeps a window opened in the second of the send, since Meta stamps a message to the second", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    await bits.window.recordInbound(THREAD, Math.floor(SENT.sentAt / 1000) * 1000);
+
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    await expect(bits.window.isClosed(THREAD, Date.now())).resolves.toBe(false);
+  });
+
+  it("leaves a thread with no message on record unknown, since it may not be the thread the user writes from", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+
+    await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(bits.markFailed).toHaveBeenCalledOnce();
+    await expect(bits.window.isClosed(THREAD, Date.now())).resolves.toBe(false);
+  });
+
+  it("answers 200 and forgets the alert when the API refuses its failure, since no retry can land it", async () => {
+    await bits.window.rememberSent("wamid.alert", SENT);
+    bits.markFailed.mockRejectedValueOnce(Object.assign(new Error("Not Found"), { status: 404 }));
+
+    const response = await bits.post(failedStatus("wamid.alert", 131047, "Re-engagement message"));
+
+    expect(response.status).toBe(200);
     await expect(bits.window.sentAlert("wamid.alert")).resolves.toBeNull();
   });
 

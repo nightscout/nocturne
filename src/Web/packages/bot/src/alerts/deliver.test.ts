@@ -45,9 +45,8 @@ function createBot(options: { adaptersWithDm?: string[] } = {}) {
     withDm.includes(name) ? { name, openDM } : undefined,
   );
 
-  const initialize = vi.fn().mockResolvedValue(undefined);
-  const bot = { channel, thread, getAdapter, initialize, getState: () => state } as unknown as Chat;
-  return { bot, channel, thread, getAdapter, openDM, post, initialize };
+  const bot = { channel, thread, getAdapter, getState: () => state } as unknown as Chat;
+  return { bot, channel, thread, getAdapter, openDM, post };
 }
 
 function createApi() {
@@ -436,7 +435,7 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
 
   it("sends the card when the bot's state cannot be read, rather than withhold the alert", async () => {
     await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
-    bits.initialize.mockRejectedValueOnce(new Error("PostgresStateAdapter is not connected"));
+    vi.spyOn(state, "connect").mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
 
     await handler.deliver(createEvent("whatsapp_dm", WA_ID));
 
@@ -445,6 +444,7 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
   });
 
   it("names the window when Meta refuses the send outright, and skips the next doomed send", async () => {
+    await window.recordInbound(THREAD, Date.now() - 23 * HOUR);
     bits.post.mockRejectedValueOnce(
       new WhatsAppApiError(
         "WhatsApp API error",
@@ -459,6 +459,22 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
       error: WINDOW_CLOSED_REASON,
     });
     await expect(window.isClosed(THREAD, Date.now())).resolves.toBe(true);
+  });
+
+  it("leaves a thread it has never heard from unknown when Meta refuses the send, so a later message can open it", async () => {
+    bits.post.mockRejectedValueOnce(
+      new WhatsAppApiError(
+        "WhatsApp API error",
+        400,
+        JSON.stringify({ error: { code: 131047, message: "Re-engagement message" } }),
+      ),
+    );
+
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+    await handler.deliver(createEvent("whatsapp_dm", WA_ID));
+
+    expect(apiBits.markFailed).toHaveBeenCalledWith("delivery-1", { error: WINDOW_CLOSED_REASON });
+    expect(bits.post).toHaveBeenCalledTimes(2);
   });
 
   it("reports any other refusal as Meta gave it", async () => {

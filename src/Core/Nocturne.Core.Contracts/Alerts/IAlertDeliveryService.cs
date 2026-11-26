@@ -80,4 +80,12 @@ public interface IAlertDeliveryService
     /// Records a failed delivery attempt with the error details.
     /// </summary>
     Task MarkFailedAsync(Guid deliveryId, string error, CancellationToken ct);
+
+    /// <summary>
+    /// Records that the platform failed a message it had first accepted, as WhatsApp does in a status
+    /// webhook outside the customer service window. That status can land before the sender's own report
+    /// of the send, and the failure then stands against the send report for the same message. A failure
+    /// that names no message, such as a dispatch timeout, does not: the send report replaces it.
+    /// </summary>
+    Task MarkSentMessageFailedAsync(Guid deliveryId, string platformMessageId, string error, CancellationToken ct);
 }

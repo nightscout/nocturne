@@ -70,6 +70,12 @@ function statusUpdates(body: string): StatusUpdate[] {
     });
 }
 
+/** An API error a retry cannot change: a 4xx other than a timeout or rate limit. */
+function isRefusal(error: unknown): boolean {
+  const status = field(error, "status");
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 function failureReason(errors: StatusError[]): string {
   if (errors.some((e) => e.code === WINDOW_CLOSED_ERROR_CODE)) return WINDOW_CLOSED_REASON;
   const first = errors[0];
@@ -91,7 +97,8 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
     const body = request.method === "POST" ? await request.clone().text() : null;
     const response = await super.handleWebhook(request, options);
     // Only a 2xx response means the signature was verified; anything else may be forged. A failure
-    // left unreported answers 500, so Meta delivers the statuses again (messages are deduplicated).
+    // left unreported answers 500, so Meta delivers the whole batch again: the messages in it are
+    // deduplicated for ten minutes, a button reply in it runs again.
     if (body !== null && response.ok && !(await this.reportStatuses(body))) {
       return new Response("A failed alert could not be reported", { status: 500 });
     }
@@ -158,11 +165,15 @@ export class NocturneWhatsAppAdapter extends WhatsAppAdapter {
         }
         await getScopedApiFactory()(alert.tenantSlug).alerts.markFailed(alert.deliveryId, {
           error: failureReason(status.errors),
+          platformMessageId: status.id,
         });
         await window.forgetSent(status.id);
       } catch (error) {
         this.logger.error("Failed to report a WhatsApp alert's status", { messageId: status.id, error });
-        if (status.status === "failed") reported = false;
+        if (status.status !== "failed") continue;
+        // The API refused the report itself (the delivery or its tenant is gone): no retry can land it.
+        if (isRefusal(error)) await window.forgetSent(status.id).catch(() => undefined);
+        else reported = false;
       }
     }
     return reported;

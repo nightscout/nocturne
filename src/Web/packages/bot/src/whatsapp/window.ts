@@ -54,11 +54,16 @@ export class WhatsAppWindow {
 
   /**
    * Records that Meta refused a send made at `sentAt` because the window was closed, so later
-   * alerts skip the doomed send. A message the user wrote since then has reopened it, and stands.
+   * alerts skip the doomed send. A message the user wrote since then has reopened it, and stands;
+   * Meta stamps a message to the second, so one in the second of the send counts as since.
+   *
+   * A thread with no message on record stays unknown. Its destination may name the user otherwise
+   * than their messages do (a typed number for a user known by a business-scoped ID), so a closed
+   * mark there could never be reopened.
    */
   async recordClosed(threadId: string, sentAt: number): Promise<void> {
     const lastInbound = await this.state.get<number>(inboundKey(threadId));
-    if (lastInbound !== null && lastInbound >= sentAt) return;
+    if (lastInbound === null || lastInbound > sentAt - 1000) return;
     await this.state.set(inboundKey(threadId), 0, INBOUND_TTL_MS);
   }
 
