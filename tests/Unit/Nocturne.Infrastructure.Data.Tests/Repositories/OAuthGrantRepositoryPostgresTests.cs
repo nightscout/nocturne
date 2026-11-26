@@ -40,13 +40,9 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
     private NocturneDbContext Context(Guid tenant) => Context(tenant, null);
 
     private NocturneDbContext Context(Guid tenant, StatementRecorder? recorder) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(recorder is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), recorder])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(
+            database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly,
+            interceptors: recorder is null ? [] : [recorder]);
 
     private sealed record Seeded(Guid Tenant, Guid Subject, Guid Grant, string TokenHash);
 

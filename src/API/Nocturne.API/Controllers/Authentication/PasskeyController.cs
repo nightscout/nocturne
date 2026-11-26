@@ -285,7 +285,7 @@ public class PasskeyController : ControllerBase
                 result = enrolment.Result!;
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (IsRegistrationRefusal(ex))
         {
             _logger.LogWarning(ex, "Passkey registration completion failed");
             return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
@@ -1141,9 +1141,8 @@ public class PasskeyController : ControllerBase
     /// attestation is refused.
     /// </summary>
     /// <remarks>
-    /// The types caught are the refusals <see cref="IPasskeyService.CompleteRegistrationAsync"/>
-    /// names, and so also anything of those types the store raises, which rolls back and leaves
-    /// only the spent challenge. Anything else is not a refusal and is left to the error handler.
+    /// Refusals are those <see cref="IsRegistrationRefusal"/> names. Anything else is not a refusal
+    /// and is left to the error handler.
     /// </remarks>
     private async Task<PasskeyCredentialResult?> TryCompleteRegistrationAsync(
         string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId,
@@ -1154,24 +1153,20 @@ public class PasskeyController : ControllerBase
             return await _passkeyService.CompleteRegistrationAsync(
                 attestationResponseJson, challengeToken, flow, tenantId, expectedSubjectId: enrollingSubjectId);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (IsRegistrationRefusal(ex))
         {
-            LogRegistrationRefused(ex, flow);
+            _logger.LogWarning(ex, "Passkey registration for {Flow} was refused", flow);
+            return null;
         }
-        catch (JsonException ex)
-        {
-            LogRegistrationRefused(ex, flow);
-        }
-        catch (PasskeyRegistrationRefusedException ex)
-        {
-            LogRegistrationRefused(ex, flow);
-        }
-
-        return null;
     }
 
-    private void LogRegistrationRefused(Exception ex, PasskeyRegistrationFlow flow) =>
-        _logger.LogWarning(ex, "Passkey registration for {Flow} was refused", flow);
+    /// <summary>
+    /// The refusals <see cref="IPasskeyService.CompleteRegistrationAsync"/> names, and so also
+    /// anything of those types the store raises, which rolls back and leaves only the spent
+    /// challenge.
+    /// </summary>
+    private static bool IsRegistrationRefusal(Exception ex) =>
+        ex is InvalidOperationException or JsonException or PasskeyRegistrationRefusedException;
 
     /// <summary>
     /// Generate passkey registration options for someone without an account who holds a tenant

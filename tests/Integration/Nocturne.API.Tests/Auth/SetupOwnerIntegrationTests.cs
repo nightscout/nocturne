@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -38,51 +39,37 @@ public class SetupOwnerIntegrationTests : ApiIntegrationTestBase
         await base.InitializeAsync();
 
         await using var conn = await OpenPostgresAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                UPDATE subjects SET is_active = false
-                WHERE is_active AND NOT is_system_subject AND NOT is_demo_subject
-                RETURNING id;
-                """;
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                _deactivated.Add(reader.GetGuid(0));
-        }
+        _deactivated.AddRange(await conn.QueryAsync(
+            """
+            UPDATE subjects SET is_active = false
+            WHERE is_active AND NOT is_system_subject AND NOT is_demo_subject
+            RETURNING id;
+            """,
+            reader => reader.GetGuid(0)));
 
         _providerId = Guid.CreateVersion7();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM passkey_credentials WHERE subject_id IN
-                    (SELECT subject_id FROM tenant_members WHERE tenant_id = @tenant);
-                INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
-                VALUES (@provider, 'Setup owner IdP', @issuer, @client, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now());
-                """;
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-            cmd.Parameters.AddWithValue("provider", _providerId);
-            cmd.Parameters.AddWithValue("issuer", Issuer);
-            cmd.Parameters.AddWithValue("client", $"client-{_providerId:N}");
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            DELETE FROM passkey_credentials WHERE subject_id IN
+                (SELECT subject_id FROM tenant_members WHERE tenant_id = @tenant);
+            INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
+            VALUES (@provider, 'Setup owner IdP', @issuer, @client, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now());
+            """,
+            ("tenant", Fixture.TenantId), ("provider", _providerId), ("issuer", Issuer), ("client", $"client-{_providerId:N}"));
     }
 
     public override async Task DisposeAsync()
     {
         await using (var conn = await OpenPostgresAsync())
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                UPDATE subjects SET is_active = false
-                WHERE is_active AND NOT is_system_subject AND NOT is_demo_subject;
-                UPDATE subjects SET is_active = true WHERE id = ANY(@restore);
-                DELETE FROM subject_oidc_identities WHERE provider_id = @provider;
-                DELETE FROM oidc_providers WHERE id = @provider;
-                """;
-            cmd.Parameters.AddWithValue("restore", _deactivated.ToArray());
-            cmd.Parameters.AddWithValue("provider", _providerId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            UPDATE subjects SET is_active = false
+            WHERE is_active AND NOT is_system_subject AND NOT is_demo_subject;
+            UPDATE subjects SET is_active = true WHERE id = ANY(@restore);
+            DELETE FROM subject_oidc_identities WHERE provider_id = @provider;
+            DELETE FROM oidc_providers WHERE id = @provider;
+            """,
+            ("restore", _deactivated.ToArray()), ("provider", _providerId));
 
         await base.DisposeAsync();
     }

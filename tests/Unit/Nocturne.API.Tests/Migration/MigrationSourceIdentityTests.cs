@@ -30,14 +30,14 @@ namespace Nocturne.API.Tests.Migration;
 /// <summary>
 /// A Nightscout URL can carry a credential in its query (<c>?token=</c>) or as a path prefix a
 /// proxy admits requests under, so a source is stored under a digest of the site and its URL, like
-/// a run's description, is stored and returned masked.
+/// a run's description, is stored and returned as its host with no path.
 /// </summary>
 public class MigrationSourceIdentityTests
 {
     private const string PathSecret = "AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI";
     private const string SiteBase = $"https://example-nightscout.invalid/{PathSecret}";
     private const string TokenUrl = $"{SiteBase}/?token=synthetic-token";
-    private const string MaskedUrl = "example-nightscout.invalid/AGYL…";
+    private const string ShownUrl = "example-nightscout.invalid/…";
 
     private static readonly IConfiguration Configured = new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?>
@@ -112,18 +112,18 @@ public class MigrationSourceIdentityTests
 
         var job = await StartAndSettleAsync(service, tenant, TokenUrl);
 
-        job.SourceDescription.Should().Be(MaskedUrl);
+        job.SourceDescription.Should().Be(ShownUrl);
         (await service.GetSourcesAsync(tenant.TenantId)).Should().ContainSingle()
-            .Which.NightscoutUrl.Should().Be(MaskedUrl);
+            .Which.NightscoutUrl.Should().Be(ShownUrl);
         (await service.GetHistoryAsync(tenant.TenantId)).Should().ContainSingle()
-            .Which.SourceDescription.Should().Be(MaskedUrl);
+            .Which.SourceDescription.Should().Be(ShownUrl);
 
         await using var scope = provider.CreateAsyncScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         var source = await db.MigrationSources.SingleAsync();
         source.SourceIdentifier.Should().Be(HashUtils.Sha256Hex(SiteBase));
-        source.NightscoutUrl.Should().Be(MaskedUrl);
-        (await db.MigrationRuns.SingleAsync()).SourceDescription.Should().Be(MaskedUrl);
+        source.NightscoutUrl.Should().Be(ShownUrl);
+        (await db.MigrationRuns.SingleAsync()).SourceDescription.Should().Be(ShownUrl);
     }
 
     [Fact]
@@ -143,7 +143,23 @@ public class MigrationSourceIdentityTests
     }
 
     [Fact]
-    public async Task A_connection_test_names_the_site_masked()
+    public async Task Two_paths_on_one_host_are_two_sources_and_neither_path_is_stored_or_returned()
+    {
+        var (service, provider) = CreateService();
+        await using var owned = provider;
+        var tenant = Tenant();
+
+        await StartAndSettleAsync(service, tenant, "https://example-nightscout.invalid/s3cr3t");
+        await StartAndSettleAsync(service, tenant, "https://example-nightscout.invalid/0th3r");
+
+        var sources = await service.GetSourcesAsync(tenant.TenantId);
+        sources.Should().HaveCount(2).And.OnlyContain(s => s.NightscoutUrl == ShownUrl);
+        (await service.GetHistoryAsync(tenant.TenantId)).Should().HaveCount(2)
+            .And.OnlyContain(r => r.SourceDescription == ShownUrl);
+    }
+
+    [Fact]
+    public async Task A_connection_test_names_the_site_by_its_host()
     {
         await using var provider = MigrationJobHarness.BuildProvider(new StatusOnly());
         var service = MigrationJobHarness.CreateService(provider);
@@ -155,7 +171,7 @@ public class MigrationSourceIdentityTests
         });
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        result.SiteName.Should().Be(MaskedUrl);
+        result.SiteName.Should().Be(ShownUrl);
     }
 
     private sealed class StatusOnly : HttpMessageHandler
@@ -187,7 +203,7 @@ public class MigrationSourceIdentityTests
 
         notified.Should().BeEmpty("the tenant completed a run of the configured source");
         logger.Entries.Should().NotBeEmpty().And.OnlyContain(e => !e.Message.Contains(PathSecret) && !e.Message.Contains("token"));
-        logger.Entries.Should().Contain(e => e.Message.Contains(MaskedUrl));
+        logger.Entries.Should().Contain(e => e.Message.Contains(ShownUrl));
     }
 
     [Fact]
@@ -273,7 +289,7 @@ public class MigrationSourceIdentityTests
     }
 
     [Fact]
-    public void The_pending_config_offers_the_configured_url_masked()
+    public void The_pending_config_offers_the_configured_url_by_its_host()
     {
         var service = MigrationJobHarness.CreateService(
             new ServiceCollection().BuildServiceProvider(),
@@ -286,7 +302,7 @@ public class MigrationSourceIdentityTests
         var pending = service.GetPendingConfig(instanceStanding: true);
 
         pending.HasPendingConfig.Should().BeTrue();
-        pending.NightscoutUrl.Should().Be(MaskedUrl);
+        pending.NightscoutUrl.Should().Be(ShownUrl);
     }
 
     /// <summary>A superuser of <paramref name="tenant"/>, a platform admin when <paramref name="platformAdmin"/>.</summary>
@@ -336,7 +352,7 @@ public class MigrationSourceIdentityTests
         {
             var source = await db.MigrationSources.SingleAsync();
             source.SourceIdentifier.Should().Be(HashUtils.Sha256Hex(SiteBase));
-            source.NightscoutUrl.Should().Be(MaskedUrl);
+            source.NightscoutUrl.Should().Be(ShownUrl);
         }
 
         await Startup(provider).StartAsync(CancellationToken.None);
@@ -357,7 +373,7 @@ public class MigrationSourceIdentityTests
 
         await using var scope = provider.CreateAsyncScope();
         await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
-        (await db.MigrationSources.SingleAsync()).NightscoutUrl.Should().Be("other-nightscout.invalid/site");
+        (await db.MigrationSources.SingleAsync()).NightscoutUrl.Should().Be("other-nightscout.invalid/…");
     }
 
     [Theory]
@@ -401,7 +417,7 @@ public class MigrationSourceIdentityTests
             new TestMigrationConnectionRequest { Mode = MigrationMode.Api, NightscoutUrl = "" }, CancellationToken.None);
 
         pending.HasPendingConfig.Should().BeTrue();
-        pending.NightscoutUrl.Should().Be(MaskedUrl);
+        pending.NightscoutUrl.Should().Be(ShownUrl);
         handler.Requests.Should().ContainSingle().Which.GetLeftPart(UriPartial.Query)
             .Should().Be($"{SiteBase}/api/v1/status?token=synthetic-token");
     }

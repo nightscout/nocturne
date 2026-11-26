@@ -218,13 +218,7 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     private StepCountService StepCounts(Guid tenant) => new(
         new StepCountRepository(Tenant(tenant).AsFactory(), TimeProvider.System), Processing<StepCount>(), Mock.Of<ISignalRBroadcastService>());
 
-    private NocturneDbContext Tenant(Guid tenant) => new(new DbContextOptionsBuilder<NocturneDbContext>()
-        .UseNpgsql(fixture.Database.AppConnectionString)
-        .AddInterceptors(new TenantConnectionInterceptor())
-        .Options)
-    {
-        TenantId = tenant,
-    };
+    private NocturneDbContext Tenant(Guid tenant) => TestContexts.Context(fixture.Database.AppConnectionString, tenant);
 
     private static IDocumentProcessingService Processing<T>() where T : class, IProcessableDocument
     {

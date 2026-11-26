@@ -12,7 +12,6 @@
         "state": "firing",
         "for_minutes": null
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
         "state": "unacknowledged",
         "for_minutes": null
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -36,7 +34,6 @@
         "state": "acknowledged",
         "for_minutes": null
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -48,7 +45,6 @@
         "state": "escalated",
         "for_minutes": null
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

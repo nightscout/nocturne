@@ -81,7 +81,7 @@ public class ExcursionTracker : IExcursionTracker
         var state = await _repository.GetTrackerStateAsync(alertRuleId, ct);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var resolveMet = AwaitsRearm(state) && autoResolveMet is not null && await autoResolveMet(ct);
-        var decision = Decider.Process(alertRuleId, state, TrackerConfig.Of(rule), conditionMet, resolveMet, now);
+        var decision = Decider.Process(alertRuleId, state, conditionMet, resolveMet, now);
         return await PersistAsync(alertRuleId, state, decision, decidedAgainst, now, ct);
     }
 
@@ -96,7 +96,7 @@ public class ExcursionTracker : IExcursionTracker
 
         var state = await _repository.GetTrackerStateAsync(alertRuleId, ct);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var decision = Decider.CloseElapsedHysteresis(alertRuleId, state, TrackerConfig.Of(rule), now);
+        var decision = Decider.CloseElapsedHysteresis(alertRuleId, state, now);
         return await PersistAsync(alertRuleId, state, decision, null, now, ct);
     }
 

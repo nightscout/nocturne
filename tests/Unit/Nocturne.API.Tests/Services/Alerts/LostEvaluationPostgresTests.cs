@@ -215,7 +215,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             opened
                 .Setup(h => h.HandleOpenedAsync(
                     It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<SensorContext>(), It.IsAny<Guid>(),
-                    It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .Callback(() => Interlocked.Increment(ref tenant.Openings))
                 .Returns(Task.CompletedTask);
             var enricher = new Mock<ISensorContextEnricher>();
@@ -276,10 +276,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Tenant> SeedAsync(
         bool withRule = true, AlertConditionType condition = AlertConditionType.Threshold, string conditionParams = Low)
@@ -730,6 +727,44 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
 
         FirstRecords(tenant).Should().Be(1);
         Warnings(tenant).Should().Be(0, "a tenant with no record has lost nothing it can name");
+    }
+
+    [NativeTheory]
+    [InlineData("condition_type", "threshold_low", "threshold")]
+    [InlineData("severity", "normal", "critical")]
+    [InlineData("scope_class", "sideways", "undirected")]
+    public async Task A_rule_holding_a_value_no_member_has_never_fires_until_it_holds_a_readable_one(
+        string column, string unreadable, string readable)
+    {
+        var tenant = await SeedAsync();
+        await SetRuleColumnAsync(tenant, column, unreadable);
+        tenant.Store(mgdl: 55);
+        var process = tenant.Process();
+
+        await process.WriteEvaluationAsync();
+        await process.SweepAsync(Stored + PastGrace);
+
+        tenant.Openings.Should().Be(0);
+        (await tenant.ExcursionsAsync()).Should().Be(0);
+
+        await SetRuleColumnAsync(tenant, column, readable);
+        tenant.Store(mgdl: 54, storedAt: Stored + PastGrace);
+        await process.WriteEvaluationAsync();
+
+        tenant.Openings.Should().Be(1, "the same rule fires once its value is readable");
+    }
+
+    private async Task SetRuleColumnAsync(Tenant tenant, string column, string value)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT set_config('app.current_tenant_id', '{tenant.Id}', false);
+            UPDATE alert_rules SET {column} = @value WHERE id = '{tenant.RuleId}';
+            """;
+        cmd.Parameters.Add(new NpgsqlParameter("@value", value));
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static Task WaitForPassAsync(Tenant tenant, SensorGlucose reading) =>

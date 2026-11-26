@@ -10,6 +10,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -47,7 +48,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
 
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
 
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
         var closed = await SubscribedHubAsync(staffSession);
@@ -80,10 +81,10 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
         var teamId = await TeamWithStaffAsync(managerClient, staff);
 
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: false);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: TeamStaffRule.OwnerApproves);
 
         var access = await TeamAccessAsync(ownerOnSite, teamId);
-        access.GetProperty("teamManagesStaff").GetBoolean().Should().BeFalse();
+        access.GetProperty("staffRule").GetString().Should().Be(TeamStaffRule.OwnerApproves);
         var listed = access.GetProperty("staff").EnumerateArray().Should().ContainSingle().Subject;
         (listed.GetProperty("subjectId").GetGuid(), listed.GetProperty("status").GetString()).Should().Be((staff, "pending"));
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -107,7 +108,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var staffSession = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff);
         using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
         var teamId = await TeamWithStaffAsync(managerClient, staff);
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
         var closed = await SubscribedHubAsync(staffSession);
 
@@ -122,14 +123,58 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
     }
 
     [Fact]
+    public async Task A_declined_staff_member_reads_the_site_while_it_trusts_the_team_and_is_refused_and_closed_once_it_stops()
+    {
+        var (manager, _) = await SeedSubjectAsync("Trusted Manager");
+        var (owner, ownerToken) = await SeedSubjectAsync("Trusting Owner", owner: true);
+        var staff = await SeedBareSubjectAsync("Trusted Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
+        var staffSession = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
+        (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("staffRule").GetString().Should().Be(TeamStaffRule.TeamDecides);
+        (await ownerOnSite.PostAsync($"/api/v4/member-invites/team-access/{teamId}/staff/{staff}/decline", null))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var unknown = await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { staffRule = "everyone" });
+        unknown.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await unknown.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_staff_rule_invalid");
+
+        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { staffRule = TeamStaffRule.TeamTrusted }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var access = await TeamAccessAsync(ownerOnSite, teamId);
+        access.GetProperty("staffRule").GetString().Should().Be(TeamStaffRule.TeamTrusted);
+        access.GetProperty("staff").EnumerateArray().Single().GetProperty("status").GetString().Should().Be("declined");
+        foreach (var decision in new[] { "approve", "decline" })
+        {
+            var refused = await ownerOnSite.PostAsync($"/api/v4/member-invites/team-access/{teamId}/staff/{staff}/{decision}", null);
+            refused.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_staff_team_trusted");
+        }
+        var closed = await SubscribedHubAsync(staffSession);
+
+        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { staffRule = TeamStaffRule.OwnerApproves }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
+        (await Task.WhenAny(closed, Task.Delay(Eventually.DefaultPatience))).Should().BeSameAs(closed, "the site stopped trusting the team");
+    }
+
+    [Fact]
     public async Task A_member_who_manages_members_but_is_no_owner_is_refused_and_an_unknown_team_is_not_found()
     {
         var (manager, _) = await SeedSubjectAsync("Refused Manager");
         var (owner, ownerToken) = await SeedSubjectAsync("Refused Owner", owner: true);
         string managingToken;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             (_, managingToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
                 conn, await AuthTestHelpers.GetTenantIdAsync(conn), "Member Manager", [Scope.MembersManage]);
         }
@@ -139,7 +184,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
         using var managingOnSite = AuthTestHelpers.CreateBearerClient(Fixture, managingToken);
         var teamId = await TeamWithStaffAsync(managerClient, staff);
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
 
         var refused = await managingOnSite.PostAsync($"/api/v4/member-invites/team-access/{teamId}/staff/{staff}/decline", null);
         refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -147,14 +192,14 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var refusedApproval = await managingOnSite.PostAsync($"/api/v4/member-invites/team-access/{teamId}/staff/{staff}/approve", null);
         refusedApproval.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await refusedApproval.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_staff_decision_not_owner");
-        (await managingOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { teamManagesStaff = false }))
+        (await managingOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { staffRule = TeamStaffRule.OwnerApproves }))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         (await ownerOnSite.PostAsync($"/api/v4/member-invites/team-access/{Guid.NewGuid()}/staff/{staff}/approve", null))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { teamManagesStaff = false }))
+        (await ownerOnSite.PutAsJsonAsync($"/api/v4/member-invites/team-access/{teamId}/staff-rule", new { staffRule = TeamStaffRule.OwnerApproves }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);
-        (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("teamManagesStaff").GetBoolean().Should().BeFalse();
+        (await TeamAccessAsync(ownerOnSite, teamId)).GetProperty("staffRule").GetString().Should().Be(TeamStaffRule.OwnerApproves);
     }
 
     [Fact]
@@ -164,9 +209,8 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var (owner, ownerToken) = await SeedSubjectAsync("Editing Owner", owner: true);
         string managingToken;
         Guid viewer, admin;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
             (_, managingToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Editing Member Manager", [Scope.MembersManage]);
             viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Viewer);
@@ -180,7 +224,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var staffSession = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff);
         using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
         var teamId = await TeamWithStaffAsync(managerClient, staff);
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
         var closed = await SubscribedHubAsync(staffSession);
         var narrowed = new { roleIds = new[] { viewer }, limitTo24Hours = false, accessEndsAt = (DateTimeOffset?)null };
@@ -228,11 +272,10 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using var limitedOnSite = AuthTestHelpers.CreateBearerClient(Fixture, limitedToken);
         using var narrowOnSite = AuthTestHelpers.CreateBearerClient(Fixture, narrowToken);
         var teamId = await TeamWithStaffAsync(managerClient, staff);
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
         Guid viewer;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, await AuthTestHelpers.GetTenantIdAsync(conn), RoleSeeds.Viewer);
         }
 
@@ -263,11 +306,10 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using var ownerClient = await SessionAtApexAsync(owner);
         using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
         var teamId = await TeamWithStaffAsync(managerClient, staff);
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
         Guid viewer;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             viewer = await AuthTestHelpers.GetTenantRoleIdAsync(conn, await AuthTestHelpers.GetTenantIdAsync(conn), RoleSeeds.Viewer);
         }
         (await ownerOnSite.PutAsJsonAsync(
@@ -283,12 +325,13 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
 
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        (await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            UPDATE oauth_grants SET limit_to_24_hours = @limited, scopes = @scopes WHERE subject_id = @subject;
-            """, ("tenant", (await AuthTestHelpers.GetTenantIdAsync(conn)).ToString()), ("limited", limitTo24Hours), ("scopes", scopes), ("subject", subject))).Should().Be(1);
+        await using var conn = await OpenPostgresAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(await AuthTestHelpers.GetTenantIdAsync(conn), local: true);
+        (await conn.ExecuteAsync(
+            "UPDATE oauth_grants SET limit_to_24_hours = @limited, scopes = @scopes WHERE subject_id = @subject;",
+            ("limited", limitTo24Hours), ("scopes", scopes), ("subject", subject))).Should().Be(1);
+        await transaction.CommitAsync();
     }
 
     /// <summary>
@@ -337,7 +380,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         (await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", entries)).EnsureSuccessStatusCode();
         (await DatesAsync(AuthenticatedClient)).Should().HaveCount(2, "the clamp below is only meaningful if the older entry is served at all");
 
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Viewer, limitTo24Hours: true, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Viewer, limitTo24Hours: true, staffRule: null);
 
         (await DatesAsync(staffOnSite)).Should().ContainSingle()
             .Which.Should().BeGreaterThan(_now.AddHours(-24).ToUnixTimeMilliseconds());
@@ -354,7 +397,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff));
         var teamId = await TeamWithStaffAsync(managerClient, staff);
 
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: false);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: TeamStaffRule.OwnerApproves);
 
         (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -391,7 +434,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
         var teamId = await TeamWithStaffAsync(managerClient, owner);
 
-        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, staffRule: null);
 
         var listed = (await MembersAsync(ownerOnSite)).Should().ContainSingle(m => m.GetProperty("subjectId").GetGuid() == owner).Subject;
         listed.GetProperty("hasDirect").GetBoolean().Should().BeTrue();
@@ -418,10 +461,10 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
 
     /// <summary>
     /// The site's owner approves the team's access link giving <paramref name="roleSlug"/>; a null
-    /// <paramref name="teamManagesStaff"/> sends no choice, which leaves the team deciding its staff.
+    /// <paramref name="staffRule"/> leaves the field out, which leaves the team deciding its staff.
     /// </summary>
     private async Task ApproveAsync(
-        HttpClient managerClient, HttpClient ownerClient, Guid teamId, string roleSlug, bool limitTo24Hours, bool? teamManagesStaff)
+        HttpClient managerClient, HttpClient ownerClient, Guid teamId, string roleSlug, bool limitTo24Hours, string? staffRule)
     {
         var link = await managerClient.PostAsJsonAsync(
             $"/api/v4/me/teams/{teamId}/access-links", new { roleSlug, limitTo24Hours });
@@ -431,9 +474,11 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
             .GetProperty("sites").EnumerateArray().Single();
         var role = site.GetProperty("roles").EnumerateArray().Single(r => r.GetProperty("slug").GetString() == roleSlug).GetProperty("id").GetGuid();
 
-        var approved = await ownerClient.PostAsJsonAsync(
-            $"/api/v4/me/teams/access-links/{token}/approve",
-            new { tenantId = site.GetProperty("tenantId").GetGuid(), roleIds = new[] { role }, limitTo24Hours, accessEndsAt = (DateTimeOffset?)null, teamManagesStaff });
+        var tenantId = site.GetProperty("tenantId").GetGuid();
+        object request = staffRule is null
+            ? new { tenantId, roleIds = new[] { role }, limitTo24Hours, accessEndsAt = (DateTimeOffset?)null }
+            : new { tenantId, roleIds = new[] { role }, limitTo24Hours, accessEndsAt = (DateTimeOffset?)null, staffRule };
+        var approved = await ownerClient.PostAsJsonAsync($"/api/v4/me/teams/access-links/{token}/approve", request);
         approved.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -455,8 +500,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
     private async Task<Guid> SeedBareSubjectAsync(string name)
     {
         var subject = Guid.CreateVersion7();
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await conn.ExecuteAsync("""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES (@id, @name, true, false, now(), now(), 'Approved');
@@ -469,8 +513,7 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, [Scope.GlucoseRead]);
         if (owner)

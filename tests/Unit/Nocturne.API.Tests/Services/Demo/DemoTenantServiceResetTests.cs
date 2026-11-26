@@ -57,7 +57,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         var subjects = new SubjectRepository(contexts, AccountLinkRoutes.Off);
         var deletion = new SubjectDeletion(
-            contexts, subjects, members,
+            contexts, subjects, AccountLinkRoutes.Off,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             Mock.Of<IAuthAuditService>(), _time, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
         _service = new DemoTenantService(

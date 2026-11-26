@@ -20,7 +20,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync(slug);
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
         var staff = await NewSubjectAsync("staff");
         (await JoinAsync(team, staff, narrowing)).Refusal.Should().BeNull();
         (await StatusAsync(access, staff)).Should().Be(TeamSiteStaffStatus.Pending);
@@ -42,7 +42,7 @@ public partial class TeamAccessEndPostgresTests
         var token = await StaffInviteAsync(team, new TeamStaffNarrowing(null, false, null));
         OwnerDecision? decided = null;
 
-        Func<Task> switchOn = async () => decided = await SetStaffRuleAsync(site, team, true);
+        Func<Task> switchOn = async () => decided = await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
         Func<Task> join = () => Service(Guid.Empty, joiner).JoinStaffAsync(token, joiner, Ct);
         await RaceAsync(
             site, holder => holder.LockTeamManagersAsync(team.Id, Ct), switchFirst ? switchOn : join, switchFirst ? join : switchOn);
@@ -68,7 +68,7 @@ public partial class TeamAccessEndPostgresTests
         await using var rowHolder = Context(site.Tenant, null);
         await using var rowHeld = await rowHolder.Database.BeginTransactionAsync(Ct);
         await rowHolder.Database.ExecuteSqlAsync($"SELECT 1 FROM subjects WHERE id = {staff} FOR UPDATE", Ct);
-        var switchOn = SetStaffRuleAsync(site, team, true);
+        var switchOn = SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, switchOn);
 
         await Service(Guid.Empty, joiner).JoinStaffAsync(token, joiner, Ct);
@@ -99,7 +99,7 @@ public partial class TeamAccessEndPostgresTests
         OwnerDecision? switched = null;
 
         Func<Task> decline = async () => declined = await DeclineStaffAsync(site, team, site.Owner, staff);
-        Func<Task> switchOn = async () => switched = await SetStaffRuleAsync(site, team, true);
+        Func<Task> switchOn = async () => switched = await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
         await RaceAsync(
             site, holder => holder.LockTenantOwnersAsync(site.Tenant, Ct), declineFirst ? decline : switchOn, declineFirst ? switchOn : decline);
 

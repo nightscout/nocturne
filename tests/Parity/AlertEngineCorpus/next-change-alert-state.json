@@ -12,7 +12,6 @@
         "state": "firing",
         "for_minutes": 15
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

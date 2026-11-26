@@ -36,8 +36,8 @@ use nocturne_alerts_core::enums::{
 };
 use nocturne_alerts_core::eval::{Env, eval_payload};
 use nocturne_alerts_core::excursion::{
-    CloseReason, ExcursionTracker, HOLD_BOUND, TrackerRuleConfig, TrackerState, TrackerStateKind,
-    Transition, TransitionType,
+    CloseReason, ExcursionTracker, HOLD_BOUND, TrackerState, TrackerStateKind, Transition,
+    TransitionType,
 };
 use nocturne_alerts_core::facts::ContextFact;
 use nocturne_alerts_core::model::{
@@ -61,12 +61,9 @@ enum Action {
     Process {
         condition_met: bool,
         auto_resolve_met: bool,
-        hysteresis_minutes: i32,
     },
     ForceClose(CloseReason),
-    CloseElapsed {
-        hysteresis_minutes: i32,
-    },
+    CloseElapsed,
 }
 
 #[derive(Debug, Clone)]
@@ -84,17 +81,14 @@ fn action() -> impl Strategy<Value = Action> {
         CloseReason::RuleDisabled,
     ]);
     prop_oneof![
-        6 => (any::<bool>(), any::<bool>(), -1..30i32).prop_map(
-            |(condition_met, auto_resolve_met, hysteresis_minutes)| {
-                Action::Process {
-                    condition_met,
-                    auto_resolve_met,
-                    hysteresis_minutes,
-                }
+        6 => (any::<bool>(), any::<bool>()).prop_map(|(condition_met, auto_resolve_met)| {
+            Action::Process {
+                condition_met,
+                auto_resolve_met,
             }
-        ),
+        }),
         1 => reason.prop_map(Action::ForceClose),
-        2 => (-1..30i32).prop_map(|hysteresis_minutes| Action::CloseElapsed { hysteresis_minutes }),
+        2 => Just(Action::CloseElapsed),
     ]
 }
 
@@ -126,18 +120,9 @@ fn run(
         Action::Process {
             condition_met,
             auto_resolve_met,
-            hysteresis_minutes,
-        } => tracker.process_evaluation(
-            rule,
-            TrackerRuleConfig { hysteresis_minutes },
-            condition_met,
-            auto_resolve_met,
-            now,
-        ),
+        } => tracker.process_evaluation(rule, condition_met, auto_resolve_met, now),
         Action::ForceClose(reason) => tracker.force_close(rule, reason, now),
-        Action::CloseElapsed { hysteresis_minutes } => {
-            tracker.close_elapsed_hysteresis(rule, TrackerRuleConfig { hysteresis_minutes }, now)
-        }
+        Action::CloseElapsed => tracker.close_elapsed_hysteresis(rule, now),
     }
 }
 
@@ -226,7 +211,7 @@ fn check_rearm(
         Action::ForceClose(reason) if t.kind == TransitionType::ExcursionClosed => {
             prop_assert_eq!(held_after, reason == CloseReason::AutoResolve && was_active);
         }
-        Action::ForceClose(_) | Action::CloseElapsed { .. } => {
+        Action::ForceClose(_) | Action::CloseElapsed => {
             prop_assert_eq!(held_after, held_before);
         }
         Action::Process {
@@ -253,13 +238,12 @@ fn check_hysteresis_window(
     now: DateTime<Utc>,
     t: Transition,
 ) -> Result<(), TestCaseError> {
-    let window = match *action {
+    match *action {
         Action::Process {
             condition_met: false,
-            hysteresis_minutes,
             ..
         }
-        | Action::CloseElapsed { hysteresis_minutes } => hysteresis_minutes,
+        | Action::CloseElapsed => {}
         Action::Process { .. } => {
             let closed = t.kind == TransitionType::ExcursionClosed
                 && t.close_reason == Some(CloseReason::Hysteresis);
@@ -270,11 +254,11 @@ fn check_hysteresis_window(
             return Ok(());
         }
         Action::ForceClose(_) => return Ok(()),
-    };
+    }
     let elapsed = before.is_some_and(|s| {
         s.state == TrackerStateKind::Hysteresis
             && s.hysteresis_started_at
-                .is_some_and(|started| now - started >= TimeDelta::minutes(i64::from(window)))
+                .is_some_and(|started| now >= started)
     });
     let closed = t.kind == TransitionType::ExcursionClosed
         && t.close_reason == Some(CloseReason::Hysteresis);
@@ -1041,8 +1025,8 @@ proptest! {
     /// §6.4: an evaluation whose unknown root the rule holds, before its
     /// hold's bound, leaves the tracker as it was, `updated_at` included,
     /// except that the first of a hold records its start (a rule with no state
-    /// then holds only that) and a hysteresis window that has elapsed closes
-    /// the excursion.
+    /// then holds only that) and moves an `updated_at` ahead of `now` back to
+    /// it, and a hysteresis window that has elapsed closes the excursion.
     #[test]
     fn a_held_evaluation_changes_nothing_but_an_elapsed_hysteresis_window(
         spec in rule_spec(),
@@ -1072,7 +1056,11 @@ proptest! {
                 continue;
             }
             let before = Some(match before {
-                Some(s) => TrackerState { held_since: Some(held_since), ..s },
+                Some(s) => TrackerState {
+                    held_since: Some(held_since),
+                    updated_at: if trusted.is_some() { s.updated_at } else { s.updated_at.min(tick.now) },
+                    ..s
+                },
                 None => TrackerState {
                     state: TrackerStateKind::Idle,
                     active_excursion: None,
@@ -1087,9 +1075,7 @@ proptest! {
                 s.state == TrackerStateKind::Hysteresis
                     && s.hysteresis_started_at
                         .and_then(|started| model_since(tick.now, started))
-                        .is_some_and(|passed| {
-                            passed >= TimeDelta::minutes(i64::from(rule.hysteresis_minutes))
-                        })
+                        .is_some()
             });
             if window_elapsed {
                 prop_assert_eq!(evaluation.transition.kind, TransitionType::ExcursionClosed);
@@ -1131,9 +1117,6 @@ proptest! {
         wire["on_unknown"] = "hold".into();
         let rule = rule_from_wire(wire);
         let bound = TimeDelta::minutes(spec.glucose_freshness_minutes.unwrap_or(11));
-        let config = TrackerRuleConfig {
-            hysteresis_minutes: rule.hysteresis_minutes,
-        };
         for k in 0..ticks.len() {
             let ctx = context_of(&ticks[k]);
             let Some(read_at) = ctx.latest_received_at.or(ctx.latest_timestamp) else {
@@ -1161,7 +1144,7 @@ proptest! {
                 for t in &ticks[..=k] {
                     evaluate_rule(&rule, &context_of(t), t.now, &mut state, false);
                 }
-                let _ = state.tracker.close_elapsed_hysteresis(RULE_ID, config, at);
+                let _ = state.tracker.close_elapsed_hysteresis(RULE_ID, at);
                 let there = evaluate_there.then(|| {
                     let e = evaluate_rule(&rule, &ctx, at, &mut state, false)
                         .evaluation
@@ -1327,20 +1310,17 @@ fn plain_tree() -> BoxedStrategy<Value> {
 }
 
 fn auto_resolving_rule() -> impl Strategy<Value = (Value, Value, Value)> {
-    (plain_tree(), plain_tree(), 0..10i32, on_unknown()).prop_map(
-        |(body, resolve, hysteresis_minutes, on_unknown)| {
-            let wire = json!({
-                "id": RULE_ID.to_string(),
-                "condition_type": "composite",
-                "condition_params": composite("or", vec![body.clone()])["composite"],
-                "hysteresis_minutes": hysteresis_minutes,
-                "auto_resolve_enabled": true,
-                "auto_resolve_params": resolve,
-                "on_unknown": on_unknown,
-            });
-            (wire, composite("or", vec![body]), resolve)
-        },
-    )
+    (plain_tree(), plain_tree(), on_unknown()).prop_map(|(body, resolve, on_unknown)| {
+        let wire = json!({
+            "id": RULE_ID.to_string(),
+            "condition_type": "composite",
+            "condition_params": composite("or", vec![body.clone()])["composite"],
+            "auto_resolve_enabled": true,
+            "auto_resolve_params": resolve,
+            "on_unknown": on_unknown,
+        });
+        (wire, composite("or", vec![body]), resolve)
+    })
 }
 
 proptest! {
@@ -1936,7 +1916,6 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
         (
             tree(),
             option::of(tree()),
-            0..10i32,
             clock_context(now),
             seeded_tracker(now),
             vec(prop_oneof![3 => 1..=3600i64, 1 => -900..=-1i64], 0..=2),
@@ -1948,7 +1927,6 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                 move |(
                     body,
                     resolve,
-                    hysteresis_minutes,
                     context,
                     tracker,
                     mut earlier,
@@ -1964,7 +1942,6 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                             "id": RULE_ID.to_string(),
                             "condition_type": kind,
                             "condition_params": body[&kind],
-                            "hysteresis_minutes": hysteresis_minutes,
                             "auto_resolve_enabled": resolve.is_some(),
                             "auto_resolve_params": resolve.map(naming_the_context),
                             "on_unknown": on_unknown,

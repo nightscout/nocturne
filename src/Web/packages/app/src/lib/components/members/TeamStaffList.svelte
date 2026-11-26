@@ -7,7 +7,12 @@
   import X from "@lucide/svelte/icons/x";
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import { formatShortDate } from "#lib/utils/formatting.js";
-  import { STAFF_APPROVED, STAFF_DECLINED, STAFF_PENDING } from "#lib/teams/site-staff.svelte.js";
+  import {
+    RULE_TEAM_TRUSTED,
+    STAFF_APPROVED,
+    STAFF_DECLINED,
+    STAFF_PENDING,
+  } from "#lib/teams/site-staff.svelte.js";
   import type { TenantTeamAccess } from "@nocturne/api-client";
 
   interface Props {
@@ -23,10 +28,17 @@
   let { team, canDecide, busy, onApprove, onDecline }: Props = $props();
 
   const staff = $derived(team.staff ?? []);
+  const trusted = $derived(team.staffRule === RULE_TEAM_TRUSTED);
+  const decides = $derived(canDecide && !trusted);
 </script>
 
 <div class="space-y-2">
   <h3 class="text-sm font-medium">Staff</h3>
+  {#if canDecide && trusted}
+    <p class="text-sm text-muted-foreground">
+      You trust the whole team, so you do not decide about one staff member. Change the setting above to decide again.
+    </p>
+  {/if}
   {#if staff.length === 0}
     <p class="text-sm text-muted-foreground">This team has no staff.</p>
   {:else}
@@ -41,6 +53,8 @@
               <span class="truncate text-sm font-medium">{name}</span>
               {#if member.status === STAFF_APPROVED}
                 <Badge variant="secondary">Approved</Badge>
+              {:else if member.status === STAFF_PENDING && trusted}
+                <Badge variant="outline">Not approved</Badge>
               {:else if member.status === STAFF_PENDING && canDecide}
                 <Badge variant="warning">Waits for your approval</Badge>
               {:else if member.status === STAFF_PENDING}
@@ -49,6 +63,11 @@
                 <Badge variant="outline">Declined</Badge>
               {/if}
             </div>
+            {#if trusted && member.status !== STAFF_APPROVED && canDecide}
+              <p class="text-xs text-muted-foreground">Can see this site while you trust the whole team.</p>
+            {:else if trusted && member.status !== STAFF_APPROVED}
+              <p class="text-xs text-muted-foreground">Can see this site while the site trusts the whole team.</p>
+            {/if}
             {#if ceiling || member.narrowing?.limitTo24Hours || endsAt}
               <ul class="flex flex-wrap gap-x-3 text-xs text-muted-foreground" aria-label={`What limits ${name}`}>
                 {#if ceiling}
@@ -65,7 +84,7 @@
               </ul>
             {/if}
           </div>
-          {#if canDecide}
+          {#if decides}
             <div class="flex shrink-0 flex-wrap gap-2">
               {#if member.status === STAFF_PENDING || member.status === STAFF_DECLINED}
                 <Button

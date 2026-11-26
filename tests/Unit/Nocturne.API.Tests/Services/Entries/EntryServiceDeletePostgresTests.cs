@@ -66,12 +66,10 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         Func<NocturneDbContext> Db);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
-                maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(
-                new TenantConnectionInterceptor(), new MutationAuditInterceptor())
-            .Options) { TenantId = tenant }.AttributedTo(_audit);
+        TestContexts.Context(
+                database.AppConnectionString, tenant, npgsql: TestContexts.RetryingBriefly,
+                interceptors: [new MutationAuditInterceptor()])
+            .AttributedTo(_audit);
 
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
 

@@ -65,7 +65,7 @@ public class ConfigurationController : ControllerBase
 
     /// <summary>
     /// Gets the configuration for a specific connector.
-    /// Returns runtime configuration only (secrets are not included), with each address masked
+    /// Returns runtime configuration only (secrets are not included), with each address in its shown form
     /// (<see cref="ConnectorAddresses"/>).
     /// </summary>
     /// <param name="connectorName">The connector name (e.g., "Dexcom", "Glooko")</param>
@@ -89,7 +89,7 @@ public class ConfigurationController : ControllerBase
         }
 
         config = await WithoutUnusableKeysAsync(connectorName, config, ct);
-        config.Configuration = (await AddressesAsync(connectorName, ct)).Masked(config.Configuration);
+        config.Configuration = (await AddressesAsync(connectorName, ct)).Shown(config.Configuration);
         if (IsGuarded())
             config.LockedKeys = await _configService.GetGuardedKeysAsync(connectorName, ct);
         return Ok(config);
@@ -214,7 +214,7 @@ public class ConfigurationController : ControllerBase
     /// Only properties marked with [RuntimeConfigurable] are accepted.
     /// Validates the configuration against the connector's schema before saving. An address the
     /// configuration leaves out keeps its stored value (<see cref="ConnectorAddresses"/>), and the
-    /// saved configuration is returned with each address masked.
+    /// saved configuration is returned with each address in its shown form.
     /// Refused for Google Health, whose options are saved by the Google Health endpoint. A delegated
     /// credential, and a caller without <c>tenant.settings</c>, is refused the changes
     /// <see cref="DelegatedConfigurationGuard"/> lists.
@@ -277,7 +277,7 @@ public class ConfigurationController : ControllerBase
         }
 
         var result = await _configService.SaveConfigurationAsync(connectorName, configuration, modifiedBy, ct);
-        result.Configuration = addresses.Masked(result.Configuration);
+        result.Configuration = addresses.Shown(result.Configuration);
         return Ok(result);
     }
 

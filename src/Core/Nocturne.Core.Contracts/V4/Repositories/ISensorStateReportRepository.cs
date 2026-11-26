@@ -11,11 +11,19 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 public interface ISensorStateReportRepository : IBulkCreateRepository<SensorStateReport>
 {
     /// <summary>
-    /// The live reports of <paramref name="device"/> under <paramref name="dataSource"/> stored by
+    /// The newest live report of <paramref name="device"/> under <paramref name="dataSource"/> stored by
     /// <paramref name="asOf"/>, whose timestamp and arrival are both at or after <paramref name="since"/>
-    /// and whose timestamp is at or before <paramref name="latestTimestamp"/>.
+    /// and whose timestamp is at or before <paramref name="latestTimestamp"/>, with its arrival; null
+    /// when there is none.
     /// </summary>
-    Task<IReadOnlyList<SensorStateReport>> GetReportedAsync(
+    /// <remarks>
+    /// Newest is by arrival (<see cref="ArrivedSensorStateReport.ArrivedAt"/>), so a report dated ahead
+    /// does not outrank a newer one. Of reports that arrived at the same instant, a state that is not ok
+    /// wins, then no state, then ok, then the lower id, so the pick never depends on row order. Only a
+    /// state that is not ok holds a glucose rule, so a report that flagged the sensor is not outvoted by
+    /// one that arrived with it; no state ranks above ok since it claims nothing about the sensor.
+    /// </remarks>
+    Task<ArrivedSensorStateReport?> GetNewestAsync(
         string device, string dataSource, DateTime since, DateTime asOf, DateTime latestTimestamp,
         CancellationToken ct = default);
 

@@ -15,8 +15,7 @@
             "is_active": true
           }
         }
-      },
-      "hysteresis_minutes": 0
+      }
     }
   ],
   "ticks": [

@@ -4,11 +4,28 @@ title: Quick Start
 
 <script>
   import Screenshot from '#lib/components/docs/Screenshot.svelte';
+  import HostingPicker from '#lib/components/docs/hosting/HostingPicker.svelte';
+  import HostingOnly from '#lib/components/docs/hosting/HostingOnly.svelte';
 </script>
 
 # Quick Start
 
 Get Nocturne up and running in just a few minutes.
+
+<HostingPicker />
+
+<HostingOnly hosting="managed">
+
+## Step 1: Sign up
+
+Choose a provider from the [managed service](/docs/managed-service) page and
+sign up with it. The provider runs Nocturne for you, so there is nothing to
+install. It gives you the address of your site. On nocturne.run, for example,
+your site is at `yourname.nocturne.run`.
+
+</HostingOnly>
+
+<HostingOnly hosting="self-host">
 
 ## Prerequisites
 
@@ -32,7 +49,17 @@ The guide has the DNS records to create first. The other
 [installation guides](/docs/installation) are for Portainer, for a free Oracle
 Cloud server, and for the same steps by hand with Docker Compose.
 
+</HostingOnly>
+
 ## Step 2: Open your instance
+
+<HostingOnly hosting="managed">
+
+Open the address of your site that the provider gave you.
+
+</HostingOnly>
+
+<HostingOnly hosting="self-host">
 
 The bundled proxy obtains a TLS certificate as soon as your DNS points at the
 server, so once the containers are running your instance is at:
@@ -41,9 +68,12 @@ server, so once the containers are running your instance is at:
 https://your-domain
 ```
 
-where `your-domain` is the domain you gave the installer. Sign in and you land
-on the home screen. It stays empty until a device or an app
-starts sending readings:
+where `your-domain` is the domain you gave the installer.
+
+</HostingOnly>
+
+Sign in and you land on the home screen. It stays empty until a device or an
+app starts sending readings:
 
 <Screenshot id="first-run" />
 

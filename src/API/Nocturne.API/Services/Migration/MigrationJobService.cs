@@ -62,7 +62,8 @@ public interface IMigrationJobService
         CancellationToken ct = default
     );
     /// <summary>
-    /// The instance's configured migration source, with its URL masked, to a caller with
+    /// The instance's configured migration source, with its URL in its
+    /// <see cref="NightscoutAddress.Shown"/> form, to a caller with
     /// <paramref name="instanceStanding"/>; no pending source to any other.
     /// </summary>
     /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
@@ -71,7 +72,7 @@ public interface IMigrationJobService
     /// <summary>
     /// The Nightscout URL an API-mode request reads: <paramref name="requested"/>, or the configured
     /// source's when it is blank and the caller has <paramref name="instanceStanding"/>.
-    /// <see cref="GetPendingConfig"/> gives a form only the masked form of the configured URL, so a
+    /// <see cref="GetPendingConfig"/> gives a form only the shown form of the configured URL, so a
     /// form that keeps it sends none.
     /// </summary>
     /// <param name="requested">The URL the request names.</param>
@@ -177,7 +178,7 @@ public class MigrationJobService : IMigrationJobService
         var tenantId = tenantContext.TenantId;
         var sourceDesc =
             request.Mode == MigrationMode.Api
-                ? request.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null
+                ? request.NightscoutUrl is { } url ? NightscoutAddress.Shown(url) : null
                 : $"MongoDB: {request.MongoDatabaseName}";
 
         var jobInfo = new MigrationJobInfo
@@ -399,7 +400,7 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = true,
-                SiteName = NightscoutAddress.Masked(request.NightscoutUrl),
+                SiteName = NightscoutAddress.Shown(request.NightscoutUrl),
                 AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
@@ -510,7 +511,7 @@ public class MigrationJobService : IMigrationJobService
             {
                 HasPendingConfig = true,
                 Mode = source.Mode,
-                NightscoutUrl = source.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null,
+                NightscoutUrl = source.NightscoutUrl is { } url ? NightscoutAddress.Shown(url) : null,
                 HasApiSecret = source.HasApiSecret,
                 HasMongoConnectionString = source.MongoConnectionString is not null,
                 MongoDatabaseName = source.MongoDatabaseName,
@@ -1167,7 +1168,7 @@ internal class MigrationJob
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
     /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>, a SHA-256 digest of the
     /// Nightscout base for API mode and of the connection string for MongoDB mode. Only non-usable
-    /// digests and the <see cref="NightscoutAddress.Masked"/> URL are stored, never the API secret,
+    /// digests and the <see cref="NightscoutAddress.Shown"/> URL are stored, never the API secret,
     /// a URL's token or path secret, or the connection string themselves.
     /// </summary>
     private async Task<Guid> UpsertSourceAsync(NocturneDbContext db, CancellationToken ct)
@@ -1190,7 +1191,7 @@ internal class MigrationJob
             TenantId = _tenantId,
             Mode = _request.Mode.ToString(),
             SourceIdentifier = identifier,
-            NightscoutUrl = isApi ? NightscoutAddress.Masked(_request.NightscoutUrl!) : null,
+            NightscoutUrl = isApi ? NightscoutAddress.Shown(_request.NightscoutUrl!) : null,
             NightscoutApiSecretHash = isApi && !string.IsNullOrEmpty(_request.NightscoutApiSecret)
                 ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
                 : null,

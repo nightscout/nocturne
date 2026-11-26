@@ -86,8 +86,7 @@ public abstract class LoopAnalysisIntegrationTestBase(ApiIntegrationTestFixture 
 
     protected async Task<HttpClient> CreateTokenClientAsync(params string[] scopes)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Loop analysis member");
         var accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subjectId);

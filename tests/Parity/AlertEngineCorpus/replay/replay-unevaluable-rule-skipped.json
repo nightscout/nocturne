@@ -25,7 +25,6 @@
           }
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -36,7 +35,6 @@
         "alert_id": "00000000-0000-0000-0000-000000000001",
         "state": "firing"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -47,7 +45,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

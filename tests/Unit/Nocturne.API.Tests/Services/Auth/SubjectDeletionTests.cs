@@ -262,7 +262,7 @@ public class SubjectDeletionTests : IDisposable
         var deletion = new SubjectDeletion(
             dbContext.AsFactory(),
             new SubjectRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
-            new TenantMembershipRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
+            AccountLinkRoutes.Off,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             audit,
             TimeProvider.System,

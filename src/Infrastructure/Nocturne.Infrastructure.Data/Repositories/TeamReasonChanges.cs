@@ -213,8 +213,8 @@ public sealed class TeamReasonChanges
 
     /// <summary>
     /// Brings the team reasons of every membership a team's rows reach into line with them, for the
-    /// startup check: one read finds each site and subject with an approved <c>team_site_staff</c> row or a
-    /// team reason, then each is synced (<see cref="SyncAsync"/>) in its own transaction, on a context
+    /// startup check: one read finds each site and subject with a <c>team_site_staff</c> row that gives a
+    /// reason (<see cref="TeamReasons.GivesReason"/>) or a team reason, then each is synced (<see cref="SyncAsync"/>) in its own transaction, on a context
     /// <paramref name="open"/> opens, under the subject's row and the site's team access lock, and what
     /// changes is handed to <paramref name="apply"/>, which stages and saves it. One that fails
     /// (<see cref="MembershipReasons.IsMembershipFailure"/>) is logged and the rest still run.
@@ -231,7 +231,8 @@ public sealed class TeamReasonChanges
         await using (var db = open())
         {
             reached = (await db.TeamSiteStaff.AsNoTracking()
-                    .Where(s => s.Status == TeamSiteStaffStatus.Approved && s.TeamMember!.Kind == TeamMemberKind.Staff)
+                    .Where(TeamReasons.GivesReason)
+                    .Where(s => s.TeamMember!.Kind == TeamMemberKind.Staff)
                     .Select(s => new { s.TeamTenantAccess!.TenantId, s.TeamMember!.SubjectId })
                     .Union(db.TenantMemberReasons.AsNoTracking()
                         .Where(r => r.Kind == MembershipReasonKind.Team)

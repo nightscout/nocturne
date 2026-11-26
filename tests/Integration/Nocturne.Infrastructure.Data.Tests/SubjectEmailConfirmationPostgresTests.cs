@@ -1,4 +1,3 @@
-using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +7,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Tests.Rls;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -29,7 +29,7 @@ public class SubjectEmailConfirmationPostgresTests
     [Fact]
     public async Task The_confirmation_round_trips_and_every_answer_is_the_time_the_row_holds()
     {
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var id = await SeedAsync(provider, "a@example.test");
         await using var db = await ContextAsync(provider);
         var repository = new SubjectRepository(DbUnitOfWork.Own(db), AccountLinkRoutes.Off);
@@ -51,7 +51,7 @@ public class SubjectEmailConfirmationPostgresTests
     [InlineData("Kate@example.test", "kate@example.test")]
     public async Task A_confirmation_for_an_address_that_only_folds_to_the_stored_one_confirms_nothing(string stored, string named)
     {
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var id = await SeedAsync(provider, stored);
         await using var db = await ContextAsync(provider);
         var repository = new SubjectRepository(DbUnitOfWork.Own(db), AccountLinkRoutes.Off);
@@ -65,7 +65,7 @@ public class SubjectEmailConfirmationPostgresTests
     [Fact]
     public async Task A_confirmation_refuses_an_address_the_account_does_not_hold()
     {
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var id = await SeedAsync(provider, "a@example.test");
         await using var db = await ContextAsync(provider);
         var repository = new SubjectRepository(DbUnitOfWork.Own(db), AccountLinkRoutes.Off);
@@ -79,7 +79,7 @@ public class SubjectEmailConfirmationPostgresTests
     [Fact]
     public async Task An_address_change_staged_before_a_confirmation_commits_ends_unconfirmed()
     {
-        await using var provider = BuildProvider();
+        await using var provider = TestContexts.BuildProvider(_fx.AppConnectionString);
         var id = await SeedAsync(provider, "a@example.test");
         await using var admin = await ContextAsync(provider);
         await using var confirming = await ContextAsync(provider);
@@ -94,15 +94,6 @@ public class SubjectEmailConfirmationPostgresTests
         var row = await ReadAsync(provider, id);
         row.Email.Should().Be("z@example.test");
         row.EmailConfirmedAt.Should().BeNull();
-    }
-
-    private ServiceProvider BuildProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
-        return services.BuildServiceProvider();
     }
 
     private static async Task<NocturneDbContext> ContextAsync(ServiceProvider provider)

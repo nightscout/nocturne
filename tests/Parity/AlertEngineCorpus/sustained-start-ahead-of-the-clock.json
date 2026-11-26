@@ -16,8 +16,7 @@
             "value": 70
           }
         }
-      },
-      "hysteresis_minutes": 0
+      }
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -31,8 +30,7 @@
             "is_active": true
           }
         }
-      },
-      "hysteresis_minutes": 0
+      }
     }
   ],
   "ticks": [

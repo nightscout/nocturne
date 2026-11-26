@@ -518,6 +518,8 @@ public class ClockAnomalyNoticeTests
             new("enabled_at", TimeSpan.FromMinutes(10)),
             new("sustained", TimeSpan.FromMinutes(10)),
             new("hysteresis_started_at", TimeSpan.FromMinutes(10)),
+            new("held_since", TimeSpan.FromMinutes(10)),
+            new("updated_at", TimeSpan.FromMinutes(10)),
             new("active_alerts", TimeSpan.FromMinutes(10)),
         ];
 

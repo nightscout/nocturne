@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using SocketIOClient;
+using SocketIOClient.Common;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -428,6 +429,50 @@ public class NightscoutRealtimeListenerTests
             .Should().EndWith("?token=reader-abc123&key=a+b%2Bc");
     }
 
+    /// <summary>
+    /// SocketIOClient does not fall back to polling when the WebSocket upgrade fails, so a site behind
+    /// a proxy that refuses the handshake would never connect without the listener's own fallback.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_SiteRefusingTheWebSocketUpgrade_ListensOnPolling()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        var site = new EngineIoSite(refuseWebSockets: true);
+        await using var app = await site.StartAsync();
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = app.Urls.Single(),
+        };
+
+        var clock = new FakeTimeProvider();
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, clock)
+        {
+            ConnectTimeout = TimeSpan.FromHours(1),
+        };
+
+        var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+        await Eventually.UntilAsync("the WebSocket handshake to be refused", () => site.WebSocketRequests > 0);
+        clock.Advance(TimeSpan.FromHours(1));
+        await start.WaitAsync(Eventually.DefaultPatience);
+
+        try
+        {
+            var client = SocketClients(sut).Values.Should().ContainSingle().Subject;
+            client.Connected.Should().BeTrue();
+            client.Options.Transport.Should().Be(TransportProtocol.Polling);
+            logger.Entries.Should().Contain(e => e.Message.Contains("WebSocket upgrade failed"));
+            logger.Entries.Should().NotContain(e => e.Message.Contains("Failed to connect Socket.IO"));
+        }
+        finally
+        {
+            await InvokeStopRealtimeListenersAsync(sut);
+        }
+    }
+
     [Fact]
     public void AuthorizeMessage_WithNoSecretOrToken_SendsNeither()
     {
@@ -450,9 +495,11 @@ public class NightscoutRealtimeListenerTests
     [Fact]
     public void NewClient_ForASiteUnderASubPath_DialsTheOriginWithTheSitesSocketPath()
     {
+        using var http = new ServiceCollection().AddHttpClient().BuildServiceProvider();
         using var client = NightscoutConnectorBackgroundService.NewClient(
             NightscoutAddress.Resolve("https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123"),
-            new ServiceCollection().AddHttpClient().BuildServiceProvider().GetRequiredService<IHttpClientFactory>());
+            http.GetRequiredService<IHttpClientFactory>(),
+            http.GetRequiredService<IHttpMessageHandlerFactory>());
 
         client.Options.Path.TrimEnd('/').Should().Be("/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io");
         client.Options.Query!["token"].Should().Be("reader-abc123");

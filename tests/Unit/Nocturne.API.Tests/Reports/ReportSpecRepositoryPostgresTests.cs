@@ -32,12 +32,9 @@ public class ReportSpecRepositoryPostgresTests(ReportSpecRepositoryPostgresTests
 
         public Task DisposeAsync() => Task.CompletedTask;
 
+        // Retrying, as the API's contexts are: that strategy refuses a transaction begun outside it.
         public DbContextOptions<NocturneDbContext> Options =>
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                // Retrying, as the API's contexts are: that strategy refuses a transaction begun outside it.
-                .UseNpgsql(AppConnectionString, o => o.EnableRetryOnFailure())
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options;
+            TestContexts.Options(AppConnectionString, npgsql: TestContexts.Retrying);
 
         public async Task<ReportSpecRepository> TenantAsync()
         {

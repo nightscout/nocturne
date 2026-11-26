@@ -687,7 +687,7 @@ public class MembershipRequestServiceTests : IDisposable
         var requester = await SeedRequesterAsync("Pending", isActive: false);
         var requestId = await RequestIdOf(requester);
 
-        (await new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off).DeleteAsync(requester, CancellationToken.None))
+        (await SubjectDeletions.DeleteAsync(_dbContext.AsFactory(), AccountLinkRoutes.Off, requester, CancellationToken.None))
             .Should().BeOfType<SubjectChange.Changed>();
 
         (await _service.GetPendingRequestsAsync(_tenantId)).Should().BeEmpty();

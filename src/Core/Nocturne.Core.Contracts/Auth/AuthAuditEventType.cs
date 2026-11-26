@@ -291,8 +291,8 @@ public static class AuthAuditEventType
     public const string TeamStaffDeclined = "team_staff_declined";
 
     /// <summary>
-    /// Event type when an owner of a site turns "the team manages its own staff" on or off for a team
-    /// with access to it. The row names the tenant and the team, and no target.
+    /// Event type when an owner of a site sets who decides which staff of a team with access to it reach it
+    /// (<c>TeamStaffRule</c>). The row names the tenant and the team, and no target.
     /// </summary>
     public const string TeamStaffRuleChanged = "team_staff_rule_changed";
 }

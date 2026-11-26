@@ -61,15 +61,12 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private async Task<Site> SiteAsync(string slug)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-reason', true, now(), now());
             """);
@@ -93,7 +90,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
     {
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
-        await ExecuteAsync(TeamReasonSql.Access(tenant, team, access, name));
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, TeamReasonSql.Access(tenant, team, access, name));
         return (team, access);
     }
 
@@ -124,7 +121,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var reason = Guid.CreateVersion7();
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var limit = limitTo24Hours ? "true" : "false";
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             {(member is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, access_ends_at, sys_created_at, sys_updated_at)
@@ -426,13 +423,13 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("fk");
         var (_, member, access) = await MixedAsync(site, "fk-mixed");
 
-        var deleteAccess = () => ExecuteAsync($"""
+        var deleteAccess = () => NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
             DELETE FROM team_tenant_access WHERE id = '{access}';
             """);
         (await deleteAccess.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
 
-        await ExecuteAsync($"DELETE FROM tenants WHERE id = '{site.Tenant}';");
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"DELETE FROM tenants WHERE id = '{site.Tenant}';");
 
         (await RowStateAsync(member)).Should().Be("absent");
         (await ReadAsync($"SELECT count(*)::text FROM tenant_member_reasons WHERE tenant_member_id = '{member}'")).Should().Equal("0");
@@ -520,23 +517,14 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var (reset, resetMember, _) = await MixedAsync(site, "remove-all-reset");
         var (deleted, deletedMember, _) = await TeamOnlyAsync(site, "remove-all-deleted");
 
-        (await site.Members.RemoveMembershipsOfSubjectAsync(reset, Ct)).Removed.Should().Be(1);
-        await new SubjectRepository(site.Factory, AccountLinkRoutes.Off).DeleteAsync(deleted, Ct);
+        (await SubjectDeletions.DeleteEvenLastOwnerAsync(site.Factory, AccountLinkRoutes.Off, reset, Ct)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
+        await SubjectDeletions.DeleteAsync(site.Factory, AccountLinkRoutes.Off, deleted, Ct);
 
         (await RowStateAsync(resetMember)).Should().Be("absent");
         (await RowStateAsync(deletedMember)).Should().Be("absent");
         (await ReadAsync($"SELECT count(*)::text FROM tenant_member_reasons WHERE tenant_member_id IN ('{resetMember}', '{deletedMember}')"))
             .Should().Equal("0");
-    }
-
-    private Task ExecuteAsync(string sql) => ExecuteAsync(database.MigratorConnectionString, sql);
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private async Task<List<string>> ReadAsync(string sql)

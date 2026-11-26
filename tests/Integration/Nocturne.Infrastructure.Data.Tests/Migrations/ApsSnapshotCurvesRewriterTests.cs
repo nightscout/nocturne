@@ -2,8 +2,8 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
-using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -53,10 +53,7 @@ public class ApsSnapshotCurvesRewriterFixture : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     private DbContextOptions<NocturneDbContext> Options() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migratorConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        TestContexts.Options(_migratorConnectionString);
 
     /// <summary>
     /// Both tenants, as the job runs them: a page of one walks every row's own page, and each page is

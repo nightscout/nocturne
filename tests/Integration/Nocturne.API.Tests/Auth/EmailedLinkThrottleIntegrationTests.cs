@@ -45,8 +45,7 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task Concurrent_requests_for_one_account_send_one_link()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Throttled Member");
         await conn.ExecuteAsync("UPDATE subjects SET email = @email, email_confirmed_at = now() WHERE id = @id;",
@@ -83,15 +82,13 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_link_request_waiting_on_a_redemptions_claim_does_not_stall_that_redemptions_recovery_session()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Redeeming Member");
         var claimedId = await InsertCodeAsync(conn, tenantId, memberId, "EmailRecovery", Address, createdMinutesAgo: 3, consumed: false);
         var spentId = await InsertCodeAsync(conn, tenantId, memberId, "Login", null, createdMinutesAgo: 0, consumed: true);
 
-        await using var claimConn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await claimConn.OpenAsync();
+        await using var claimConn = await OpenPostgresAsync();
         await using var claim = await claimConn.BeginTransactionAsync();
         using var cancel = new CancellationTokenSource();
         Task<LoginCode?>? mint = null;

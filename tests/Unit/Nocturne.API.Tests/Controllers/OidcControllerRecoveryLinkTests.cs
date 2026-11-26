@@ -61,7 +61,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
     {
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
-        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object);
+        _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
 
         using (var seed = _db.CreateContext(Guid.Empty))
         {

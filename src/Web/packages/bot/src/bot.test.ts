@@ -129,3 +129,53 @@ describe("the Telegram webhook", () => {
     expect((await telegram.handleWebhook(update("env-secret"))).status).toBe(200);
   });
 });
+
+describe("the WhatsApp webhook", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const whatsappWith = (whatsapp: boolean | { enabled: true; verifyToken: string }) =>
+    createBot({
+      postgresUrl: "postgres://nobody@localhost:5432/not-connected",
+      platforms: {
+        whatsapp:
+          typeof whatsapp === "boolean"
+            ? whatsapp
+            : { ...whatsapp, accessToken: "not-a-token", appSecret: "not-a-secret", phoneNumberId: "1000" },
+      },
+    }).getAdapter("whatsapp")!;
+
+  const verification = (verifyToken: string) =>
+    new Request(
+      `https://nocturne.test/api/v4/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=${verifyToken}&hub.challenge=1158201444`,
+    );
+
+  it("answers Meta's verification with the challenge when the verify token matches", async () => {
+    const response = await whatsappWith({ enabled: true, verifyToken: "the-token" }).handleWebhook(
+      verification("the-token"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("1158201444");
+  });
+
+  it("refuses Meta's verification when the verify token does not match", async () => {
+    const response = await whatsappWith({ enabled: true, verifyToken: "the-token" }).handleWebhook(
+      verification("a-guess"),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("checks the environment's verify token when configured from the environment", async () => {
+    vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "not-a-token");
+    vi.stubEnv("WHATSAPP_APP_SECRET", "not-a-secret");
+    vi.stubEnv("WHATSAPP_PHONE_NUMBER_ID", "1000");
+    vi.stubEnv("WHATSAPP_VERIFY_TOKEN", "env-token");
+    const whatsapp = whatsappWith(true);
+
+    expect((await whatsapp.handleWebhook(verification("a-guess"))).status).toBe(403);
+    expect((await whatsapp.handleWebhook(verification("env-token"))).status).toBe(200);
+  });
+});

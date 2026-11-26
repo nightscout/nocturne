@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Interceptors;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -67,12 +68,6 @@ public static class AuditedBulkDeleteExtensions
     /// invalidation, and materializing a source's whole history is what this cap exists to prevent.
     /// </summary>
     public const int BroadcastMaterializationCap = 500;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-    };
 
     /// <summary>What a <c>bulk_delete</c> or <c>allow_reimport</c> summary row records in place of per-row snapshots.</summary>
     private readonly record struct BulkSummary(int Count, string Scope);
@@ -458,17 +453,18 @@ public static class AuditedBulkDeleteExtensions
         context.Set<MutationAuditLogEntity>().Add(MutationAuditLogEntity.Create(
             context.TenantId,
             auditContext,
-            AuditEntityTypeName<T>(),
+            MutationAuditInterceptor.EntityName(typeof(T)),
             null,
             action,
-            JsonSerializer.Serialize(new BulkSummary(count, scope), JsonOptions),
+            JsonSerializer.Serialize(new BulkSummary(count, scope), MutationAuditInterceptor.JsonOptions),
             DateTime.UtcNow));
 
         await context.SaveChangesAsync(ct);
     }
 
     /// <summary>
-    /// Builds one "delete" audit row per affected record, snapshotting its current values.
+    /// Builds one "delete" audit row per affected record, snapshotting its stored values as
+    /// <see cref="MutationAuditInterceptor.BuildDeleteSnapshot"/> records them.
     /// Returns an empty list for system/unattributed mutations: these helpers write audit rows
     /// themselves rather than through <c>MutationAuditInterceptor</c>, so they have to apply the
     /// same skip — a connector's reconcile sweep is high-volume and has no human actor, and
@@ -483,40 +479,21 @@ public static class AuditedBulkDeleteExtensions
             return [];
 
         var now = DateTime.UtcNow;
-        var entityTypeName = AuditEntityTypeName<T>();
+        var entityTypeName = MutationAuditInterceptor.EntityName(typeof(T));
 
         return affectedRecords.Select(record =>
         {
             var entry = context.Entry(record);
-            var snapshot = new Dictionary<string, object?>();
-
-            foreach (var prop in entry.Properties)
-            {
-                if (prop.Metadata.IsPrimaryKey())
-                    continue;
-
-                var property = typeof(T).GetProperty(prop.Metadata.Name,
-                    BindingFlags.Public | BindingFlags.Instance);
-
-                if (property?.GetCustomAttribute<AuditIgnoredAttribute>() is not null)
-                    continue;
-
-                var isRedacted = property?.GetCustomAttribute<AuditRedactedAttribute>() is not null;
-                snapshot[prop.Metadata.Name] = isRedacted ? "[redacted]" : prop.CurrentValue;
-            }
-
             return MutationAuditLogEntity.Create(
                 context.TenantId,
                 auditContext,
                 entityTypeName,
-                (Guid)entry.Property("Id").CurrentValue!,
+                MutationAuditInterceptor.GetEntityId(entry),
                 "delete",
-                JsonSerializer.Serialize(snapshot, JsonOptions),
+                MutationAuditInterceptor.BuildDeleteSnapshot(entry),
                 now);
         }).ToList();
     }
-
-    private static string AuditEntityTypeName<T>() => typeof(T).Name.Replace("Entity", "");
 
     private static readonly ConcurrentDictionary<Type, PropertyInfo> IdProperties = new();
 

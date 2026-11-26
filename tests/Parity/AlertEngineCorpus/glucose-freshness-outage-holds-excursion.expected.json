@@ -120,7 +120,7 @@
             "excursion": 1,
             "hysteresis_started_at": "2026-03-02T13:10:00Z"
           },
-          "next_change_at": "2026-03-02T13:21:00Z"
+          "next_change_at": "2026-03-02T13:10:00.000000100Z"
         }
       ]
     }

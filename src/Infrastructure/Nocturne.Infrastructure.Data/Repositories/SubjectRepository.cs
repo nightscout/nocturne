@@ -498,62 +498,128 @@ public class SubjectRepository : ISubjectRepository
         confirmation.IsModified = false;
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<SubjectChange> DeleteAsync(Guid subjectId, CancellationToken ct)
+    /// <summary>
+    /// Deletes the subject on this repository's unit, inside its owner's commit, and in that commit
+    /// clears its personal data from the three audit trails, leaving the ids that make them a
+    /// pseudonymous record. In <c>auth_audit_log</c> the details go from every row the subject is party
+    /// to. In all three, the client address, and the user agent where the table keeps one, go from every
+    /// row it acted on, in every tenant. They are the actor's, so another subject's on a row about this
+    /// one are kept. <c>actor_name</c> stays on <c>mutation_audit_log</c> and <c>read_access_log</c>, so
+    /// a tenant's owner can still see who changed or read their data. Rows that reference the subject go
+    /// with it by cascade.
+    /// </summary>
+    /// <remarks>
+    /// Refused with <see cref="SubjectChange.LastOwnerOf"/> while an active subject is the last owner of
+    /// any tenant by <c>TenantOwnerFilter.IsLastOwnerAsync</c>, whether or not the tenant has other
+    /// members: the cascade would remove its membership. An inactive subject is never refused, since it
+    /// counts as no owner. The check holds the owner lock of each tenant the subject belongs to, in
+    /// ascending tenant id, until the delete commits.
+    /// <para>
+    /// A team the subject is the only member of is deleted with them. A team with other members is
+    /// refused with <see cref="SubjectChange.LastManagerOf"/> while the subject is its last manager by
+    /// <c>TeamManagerFilter.IsLastManagerAsync</c>. Both hold the manager lock of each team the subject
+    /// belongs to, in ascending team id, until the delete commits.
+    /// </para>
+    /// <para>
+    /// Once nothing refuses it and every lock is held, <paramref name="stopMadeByOn"/> runs for each
+    /// tenant the subject belongs to, with the unit pinned to that tenant, before any membership goes. A
+    /// refused delete runs it for none, so what it stages commits with the delete or not at all.
+    /// </para>
+    /// <para>
+    /// A delete answers <see cref="SubjectChange.Changed.RemovedNotices"/> with the notices it removed
+    /// from other people.
+    /// </para>
+    /// </remarks>
+    /// <param name="subjectId">The subject to delete.</param>
+    /// <param name="evenLastOwner">
+    /// Refuses no last owner, and names the tenants the delete leaves without an owner. Each removed
+    /// membership is audited with the roles and direct permissions it held, whose details then go with
+    /// the account like the rest: anyone can get a session as the demo visitor, so a membership it holds
+    /// must go whatever role it carries.
+    /// </param>
+    /// <param name="stopMadeByOn">Stages and saves the stop of what the subject made on the tenant it is given.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit.</exception>
+    public async Task<SubjectDeletionOutcome> DeleteAsync(
+        Guid subjectId, bool evenLastOwner, Func<Guid, CancellationToken, Task> stopMadeByOn, CancellationToken ct)
     {
-        await using var db = await Transactional.CreateAsync(ct);
+        var db = (_unit ?? throw new InvalidOperationException(
+            "A delete that stops what the subject made runs inside the commit of the unit that stages the stop.")).Context;
+        await db.LockSubjectRowAsync(subjectId, ct);
         var entity = await db.Subjects.FirstOrDefaultAsync(s => s.Id == subjectId, ct);
         if (entity is null)
-            return new SubjectChange.NotFound();
+            return new SubjectDeletionOutcome(new SubjectChange.NotFound(), []);
 
-        return await db.Database.CreateExecutionStrategy().ExecuteAsync<SubjectChange>(async () =>
+        IReadOnlyList<LastOwnerTenant> leftWithoutOwner = [];
+        if (evenLastOwner)
         {
-            await using var tx = await db.Database.BeginTransactionAsync(ct);
-            await db.LockSubjectRowAsync(subjectId, ct);
+            leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, _linkRoute, ct);
+        }
+        else if (entity.IsActive)
+        {
+            var lastOwnerOf = await db.LockTenantsOfSubjectAsync(subjectId, _linkRoute, ct);
+            if (lastOwnerOf.Count > 0)
+                return new SubjectDeletionOutcome(new SubjectChange.LastOwnerOf(lastOwnerOf), []);
+        }
 
-            if (entity.IsActive)
+        var (soleMemberOf, lastManagerOf) = await db.LockTeamsOfSubjectAsync(subjectId, ct);
+        if (lastManagerOf.Count > 0)
+            return new SubjectDeletionOutcome(new SubjectChange.LastManagerOf(lastManagerOf), []);
+
+        await TeamRepository.LockAccessOfTeamsAsync(db, soleMemberOf.Select(t => t.Id).ToList(), ct);
+        var ofSubject = db.TenantMembers.Where(m => m.SubjectId == subjectId);
+        var memberships = await (evenLastOwner ? ofSubject.Include(m => m.MemberRoles) : ofSubject).ToListAsync(ct);
+        await db.LockMembershipsAsync(memberships.Select(m => (m.TenantId, m.SubjectId)), ct);
+
+        // Stopped only once every lock is held: a write that takes one of them before it caps what the
+        // subject made then waits for the delete instead of holding a row the delete waits for.
+        var trackedBefore = db.ChangeTracker.Entries().Select(e => e.Entity).ToHashSet(ReferenceEqualityComparer.Instance);
+        foreach (var tenantId in memberships.Select(m => m.TenantId).Distinct().Order())
+        {
+            await db.InTenantForTransactionAsync(tenantId, async token =>
             {
-                var lastOwnerOf = await db.LockTenantsOfSubjectAsync(subjectId, _linkRoute, ct);
-                if (lastOwnerOf.Count > 0)
-                    return new SubjectChange.LastOwnerOf(lastOwnerOf);
-            }
+                await stopMadeByOn(tenantId, token);
+                return true;
+            }, ct);
+        }
 
-            var (soleMemberOf, lastManagerOf) = await db.LockTeamsOfSubjectAsync(subjectId, ct);
-            if (lastManagerOf.Count > 0)
-                return new SubjectChange.LastManagerOf(lastManagerOf);
+        // Row level security hides each stopped row once its tenant is no longer pinned. Left
+        // tracked, the subject's removal below would clear or delete them itself and find no row;
+        // the foreign keys do it instead.
+        foreach (var entry in db.ChangeTracker.Entries().Where(e => !trackedBefore.Contains(e.Entity)).ToList())
+            entry.State = EntityState.Detached;
 
-            // Removed here rather than by the subject's cascade so each membership leaves its removed
-            // row; saved before the scrub below, which then clears that row's details like the rest.
-            // The teams are staged after that save, so their rows keep their details.
-            await TeamRepository.LockAccessOfTeamsAsync(db, soleMemberOf.Select(t => t.Id).ToList(), ct);
-            var memberships = await db.TenantMembers.Where(m => m.SubjectId == subjectId).ToListAsync(ct);
-            await db.LockMembershipsAsync(memberships.Select(m => (m.TenantId, m.SubjectId)), ct);
-            foreach (var membership in memberships)
+        // Removed here rather than by the subject's cascade so each membership leaves its removed
+        // row; saved before the scrub below, which then clears that row's details like the rest.
+        // The teams are staged after that save, so their rows keep their details.
+        foreach (var membership in memberships)
+        {
+            if (evenLastOwner)
+                await TenantMembershipRepository.StageRemoveAsync(db, membership, MembershipEndHow.System, ct);
+            else
                 await MembershipReasons.RemoveMemberAsync(db, membership, MembershipEndHow.AccountDeleted, ct);
-            await db.SaveChangesAsync(ct);
+        }
+        await db.SaveChangesAsync(ct);
 
-            foreach (var team in soleMemberOf)
-                await TeamRepository.RemoveAsync(db, team, ct);
+        foreach (var team in soleMemberOf)
+            await TeamRepository.RemoveAsync(db, team, ct);
 
-            // One statement per column set: the audit trail of a long-lived subject is every
-            // sign-in it ever made, which is not loaded into the tracker to null two columns.
-            await db.AuthAuditLog
-                .Where(a => a.ActorSubjectId == subjectId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(a => a.IpAddress, (string?)null)
-                    .SetProperty(a => a.UserAgent, (string?)null), ct);
-            await db.AuthAuditLog
-                .Where(a => a.TargetSubjectId == subjectId || a.ActorSubjectId == subjectId)
-                .ExecuteUpdateAsync(s => s.SetProperty(a => a.DetailsJson, (string?)null), ct);
+        // One statement per column set: the audit trail of a long-lived subject is every
+        // sign-in it ever made, which is not loaded into the tracker to null two columns.
+        await db.AuthAuditLog
+            .Where(a => a.ActorSubjectId == subjectId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.IpAddress, (string?)null)
+                .SetProperty(a => a.UserAgent, (string?)null), ct);
+        await db.AuthAuditLog
+            .Where(a => a.TargetSubjectId == subjectId || a.ActorSubjectId == subjectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.DetailsJson, (string?)null), ct);
 
-            db.Subjects.Remove(entity);
-            await db.SaveChangesAsync(ct);
+        db.Subjects.Remove(entity);
+        await db.SaveChangesAsync(ct);
 
-            var removed = await ScrubTenantRowsAsync(db, subjectId, ct);
-
-            await tx.CommitAsync(ct);
-            return new SubjectChange.Changed { RemovedNotices = removed };
-        });
+        var removed = await ScrubTenantRowsAsync(db, subjectId, ct);
+        return new SubjectDeletionOutcome(new SubjectChange.Changed { RemovedNotices = removed }, leftWithoutOwner);
     }
 
     /// <summary>

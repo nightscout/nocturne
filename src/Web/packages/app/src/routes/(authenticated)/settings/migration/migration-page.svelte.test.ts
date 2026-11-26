@@ -364,17 +364,17 @@ describe("settings/migration source the server gives", () => {
   beforeEach(() => {
     history = [];
     polled = null;
-    remote.pending = { hasPendingConfig: true, mode: MigrationMode.Api, nightscoutUrl: "mine.example/AGYL…" };
+    remote.pending = { hasPendingConfig: true, mode: MigrationMode.Api, nightscoutUrl: "mine.example/…" };
   });
 
   afterEach(() => {
     remote.pending = { hasPendingConfig: false };
   });
 
-  it("shows the server's address masked and sends no URL, so the API reads its own", async () => {
+  it("shows the server's address as its host and sends no URL, so the API reads its own", async () => {
     render(MigrationPage, {});
 
-    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/AGYL…");
+    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/…");
     await expect.element(page.getByRole("button", { name: "Change address" })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
     expect(page.getByRole("textbox", { name: "Nightscout URL" }).elements()).toHaveLength(0);
@@ -400,7 +400,7 @@ describe("settings/migration source the server gives", () => {
     await page.getByRole("textbox", { name: "Nightscout URL" }).fill("https://other.example/ns");
     await page.getByRole("button", { name: "Keep current address" }).click();
 
-    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/AGYL…");
+    await expect.element(page.getByTestId("configured-nightscout-url")).toHaveTextContent("mine.example/…");
     expect(sentUrls()).toEqual([]);
   });
 });

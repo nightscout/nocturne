@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -65,7 +66,7 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
         await ShouldRefuseWithAsync(CallerCode, await teamOnly.PostAsync(
             $"/api/v4/member-invites/team-access/{team}/staff/{staff}/decline", null));
         await ShouldRefuseWithAsync(CallerCode, await teamOnly.PutAsJsonAsync(
-            $"/api/v4/member-invites/team-access/{team}/staff-rule", new { teamManagesStaff = false }));
+            $"/api/v4/member-invites/team-access/{team}/staff-rule", new { staffRule = "owner_approves" }));
         await ShouldRefuseWithAsync(CallerCode, await teamOnly.PutAsJsonAsync(
             $"/api/v4/member-invites/team-access/{team}", new { roleIds = new[] { viewer }, limitTo24Hours = false, accessEndsAt = (DateTimeOffset?)null }));
 
@@ -89,8 +90,7 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
 
     private async Task<Guid> RoleIdAsync(string slug)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return await AuthTestHelpers.GetTenantRoleIdAsync(conn, await AuthTestHelpers.GetTenantIdAsync(conn), slug);
     }
 
@@ -103,14 +103,13 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
     /// </summary>
     private async Task<Guid> TeamReasonsAsync(Guid staff, Guid mixed, Guid caller)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var caretaker = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Caretaker);
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
+        await conn.PinTenantAsync(tenantId);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenant::text, false);
             INSERT INTO teams (id, name) VALUES (@team, 'Clinic');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours) VALUES (@access, @team, @tenant, false);
             INSERT INTO team_tenant_access_roles (id, team_tenant_access_id, tenant_role_id) VALUES (gen_random_uuid(), @access, @caretaker);
@@ -148,8 +147,7 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
         using (var provisioning = CreateAuthenticatedClient())
             (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, permissions);
         if (owner)

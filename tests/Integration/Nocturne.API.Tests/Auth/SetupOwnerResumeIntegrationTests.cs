@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -186,12 +187,12 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                 break;
             case "owner membership and a live operator recovery code":
                 await AddMemberAsync(conn, subjectId, "owner");
+                await conn.PinTenantAsync(Fixture.TenantId);
                 await conn.ExecuteAsync("""
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
                     INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
                     VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), 'OperatorRecovery', now() + interval '1 day', now());
                     """,
-                    ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", subjectId));
+                    ("tenant", Fixture.TenantId), ("subject", subjectId));
                 break;
             case "owner membership and a confirmed address a recovery link can reach":
                 await AddMemberAsync(conn, subjectId, "owner");
@@ -227,15 +228,15 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                     ("subject", subjectId));
                 break;
             case "a passkey and no membership":
+                await conn.PinTenantAsync(Fixture.TenantId);
                 await conn.ExecuteAsync("""
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
                     DELETE FROM tenant_member_roles WHERE tenant_member_id IN
                         (SELECT id FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject);
                     DELETE FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;
                     INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
                     VALUES (gen_random_uuid(), @subject, @credential, @credential, 0, '{}', now());
                     """,
-                    ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+                    ("tenant", Fixture.TenantId),
                     ("subject", subjectId), ("credential", Guid.NewGuid().ToByteArray()));
                 break;
             case "an authenticator":
@@ -246,12 +247,12 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
                     ("subject", subjectId));
                 break;
             case "a live operator recovery code":
+                await conn.PinTenantAsync(Fixture.TenantId);
                 await conn.ExecuteAsync("""
-                    SELECT set_config('app.current_tenant_id', @tenantText, false);
                     INSERT INTO login_codes (id, tenant_id, subject_id, code_hash, purpose, expires_at, created_at)
                     VALUES (gen_random_uuid(), @tenant, @subject, md5(@subject::text), 'OperatorRecovery', now() + interval '1 day', now());
                     """,
-                    ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId), ("subject", subjectId));
+                    ("tenant", Fixture.TenantId), ("subject", subjectId));
                 break;
             case "a confirmed address a recovery link can reach":
                 await conn.ExecuteAsync("""
@@ -273,8 +274,8 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
 
     private async Task AddMemberAsync(NpgsqlConnection conn, Guid subjectId, string roleSlug)
     {
+        await conn.PinTenantAsync(Fixture.TenantId);
         await conn.ExecuteAsync("""
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
             WITH member AS (
                 INSERT INTO tenant_members (id, tenant_id, subject_id, username, sys_created_at, sys_updated_at)
                 VALUES (gen_random_uuid(), @tenant, @subject, 'someone-else', now(), now())
@@ -283,7 +284,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
             SELECT gen_random_uuid(), member.id, r.id
             FROM member, tenant_roles r WHERE r.tenant_id = @tenant AND r.slug = @role;
             """,
-            ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
+            ("tenant", Fixture.TenantId),
             ("subject", subjectId), ("role", roleSlug));
     }
 
@@ -303,8 +304,8 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
             SELECT r.name FROM subject_roles sr JOIN roles r ON r.id = sr.role_id
             WHERE sr.subject_id = @subject ORDER BY r.name;
             """, subjectId);
+        await conn.PinTenantAsync(Fixture.TenantId);
         var memberships = await StringsAsync(conn, """
-            SELECT set_config('app.current_tenant_id', @tenantText, false);
             SELECT m.tenant_id::text || ':' || coalesce(m.username, '') || ':' ||
                 coalesce((SELECT string_agg(tr.slug, ',' ORDER BY tr.slug)
                     FROM tenant_member_roles mr JOIN tenant_roles tr ON tr.id = mr.tenant_role_id
@@ -317,7 +318,7 @@ public class SetupOwnerResumeIntegrationTests : ApiIntegrationTestBase
     private async Task<List<string>> StringsAsync(NpgsqlConnection conn, string sql, Guid subjectId)
     {
         return await conn.QueryAsync(
-            sql, reader => reader.GetString(0), ("subject", subjectId), ("tenantText", Fixture.TenantId.ToString()));
+            sql, reader => reader.GetString(0), ("subject", subjectId));
     }
 
     private async Task<List<Guid>> ActiveSubjectsNamedAsync(string username)

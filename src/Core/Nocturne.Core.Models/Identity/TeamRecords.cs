@@ -23,6 +23,26 @@ public static class TeamSiteStaffStatus
     public const string Declined = "declined";
 }
 
+/// <summary>Who decides which staff of a team reach a site the team has access to.</summary>
+public static class TeamStaffRule
+{
+    /// <summary>Each new staff member, and each one the team gives more, waits for an owner of the site to approve them.</summary>
+    public const string OwnerApproves = "owner_approves";
+
+    /// <summary>Staff reach the site as they join, its owners are told, and an owner may decline any one of them.</summary>
+    public const string TeamDecides = "team_decides";
+
+    /// <summary>
+    /// Every staff member reaches the site whatever an owner decided about them, and no owner decides about one.
+    /// Their decisions are kept, and apply again once the site stops trusting the team.
+    /// </summary>
+    public const string TeamTrusted = "team_trusted";
+
+    public static IReadOnlyList<string> All { get; } = [OwnerApproves, TeamDecides, TeamTrusted];
+
+    public static bool IsKnown(string? rule) => rule is OwnerApproves or TeamDecides or TeamTrusted;
+}
+
 /// <summary>A team the caller is a member of.</summary>
 /// <param name="Kind">What the caller is in the team, a <see cref="TeamMemberKind"/> value.</param>
 public sealed record TeamSummary(Guid Id, string Name, string Kind);
@@ -235,11 +255,12 @@ public sealed record TeamAccessLinkSummary(
 
 /// <summary>
 /// A site the team has access to, as a manager of the team reads it: how many of its staff wait for the
-/// site's approval there and how many the site declined, never which of them or who decided.
+/// site's approval there and how many the site's declines keep out, never which of them or who decided.
+/// Both are 0 while the site trusts the whole team, since then nobody waits and no decline applies.
 /// </summary>
 /// <param name="HasEnded">Whether <paramref name="AccessEndsAt"/> has passed.</param>
 /// <param name="GivenAt">When the access was given.</param>
-/// <param name="TeamManagesStaff">Whether the team's staff are approved at the site as they join.</param>
+/// <param name="StaffRule">Who decides which of the team's staff reach the site, a <see cref="TeamStaffRule"/> value.</param>
 public sealed record TeamSiteAccess(
     Guid TenantId,
     string DisplayName,
@@ -248,7 +269,7 @@ public sealed record TeamSiteAccess(
     DateTime? AccessEndsAt,
     bool HasEnded,
     DateTime GivenAt,
-    bool TeamManagesStaff,
+    string StaffRule,
     int PendingStaffCount,
     int DeclinedStaffCount);
 
@@ -313,12 +334,9 @@ public enum TeamAccessRefusal
 
 /// <summary>What a team is given on a site.</summary>
 /// <param name="AccessEndsAt">When the access ends, in UTC; null for no end.</param>
-/// <param name="TeamManagesStaff">
-/// Whether the team's managers decide which of their staff reach the site: its staff are approved
-/// there as they join. When false each waits for the site to approve them.
-/// </param>
+/// <param name="StaffRule">Who decides which of the team's staff reach the site, a <see cref="TeamStaffRule"/> value.</param>
 public sealed record TeamAccessGrant(
-    Guid TenantId, IReadOnlyList<Guid> RoleIds, bool LimitTo24Hours, DateTime? AccessEndsAt, bool TeamManagesStaff);
+    Guid TenantId, IReadOnlyList<Guid> RoleIds, bool LimitTo24Hours, DateTime? AccessEndsAt, string StaffRule);
 
 /// <summary>What approving an access link did: the access made, or why it was refused.</summary>
 public sealed record TeamAccessApproval(Guid? AccessId, TeamAccessRefusal? Refusal);
@@ -337,9 +355,7 @@ public sealed record TeamAccessEdit(OwnerDecision Decision, TeamAccessRefusal? R
 /// <summary>A team with access to a site, as the site reads it.</summary>
 /// <param name="HasEnded">Whether <paramref name="AccessEndsAt"/> has passed.</param>
 /// <param name="ApprovedBySubjectId">Who approved it; null once that subject is deleted.</param>
-/// <param name="TeamManagesStaff">
-/// Whether the team's staff are approved at the site as they join. When false each waits for an owner.
-/// </param>
+/// <param name="StaffRule">Who decides which of the team's staff reach the site, a <see cref="TeamStaffRule"/> value.</param>
 /// <param name="Staff">The team's staff, each with whether the site approved them.</param>
 public sealed record TenantTeamAccess(
     Guid TeamId,
@@ -351,7 +367,7 @@ public sealed record TenantTeamAccess(
     Guid? ApprovedBySubjectId,
     string? ApprovedByName,
     DateTime GivenAt,
-    bool TeamManagesStaff,
+    string StaffRule,
     IReadOnlyList<TenantTeamStaff> Staff);
 
 /// <summary>A staff member of a team with access to a site, as the site reads them.</summary>
@@ -376,6 +392,9 @@ public enum OwnerDecision
 
     /// <summary>The caller's direct reason on the site does not hold the owner role.</summary>
     NotOwner,
+
+    /// <summary>The site trusts the team's whole staff (<see cref="TeamStaffRule.TeamTrusted"/>), so no owner decides about one of them.</summary>
+    TeamTrusted,
 }
 
 /// <summary>A role a team's access gives.</summary>

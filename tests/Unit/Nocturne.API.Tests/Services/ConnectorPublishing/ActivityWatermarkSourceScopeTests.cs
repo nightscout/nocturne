@@ -1,6 +1,5 @@
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Infrastructure.Data.Repositories.Health;
-using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Caching;
 using Nocturne.Connectors.Core.Models;
@@ -32,6 +31,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -90,14 +90,7 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             await cmd.ExecuteNonQueryAsync();
         }
 
-        _context = new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options)
-        {
-            TenantId = tenant,
-        };
+        _context = TestContexts.Context(database.AppConnectionString, tenant);
 
         var processing = new Mock<IDocumentProcessingService>();
         processing

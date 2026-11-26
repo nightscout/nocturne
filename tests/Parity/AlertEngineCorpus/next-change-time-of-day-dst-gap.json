@@ -12,7 +12,6 @@
         "to": "05:00",
         "timezone": "Australia/Sydney"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

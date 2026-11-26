@@ -38,10 +38,7 @@ public class PlatformAdminBootstrapPostgresTests(PlatformAdminBootstrapPostgresT
     private sealed class Instance(TestDatabase database, bool linkRoute)
     {
         public NocturneDbContext Context(Guid tenant) =>
-            new(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.AppConnectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options) { TenantId = tenant };
+            TestContexts.Context(database.AppConnectionString, tenant);
 
         private SuppliedContextFactory Contexts(Guid tenant) => new(() => Context(tenant));
 

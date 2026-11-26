@@ -79,7 +79,7 @@ function site(overrides: Partial<TeamSiteAccess> = {}): TeamSiteAccess {
     roleNames: ["Viewer"],
     limitTo24Hours: false,
     givenAt: "2026-11-01T00:00:00Z",
-    teamManagesStaff: true,
+    staffRule: "team_decides",
     pendingStaffCount: 0,
     declinedStaffCount: 0,
     ...overrides,
@@ -501,19 +501,24 @@ describe("team page staff sections", () => {
   });
 
   describe("sites", () => {
-    it.each([
-      [true, "The team decides which of its staff can see this site.", "An owner of the site must approve each staff member."],
-      [false, "An owner of the site must approve each staff member.", "The team decides which of its staff can see this site."],
-    ])("words the switch when the team manages its staff is %s", async (teamManagesStaff, shown, absent) => {
-      mocks.team = { ...manager, sites: [site({ teamManagesStaff })] };
+    const sentences = {
+      owner_approves: "An owner of the site must approve each staff member.",
+      team_decides: "The team decides which of its staff can see this site.",
+      team_trusted: "The site trusts the whole team. Every staff member can see this site.",
+    };
+
+    it.each(Object.entries(sentences))("states the rule %s in one sentence", async (staffRule, shown) => {
+      mocks.team = { ...manager, sites: [site({ staffRule })] };
       render(TeamPage);
 
       await expect.element(page.getByText(shown)).toBeVisible();
-      expect(page.getByText(absent).elements()).toHaveLength(0);
+      for (const [other, absent] of Object.entries(sentences)) {
+        if (other !== staffRule) expect(page.getByText(absent).elements(), other).toHaveLength(0);
+      }
     });
 
     it("says that declines still hold when the team decides and the site declined staff", async () => {
-      mocks.team = { ...manager, sites: [site({ teamManagesStaff: true, declinedStaffCount: 2 })] };
+      mocks.team = { ...manager, sites: [site({ staffRule: "team_decides", declinedStaffCount: 2 })] };
       render(TeamPage);
 
       await expect
@@ -526,14 +531,14 @@ describe("team page staff sections", () => {
       await expect.element(page.getByText("The site declined 2 staff members.")).toBeVisible();
     });
 
-    it("states no switch and no count for a site whose access ended", async () => {
+    it("states no rule and no count for a site whose access ended", async () => {
       mocks.team = {
         ...manager,
         sites: [
           site({
             accessEndsAt: "2020-02-01T00:00:00Z",
             hasEnded: true,
-            teamManagesStaff: true,
+            staffRule: "team_decides",
             pendingStaffCount: 2,
             declinedStaffCount: 1,
           }),
@@ -568,7 +573,7 @@ describe("team page staff sections", () => {
     ])("states %i waiting and %i declined", async (pending, declined, pendingText, declinedText) => {
       mocks.team = {
         ...manager,
-        sites: [site({ teamManagesStaff: false, pendingStaffCount: pending, declinedStaffCount: declined })],
+        sites: [site({ staffRule: "owner_approves", pendingStaffCount: pending, declinedStaffCount: declined })],
       };
       render(TeamPage);
 
@@ -576,14 +581,14 @@ describe("team page staff sections", () => {
       await expect.element(page.getByText(declinedText)).toBeVisible();
     });
 
-    it("states that only an owner of the site changes the switch, and offers no control for it", async () => {
+    it("states that only an owner of the site changes the rule, and offers no control for it", async () => {
       mocks.team = { ...manager, sites: [site()] };
       render(TeamPage);
 
       await expect
         .element(page.getByText("Only an owner of the site can change this.", { exact: false }))
         .toBeVisible();
-      expect(page.getByRole("switch").elements()).toHaveLength(0);
+      expect(page.getByRole("radio", { name: /I trust the whole team/ }).elements()).toHaveLength(0);
     });
   });
 });

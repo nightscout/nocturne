@@ -12,6 +12,7 @@
   import TeamStaffList from "#lib/components/members/TeamStaffList.svelte";
   import TeamStaffRule from "#lib/components/members/TeamStaffRule.svelte";
   import TeamAccessEditForm from "#lib/components/members/TeamAccessEditForm.svelte";
+  import { RULE_OWNER_APPROVES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
   import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     teamAccessEditProblemMessages,
@@ -121,11 +122,15 @@
     );
   }
 
-  function setRule(teamManagesStaff: boolean) {
+  function setRule(staffRule: string) {
     void run(
       "rule",
-      () => setTeamStaffRule({ teamId, request: { teamManagesStaff } }),
-      teamManagesStaff ? "The team now decides who on its staff can see this site." : "Each new staff member now waits for an owner's approval.",
+      () => setTeamStaffRule({ teamId, request: { staffRule } }),
+      staffRule === RULE_TEAM_TRUSTED
+        ? "You now trust the whole team."
+        : staffRule === RULE_OWNER_APPROVES
+          ? "Each new staff member now waits for an owner's approval."
+          : "The team now decides who on its staff can see this site.",
       "Could not change the setting. Try again.",
       teamGone,
       teamStaffDecisionProblemMessages(),

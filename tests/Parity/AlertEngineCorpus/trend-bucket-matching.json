@@ -10,7 +10,6 @@
       "condition_params": {
         "bucket": "falling_fast"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -20,7 +19,6 @@
       "condition_params": {
         "bucket": "FALLING_FAST"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -30,7 +28,6 @@
       "condition_params": {
         "bucket": "plummeting"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

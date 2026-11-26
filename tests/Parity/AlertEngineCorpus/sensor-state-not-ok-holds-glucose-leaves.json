@@ -11,7 +11,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -22,7 +21,6 @@
         "direction": "falling",
         "rate": 2
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -32,7 +30,6 @@
       "condition_params": {
         "bucket": "falling_fast"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -45,7 +42,6 @@
           "very_low"
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

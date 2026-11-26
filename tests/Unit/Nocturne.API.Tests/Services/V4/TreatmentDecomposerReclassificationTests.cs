@@ -42,7 +42,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
 
     public TreatmentDecomposerReclassificationTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate, _statements);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, "test", _statements);
         _context = _db.CreateContext();
         _factory = new TestNocturneDbContextFactory(_context);
 

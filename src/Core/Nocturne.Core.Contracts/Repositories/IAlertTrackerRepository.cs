@@ -35,7 +35,10 @@ public interface IAlertTrackerRepository
         CancellationToken ct = default);
 
     /// <param name="alertRuleId">The unique identifier of the <see cref="AlertRule"/>.</param>
-    /// <returns>The <see cref="AlertRule"/>, or <c>null</c> if not found.</returns>
+    /// <returns>
+    /// The <see cref="AlertRule"/>, or <c>null</c> if not found or its condition type, severity or
+    /// scope class names no member, which is not evaluated.
+    /// </returns>
     Task<AlertRule?> GetRuleAsync(
         Guid alertRuleId,
         CancellationToken ct = default);

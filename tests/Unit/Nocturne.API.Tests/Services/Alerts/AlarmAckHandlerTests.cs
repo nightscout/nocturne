@@ -34,6 +34,7 @@ public class AlarmAckHandlerTests
             _tenant.Canonical.Object,
             _tenant.Broadcast.Object,
             relay,
+            Mock.Of<IExcursionResolutionHandler>(),
             _tenant.Time,
             NullLogger<AlertSnoozeService>.Instance);
 

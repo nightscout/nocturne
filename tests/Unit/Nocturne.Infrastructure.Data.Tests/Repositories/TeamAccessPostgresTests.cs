@@ -52,14 +52,8 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         new(instant.Ticks - instant.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
 
     private NocturneDbContext Context(IAuditContext? actor = null, Guid? tenant = null, bool retry = true) =>
-        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, npgsql =>
-            {
-                if (retry)
-                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null);
-            })
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant ?? Guid.Empty }.ActingAs(actor);
+        TestContexts.Context(
+            database.AppConnectionString, tenant ?? Guid.Empty, npgsql: retry ? TestContexts.RetryingBriefly : null).ActingAs(actor);
 
     private SuppliedContextFactory Contexts(Guid? actor = null, Guid? tenant = null) =>
         new(() => Context(actor is { } id ? new TestAuditActor { SubjectId = id } : null, tenant));
@@ -115,7 +109,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         return (token, id!.Value);
     }
 
-    private static TeamAccessGrant Grant(Site site, params Guid[] roles) => new(site.Id, roles, false, null, true);
+    private static TeamAccessGrant Grant(Site site, params Guid[] roles) => new(site.Id, roles, false, null, TeamStaffRule.TeamDecides);
 
     /// <summary>Approves as <paramref name="approver"/>, made an owner of the grant's site first if they are not one.</summary>
     private async Task<TeamAccessApproval> ApproveAsync(string token, Guid approver, TeamAccessGrant grant, bool limited = false)
@@ -288,7 +282,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var viewerish = await RoleAsync(site, Scope.GlucoseRead);
 
         var approval = await ApproveAsync(
-            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker], viewerish], true, end, true));
+            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker], viewerish], true, end, TeamStaffRule.TeamDecides));
 
         approval.Refusal.Should().BeNull();
         await using (var db = Context())
@@ -641,13 +635,13 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
                 $"UPDATE tenant_members SET access_ends_at = {ownEnd} WHERE tenant_id = {site.Id} AND subject_id = {owner}");
         var viewer = site.Roles[RoleSeeds.Viewer];
 
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover);
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, ownEnd.AddSeconds(1), true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, ownEnd.AddSeconds(1), TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover);
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], false, ownEnd, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], false, ownEnd, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().Be(TeamAccessRefusal.LimitRequired);
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], true, ownEnd, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], true, ownEnd, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().BeNull();
     }
 
@@ -655,8 +649,8 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
     {
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.PinTenantAsync(tenant);
+        await conn.ExecuteAsync(sql);
     }
 
     [Theory]
@@ -676,9 +670,9 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             """);
         var viewer = site.Roles[RoleSeeds.Viewer];
 
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover, "the row's end holds the approver, whatever its direct reason says");
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, rowEnd, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, rowEnd, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().BeNull();
     }
 
@@ -705,9 +699,9 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             """);
         var viewer = site.Roles[RoleSeeds.Viewer];
 
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover, "the row has no end, but the owner's direct reason ends");
-        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, directEnd, true), Now))
+        (await TeamWrites.ApproveAccessAsync(Contexts(owner), token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, directEnd, TeamStaffRule.TeamDecides), Now))
             .Refusal.Should().BeNull();
     }
 
@@ -721,7 +715,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (retired, retiredId) = await LinkAsync(team, manager);
         await using (var db = Context())
             await db.Database.ExecuteSqlAsync($"UPDATE team_access_links SET suggested_role_slug = 'retired' WHERE id = {retiredId}");
-        var grant = new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Viewer]], false, Now.AddMinutes(-2), true);
+        var grant = new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Viewer]], false, Now.AddMinutes(-2), TeamStaffRule.TeamDecides);
 
         (await Teams().GetAccessLinkInfoAsync(passed, Now, default))!.Refusal.Should().Be(TeamAccessRefusal.SuggestedEndPassed);
         (await ApproveAsync(passed, owner, grant)).Refusal.Should().Be(TeamAccessRefusal.SuggestedEndPassed);
@@ -850,9 +844,9 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (token, _) = await LinkAsync(team, manager);
         (await ApproveAsync(token, owner, Grant(a, a.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
         (await ApproveAsync(token, owner, Grant(b, b.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
-        var onSiteA = new SubjectRepository(new SuppliedContextFactory(() => Context(tenant: a.Id)), AccountLinkRoutes.Off);
+        var onSiteA = new SuppliedContextFactory(() => Context(tenant: a.Id));
 
-        (await onSiteA.DeleteAsync(manager, default)).Should().BeOfType<SubjectChange.Changed>();
+        (await SubjectDeletions.DeleteAsync(onSiteA, AccountLinkRoutes.Off, manager, default)).Should().BeOfType<SubjectChange.Changed>();
 
         (await AccessCountAsync(team)).Should().Be(0);
         (await AuditOfAsync(team)).Where(r => r.EventType == AuthAuditEventType.TeamAccessStopped).Select(r => r.TenantId)
@@ -868,7 +862,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var end = Now.AddDays(5);
         var (token, _) = await LinkAsync(team, manager);
         (await ApproveAsync(
-            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker]], true, end, true))).Refusal.Should().BeNull();
+            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker]], true, end, TeamStaffRule.TeamDecides))).Refusal.Should().BeNull();
         (await TeamWrites.StopAccessAsync(Contexts(owner), site.Id, team)).Should().BeTrue();
         await Teams(manager).RenameAsync(team, manager, "New name", default);
         var reader = new MemberHistoryReader(Contexts());
@@ -921,7 +915,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var roleDeletion = new TenantMembershipRepository(once, AccountLinkRoutes.Off)
             .DeleteRoleAsync(site.Id, site.Roles[RoleSeeds.Caretaker], Now, default);
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, roleDeletion);
-        var accountDeletion = new SubjectRepository(once, AccountLinkRoutes.Off).DeleteAsync(manager, default);
+        var accountDeletion = SubjectDeletions.DeleteAsync(once, AccountLinkRoutes.Off, manager, default);
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, roleDeletion, accountDeletion);
         await held.RollbackAsync();
 

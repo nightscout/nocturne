@@ -11,7 +11,6 @@
         "operator": ">=",
         "value": 20
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
     },
@@ -23,7 +22,6 @@
         "operator": ">",
         "value": 20
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
     },
@@ -35,7 +33,6 @@
         "operator": "<",
         "value": 20
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
     },
@@ -47,7 +44,6 @@
         "operator": "<=",
         "value": 20
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
     },
@@ -59,7 +55,6 @@
         "operator": "==",
         "value": 20
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
     },
@@ -71,7 +66,6 @@
         "operator": ">=",
         "value": 20
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

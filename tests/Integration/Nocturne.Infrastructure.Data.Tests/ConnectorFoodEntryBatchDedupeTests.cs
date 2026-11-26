@@ -42,10 +42,7 @@ public class ConnectorFoodEntryBatchDedupeTests(ConnectorFoodEntryBatchDedupeTes
     };
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString, o => o.EnableRetryOnFailure())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, npgsql: TestContexts.Retrying);
 
     private ConnectorFoodEntryRepository Repository(NocturneDbContext context) =>
         new(context.AsFactory(), NullLogger<ConnectorFoodEntryRepository>.Instance);

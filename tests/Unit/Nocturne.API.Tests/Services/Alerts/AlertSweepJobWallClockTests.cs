@@ -1133,7 +1133,6 @@ public class AlertSweepJobWallClockTests
                 Name = "Wall clock",
                 ConditionType = conditionType,
                 ConditionParams = conditionParams,
-                HysteresisMinutes = 0,
             };
             var snapshot = new AlertRuleSnapshot(
                 RuleId, Tenant, rule.Name, conditionType, rule.ConditionParams,

@@ -37,6 +37,9 @@ public class SubjectOwnerGuardTests : IDisposable
 
     private SubjectRepository Subjects() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off);
 
+    private Task<SubjectChange> DeleteAsync(Guid subjectId) =>
+        SubjectDeletions.DeleteAsync(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off, subjectId, CancellationToken.None);
+
     private Task<Guid> SubjectAsync(string name, bool active = true) =>
         Subjects().CreateAsync(new NewSubject(name, IsActive: active), CancellationToken.None);
 
@@ -71,7 +74,7 @@ public class SubjectOwnerGuardTests : IDisposable
         await JoinAsync(_home, owner, owner: true);
         await JoinAsync(_home, await SubjectAsync("Carer"), owner: false);
 
-        var refused = RefusedTenants(await Subjects().DeleteAsync(owner, CancellationToken.None));
+        var refused = RefusedTenants(await DeleteAsync(owner));
 
         refused.Should().Equal(new LastOwnerTenant(_home, "home"));
         (await ExistsAsync(owner)).Should().BeTrue();
@@ -84,7 +87,7 @@ public class SubjectOwnerGuardTests : IDisposable
         var owner = await SubjectAsync("Alone");
         await JoinAsync(_home, owner, owner: true);
 
-        RefusedTenants(await Subjects().DeleteAsync(owner, CancellationToken.None)).Should().Equal(new LastOwnerTenant(_home, "home"));
+        RefusedTenants(await DeleteAsync(owner)).Should().Equal(new LastOwnerTenant(_home, "home"));
         (await ExistsAsync(owner)).Should().BeTrue();
     }
 
@@ -97,10 +100,10 @@ public class SubjectOwnerGuardTests : IDisposable
         await JoinAsync(_other, subject, owner: true);
         await JoinAsync(_other, spare, owner: true);
 
-        RefusedTenants(await Subjects().DeleteAsync(subject, CancellationToken.None)).Should().Equal(new LastOwnerTenant(_home, "home"));
+        RefusedTenants(await DeleteAsync(subject)).Should().Equal(new LastOwnerTenant(_home, "home"));
 
         await JoinAsync(_home, spare, owner: true);
-        (await Subjects().DeleteAsync(subject, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteAsync(subject)).Should().BeOfType<SubjectChange.Changed>();
         (await Members().ListOwnersAsync(_other, CancellationToken.None)).Select(o => o.SubjectId).Should().Equal(spare);
     }
 
@@ -112,7 +115,7 @@ public class SubjectOwnerGuardTests : IDisposable
         await JoinAsync(_home, leaving, owner: true);
         await JoinAsync(_home, staying, owner: true);
 
-        (await Subjects().DeleteAsync(leaving, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteAsync(leaving)).Should().BeOfType<SubjectChange.Changed>();
 
         (await ExistsAsync(leaving)).Should().BeFalse();
         (await Members().ListOwnersAsync(_home, CancellationToken.None)).Select(o => o.SubjectId).Should().Equal(staying);
@@ -125,7 +128,7 @@ public class SubjectOwnerGuardTests : IDisposable
         await JoinAsync(_home, owner, owner: true);
         await JoinAsync(_home, await SubjectAsync("Deactivated owner", active: false), owner: true);
 
-        RefusedTenants(await Subjects().DeleteAsync(owner, CancellationToken.None)).Should().Equal(new LastOwnerTenant(_home, "home"));
+        RefusedTenants(await DeleteAsync(owner)).Should().Equal(new LastOwnerTenant(_home, "home"));
     }
 
     [Fact]
@@ -134,7 +137,7 @@ public class SubjectOwnerGuardTests : IDisposable
         var pending = await SubjectAsync("Pending", active: false);
         await JoinAsync(_home, pending, owner: true);
 
-        (await Subjects().DeleteAsync(pending, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteAsync(pending)).Should().BeOfType<SubjectChange.Changed>();
         (await ExistsAsync(pending)).Should().BeFalse();
     }
 
@@ -145,7 +148,7 @@ public class SubjectOwnerGuardTests : IDisposable
         var carer = await SubjectAsync("Carer");
         await JoinAsync(_home, carer, owner: false);
 
-        (await Subjects().DeleteAsync(carer, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
+        (await DeleteAsync(carer)).Should().BeOfType<SubjectChange.Changed>();
         (await ExistsAsync(carer)).Should().BeFalse();
     }
 

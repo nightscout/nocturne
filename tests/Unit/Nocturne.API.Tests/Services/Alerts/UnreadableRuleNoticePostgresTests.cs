@@ -1,19 +1,24 @@
 using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -22,10 +27,10 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
-/// An enabled rule whose stored condition type or severity no engine member has cannot be read into
-/// a snapshot, so the sweep reads it as an <see cref="UnreadableAlertRule"/> and tells its recipients
-/// once, as for a body that cannot be evaluated. Run on PostgreSQL under the runtime role, since no
-/// other store holds a value the enum converters refuse.
+/// An enabled rule whose stored condition type, severity or scope class no engine member has is not
+/// evaluated: the sweep reads it as an <see cref="UnreadableAlertRule"/> and tells its recipients
+/// once, as for a body that cannot be evaluated. The rule can still be listed, opened, saved and
+/// deleted. Run on PostgreSQL under the runtime role, since no other store holds such a value.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgresTests.Database database)
@@ -49,15 +54,13 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
     private static readonly DateTime Now = new(2026, 11, 22, 8, 0, 0, DateTimeKind.Utc);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     private sealed class Harness
     {
         public required Guid Tenant { get; init; }
         public required AlertRepository Repository { get; init; }
+        public required AlertRuleRepository Rules { get; init; }
         public required UnevaluableRuleNotice Notice { get; init; }
         public required Mock<IAlertDeliveryService> Delivery { get; init; }
         public required Mock<IExcursionResolutionHandler> Resolution { get; init; }
@@ -82,6 +85,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
 
         var contexts = new SuppliedContextFactory(() => Context(tenant));
         var repository = new AlertRepository(contexts);
+        var rules = new AlertRuleRepository(contexts, TimeProvider.System);
 
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(t => t.TenantId).Returns(tenant);
@@ -129,12 +133,13 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
         {
             Tenant = tenant,
             Repository = repository,
+            Rules = rules,
             Delivery = delivery,
             Resolution = resolution,
             ActiveDnd = dnd,
             Notice = new UnevaluableRuleNotice(
                 repository,
-                new AlertRuleRepository(contexts, TimeProvider.System),
+                rules,
                 accessor.Object,
                 delivery.Object,
                 enricher.Object,
@@ -147,7 +152,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
     }
 
     private async Task<Guid> SeedRuleAsync(Guid tenant, string name, string conditionType, string severity,
-        string scopeClass = "undirected")
+        string scopeClass = "undirected", string conditionParams = """{"direction":"below","value":70}""")
     {
         var id = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
@@ -158,13 +163,14 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, auto_resolve_enabled,
                                      severity, client_configuration, is_enabled, allow_through_dnd, scope_class,
                                      sort_order, created_at, updated_at)
-            VALUES ('{{id}}', '{{tenant}}', @name, @type, '{"direction":"below","value":70}', false,
+            VALUES ('{{id}}', '{{tenant}}', @name, @type, @params::jsonb, false,
                     @severity, '{}', true, false, @scope, 1, now(), now());
             """;
         cmd.Parameters.Add(new NpgsqlParameter("@name", name));
         cmd.Parameters.Add(new NpgsqlParameter("@type", conditionType));
         cmd.Parameters.Add(new NpgsqlParameter("@severity", severity));
         cmd.Parameters.Add(new NpgsqlParameter("@scope", scopeClass));
+        cmd.Parameters.Add(new NpgsqlParameter("@params", conditionParams));
         await cmd.ExecuteNonQueryAsync();
         return id;
     }
@@ -342,5 +348,130 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             await harness.Repository.ReadEnabledRulesAsync(CancellationToken.None), CancellationToken.None);
 
         harness.Delivery.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData("condition_type", "threshold_low", AlertRuleUnreadableValues.ConditionType, AlertRuleReviewReasons.ConditionTypeUnrecognized)]
+    [InlineData("severity", "normal", AlertRuleUnreadableValues.Severity, AlertRuleReviewReasons.SeverityUnrecognized)]
+    [InlineData("scope_class", "sideways", AlertRuleUnreadableValues.ScopeClass, null)]
+    public async Task A_rule_holding_a_value_no_member_has_is_listed_and_opened_with_readable_values(
+        string column, string unreadable, AlertRuleUnreadableValues unreadableValues, string? shownReason)
+    {
+        var harness = await CreateAsync();
+        var readable = await SeedRuleAsync(harness.Tenant, "Readable", "threshold", "warning");
+        var rule = await SeedRuleAsync(harness.Tenant, "Legacy", "threshold", "warning");
+        await UpdateRuleAsync(harness.Tenant, rule, $"{column} = @value", unreadable);
+
+        var listed = await harness.Repository.GetRulesAsync(CancellationToken.None);
+        var opened = await harness.Repository.GetRuleAsync(rule, CancellationToken.None);
+
+        listed.Select(r => r.Rule.Id).Should().BeEquivalentTo([readable, rule]);
+        foreach (var record in new[] { listed.Single(r => r.Rule.Id == rule), opened! })
+        {
+            Enum.IsDefined(record.Rule.ConditionType).Should().BeTrue();
+            Enum.IsDefined(record.Rule.Severity).Should().BeTrue();
+            Enum.IsDefined(record.Rule.ScopeClass).Should().BeTrue();
+            record.Unreadable.Should().Be(unreadableValues);
+            record.ReviewReason.Should().BeNull("nothing stored one");
+            AlertRuleMapper.ShownReviewReason(record).Should().Be(shownReason);
+        }
+    }
+
+    [Theory]
+    [InlineData("condition_type", "threshold_low")]
+    [InlineData("severity", "normal")]
+    public async Task A_writer_that_rewrites_a_rule_from_its_record_stores_no_review_reason_it_did_not_read(
+        string column, string unreadable)
+    {
+        var harness = await CreateAsync();
+        var rule = await SeedRuleAsync(harness.Tenant, "Tracker", "threshold", "warning");
+        await UpdateRuleAsync(harness.Tenant, rule, $"{column} = @value", unreadable);
+        var opened = (await harness.Repository.GetRuleAsync(rule, CancellationToken.None))!;
+
+        await harness.Rules.UpdateAsync(
+            rule,
+            AlertRuleWrite.Of(opened) with { ConditionType = AlertConditionType.Threshold, Severity = AlertRuleSeverity.Warning },
+            CancellationToken.None);
+
+        (await StoredValuesAsync(harness.Tenant, rule)).Should().Be(("threshold", "warning", "undirected", (string?)null));
+        AlertRuleMapper.ShownReviewReason((await harness.Repository.GetRuleAsync(rule, CancellationToken.None))!)
+            .Should().BeNull("the rule now holds members, so nothing is left to review");
+    }
+
+    [NativeTheory]
+    [InlineData("severity", "normal")]
+    [InlineData("scope_class", "sideways")]
+    public async Task A_rule_holding_a_value_no_member_has_still_counts_as_referencing_the_rule_its_body_names(
+        string column, string unreadable)
+    {
+        var harness = await CreateAsync();
+        var target = await SeedRuleAsync(harness.Tenant, "Low", "threshold", "warning");
+        var referencing = await SeedRuleAsync(harness.Tenant, "After low", "alert_state", "warning",
+            conditionParams: $$"""{"alert_id":"{{target}}","state":"firing"}""");
+        await UpdateRuleAsync(harness.Tenant, referencing, $"{column} = @value", unreadable);
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.SetupGet(t => t.IsResolved).Returns(true);
+        accessor.SetupGet(t => t.TenantId).Returns(harness.Tenant);
+        var references = new AlertReferenceService(
+            harness.Repository, accessor.Object, NullLogger<AlertReferenceService>.Instance);
+
+        (await references.FindReferencingRulesAsync(target, CancellationToken.None))
+            .Should().Equal([referencing], "deleting the target would leave the reference dangling");
+        (await references.DetectCycleAsync(target, [referencing], CancellationToken.None))
+            .Should().BeTrue("a reference back through the rule closes a cycle");
+    }
+
+    [Fact]
+    public async Task The_scope_class_backfill_classifies_a_rule_holding_a_scope_class_no_member_has()
+    {
+        var harness = await CreateAsync();
+        var rule = await SeedRuleAsync(harness.Tenant, "Legacy scope", "threshold", "warning", scopeClass: "sideways");
+        var classifier = new Mock<IRuleScopeClassifier>();
+        classifier.Setup(c => c.Classify(It.IsAny<AlertConditionType>(), It.IsAny<string>())).Returns(RuleScopeClass.Low);
+        await using var services = new ServiceCollection()
+            .AddSingleton(classifier.Object)
+            .AddSingleton<IAlertRepository>(harness.Repository)
+            .AddSingleton<IAlertRuleRepository>(harness.Rules)
+            .BuildServiceProvider();
+
+        await new RuleScopeClassBackfillJob(NullLogger<RuleScopeClassBackfillJob>.Instance).RunAsync(
+            new JobRun(new TenantContext(harness.Tenant, "t", "T", true, IsDemo: false), null, 0, services, DateTimeOffset.UnixEpoch),
+            CancellationToken.None);
+
+        (await StoredValuesAsync(harness.Tenant, rule)).ScopeClass.Should().Be("low");
+        (await harness.Repository.ReadEnabledRulesAsync(CancellationToken.None)).Rules.Select(r => r.Id).Should().Equal(rule);
+    }
+
+    [Theory]
+    [InlineData("condition_type", "threshold_low")]
+    [InlineData("severity", "normal")]
+    [InlineData("scope_class", "sideways")]
+    public async Task A_rule_holding_a_value_no_member_has_can_be_deleted(string column, string unreadable)
+    {
+        var harness = await CreateAsync();
+        var rule = await SeedRuleAsync(harness.Tenant, "Legacy", "threshold", "warning");
+        await UpdateRuleAsync(harness.Tenant, rule, $"{column} = @value", unreadable);
+
+        var deleted = await harness.Rules.DeleteAsync(rule, CancellationToken.None);
+
+        deleted.Should().BeTrue();
+        (await harness.Repository.GetRulesAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
+    private async Task<(string ConditionType, string Severity, string ScopeClass, string? ReviewReason)> StoredValuesAsync(
+        Guid tenant, Guid ruleId)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT set_config('app.current_tenant_id', '{tenant}', false);
+            SELECT condition_type, severity, scope_class, review_reason FROM alert_rules WHERE id = '{ruleId}';
+            """;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.NextResultAsync();
+        await reader.ReadAsync();
+        return (reader.GetString(0), reader.GetString(1), reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3));
     }
 }

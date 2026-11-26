@@ -10,7 +10,6 @@
       "condition_params": {
         "operator": "and"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -28,7 +27,6 @@
           }
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -39,7 +37,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

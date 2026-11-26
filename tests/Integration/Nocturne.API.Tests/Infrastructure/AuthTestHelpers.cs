@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
@@ -50,71 +51,52 @@ public static class AuthTestHelpers
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
-                VALUES (@id, @name, true, false, now(), now(), 'Approved');
-                """;
-            cmd.Parameters.AddWithValue("id", subjectId);
-            cmd.Parameters.AddWithValue("name", name);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+            VALUES (@id, @name, true, false, now(), now(), 'Approved');
+            """,
+            ("id", subjectId), ("name", name));
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
-                VALUES (@id, @subjectId, @credentialId, @publicKey, 0, '{}', now());
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            cmd.Parameters.AddWithValue("credentialId", Encoding.UTF8.GetBytes($"cred-{subjectId:N}"));
-            cmd.Parameters.AddWithValue("publicKey", Encoding.UTF8.GetBytes($"pk-{subjectId:N}"));
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
+            VALUES (@id, @subjectId, @credentialId, @publicKey, 0, '{}', now());
+            """,
+            ("id", Guid.CreateVersion7()), ("subjectId", subjectId),
+            ("credentialId", Encoding.UTF8.GetBytes($"cred-{subjectId:N}")),
+            ("publicKey", Encoding.UTF8.GetBytes($"pk-{subjectId:N}")));
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess]));
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
+            VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
+            """,
+            ("id", Guid.CreateVersion7()), ("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess])),
+            ("tenantId", tenantId), ("subjectId", subjectId));
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO subject_roles (subject_id, role_id)
-                SELECT @subjectId, r.id
-                FROM roles r WHERE r.name = 'admin'
-                LIMIT 1;
-                """;
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO subject_roles (subject_id, role_id)
+            SELECT @subjectId, r.id
+            FROM roles r WHERE r.name = 'admin'
+            LIMIT 1;
+            """,
+            ("subjectId", subjectId));
 
         // Without the grant the returned token matches nothing, and a caller sending it alongside an
         // api-secret would silently authenticate as the api-secret's principal instead.
-        await using (var cmd = conn.CreateCommand())
+        await using (var transaction = await conn.BeginTransactionAsync())
         {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenantText, true);
+            await conn.PinTenantAsync(tenantId, local: true);
+            await conn.ExecuteAsync(
+                """
                 INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, label, token_hash, created_at)
                 VALUES (@id, @tenantId, @subjectId, 'direct', ARRAY['*'], @label, @hash, now());
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("tenantText", tenantId.ToString());
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            cmd.Parameters.AddWithValue("label", name);
-            cmd.Parameters.AddWithValue("hash", HashUtils.Sha256Hex(accessToken));
-            await cmd.ExecuteNonQueryAsync();
+                """,
+                ("id", Guid.CreateVersion7()), ("tenantId", tenantId), ("subjectId", subjectId),
+                ("label", name), ("hash", HashUtils.Sha256Hex(accessToken)));
+            await transaction.CommitAsync();
         }
 
         return (subjectId, accessToken);
@@ -131,14 +113,12 @@ public static class AuthTestHelpers
     {
         var seeded = await SeedAuthenticatedSubjectAsync(conn, tenantId, name);
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, true);
-            UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
-            """;
-        cmd.Parameters.AddWithValue("tenant", tenantId.ToString());
-        cmd.Parameters.AddWithValue("subject", seeded.SubjectId);
-        var clamped = await cmd.ExecuteNonQueryAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+        await conn.PinTenantAsync(tenantId, local: true);
+        var clamped = await conn.ExecuteAsync(
+            "UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;",
+            ("subject", seeded.SubjectId));
+        await transaction.CommitAsync();
         if (clamped != 1)
             throw new InvalidOperationException($"Clamping subject {seeded.SubjectId} updated {clamped} grants, expected 1.");
 
@@ -168,27 +148,15 @@ public static class AuthTestHelpers
     {
         var grantId = Guid.CreateVersion7();
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenantId);
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, legacy_secret_hash, created_at)
-                VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, @legacySecretHash, now());
-                """;
-            cmd.Parameters.AddWithValue("id", grantId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            cmd.Parameters.AddWithValue("grantType", OAuthGrantTypes.Direct);
-            cmd.Parameters.AddWithValue("scopes", new[] { Scope.FullAccess });
-            cmd.Parameters.AddWithValue("legacySecretHash", apiSecret.ToLowerInvariant());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, legacy_secret_hash, created_at)
+            VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, @legacySecretHash, now());
+            """,
+            ("id", grantId), ("tenantId", tenantId), ("subjectId", subjectId), ("grantType", OAuthGrantTypes.Direct),
+            ("scopes", new[] { Scope.FullAccess }), ("legacySecretHash", apiSecret.ToLowerInvariant()));
 
         return grantId;
     }
@@ -207,41 +175,29 @@ public static class AuthTestHelpers
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
-                VALUES (@id, @name, true, false, now(), now(), 'Approved');
-                """;
-            cmd.Parameters.AddWithValue("id", subjectId);
-            cmd.Parameters.AddWithValue("name", name);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+            VALUES (@id, @name, true, false, now(), now(), 'Approved');
+            """,
+            ("id", subjectId), ("name", name));
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess]));
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
+            VALUES (@id, @tenantId, @subjectId, @permissions::jsonb, now(), now(), false);
+            """,
+            ("id", Guid.CreateVersion7()), ("permissions", JsonSerializer.Serialize(permissions ?? [Scope.FullAccess])),
+            ("tenantId", tenantId), ("subjectId", subjectId));
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO subject_roles (subject_id, role_id)
-                SELECT @subjectId, r.id
-                FROM roles r WHERE r.name = 'admin'
-                LIMIT 1;
-                """;
-            cmd.Parameters.AddWithValue("subjectId", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO subject_roles (subject_id, role_id)
+            SELECT @subjectId, r.id
+            FROM roles r WHERE r.name = 'admin'
+            LIMIT 1;
+            """,
+            ("subjectId", subjectId));
 
         return (subjectId, accessToken);
     }
@@ -394,28 +350,16 @@ public static class AuthTestHelpers
             tenantId = (Guid)result;
         }
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.PinTenantAsync(tenantId);
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, token_hash, created_at, expires_at, revoked_at, activated_at)
-                VALUES (@id, @tenantId, @subjectId, 'guest', ARRAY['glucose.read','treatments.read'], @tokenHash, now(), @expiresAt, @revokedAt, @activatedAt);
-                """;
-            cmd.Parameters.AddWithValue("id", grantId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", dataOwnerSubjectId);
-            cmd.Parameters.AddWithValue("tokenHash", codeHash);
-            cmd.Parameters.AddWithValue("expiresAt", (object?)(expiresAt ?? DateTime.UtcNow.AddHours(48)) ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("revokedAt", (object?)revokedAt ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("activatedAt", (object?)activatedAt ?? DBNull.Value);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, token_hash, created_at, expires_at, revoked_at, activated_at)
+            VALUES (@id, @tenantId, @subjectId, 'guest', ARRAY['glucose.read','treatments.read'], @tokenHash, now(), @expiresAt, @revokedAt, @activatedAt);
+            """,
+            ("id", grantId), ("tenantId", tenantId), ("subjectId", dataOwnerSubjectId), ("tokenHash", codeHash),
+            ("expiresAt", (object?)(expiresAt ?? DateTime.UtcNow.AddHours(48)) ?? DBNull.Value),
+            ("revokedAt", (object?)revokedAt ?? DBNull.Value), ("activatedAt", (object?)activatedAt ?? DBNull.Value));
 
         return (grantId, code);
     }
@@ -452,6 +396,29 @@ public static class AuthTestHelpers
                          $"Public system subject not found in tenant {tenantId}.");
         return (Guid)result;
     }
+
+    /// <summary>
+    /// <see cref="NpgsqlTestCommands.ScalarAsync{T}(NpgsqlConnection, string, (string Name, object Value)[])"/>
+    /// under the seeded tenant, with the one parameter <c>@key</c>. The tenant is pinned for the rest of the
+    /// connection's life, not only for this call.
+    /// </summary>
+    public static async Task<T> ScalarInTenantAsync<T>(this NpgsqlConnection conn, string sql, object key)
+    {
+        await conn.PinTenantAsync(await GetTenantIdAsync(conn));
+        return await conn.ScalarAsync<T>(sql, ("key", key));
+    }
+
+    /// <summary>
+    /// Gets the id of the one instance-wide role named <paramref name="name"/>.
+    /// </summary>
+    public static Task<Guid> RoleIdAsync(NpgsqlConnection conn, string name) =>
+        conn.ScalarAsync<Guid>("SELECT id FROM roles WHERE name = @name;", ("name", name));
+
+    /// <summary>
+    /// Counts the instance-wide roles named <paramref name="name"/>.
+    /// </summary>
+    public static Task<long> RoleCountAsync(NpgsqlConnection conn, string name) =>
+        conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE name = @name;", ("name", name));
 
     /// <summary>
     /// Gets the id of one of a tenant's seeded roles (<see cref="RoleSeeds"/>) by its slug.

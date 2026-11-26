@@ -47,10 +47,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
     }
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant);
 
     /// <summary>A repository on connections of its own, as one instance of the API has.</summary>
     private AlertRepository Instance(Guid tenant) => new(new SuppliedContextFactory(() => Context(tenant)));

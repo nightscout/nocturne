@@ -84,7 +84,7 @@ describe("AlertCard for a rule that cannot run", () => {
 
     expect(cardTitle(card)).toBe("CRITICAL: Urgent low");
     expect(cardTexts(card)).toEqual([
-      "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+      "This rule cannot run as set, so it sends no alerts. Open the rule, check its settings, and save it.",
     ]);
     expect(cardFields(card)).toHaveLength(0);
     expect(cardButtons(card)).toHaveLength(0);

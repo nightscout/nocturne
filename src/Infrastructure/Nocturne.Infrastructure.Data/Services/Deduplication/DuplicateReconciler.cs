@@ -245,14 +245,14 @@ public sealed class DuplicateReconciler(
     /// </summary>
     /// <param name="recordType">The record type whose canonical groups are reconciled.</param>
     /// <param name="candidateCanonicalIds">
-    /// When non-null, only canonical groups in this set plus their event-window neighbours are
-    /// considered; when null, all primaries of the type are considered.
+    /// Only canonical groups in this set plus their event-window neighbours are considered.
+    /// <see cref="MergeAllAsync"/> considers every primary of the type.
     /// </param>
     /// <param name="ct">A token to cancel the operation.</param>
     /// <returns>The number of duplicate groups collapsed (merges that reduced group count).</returns>
     internal async Task<int> MergeDuplicateGroupsAsync(
         RecordType recordType,
-        IReadOnlySet<Guid>? candidateCanonicalIds,
+        IReadOnlySet<Guid> candidateCanonicalIds,
         CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
@@ -264,6 +264,15 @@ public sealed class DuplicateReconciler(
     /// reconcile batch it waits for the tenant's merge lock: a skipped pass would leave the splits
     /// unhealed until the run is made again.
     /// </summary>
+    /// <remarks>
+    /// Its lists are as long as the type's data, so its transaction is planned for their values
+    /// (<see cref="ArrayFilterPlans"/>). The call is sized by the primaries before the group members
+    /// are read, since the canonical ids passed there are no more than that, and again by the record
+    /// ids <see cref="MergePrimariesAsync"/> reads info for, which with members are more than the
+    /// primaries. The setting lasts the transaction, so whichever call is first to reach
+    /// <see cref="ArrayFilterPlans.HashedArrayLength"/> covers the rest. A reconcile batch and the state
+    /// span repair pass lists bounded by a run of candidates or by a day of spans, and are not planned.
+    /// </remarks>
     internal async Task<int> MergeAllAsync(RecordType recordType, CancellationToken ct)
     {
         await using var db = await contexts.CreateAsync(ct);
@@ -274,7 +283,7 @@ public sealed class DuplicateReconciler(
         }, ct: ct);
     }
 
-    /// <inheritdoc cref="MergeDuplicateGroupsAsync(RecordType, IReadOnlySet{Guid}?, CancellationToken)"/>
+    /// <inheritdoc cref="MergeDuplicateGroupsAsync(RecordType, IReadOnlySet{Guid}, CancellationToken)"/>
     private async Task<int> MergeDuplicateGroupsAsync(
         NocturneDbContext db,
         RecordType recordType,
@@ -295,6 +304,7 @@ public sealed class DuplicateReconciler(
                 .ToListAsync(ct);
 
             var all = WithUnlinked(allPrimaries, await UnlinkedAsync(db, recordType, null, null, ct));
+            await db.PlanForEachArrayAsync(all.Primaries.Count, ct);
             return await MergePrimariesAsync(db, recordType, all.Primaries, all.Unlinked, null, null, null, ct);
         }
 
@@ -478,6 +488,8 @@ public sealed class DuplicateReconciler(
         var infoIds = primaries.Select(p => p.RecordId).ToHashSet();
         if (rootMembers is not null)
             infoIds.UnionWith(rootMembers.Values.SelectMany(members => members).Select(m => m.RecordId));
+        if (candidateCanonicalIds is null)
+            await db.PlanForEachArrayAsync(infoIds.Count, ct);
         var info = await LoadRecordInfoAsync(db, recordType, infoIds, ct);
 
         // 3. Sorted sliding-window union-find over primaries by canonical id.

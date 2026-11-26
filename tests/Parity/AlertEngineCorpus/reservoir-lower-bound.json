@@ -11,7 +11,6 @@
         "operator": "\u003C",
         "value": 60
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -22,7 +21,6 @@
         "operator": "\u003C=",
         "value": 60
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -33,7 +31,6 @@
         "operator": "==",
         "value": 50
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -44,7 +41,6 @@
         "operator": "\u003E",
         "value": 40
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -55,7 +51,6 @@
         "operator": "\u003E=",
         "value": 50
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -66,7 +61,6 @@
         "operator": "\u003E",
         "value": 50
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

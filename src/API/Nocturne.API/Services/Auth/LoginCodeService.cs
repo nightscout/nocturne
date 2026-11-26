@@ -119,6 +119,14 @@ public interface ILoginCodeService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Spends every outstanding code of <see cref="LoginCodeService.SessionStartingPurposes"/> for
+    /// <paramref name="subjectId"/> on the context's tenant. Such a code is a bearer link that
+    /// outlives the situation it was issued for, so it stops working once the member enrols a way
+    /// to sign in.
+    /// </summary>
+    Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default);
 }
 
 /// <summary>A minted login code and the moment it stops being redeemable.</summary>
@@ -197,10 +205,10 @@ public class LoginCodeService : ILoginCodeService
     /// The throttle of <see cref="IssueEmailedAsync"/>, counted from the stored codes, spent or not,
     /// which <see cref="PruneAsync"/> keeps for the window.
     /// </summary>
-    private static async Task<bool> MayEmailAsync(
+    private async Task<bool> MayEmailAsync(
         NocturneDbContext dbContext, Guid subjectId, LoginCodePurpose purpose, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = Now;
         var since = now - EmailWindow;
         var issued = await dbContext.LoginCodes.AsNoTracking()
             .Where(c => c.SubjectId == subjectId && c.Purpose == purpose && c.CreatedAt > since)
@@ -209,19 +217,14 @@ public class LoginCodeService : ILoginCodeService
         return issued.Count < EmailsPerWindow && !issued.Any(at => at > now - EmailInterval);
     }
 
-    /// <summary>
-    /// Spends every outstanding code of <see cref="SessionStartingPurposes"/> for
-    /// <paramref name="subjectId"/> on the context's tenant. Such a code is a bearer link that
-    /// outlives the situation it was issued for, so it stops working once the member enrols a way
-    /// to sign in.
-    /// </summary>
-    public static Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default) =>
+    /// <inheritdoc />
+    public Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default) =>
         VoidAsync(dbContext, subjectId, SessionStartingPurposes, ct);
 
-    private static Task VoidAsync(
+    private Task VoidAsync(
         NocturneDbContext dbContext, Guid subjectId, IReadOnlyList<LoginCodePurpose> purposes, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = Now;
         return dbContext.LoginCodes
             .Where(c => c.SubjectId == subjectId && c.ConsumedAt == null && purposes.Contains(c.Purpose))
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), ct);
@@ -229,12 +232,16 @@ public class LoginCodeService : ILoginCodeService
 
     private readonly IJwtService _jwtService;
     private readonly IAuthAuditService _auditService;
+    private readonly TimeProvider _time;
 
-    public LoginCodeService(IJwtService jwtService, IAuthAuditService auditService)
+    public LoginCodeService(IJwtService jwtService, IAuthAuditService auditService, TimeProvider time)
     {
         _jwtService = jwtService;
         _auditService = auditService;
+        _time = time;
     }
+
+    private DateTime Now => _time.GetUtcNow().UtcDateTime;
 
     /// <inheritdoc />
     public async Task<LoginCode> IssueAsync(
@@ -299,9 +306,9 @@ public class LoginCodeService : ILoginCodeService
     /// on them. The count cannot miss a code the prune drops, because it reads later than the prune and
     /// the prune keeps every emailed code inside the window.
     /// </summary>
-    private static Task PruneAsync(NocturneDbContext dbContext, CancellationToken ct)
+    private Task PruneAsync(NocturneDbContext dbContext, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = Now;
         var counted = now - EmailWindow;
         return dbContext.LoginCodes
             .Where(c => (c.ConsumedAt != null || c.ExpiresAt <= now)
@@ -312,7 +319,7 @@ public class LoginCodeService : ILoginCodeService
     private async Task<MintedCode> MintAsync(
         NocturneDbContext dbContext, Guid subjectId, LoginCodePurpose purpose, string? email, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = Now;
 
         var superseded = SupersededBy(purpose);
         if (superseded.Count > 0)
@@ -354,7 +361,7 @@ public class LoginCodeService : ILoginCodeService
         Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits = null,
         CancellationToken ct = default)
     {
-        var found = await LiveCodes(dbContext, code, purposes, DateTime.UtcNow)
+        var found = await LiveCodes(dbContext, code, purposes, Now)
             .Select(c => new RedeemedLoginCode(c.SubjectId, c.Purpose, c.Email) { CodeId = c.Id })
             .FirstOrDefaultAsync(ct);
         return found is not null && admits is not null && !await admits(found, ct) ? null : found;
@@ -390,7 +397,7 @@ public class LoginCodeService : ILoginCodeService
         string? userAgent,
         CancellationToken ct = default)
     {
-        var now = NocturneDbContext.AtStoredPrecision(DateTime.UtcNow);
+        var now = NocturneDbContext.AtStoredPrecision(Now);
         Guid? claimedId = null;
 
         var redeemed = await dbContext.ExecuteInTransactionAsync<RedeemedLoginCode?>(async token =>

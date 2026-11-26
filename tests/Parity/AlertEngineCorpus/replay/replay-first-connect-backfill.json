@@ -10,7 +10,6 @@
       "condition_params": {
         "timeout_minutes": 30
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

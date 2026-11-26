@@ -61,7 +61,7 @@ public sealed class StoreSizeReaderPostgresTests(StoreSizePostgresFixture fixtur
         var stepCounts = await fixture.RelationBytesAsync("step_counts");
         var before = await reader.EstimateAsync(_small);
 
-        await fixture.ExecuteAsync("UPDATE pg_class SET reltuples = -1 WHERE relname = 'step_counts'");
+        await NpgsqlTestCommands.ExecuteAsync(fixture.SuperuserConnectionString, "UPDATE pg_class SET reltuples = -1 WHERE relname = 'step_counts'");
         DbStats after;
         try
         {
@@ -69,7 +69,7 @@ public sealed class StoreSizeReaderPostgresTests(StoreSizePostgresFixture fixtur
         }
         finally
         {
-            await fixture.ExecuteAsync("ANALYZE step_counts");
+            await NpgsqlTestCommands.ExecuteAsync(fixture.SuperuserConnectionString, "ANALYZE step_counts");
         }
 
         var proportional = (long)(stepCounts * ((double)SmallRows / (LargeRows + SmallRows)));
@@ -163,6 +163,8 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
 
     private TestDatabase _database = null!;
 
+    public string SuperuserConnectionString => _database.SuperuserConnectionString;
+
     public ServiceProvider Provider { get; private set; } = null!;
     public Guid Large { get; private set; }
     public Guid Small { get; private set; }
@@ -171,16 +173,13 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
     {
         _database = await SharedPostgres.CreateMigratedDatabaseAsync("store_size");
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(_database.AppConnectionString, configuration: null);
-        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
-        Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        Provider = TestContexts.BuildProvider(
+            _database.AppConnectionString, configure: services => services.AddScoped<ITenantAccessor, SettableTenantAccessor>());
 
         Large = await SeedTenantAsync("large", LargeRows);
         Small = await SeedTenantAsync("small", SmallRows);
         // Autovacuum's first pass would otherwise add a visibility map page between a test's reads.
-        await ExecuteAsync("VACUUM ANALYZE");
+        await NpgsqlTestCommands.ExecuteAsync(_database.SuperuserConnectionString, "VACUUM ANALYZE");
     }
 
     public async Task DisposeAsync() => await Provider.DisposeAsync();
@@ -188,7 +187,7 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
     private async Task<Guid> SeedTenantAsync(string name, int rows)
     {
         var tenant = Guid.NewGuid();
-        await ExecuteAsync(
+        await NpgsqlTestCommands.ExecuteAsync(_database.SuperuserConnectionString,
             $"INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES ('{tenant}', 'size-{name}-{tenant:N}', '{name}', true, now(), now())");
 
         var now = DateTime.UtcNow;
@@ -197,13 +196,6 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
             new StepCountEntity { Id = Guid.NewGuid(), Timestamp = now.AddMinutes(-i) }));
         await db.SaveChangesAsync();
         return tenant;
-    }
-
-    public async Task ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
-        await conn.OpenAsync();
-        await conn.ExecuteAsync(sql);
     }
 
     public async Task<long> RelationBytesAsync(string table)

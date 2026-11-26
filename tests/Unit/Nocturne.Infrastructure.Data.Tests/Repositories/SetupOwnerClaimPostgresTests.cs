@@ -40,14 +40,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     }
 
     private static NocturneDbContext Context(string connectionString, Guid tenant, bool retrying = false) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, o =>
-            {
-                if (retrying)
-                    o.EnableRetryOnFailure();
-            })
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options) { TenantId = tenant };
+        TestContexts.Context(connectionString, tenant, npgsql: retrying ? TestContexts.Retrying : null);
 
     /// <summary>Contexts as the setup request's scope opens them: no tenant, with the runtime retry strategy.</summary>
     private SuppliedContextFactory Contexts(bool retrying) =>
@@ -61,7 +54,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     {
         var tenant = Guid.NewGuid();
         var slug = $"{name}-{tenant:N}";
-        await ExecuteAsync(database.MigratorConnectionString, $"""
+        await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}', 'setup-claim', true, now(), now());
             """);
@@ -197,12 +190,12 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
             await holding.LockMembershipAsync(site.Tenant, holder, Ct);
             adoption = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).AdoptForSetupAsync(site.Owner, holder, identity, site.Slug, Ct);
             await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, adoption);
-            deletion = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).DeleteAsync(holder, Ct);
+            deletion = SubjectDeletions.DeleteAsync(site.Runtime, AccountLinkRoutes.Off, holder, Ct);
         }
         else
         {
             await holding.LockTeamManagersAsync(team, Ct);
-            deletion = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).DeleteAsync(holder, Ct);
+            deletion = SubjectDeletions.DeleteAsync(site.Runtime, AccountLinkRoutes.Off, holder, Ct);
             await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, deletion);
             adoption = new SubjectRepository(site.Runtime, AccountLinkRoutes.Off).AdoptForSetupAsync(site.Owner, holder, identity, site.Slug, Ct);
         }
@@ -256,13 +249,5 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
     {
         await using var db = Context(database.AppConnectionString, Guid.Empty);
         return await db.Tenants.AsNoTracking().Where(t => t.Id == tenant).Select(t => t.SetupOwnerSubjectId).SingleAsync();
-    }
-
-    private static async Task ExecuteAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 }

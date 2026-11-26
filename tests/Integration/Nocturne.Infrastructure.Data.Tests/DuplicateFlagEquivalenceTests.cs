@@ -290,7 +290,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         deleted.Promoted.Should().Equal(later.Copy);
 
         await using var scope = Scope(tenant);
-        var merge = Task.Run(() => Dedup(scope).MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, default));
+        var merge = Task.Run(() => Dedup(scope).MergeAllAsync(RecordType.CarbIntake, default));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, merge);
 
         await transaction.CommitAsync();
@@ -503,10 +503,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] interceptors) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. interceptors])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, interceptors);
 
     /// <summary>Holds the first flag statement until <see cref="Release"/>, its links written.</summary>
     private sealed class PauseBeforeFlagWrite : DbCommandInterceptor
@@ -675,7 +672,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
             await test.ExecuteAsync(tenant, correct(second.Id));
 
             await using var scope = test.Scope(tenant);
-            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            var merged = await Dedup(scope).MergeAllAsync(type, default);
             merged.Should().BePositive($"the corrected copy of {type} matches the first");
             Exercised.Add("merged");
             return $"split then merge {type}: {merged}";
@@ -701,7 +698,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         private async Task<string> MergeAsync(RecordType type)
         {
             await using var scope = test.Scope(tenant);
-            var merged = await Dedup(scope).MergeDuplicateGroupsAsync(type, null, default);
+            var merged = await Dedup(scope).MergeAllAsync(type, default);
             if (merged > 0)
                 Exercised.Add("merged");
             return $"merge {type}: {merged}";
@@ -954,8 +951,7 @@ public class DuplicateFlagEquivalenceTests(DuplicateFlagEquivalenceTests.Databas
         await conn.OpenAsync();
         await using var transaction = await conn.BeginTransactionAsync();
         await SetTenantAsync(conn, tenant);
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-            await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
         await transaction.CommitAsync();
     }
 

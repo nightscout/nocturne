@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -26,8 +27,7 @@ public class RecoveryCodeSignInIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_deactivated_member_is_refused_as_an_unknown_username_and_keeps_the_code()
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
 
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Deactivated Member");

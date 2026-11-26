@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -25,10 +26,7 @@ public class ProviderOwnedPoolsTests(RlsCompletenessFixture fx)
             ConnectionIdleLifetime = 3600,
         }.ConnectionString;
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddPostgreSqlInfrastructure(connectionString, configuration: null);
-        await using var provider = services.BuildServiceProvider();
+        await using var provider = TestContexts.BuildProvider(connectionString);
 
         await using (var context = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync())
         {

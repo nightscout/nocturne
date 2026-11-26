@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.ClientDevices;
 
@@ -281,7 +282,7 @@ public class ClientDeviceService : IClientDeviceService
                 Intent = acknowledged ? "acknowledged" : snoozed ? "snoozed" : "opened",
                 ExcursionId = e.Id,
                 RuleName = e.AlertRule.Name,
-                Severity = e.AlertRule.Severity,
+                Severity = AlertRuleMapper.Readable(e.AlertRule.Severity),
                 TargetKind = device.Kind,
                 Capabilities = effective,
                 Acknowledged = acknowledged,

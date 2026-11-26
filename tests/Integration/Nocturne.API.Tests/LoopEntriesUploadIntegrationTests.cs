@@ -29,9 +29,8 @@ public class LoopEntriesUploadIntegrationTests : ApiIntegrationTestBase
     {
         const string secret = "loop-uploader-secret";
         var hashed = Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(secret)));
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        await using (var conn = await OpenPostgresAsync())
         {
-            await conn.OpenAsync();
             await AuthTestHelpers.SeedApiSecretGrantAsync(conn, Fixture.TenantId, Fixture.OwnerSubjectId, hashed);
         }
 

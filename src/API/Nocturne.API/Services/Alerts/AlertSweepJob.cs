@@ -128,7 +128,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             {
                 await pass(sweep, ct);
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogError(ex, "Error {Pass} for tenant {TenantId}", what, tenantId);
                 failed ??= ex;
@@ -273,6 +273,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 logger.LogWarning(
                     "Excursion {ExcursionId} opened without being dispatched and has since closed or lost its rule; it is not sent",
                     transition.ExcursionId);
+                if (transition.EndedAt is not null)
+                    await resolutionHandler.CloseAgainIfEndedAsync(transition.ExcursionId, sweep.TenantId, ct);
                 await sweep.Repository.SettleTransitionAsync(transition.ExcursionId, transition.Kind, ct);
                 continue;
             }
@@ -282,7 +284,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 transition.ExcursionId, rule.Id);
             context ??= await OwedDispatchContextAsync(sweep, owed, rules, ct);
             await openedHandler.HandleOpenedAsync(
-                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], ct);
+                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], callerCloses: false, ct);
         }
     }
 

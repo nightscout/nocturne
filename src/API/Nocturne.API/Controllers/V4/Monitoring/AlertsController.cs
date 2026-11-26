@@ -15,6 +15,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -126,8 +127,8 @@ public class AlertsController : ControllerBase
             Id = e.Id,
             AlertRuleId = e.AlertRuleId,
             RuleName = e.AlertRule?.Name ?? string.Empty,
-            ConditionType = e.AlertRule?.ConditionType ?? AlertConditionType.Threshold,
-            Severity = e.AlertRule?.Severity ?? AlertRuleSeverity.Warning,
+            ConditionType = AlertRuleMapper.Readable(e.AlertRule?.ConditionType ?? AlertConditionType.Threshold),
+            Severity = AlertRuleMapper.Readable(e.AlertRule?.Severity ?? AlertRuleSeverity.Warning),
             StartedAt = e.StartedAt,
             AcknowledgedAt = e.AcknowledgedAt,
             AcknowledgedBy = namesAcknowledger ? e.AcknowledgedBy : null,
@@ -236,8 +237,8 @@ public class AlertsController : ControllerBase
                 Id = e.Id,
                 AlertRuleId = e.AlertRuleId,
                 RuleName = e.RuleName,
-                ConditionType = e.ConditionType,
-                Severity = e.Severity,
+                ConditionType = AlertRuleMapper.Readable(e.ConditionType),
+                Severity = AlertRuleMapper.Readable(e.Severity),
                 StartedAt = e.StartedAt,
                 EndedAt = e.EndedAt,
                 AcknowledgedAt = e.AcknowledgedAt,

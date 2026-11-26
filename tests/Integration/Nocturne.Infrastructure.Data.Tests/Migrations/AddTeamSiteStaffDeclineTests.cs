@@ -16,7 +16,7 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
 {
     internal const string PriorMigration = "20261124225956_RecordImportStarter";
 
-    private string _migrator = string.Empty;
+    internal string Migrator { get; private set; } = string.Empty;
 
     internal string App { get; private set; } = string.Empty;
 
@@ -29,13 +29,13 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "add_team_site_decline");
-        _migrator = database.MigratorConnectionString;
+        Migrator = database.MigratorConnectionString;
         App = database.AppConnectionString;
 
         var subject = Guid.CreateVersion7();
         var tenant = Guid.CreateVersion7();
         var team = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{subject}', 'decline-{subject:N}', true, false, now(), now(), 'Approved');
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
@@ -48,7 +48,7 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
             VALUES ('{Guid.CreateVersion7()}', '{ExistingAccess}', '{ExistingMember}', 'approved');
             """);
 
-        await MigrateAsync(_migrator);
+        await MigrateAsync(Migrator);
 
         var down = await SharedPostgres.CreateDatabaseAtMigrationAsync(PriorMigration, "add_team_site_decline_down");
         DownMigrator = down.MigratorConnectionString;
@@ -61,7 +61,7 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
     internal async Task<Guid> NewSubjectAsync()
     {
         var subject = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES ('{subject}', 'decline-{subject:N}', true, false, now(), now(), 'Approved');
             """);
@@ -73,7 +73,7 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
         var tenant = Guid.CreateVersion7();
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
-        await ExecuteAsync($"""
+        await NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', 'decline-{tenant:N}', 'Site', true, now(), now());
             INSERT INTO teams (id, name) VALUES ('{team}', 'Clinic');
@@ -86,44 +86,24 @@ public class AddTeamSiteStaffDeclineFixture : IAsyncLifetime
     internal async Task<Guid> NewMemberAsync(Guid team, Guid subject)
     {
         var member = Guid.CreateVersion7();
-        await ExecuteAsync($"INSERT INTO team_members (id, team_id, subject_id, kind) VALUES ('{member}', '{team}', '{subject}', 'staff');");
+        await NpgsqlTestCommands.ExecuteAsync(
+            Migrator, $"INSERT INTO team_members (id, team_id, subject_id, kind) VALUES ('{member}', '{team}', '{subject}', 'staff');");
         return member;
     }
 
-    internal Task<int> NewSiteStaffAsync(Guid access, Guid member, string status) => ExecuteAsync($"""
+    internal Task<int> NewSiteStaffAsync(Guid access, Guid member, string status) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
         VALUES ('{Guid.CreateVersion7()}', '{access}', '{member}', '{status}');
         """);
 
-    internal Task<int> NewDeclineAsync(Guid access, Guid subject) => ExecuteAsync($"""
+    internal Task<int> NewDeclineAsync(Guid access, Guid subject) => NpgsqlTestCommands.ExecuteAsync(Migrator, $"""
         INSERT INTO team_site_declines (id, team_tenant_access_id, subject_id)
         VALUES ('{Guid.CreateVersion7()}', '{access}', '{subject}');
         """);
 
-    internal Task<long> ScalarAsync(string sql) => ScalarAsync(_migrator, sql);
-
-    internal static async Task<long> ScalarAsync(string connectionString, string sql)
-    {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
-    }
-
-    internal async Task<int> ExecuteAsync(string sql)
-    {
-        await using var conn = new NpgsqlConnection(_migrator);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        return await cmd.ExecuteNonQueryAsync();
-    }
-
     private static async Task MigrateAsync(string connectionString, string? target = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations())
-            .AddInterceptors(new TenantConnectionInterceptor())
-            .Options;
+        var options = TestContexts.MigrationsOptions(connectionString);
         await using var context = new NocturneDbContext(options);
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
@@ -138,10 +118,11 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
     [Fact]
     public async Task An_existing_site_staff_row_keeps_its_status_and_no_decline_is_made()
     {
-        (await fixture.ScalarAsync($"""
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, $"""
             SELECT count(*) FROM team_site_staff WHERE team_member_id = '{fixture.ExistingMember}' AND status = 'approved'
             """)).Should().Be(1);
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_declines WHERE team_tenant_access_id = '{fixture.ExistingAccess}'")).Should().Be(0);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_site_declines WHERE team_tenant_access_id = '{fixture.ExistingAccess}'")).Should().Be(0);
     }
 
     [Fact]
@@ -153,7 +134,8 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
 
         await fixture.NewSiteStaffAsync(access, declined, "declined");
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_staff WHERE team_member_id = '{declined}' AND status = 'declined'"))
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_site_staff WHERE team_member_id = '{declined}' AND status = 'declined'"))
             .Should().Be(1);
         await ShouldViolateAsync(() => fixture.NewSiteStaffAsync(access, other, "refused"), PostgresErrorCodes.CheckViolation);
     }
@@ -179,20 +161,23 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
         await fixture.NewDeclineAsync(access, leaving);
         await fixture.NewDeclineAsync(access, deleted);
 
-        await fixture.ExecuteAsync($"DELETE FROM team_members WHERE id = '{member}'");
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_declines WHERE subject_id = '{leaving}'")).Should().Be(1);
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM team_members WHERE id = '{member}'");
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_site_declines WHERE subject_id = '{leaving}'")).Should().Be(1);
 
-        await fixture.ExecuteAsync($"DELETE FROM subjects WHERE id = '{deleted}'");
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_declines WHERE team_tenant_access_id = '{access}'")).Should().Be(1);
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM subjects WHERE id = '{deleted}'");
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_site_declines WHERE team_tenant_access_id = '{access}'")).Should().Be(1);
 
-        await fixture.ExecuteAsync($"DELETE FROM team_tenant_access WHERE id = '{access}'");
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_declines WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
+        await NpgsqlTestCommands.ExecuteAsync(fixture.Migrator, $"DELETE FROM team_tenant_access WHERE id = '{access}'");
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_site_declines WHERE team_tenant_access_id = '{access}'")).Should().Be(0);
     }
 
     [Fact]
     public async Task The_declines_are_under_the_tenant_pin_and_a_context_pinned_to_another_site_reads_none()
     {
-        (await fixture.ScalarAsync("""
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, """
             SELECT count(*) FROM pg_class c
              WHERE c.relname = 'team_site_declines' AND c.relrowsecurity AND c.relforcerowsecurity
                AND EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'tenant_pin')
@@ -216,7 +201,8 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
         await PinnedInsertAsync(tenant, access, subject);
         await ShouldViolateAsync(() => PinnedInsertAsync(tenant, otherAccess, subject), PostgresErrorCodes.InsufficientPrivilege);
 
-        (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_declines WHERE subject_id = '{subject}'")).Should().Be(1);
+        (await NpgsqlTestCommands.ScalarAsync<long>(
+            fixture.Migrator, $"SELECT count(*) FROM team_site_declines WHERE subject_id = '{subject}'")).Should().Be(1);
     }
 
     private async Task<long> PinnedCountAsync(Guid site, Guid access)
@@ -248,10 +234,10 @@ public class AddTeamSiteStaffDeclineTests(AddTeamSiteStaffDeclineFixture fixture
     [Fact]
     public async Task Down_drops_the_declines_and_restores_the_status_check()
     {
-        (await AddTeamSiteStaffDeclineFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'team_site_declines'
             """)).Should().Be(0);
-        (await AddTeamSiteStaffDeclineFixture.ScalarAsync(fixture.DownMigrator, """
+        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.DownMigrator, """
             SELECT count(*) FROM pg_constraint
              WHERE conname = 'ck_team_site_staff_status' AND pg_get_constraintdef(oid) NOT LIKE '%declined%'
             """)).Should().Be(1);

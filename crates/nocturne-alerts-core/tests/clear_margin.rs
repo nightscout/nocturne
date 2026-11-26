@@ -356,12 +356,11 @@ fn the_evaluation_that_opens_reads_closed_and_the_next_reads_open() {
     );
 }
 
-/// With a 15-minute wait, the excursion leaves through the widened limit,
-/// waits, and closes; the evaluation after the close reads closed.
+/// The excursion leaves through the widened limit, waits, and closes; the
+/// evaluation after the close reads closed.
 #[test]
 fn the_evaluation_that_closes_reads_open_and_the_next_reads_closed() {
-    let mut r = rule("threshold", low_with_margin());
-    r.hysteresis_minutes = 15;
+    let r = rule("threshold", low_with_margin());
     let mut state = EngineState::new();
     let kinds: Vec<_> = [
         ("69", 0),
@@ -369,7 +368,7 @@ fn the_evaluation_that_closes_reads_open_and_the_next_reads_closed() {
         ("76", 10),
         ("74.5", 15),
         ("76", 20),
-        ("76", 40),
+        ("76", 25),
     ]
     .into_iter()
     .map(|(v, m)| {
@@ -389,7 +388,7 @@ fn the_evaluation_that_closes_reads_open_and_the_next_reads_closed() {
             TransitionType::ExcursionClosed,
         ]
     );
-    let after = step(&r, &glucose("72", at(45)), at(45), &mut state);
+    let after = step(&r, &glucose("72", at(30)), at(30), &mut state);
     assert_eq!(
         (after.root, after.transition.kind),
         (Truth::False, TransitionType::None)
@@ -932,7 +931,6 @@ struct Case {
     leaf: Leaf,
     value: i64,
     margin: i64,
-    hysteresis: i32,
     readings: Vec<i64>,
 }
 
@@ -966,7 +964,6 @@ impl Case {
     fn rule(&self, margin: Option<i64>) -> Rule {
         let (kind, params) = self.params(margin);
         let mut r = rule(kind, params);
-        r.hysteresis_minutes = self.hysteresis;
         r.on_unknown = OnUnknown::Hold;
         r
     }
@@ -1025,7 +1022,7 @@ fn case() -> impl Strategy<Value = Case> {
         op().prop_map(Leaf::Iob),
         op().prop_map(Leaf::Predicted),
     ];
-    (leaf, 0..=15i32).prop_flat_map(|(leaf, hysteresis)| {
+    leaf.prop_flat_map(|leaf| {
         let (values, readings) = match leaf {
             Leaf::Below | Leaf::Above | Leaf::Predicted(_) => (60..=80i64, 50..=95i64),
             Leaf::Falling | Leaf::Rising => (1..=3, -6..=6),
@@ -1034,10 +1031,9 @@ fn case() -> impl Strategy<Value = Case> {
         (
             Just(leaf),
             values,
-            Just(hysteresis),
             proptest::collection::vec(readings, 1..=24),
         )
-            .prop_flat_map(|(leaf, value, hysteresis, readings)| {
+            .prop_flat_map(|(leaf, value, readings)| {
                 let largest = match leaf {
                     Leaf::Falling | Leaf::Rising => value,
                     Leaf::Iob(_) => 3,
@@ -1047,7 +1043,6 @@ fn case() -> impl Strategy<Value = Case> {
                     leaf,
                     value,
                     margin,
-                    hysteresis,
                     readings: readings.clone(),
                 })
             })

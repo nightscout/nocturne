@@ -111,10 +111,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
     }
 
     private NocturneDbContext Context(Guid tenant, params IInterceptor[] staged) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors([new TenantConnectionInterceptor(), .. staged])
-            .Options) { TenantId = tenant };
+        TestContexts.Context(database.AppConnectionString, tenant, staged);
 
     private sealed record Seeded(Guid Tenant, Guid Client, Guid Subject, SuppliedContextFactory Contexts);
 
@@ -340,7 +337,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
         var consent = Task.Run(() => ConsentAsync(consenting, seeded, "glucose.read"));
         await consentIsAboutToCreate.Task.WaitAsync(Eventually.DefaultPatience);
         var deletion = Task.Run(() =>
-            new SubjectRepository(deleting, AccountLinkRoutes.Off).DeleteAsync(seeded.Subject, CancellationToken.None));
+            SubjectDeletions.DeleteAsync(deleting, AccountLinkRoutes.Off, seeded.Subject, CancellationToken.None));
 
         var finishedAhead = await Task.WhenAny(deletion, Task.Delay(DeadlockDetection));
         finishedAhead.Should().NotBe(deletion, "the deletion waits for the consent to commit");

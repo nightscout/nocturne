@@ -37,7 +37,7 @@ describe("alert notifications", () => {
 
     expect(created.create).toHaveBeenCalledWith(
       "Urgent low",
-      "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+      "This rule cannot run as set, so it sends no alerts. Open the rule, check its settings, and save it.",
       "alert-n",
       false
     );

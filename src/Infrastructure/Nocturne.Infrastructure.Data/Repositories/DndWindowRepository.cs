@@ -116,12 +116,12 @@ public class DndWindowRepository : IDndWindowRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> AnyTouchingAsync(DateTime from, DateTime to, CancellationToken ct)
+    public virtual async Task<bool> AnyOverlappingAsync(DateTime from, DateTime to, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
 
         return await lease.Context.DndWindows.AsNoTracking()
-            .AnyAsync(w => w.StartedAt < to && (w.EndsAt == null || w.EndsAt >= from) && (w.ClearedAt == null || w.ClearedAt >= from), ct);
+            .AnyAsync(w => w.StartedAt < to && (w.EndsAt == null || w.EndsAt > from) && (w.ClearedAt == null || w.ClearedAt > from), ct);
     }
 
     /// <inheritdoc/>

@@ -144,7 +144,7 @@ public class MigrationStartupService : IHostedService
         }
 
         return configured.NightscoutUrl is { } url
-            ? (MigrationJob.ApiSourceIdentifier(url), NightscoutAddress.Masked(url))
+            ? (MigrationJob.ApiSourceIdentifier(url), NightscoutAddress.Shown(url))
             : null;
     }
 }

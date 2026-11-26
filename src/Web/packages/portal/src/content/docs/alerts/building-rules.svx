@@ -401,7 +401,7 @@ Two examples:
 
 - **Predicted more than 30 below the latest glucose**: a predicted glucose
   condition "less than", **Latest glucose**, plus -30 mg/dL (about -1.7 mmol/L). Set
-  it to look 30 minutes ahead. The summary shows "Predicted glucose < latest glucose minus 30
+  it to look 30 minutes ahead. The summary shows "Predicted glucose &lt; latest glucose minus 30
   mg/dL in 30 minutes".
 - **Below the target low in your profile**: a glucose condition "below",
   **Target low**, plus 0. If your profile has a different target at night, the
