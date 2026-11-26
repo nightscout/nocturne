@@ -101,9 +101,8 @@ public sealed class ExternalNotificationService(
         var stored = scope.ServiceProvider.GetRequiredService<IInAppNotificationRepository>();
 
         var results = new List<ExternalNotificationRecipient>();
-        foreach (var recipient in audience.Recipients)
+        foreach (var entry in audience.Recipients.Select(r => claim.Entries.First(e => e.SubjectId == r)))
         {
-            var entry = claim.Entries.First(e => e.SubjectId == recipient);
             results.Add(entry.IsNew
                 ? await CreateAsync(notifications, sender, tenant, request, expiresAt, entry, ct)
                 : await ExistingAsync(stored, entry, ct));

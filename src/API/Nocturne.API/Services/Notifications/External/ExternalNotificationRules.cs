@@ -117,19 +117,10 @@ public static partial class ExternalNotificationRules
         if (string.IsNullOrWhiteSpace(text) || text.Length > maxLength)
             return false;
 
-        foreach (var c in text)
-        {
-            if (allowLineBreaks && c is '\n' or '\r')
-                continue;
-            var category = char.GetUnicodeCategory(c);
-            if (category is UnicodeCategory.Control or UnicodeCategory.Format
-                or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return !text
+            .Where(c => !(allowLineBreaks && c is '\n' or '\r'))
+            .Any(c => char.GetUnicodeCategory(c) is UnicodeCategory.Control or UnicodeCategory.Format
+                or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator);
     }
 
     /// <summary>The URL when it is an absolute https URL with a host and no user information.</summary>
@@ -151,15 +142,10 @@ public static partial class ExternalNotificationRules
     public static bool IsOnDomain(Uri url, IEnumerable<string> domains)
     {
         var host = url.IdnHost.TrimEnd('.').ToLowerInvariant();
-        foreach (var candidate in domains)
-        {
-            if (NormalizeDomain(candidate) is not { } domain)
-                continue;
-            if (host == domain || host.EndsWith("." + domain, StringComparison.Ordinal))
-                return true;
-        }
-
-        return false;
+        return domains
+            .Select(NormalizeDomain)
+            .OfType<string>()
+            .Any(domain => host == domain || host.EndsWith("." + domain, StringComparison.Ordinal));
     }
 
     /// <summary>

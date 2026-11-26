@@ -110,7 +110,7 @@ public sealed class ExternalNotificationLedger(INocturneDbContextFactory context
                 foreach (var subjectId in missing)
                 {
                     var id = Guid.CreateVersion7();
-                    var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
+                    var inserted = await db.Database.ExecuteSqlAsync(
                         $"""
                         INSERT INTO external_notifications
                             (id, sender_kind, sender_id, sender_name, tenant_id, subject_id, key, grant_id, sys_created_at)
