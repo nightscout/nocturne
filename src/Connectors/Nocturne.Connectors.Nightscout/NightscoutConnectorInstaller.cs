@@ -14,7 +14,7 @@ public class NightscoutConnectorInstaller()
         new ConnectorOptions(),
         config => config.Url)
 {
-    /// <summary>The client the real-time listener's Socket.IO polling transport sends through.</summary>
+    /// <summary>The client the real-time listener's Socket.IO polling and WebSocket transports send through.</summary>
     public const string RealtimeHttpClientName = "NightscoutRealtime";
 
     /// <summary>
