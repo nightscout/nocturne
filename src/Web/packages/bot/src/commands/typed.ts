@@ -11,12 +11,15 @@ const TYPED_COMMAND_PLATFORMS = new Set(["whatsapp"]);
 
 const COMMANDS = new Set(DISCORD_COMMAND_MANIFEST.map((c) => `/${c.name}`));
 
-/** Commands people try for help; they get the list at once, however often they ask. */
+/**
+ * Commands people try for help; they get the list at once, however often they ask. So does a
+ * command the bot does not know: an auto-responder does not start its replies with a slash.
+ */
 const HELP_COMMANDS = new Set(["/help", "/start"]);
 
 /**
- * Any other message gets the list at most once in this time per thread, so the bot and another
- * auto-responder cannot answer each other without end.
+ * A message that is not a command gets the list at most once in this time per thread, so the bot
+ * and another auto-responder cannot answer each other without end.
  */
 const HELP_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -70,9 +73,13 @@ export function registerTypedCommands(bot: Chat) {
         await thread.post(typedCommandHelp(null));
         return;
       }
-      if (!typed || !COMMANDS.has(typed.command)) {
+      if (typed && !COMMANDS.has(typed.command)) {
+        await thread.post(typedCommandHelp(typed.command));
+        return;
+      }
+      if (!typed) {
         if (await bot.getState().setIfNotExists(helpKey(thread.id), true, HELP_INTERVAL_MS)) {
-          await thread.post(typedCommandHelp(typed?.command ?? null));
+          await thread.post(typedCommandHelp(null));
         }
         return;
       }

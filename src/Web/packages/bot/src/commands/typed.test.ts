@@ -105,9 +105,19 @@ describe("registerTypedCommands", () => {
 
     await dm("whatsapp", "hello");
     await dm("whatsapp", "Thank you for your message.");
-    await dm("whatsapp", "/foo");
 
     expect(post).toHaveBeenCalledOnce();
+  });
+
+  it("names a command it does not know every time, even just after the list", async () => {
+    const { dm, post } = await register();
+
+    await dm("whatsapp", "hello");
+    await dm("whatsapp", "/bgg");
+    await dm("whatsapp", "/bgg");
+
+    expect(post).toHaveBeenCalledTimes(3);
+    expect(post).toHaveBeenLastCalledWith(expect.stringMatching(/^I do not know the command \/bgg\./));
   });
 
   it.each(["/help", "/start", "/HELP"])("answers %j with the commands every time", async (text) => {
