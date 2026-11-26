@@ -10,8 +10,8 @@ namespace Nocturne.Core.Models.Authorization;
 /// and a device token minted by or for a platform admin would otherwise inherit the whole instance.
 /// <para>
 /// Only a Nocturne session carries the standing, because only a session is issued by Nocturne's own
-/// sign-in checks, which hold it back until an enrolled second factor is passed. A grant, an
-/// api-secret or an OAuth token is a delegation bounded by its scopes.
+/// sign-in checks, which hold it back until an enrolled second factor is passed, when the subject
+/// must present one. A grant, an api-secret or an OAuth token is a delegation bounded by its scopes.
 /// </para>
 /// <para>
 /// <see cref="AuthType.PlatformAccess"/> is included because it is minted only by an endpoint that
@@ -58,3 +58,4 @@ public static class PlatformAdminCredentials
     public static bool Carries(AuthContext auth) =>
         CarryingTypes.Contains(auth.AuthType) && !auth.IsHandedOff;
 }
+
