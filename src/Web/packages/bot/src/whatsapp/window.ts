@@ -38,12 +38,19 @@ export interface SentAlert {
   threadId: string;
   /** Epoch milliseconds, taken before the send. */
   sentAt: number;
+  /**
+   * Whether the alert is sent again as the configured template if Meta fails the card for the
+   * window. The template is built from the delivery's payload, read from the API then: the bot's
+   * state holds no health data.
+   */
+  fallback?: boolean;
 }
 
 const inboundKey = (threadId: string) => `nocturne:whatsapp:last-inbound:${threadId}`;
 const sentKey = (messageId: string) => `nocturne:whatsapp:alert-sent:${messageId}`;
 const earlyFailureKey = (messageId: string) => `nocturne:whatsapp:early-failure:${messageId}`;
 const reportAttemptKey = (messageId: string) => `nocturne:whatsapp:report-attempt:${messageId}`;
+const fallbackKey = (cardId: string) => `nocturne:whatsapp:fallback:${cardId}`;
 
 /** A failed status for a message no sent alert was remembered for yet; see {@link WhatsAppWindow.rememberEarlyFailure}. */
 export interface EarlyFailure {
@@ -120,6 +127,20 @@ export class WhatsAppWindow {
     return (await this.state.get<number>(reportAttemptKey(messageId))) ?? now;
   }
 
+  /**
+   * Claims sending the template in place of a card Meta failed for the window. Delivery and the
+   * status webhook can each learn of the failure, and a webhook can be delivered again: only the
+   * caller that gets true sends it.
+   */
+  async claimFallback(cardId: string): Promise<boolean> {
+    return await this.state.setIfNotExists(fallbackKey(cardId), true, SENT_TTL_MS);
+  }
+
+  /** Gives up a claim whose template did not go out, so a retry of the webhook can send it. */
+  async releaseFallback(cardId: string): Promise<void> {
+    await this.state.delete(fallbackKey(cardId));
+  }
+
   /** Forgets a sent alert once its outcome is reported, so a repeated status finds nothing. */
   async forgetSent(messageId: string): Promise<void> {
     await this.state.delete(sentKey(messageId));
@@ -129,4 +150,12 @@ export class WhatsAppWindow {
 /** Whether Meta refused a send outright because the window is closed. It usually accepts and fails it later instead. */
 export function isWindowClosedError(err: unknown): boolean {
   return err instanceof WhatsAppApiError && err.errorCode === WINDOW_CLOSED_ERROR_CODE;
+}
+
+/**
+ * Whether Meta certainly sent nothing: it answered the request with a 4xx refusal. A network
+ * error, a 5xx or an answer that could not be read can follow a message that went out.
+ */
+export function isRefusedUnsent(err: unknown): boolean {
+  return err instanceof WhatsAppApiError && err.status >= 400 && err.status < 500;
 }

@@ -45,7 +45,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
 
         deleted.Should().Be(Groups);
         recorder.Stamps.Should().HaveCount(2, "one update per chunk of ids");
-        var plan = await PlanTestSupport.ExplainAsync(conn, recorder.Stamps[0]);
+        var plan = await QueryPlans.ExplainAsync(conn, recorder.Stamps[0]);
         plan.Descendants("Relation Name").Should().Equal(
             ["sensor_glucose", "sensor_glucose"], "the update reads its table once: " + plan);
         plan.Descendants("Node Type").Should().NotContain(
@@ -125,7 +125,7 @@ public class SourceDeletePlanTests(SourceDeletePlanTests.NeverAnalysedDatabase d
         {
             var conn = new NpgsqlConnection(_database.AppConnectionString);
             await conn.OpenAsync();
-            await PlanTestSupport.SetTenantAsync(conn, tenant);
+            await QueryPlans.SetTenantAsync(conn, tenant);
             return conn;
         }
 

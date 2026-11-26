@@ -5,6 +5,7 @@ import { SlackAdapter } from "@chat-adapter/slack";
 import { createBot } from "./bot.js";
 import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
+import type { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
 
 /**
  * The Resend adapter resolves `react` from its own install, which this package
@@ -35,6 +36,13 @@ const bot = () =>
       },
       slack: { enabled: true, botToken: "not-a-token", signingSecret: "not-a-secret" },
       telegram: { enabled: true, botToken: "not-a-token" },
+      whatsapp: {
+        enabled: true,
+        accessToken: "not-a-token",
+        appSecret: "not-a-secret",
+        phoneNumberId: "1000",
+        verifyToken: "not-a-token",
+      },
     },
   });
 
@@ -57,6 +65,19 @@ describe("createBot", () => {
     expect(telegram).not.toBeInstanceOf(AccentedSlackAdapter);
     expect(telegram?.name).toBe("telegram");
   });
+
+  it.each(["discord", "slack", "telegram", "whatsapp"])(
+    "keeps no thread history for %s, so the bot's state holds no message text",
+    (name) => {
+      const adapter = bot().getAdapter(name) as unknown as {
+        persistThreadHistory?: boolean;
+        persistMessageHistory?: boolean;
+      };
+
+      expect(adapter.persistThreadHistory ?? false).toBe(false);
+      expect(adapter.persistMessageHistory ?? false).toBe(false);
+    },
+  );
 });
 
 describe("the Telegram webhook", () => {
@@ -166,6 +187,34 @@ describe("the WhatsApp webhook", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it("takes the alert template from the WhatsApp settings alone", () => {
+    const adapterWith = (settings: Record<string, string>) =>
+      createBot({
+        postgresUrl: "postgres://nobody@localhost:5432/not-connected",
+        platforms: {
+          whatsapp: {
+            enabled: true,
+            accessToken: "not-a-token",
+            appSecret: "not-a-secret",
+            phoneNumberId: "1000",
+            verifyToken: "not-a-token",
+            ...settings,
+          },
+        },
+      }).getAdapter("whatsapp") as NocturneWhatsAppAdapter;
+
+    expect(adapterWith({}).alertTemplate).toBeNull();
+    expect(adapterWith({ alertTemplateName: "nocturne_alert", alertTemplateLanguage: "en_US" }).alertTemplate).toEqual({
+      name: "nocturne_alert",
+      language: "en_US",
+    });
+
+    expect(adapterWith({ alertTemplateName: "nocturne_alert" }).alertTemplate).toEqual({
+      name: "nocturne_alert",
+      language: "en",
+    });
   });
 
   it("checks the environment's verify token when configured from the environment", async () => {

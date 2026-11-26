@@ -10,12 +10,6 @@ internal sealed class ProfileActivationEntityConfiguration : IEntityTypeConfigur
     public void Configure(EntityTypeBuilder<ProfileActivationEntity> entity)
     {
         entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_profile_activations_tenant_start_timestamp")
-            .IsDescending(false, true)
-            .HasFilter("deleted_at IS NULL");
-
-        entity
             .Property(e => e.Timestamp)
             .HasColumnName("start_timestamp");
 

@@ -33,9 +33,9 @@ public class AlertOwedTransitionPlanTests(RlsCompletenessFixture fx)
         await SeedExcursionsAsync(tenant, rule);
 
         await using var conn = await fx.OpenAppConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
 
-        var capture = new PlanTestSupport.LastReaderCapture();
+        var capture = new QueryPlans.LastReaderCapture();
         await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(conn)
             .AddInterceptors(capture)
@@ -48,7 +48,7 @@ public class AlertOwedTransitionPlanTests(RlsCompletenessFixture fx)
         owed.Should().HaveCount(Owed);
         owed.Should().OnlyContain(t => t.Kind == ExcursionTransitionType.ExcursionOpened);
 
-        var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);
+        var plan = await QueryPlans.ExplainAsync(conn, capture.Command!);
         plan.Descendants("Index Name").Should().Contain(Index, plan.ToString());
         SeqScannedTables(plan).Should().NotContain("alert_excursions", plan.ToString());
     }
@@ -76,7 +76,7 @@ public class AlertOwedTransitionPlanTests(RlsCompletenessFixture fx)
     private async Task SeedExcursionsAsync(Guid tenant, Guid rule)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
-        await PlanTestSupport.SetTenantAsync(conn, tenant);
+        await QueryPlans.SetTenantAsync(conn, tenant);
 
         await using (var insert = conn.CreateCommand())
         {

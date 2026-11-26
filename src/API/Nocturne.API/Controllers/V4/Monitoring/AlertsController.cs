@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -489,6 +490,29 @@ public class AlertsController : ControllerBase
             .ToListAsync(ct);
 
         return Ok(deliveries);
+    }
+
+    /// <summary>
+    /// The payload a delivery was dispatched with, for a delivery adapter that sends the alert again
+    /// in another form after the platform refused the first, such as a WhatsApp template outside the
+    /// customer service window. The adapter keeps only the delivery's id, so the payload, which holds
+    /// health data, is read here rather than kept in the adapter's own state.
+    /// </summary>
+    [HttpGet("deliveries/{id:guid}/payload")]
+    [Authorize]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [ProducesResponseType(typeof(Nocturne.Core.Models.AlertPayload), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Nocturne.Core.Models.AlertPayload>> GetDeliveryPayload(Guid id, CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var json = await db.AlertDeliveries
+            .AsNoTracking()
+            .Where(d => d.Id == id)
+            .Select(d => d.Payload)
+            .FirstOrDefaultAsync(ct);
+        var payload = json is null ? null : JsonSerializer.Deserialize<Nocturne.Core.Models.AlertPayload>(json);
+        return payload is null ? NotFound() : Ok(payload);
     }
 }
 

@@ -126,6 +126,74 @@ public class DndWindowModuleTests
     }
 
     [Fact]
+    public async Task TheOverlapReadsExcludeAWindowThatOnlyTouchesTheRangeEdges()
+    {
+        var rows = new[]
+        {
+            Window(DndScope.All, At(0), endsAt: At(1)),
+            Window(DndScope.All, At(-2), endsAt: At(0)),
+            Window(DndScope.All, At(1), endsAt: At(2)),
+            Window(DndScope.All, At(-2), clearedAt: At(0)),
+            Window(DndScope.All, At(-2), clearedAt: At(0.5)),
+            Window(DndScope.All, At(-2)),
+        };
+        await using (var seed = Db())
+        {
+            seed.DndWindows.AddRange(rows);
+            await seed.SaveChangesAsync();
+        }
+        var repository = new DndWindowRepository(Factory(), _clock);
+
+        var read = await repository.GetOverlappingAsync(At(0), At(1), 100, default);
+
+        read.Select(w => w.Id).Should().BeEquivalentTo(new[] { rows[0].Id, rows[4].Id, rows[5].Id });
+        (await repository.AnyOverlappingAsync(At(0), At(1), default)).Should().BeTrue();
+        (await repository.AnyOverlappingAsync(At(1), At(2), default)).Should().BeTrue();
+        (await repository.AnyOverlappingAsync(At(-3), At(-2), default)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AWindowClearedExactlyAtTheStartOfTheRangeIsNotRead()
+    {
+        await using (var seed = Db())
+        {
+            seed.DndWindows.Add(Window(DndScope.All, At(-2), clearedAt: At(0)));
+            await seed.SaveChangesAsync();
+        }
+        var repository = new DndWindowRepository(Factory(), _clock);
+
+        (await repository.GetOverlappingAsync(At(0), At(1), 100, default)).Should().BeEmpty();
+        (await repository.AnyOverlappingAsync(At(0), At(1), default)).Should().BeFalse();
+        (await repository.AnyOverlappingAsync(At(-0.5), At(1), default)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateLeavesAWindowThatOnlyTouchesTheNewOnesEdges()
+    {
+        var endsAtStart = Window(DndScope.All, At(-2), endsAt: At(0));
+        var startsAtEnd = Window(DndScope.All, At(1), endsAt: At(2));
+        var overlapping = Window(DndScope.All, At(-1), endsAt: At(0.5));
+        var otherScope = Window(DndScope.Lows, At(-1), endsAt: At(0.5));
+        await using (var seed = Db())
+        {
+            seed.DndWindows.AddRange(endsAtStart, startsAtEnd, overlapping, otherScope);
+            await seed.SaveChangesAsync();
+        }
+
+        await new DndWindowRepository(Factory(), _clock).CreateAsync(
+            new NewDndWindow(Guid.CreateVersion7(), DndScope.All, At(0), At(1), "test"), default);
+
+        await using var db = Db();
+        var windows = await db.DndWindows.ToDictionaryAsync(w => w.Id);
+        windows[endsAtStart.Id].EndsAt.Should().Be(At(0));
+        windows[endsAtStart.Id].ClearedAt.Should().BeNull();
+        windows[startsAtEnd.Id].ClearedAt.Should().BeNull();
+        windows[startsAtEnd.Id].StartedAt.Should().Be(At(1));
+        windows[overlapping.Id].EndsAt.Should().Be(At(0));
+        windows[otherScope.Id].EndsAt.Should().Be(At(0.5));
+    }
+
+    [Fact]
     public async Task EnsureManualStoresAWebWindowStartingNowWhenNoneIsActive()
     {
         await new DndWindowRepository(Factory(), _clock).EnsureManualAsync(At(1), default);

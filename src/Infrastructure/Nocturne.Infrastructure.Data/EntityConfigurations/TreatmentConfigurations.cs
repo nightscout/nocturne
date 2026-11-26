@@ -10,11 +10,6 @@ internal sealed class BolusEntityConfiguration : IEntityTypeConfiguration<BolusE
     public void Configure(EntityTypeBuilder<BolusEntity> entity)
     {
         entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_boluses_tenant_timestamp")
-            .IsDescending(false, true);
-
-        entity
             .HasOne<DeviceEntity>()
             .WithMany()
             .HasForeignKey(e => e.DeviceId)
@@ -57,17 +52,6 @@ internal sealed class BasalInjectionEntityConfiguration : IEntityTypeConfigurati
     }
 }
 
-internal sealed class CarbIntakeEntityConfiguration : IEntityTypeConfiguration<CarbIntakeEntity>
-{
-    public void Configure(EntityTypeBuilder<CarbIntakeEntity> entity)
-    {
-        entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_carb_intakes_tenant_timestamp")
-            .IsDescending(false, true);
-    }
-}
-
 internal sealed class DeviceEventEntityConfiguration : IEntityTypeConfiguration<DeviceEventEntity>
 {
     public void Configure(EntityTypeBuilder<DeviceEventEntity> entity)
@@ -102,11 +86,6 @@ internal sealed class TempBasalEntityConfiguration : IEntityTypeConfiguration<Te
             .HasIndex(e => e.Timestamp)
             .HasDatabaseName("ix_temp_basals_start_timestamp")
             .IsDescending();
-
-        entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
-            .IsDescending(false, true);
 
         entity
             .HasOne<DeviceEntity>()
