@@ -166,7 +166,7 @@ public class ExcursionTrackerSeamTests
         var closed = await f.Tracker.CloseElapsedHysteresisAsync(RuleId, CancellationToken.None);
 
         closed.Should().Be(new ExcursionTransition(
-            ExcursionTransitionType.ExcursionClosed, opened.ExcursionId, ExcursionCloseReason.Hysteresis));
+            ExcursionTransitionType.ExcursionClosed, opened.ExcursionId, ExcursionCloseReason.Hysteresis, T0.AddMinutes(5)));
         f.Repository.Excursions[opened.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(5));
         f.State.Should().BeEquivalentTo(new
         {
@@ -260,7 +260,8 @@ public class ExcursionTrackerSeamTests
 
         var fromActive = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
 
-        fromActive.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, first.ExcursionId, reason));
+        fromActive.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, first.ExcursionId, reason, T0.AddMinutes(1)));
         f.Repository.Excursions[first.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(1));
         f.State.Should().BeEquivalentTo(new
         {
@@ -273,7 +274,8 @@ public class ExcursionTrackerSeamTests
         await f.Process(false);
         var fromHysteresis = await f.Tracker.ForceCloseAsync(RuleId, reason, CancellationToken.None);
 
-        fromHysteresis.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, second.ExcursionId, reason));
+        fromHysteresis.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, second.ExcursionId, reason, T0.AddMinutes(1)));
         f.State!.HysteresisStartedAt.Should().BeNull();
     }
 

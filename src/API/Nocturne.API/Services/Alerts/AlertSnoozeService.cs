@@ -173,7 +173,7 @@ internal sealed class AlertSnoozeService(
         await deliveryService.RenotifyAsync(instance.Id, inputs.Channels, payload, ct);
         await resolutionHandler.CloseAgainIfEndedAsync(excursion.Id, tenantId, ct);
         if (end == LapsedSnoozeEnd.EndedHoldingOpening)
-            await repository.SettleTransitionAsync(excursion.Id, ExcursionTransitionType.ExcursionOpened, ct);
+            await repository.SettleTransitionAsync(excursion.Id, ExcursionTransitionType.ExcursionOpened, now, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",

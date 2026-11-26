@@ -138,8 +138,8 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
 
         (await repository.GetStandingUnevaluableNoticesAsync(null, CancellationToken.None))
             .Should().BeEquivalentTo([
-                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, At, false),
-                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, At, false),
+                new StandingUnevaluableNotice(first.ExcursionId, first.InstanceId, rule, Version, At, false, At),
+                new StandingUnevaluableNotice(second.ExcursionId, second.InstanceId, rule, OtherVersion, At, false, At),
             ]);
         await repository.ResolveInstancesForExcursionAsync(first.ExcursionId, At, "manual", CancellationToken.None);
         (await repository.GetStandingUnevaluableNoticesAsync(rule, CancellationToken.None))
@@ -196,8 +196,9 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         var notice = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!;
         notice.Dispatched.Should().BeFalse();
         var handedBack = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!;
-        (handedBack.ExcursionId, handedBack.InstanceId, handedBack.Dispatched)
-            .Should().Be((notice.ExcursionId, notice.InstanceId, false), "a notice whose dispatch never finished is handed back");
+        (handedBack.ExcursionId, handedBack.InstanceId, handedBack.Dispatched, handedBack.OpenedOwedAt)
+            .Should().Be((notice.ExcursionId, notice.InstanceId, false, (DateTime?)At),
+                "a notice whose dispatch never finished is handed back with the stamp its dispatch is owed at");
 
         await using (var db = Context(tenant))
         {
@@ -211,14 +212,14 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         }
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!.Dispatched
             .Should().BeFalse("a dispatch that died after its first row may still owe another channel");
-        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, CancellationToken.None);
+        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, At, CancellationToken.None);
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!.Dispatched.Should().BeTrue();
         (await repository.GetHomeAssistantInstancesSentExcursionAsync(notice.ExcursionId, CancellationToken.None))
             .Should().Equal("kitchen-ha");
 
         var silenced = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), OtherVersion, At, CancellationToken.None))!;
         await repository.MarkInstanceSuppressedAsync(silenced.InstanceId, "dnd:all", CancellationToken.None);
-        await repository.SettleTransitionAsync(silenced.ExcursionId, ExcursionTransitionType.ExcursionOpened, CancellationToken.None);
+        await repository.SettleTransitionAsync(silenced.ExcursionId, ExcursionTransitionType.ExcursionOpened, At, CancellationToken.None);
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), OtherVersion, At, CancellationToken.None))!.Dispatched.Should().BeTrue();
 
         await using (var db = Context(tenant))

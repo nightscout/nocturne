@@ -214,7 +214,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             var opened = new Mock<IExcursionOpenedHandler>();
             opened
                 .Setup(h => h.HandleOpenedAsync(
-                    It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<SensorContext>(), It.IsAny<Guid>(),
+                    It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<SensorContext>(), It.IsAny<Guid>(),
                     It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .Callback(() => Interlocked.Increment(ref tenant.Openings))
                 .Returns(Task.CompletedTask);

@@ -335,7 +335,7 @@ public class AlertSnoozeServiceTests
 
         order.Should().Equal("ended", "sent");
         _repository.Verify(r => r.SettleTransitionAsync(
-            seeded.ExcursionId, ExcursionTransitionType.ExcursionOpened, It.IsAny<CancellationToken>()), Times.Once);
+            seeded.ExcursionId, ExcursionTransitionType.ExcursionOpened, Now, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -349,7 +349,7 @@ public class AlertSnoozeServiceTests
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
 
         _repository.Verify(r => r.SettleTransitionAsync(
-            It.IsAny<Guid>(), It.IsAny<ExcursionTransitionType>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<ExcursionTransitionType>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public class AlertSnoozeServiceTests
 
         _delivery.VerifyNoOtherCalls();
         _repository.Verify(r => r.SettleTransitionAsync(
-            It.IsAny<Guid>(), It.IsAny<ExcursionTransitionType>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<ExcursionTransitionType>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

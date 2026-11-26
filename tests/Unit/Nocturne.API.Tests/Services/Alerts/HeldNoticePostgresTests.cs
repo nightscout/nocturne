@@ -168,7 +168,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
         (await repository.GetActiveAlertSnapshotsAsync(CancellationToken.None)).Should().BeEmpty();
         (await repository.GetStandingUnevaluableNoticesAsync(null, CancellationToken.None)).Should().BeEmpty();
         (await repository.GetStandingHeldNoticesAsync(rule, CancellationToken.None))
-            .Should().Equal(new StandingHeldNotice(notice.ExcursionId, notice.InstanceId, rule, HeldSince, false));
+            .Should().Equal(new StandingHeldNotice(notice.ExcursionId, notice.InstanceId, rule, HeldSince, false, Bound));
         var snapshot = (await repository.GetExcursionRuleAsync(notice.ExcursionId, CancellationToken.None))!;
         (snapshot.IsHeldNotice, snapshot.IsUnevaluableNotice).Should().Be((true, false));
     }

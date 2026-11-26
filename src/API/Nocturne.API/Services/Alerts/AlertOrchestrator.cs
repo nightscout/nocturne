@@ -137,12 +137,20 @@ internal sealed class AlertOrchestrator(
 
         switch (evaluation.Transition.Type)
         {
-            case ExcursionTransitionType.ExcursionOpened when evaluation.Transition.ExcursionId is { } opened:
+            case ExcursionTransitionType.ExcursionOpened
+                when evaluation.Transition is { ExcursionId: { } opened, OwedAt: { } owedAt }:
                 await openedHandler.HandleOpenedAsync(
-                    rule, opened, context, tenantId, late: false, evaluation.MetBy,
+                    rule, opened, owedAt, context, tenantId, late: false, evaluation.MetBy,
                     callerCloses: evaluation.AutoResolveTransition is { Type: ExcursionTransitionType.ExcursionClosed } closing
                         && closing.ExcursionId == opened,
                     ct);
+                break;
+
+            case ExcursionTransitionType.ExcursionOpened
+                when evaluation.Transition is { ExcursionId: { } stampless }:
+                logger.LogWarning(
+                    "Excursion {ExcursionId} of rule {AlertRuleId} opened without the stamp its dispatch settles; the alert sweep sends it",
+                    stampless, rule.Id);
                 break;
 
             case ExcursionTransitionType.ExcursionClosed:

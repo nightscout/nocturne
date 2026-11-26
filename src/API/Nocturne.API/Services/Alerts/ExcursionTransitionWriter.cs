@@ -267,7 +267,7 @@ internal static class ExcursionTransitionWriter
                 logger.LogInformation(
                     "Excursion {ExcursionId} opened for alert rule {AlertRuleId}", opened.Id, ruleId);
                 activeId = opened.Id;
-                transition = new ExcursionTransition(decision.Type, opened.Id);
+                transition = new ExcursionTransition(decision.Type, opened.Id, OwedAt: now);
                 break;
 
             case ExcursionTransitionType.HysteresisStarted:
@@ -285,7 +285,7 @@ internal static class ExcursionTransitionWriter
             case ExcursionTransitionType.ExcursionClosed:
                 await CloseAsync(repository, logger, ruleId, priorId, decision.CloseReason, now, ct);
                 activeId = null;
-                transition = new ExcursionTransition(decision.Type, priorId, decision.CloseReason);
+                transition = new ExcursionTransition(decision.Type, priorId, decision.CloseReason, now);
                 break;
 
             case ExcursionTransitionType.ExcursionContinues:
@@ -302,7 +302,7 @@ internal static class ExcursionTransitionWriter
         {
             await CloseAsync(repository, logger, ruleId, resolved, ExcursionCloseReason.AutoResolve, now, ct);
             autoResolve = new ExcursionTransition(
-                ExcursionTransitionType.ExcursionClosed, resolved, ExcursionCloseReason.AutoResolve);
+                ExcursionTransitionType.ExcursionClosed, resolved, ExcursionCloseReason.AutoResolve, now);
             activeId = null;
         }
 
