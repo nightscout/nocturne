@@ -31,6 +31,21 @@ public class NightscoutConnectorBackgroundService
     private readonly ConcurrentDictionary<Guid, SocketIO> _socketClients = new();
 
     /// <summary>
+    /// The address, and when, of each tenant's last failed WebSocket upgrade. Held in memory only: the
+    /// address can carry a secret path or token, so it is never stored or logged.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, FailedUpgrade> _failedUpgrades = new();
+
+    private sealed record FailedUpgrade(Uri Address, DateTimeOffset At);
+
+    /// <summary>
+    /// How long a site whose WebSocket upgrade failed is connected on polling without trying the
+    /// upgrade again. A fixed proxy is found within a day, and a site that still refuses costs one
+    /// failed attempt a day.
+    /// </summary>
+    internal static readonly TimeSpan UpgradeRetryPeriod = TimeSpan.FromDays(1);
+
+    /// <summary>
     /// Reconnection budget for a tenant's Socket.IO client. SocketIOClient bounds the whole
     /// connect-with-retries operation with <c>new CancellationTokenSource(ReconnectionAttempts *
     /// ReconnectionDelayMax)</c>, evaluated in <see cref="int"/> arithmetic: a product above
@@ -160,13 +175,32 @@ public class NightscoutConnectorBackgroundService
 
         // SocketIOClient does not fall back to polling when the WebSocket upgrade fails, as behind a
         // proxy that does not pass Upgrade on: it waits out the connect, and dials a WebSocket on every
-        // reconnect after it. A site whose upgrade failed is connected again on polling alone.
-        var (client, upgradeFailed) = await ConnectListenerAsync(
-            tenantId, tenantSlug, address, config.ApiSecret, upgrade: true, cancellationToken);
-        if (upgradeFailed)
+        // reconnect after it. A site whose upgrade failed is connected again on polling alone, and
+        // stays on polling until UpgradeRetryPeriod passes or its address changes.
+        SocketIO? client;
+        if (UpgradeIsKnownToFail(tenantId, address))
         {
+            Logger.LogDebug(
+                "Connecting Socket.IO for tenant {TenantSlug} on polling, as its WebSocket upgrade failed before",
+                tenantSlug);
             (client, _) = await ConnectListenerAsync(
                 tenantId, tenantSlug, address, config.ApiSecret, upgrade: false, cancellationToken);
+        }
+        else
+        {
+            bool upgradeFailed;
+            (client, upgradeFailed) = await ConnectListenerAsync(
+                tenantId, tenantSlug, address, config.ApiSecret, upgrade: true, cancellationToken);
+            if (upgradeFailed)
+            {
+                _failedUpgrades[tenantId] = new FailedUpgrade(address.BaseUri, Clock.GetUtcNow());
+                (client, _) = await ConnectListenerAsync(
+                    tenantId, tenantSlug, address, config.ApiSecret, upgrade: false, cancellationToken);
+            }
+            else if (client is not null)
+            {
+                _failedUpgrades.TryRemove(tenantId, out _);
+            }
         }
 
         if (client is null)
@@ -182,6 +216,11 @@ public class NightscoutConnectorBackgroundService
             "Started real-time listener for Nightscout tenant {TenantSlug}",
             tenantSlug);
     }
+
+    private bool UpgradeIsKnownToFail(Guid tenantId, NightscoutAddress address) =>
+        _failedUpgrades.TryGetValue(tenantId, out var failed)
+        && failed.Address == address.BaseUri
+        && Clock.GetUtcNow() - failed.At < UpgradeRetryPeriod;
 
     /// <summary>
     /// The tenant's listener, connected, or null with the failure logged. <c>UpgradeFailed</c> is
