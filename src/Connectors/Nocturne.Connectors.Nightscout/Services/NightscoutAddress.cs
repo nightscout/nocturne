@@ -12,8 +12,8 @@ namespace Nocturne.Connectors.Nightscout.Services;
 /// </summary>
 /// <remarks>
 ///     User info and fragment are dropped. Everything after the origin may be the credential, so only
-///     <see cref="Origin"/> and <see cref="Shown"/> are free of credentials and may be logged, stored
-///     or shown. <see cref="Masked"/> is the form a telemetry span carries. <see cref="Base"/>,
+///     <see cref="Origin"/>, <see cref="Shown"/> and <see cref="ShownRequest"/> are free of credentials
+///     and may be logged, stored or shown. <see cref="Base"/>,
 ///     <see cref="SocketIoPath"/>, <see cref="Query"/>, <see cref="Token"/> and <see cref="BaseUri"/>
 ///     may each carry one: the path, the query, or both.
 /// </remarks>
@@ -23,20 +23,24 @@ public sealed class NightscoutAddress
 
     public const string OutsideBaseMessage = "The path must stay under the Nightscout URL.";
 
-    /// <summary>A path segment at least this long is cut in a span.</summary>
-    private const int LongSegment = 16;
+    private const string SocketIoRoot = "socket.io";
+
+    private const string PathMark = "/…";
+
+    /// <summary>The versions Nocturne sends under <c>api</c>.</summary>
+    private static readonly string[] ApiVersions = ["v1", "v2", "v3"];
 
     private static readonly char[] PathStarts = ['/', '\\'];
 
     private NightscoutAddress(Uri uri)
     {
         var path = uri.AbsolutePath.TrimEnd('/');
-        var site = new UriBuilder(uri.Scheme, uri.Host, uri.Port) { Path = path + "/" }.Uri;
+        var site = Site(uri, path + "/");
         var query = uri.Query.TrimStart('?');
 
         Base = site.AbsoluteUri.TrimEnd('/');
-        Origin = site.GetLeftPart(UriPartial.Authority);
-        SocketIoPath = path + "/socket.io";
+        Origin = OriginOf(site);
+        SocketIoPath = $"{path}/{SocketIoRoot}";
         Query = query.Length == 0 ? null : query;
         Token = ReadToken(Query);
         BaseUri = Query is null ? site : new Uri($"{site.AbsoluteUri}?{Query}");
@@ -115,7 +119,7 @@ public sealed class NightscoutAddress
     ///     info. A value that does not read as an address is cut at its query or fragment, and loses
     ///     any user info before its host, which ends at a <c>/</c> or, as <see cref="Uri"/> reads an
     ///     http(s) address, a <c>\</c>. It still carries the path, so it is neither stored nor
-    ///     shown: it is what <see cref="Shown"/> and <see cref="Masked"/> shorten and what a migration
+    ///     shown: it is what <see cref="Shown"/> shortens and what a migration
     ///     source's digest is taken over.
     /// </summary>
     public static string Display(string nightscoutUrl)
@@ -144,26 +148,60 @@ public sealed class NightscoutAddress
     {
         var hostAndPath = HostAndPath(nightscoutUrl).TrimEnd(PathStarts);
         var pathStart = hostAndPath.IndexOfAny(PathStarts);
-        return pathStart < 0 ? hostAndPath : hostAndPath[..pathStart] + "/…";
+        return pathStart < 0 ? hostAndPath : hostAndPath[..pathStart] + PathMark;
     }
 
     /// <summary>
-    ///     <paramref name="nightscoutUrl"/> as a telemetry span carries it: the host, port and path of
-    ///     <see cref="Display"/> with no scheme, each path segment of <see cref="LongSegment"/> or
-    ///     more characters cut to its first four followed by <c>…</c>.
+    ///     <see cref="Origin"/>, followed by <c>/…</c> when the address has a path: the span URL of a
+    ///     request to the base itself, which <see cref="ShownRequest"/> cannot tell from a route
+    ///     when the base is shaped like one.
     /// </summary>
-    public static string Masked(string nightscoutUrl)
-    {
-        var hostAndPath = HostAndPath(nightscoutUrl);
-        var pathStart = hostAndPath.IndexOf('/');
-        if (pathStart < 0)
-            return hostAndPath;
+    public string ShownBase => Base.Length > Origin.Length ? Origin + PathMark : Origin;
 
-        var segments = hostAndPath[pathStart..]
-            .Split('/')
-            .Select(segment => segment.Length >= LongSegment ? $"{segment[..4]}…" : segment);
-        return hostAndPath[..pathStart] + string.Join('/', segments).TrimEnd('/');
+    /// <summary>
+    ///     A request to a Nightscout as a telemetry span carries it: <see cref="Origin"/>, then
+    ///     <c>/…</c> when a path precedes the route, then the route. The route starts at the last
+    ///     <c>api</c> segment followed by a version, or at a final <c>socket.io</c> or <c>pebble</c>
+    ///     segment, so a base path that holds one of those words is left out unless it is itself
+    ///     shaped like a route, such as a base <c>/api/v1/secret</c> with nothing after it. A path
+    ///     with no route shows <c>/…</c> alone, and the query, user info and fragment are never shown.
+    /// </summary>
+    public static string ShownRequest(Uri uri)
+    {
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var route = RouteStart(segments);
+        var origin = OriginOf(Site(uri, "/"));
+
+        return route switch
+        {
+            < 0 when segments.Length == 0 => origin,
+            < 0 => origin + PathMark,
+            0 => $"{origin}/{string.Join('/', segments)}",
+            _ => $"{origin}{PathMark}/{string.Join('/', segments[route..])}",
+        };
     }
+
+    private static int RouteStart(string[] segments)
+    {
+        for (var i = segments.Length - 1; i >= 0; i--)
+        {
+            var last = i == segments.Length - 1;
+            if (segments[i].Equals("api", StringComparison.OrdinalIgnoreCase)
+                    ? !last && ApiVersions.Contains(segments[i + 1], StringComparer.OrdinalIgnoreCase)
+                    : last && (segments[i].Equals(SocketIoRoot, StringComparison.OrdinalIgnoreCase)
+                               || segments[i].Equals("pebble", StringComparison.OrdinalIgnoreCase)))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static Uri Site(Uri uri, string path) =>
+        new UriBuilder(uri.Scheme, uri.Host, uri.Port) { Path = path }.Uri;
+
+    private static string OriginOf(Uri site) => site.GetLeftPart(UriPartial.Authority);
 
     private static string HostAndPath(string nightscoutUrl)
     {

@@ -236,7 +236,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
         var winner = Source(MaskNightscoutSourceUrlsFixture.Current);
 
         winner.Identifier.Should().Be(MigrationJob.ApiSourceIdentifier(url));
-        winner.Url.Should().Be(NightscoutAddress.Masked(url)).And.Be(MaskedUrl);
+        winner.Url.Should().Be(MaskedUrl);
     }
 
     [Fact]
@@ -270,8 +270,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
         var source = Source(MaskNightscoutSourceUrlsFixture.Schemeless);
 
         source.Identifier.Should().Be(MigrationJob.ApiSourceIdentifier(MaskNightscoutSourceUrlsFixture.SchemelessLegacyUrl));
-        source.Url.Should().Be("ns.other.example:8443/nightscout/Long…")
-            .And.Be(NightscoutAddress.Masked(MaskNightscoutSourceUrlsFixture.SchemelessLegacyUrl));
+        source.Url.Should().Be("ns.other.example:8443/nightscout/Long…");
         fixture.Runs.Single(r => r.SourceId == MaskNightscoutSourceUrlsFixture.Schemeless).Description.Should().Be(source.Url);
     }
 
@@ -315,7 +314,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
     {
         var source = fixture.Sources.Single(s => s.Identifier == MigrationJob.ApiSourceIdentifier(url));
 
-        source.Url.Should().Be(NightscoutAddress.Masked(url)).And.Be(masked);
+        source.Url.Should().Be(masked);
         fixture.Runs.Single(r => r.SourceId == source.Id).Description.Should().Be(masked);
     }
 

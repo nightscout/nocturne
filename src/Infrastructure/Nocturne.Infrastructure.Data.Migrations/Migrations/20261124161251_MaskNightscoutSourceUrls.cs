@@ -9,9 +9,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
     {
         /// <summary>
         /// Rewrites every API-mode migration source to the form the import now writes: its identifier
-        /// a SHA-256 digest of the Nightscout base and its URL masked, as
-        /// <c>MigrationJob.ApiSourceIdentifier</c> and <c>NightscoutAddress.Masked</c> compute them,
-        /// and every run of such a source to the source's masked URL.
+        /// a SHA-256 digest of the Nightscout base, as <c>MigrationJob.ApiSourceIdentifier</c>
+        /// computes it, and its URL masked: host, port and path with no scheme, each path segment of 16
+        /// or more characters cut to its first four followed by <c>…</c>. Every run of such a source
+        /// takes the source's masked URL.
         /// </summary>
         /// <remarks>
         /// A source may still hold the raw URL it was first stored under, query and all, so the base is
@@ -25,11 +26,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// is left as it is. The migration tables carry no row level security, so no tenant context is
         /// set.
         /// <para>
-        /// The mask is wider than <c>NightscoutAddress.Masked</c>: it also cuts every segment holding a
-        /// character outside <c>[A-Za-z0-9._~-]</c>, whatever its length. <c>Masked</c> counts the
-        /// characters of the path as <c>System.Uri</c> escapes it, and a raw legacy path is not escaped,
-        /// so a secret segment that escapes to 16 or more characters can be shorter here. Cutting a
-        /// stored display string too far costs nothing; leaving a secret whole does.
+        /// This mask is wider than the 16-character cut: it also cuts every segment holding a
+        /// character outside <c>[A-Za-z0-9._~-]</c>, whatever its length. The 16-character cut counts
+        /// the characters of the path as <c>System.Uri</c> escapes it, and a raw legacy path is not
+        /// escaped, so a secret segment that escapes to 16 or more characters can be shorter here.
+        /// Cutting a stored display string too far costs nothing; leaving a secret whole does.
         /// </para>
         /// </remarks>
         internal const string RewriteSql = """

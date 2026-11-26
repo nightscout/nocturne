@@ -38,6 +38,7 @@ public class RequestForwardingServiceTests
             nightscoutConfig ?? new NightscoutConnectorConfiguration(),
             _circuitBreaker,
             _correlationServiceMock.Object,
+            new CredentialPathRedactor(),
             _logger
         );
     }
@@ -230,6 +231,7 @@ public class RequestForwardingServiceTests
             new NightscoutConnectorConfiguration { Url = nightscoutUrl },
             _circuitBreaker,
             _correlationServiceMock.Object,
+            new CredentialPathRedactor(),
             logger);
 
         await service.ForwardToNightscoutAsync(new ClonedRequest { Method = "GET", Path = "/api/v1/status?token=caller456" });

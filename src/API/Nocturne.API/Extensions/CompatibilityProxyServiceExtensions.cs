@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Core.Constants;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Compatibility;
 
@@ -227,10 +228,9 @@ public class CompatibilityProxyHealthCheck : IHealthCheck
             using var client = _httpClientFactory.CreateClient(clientName);
             client.Timeout = TimeSpan.FromSeconds(5); // Short timeout for health checks
 
-            using var response = await client.SendAsync(
-                new HttpRequestMessage(HttpMethod.Head, probe),
-                cancellationToken
-            );
+            using var head = new HttpRequestMessage(HttpMethod.Head, probe);
+            head.Options.Set(OutboundTelemetry.DisplayUrl, address.ShownBase);
+            using var response = await client.SendAsync(head, cancellationToken);
 
             return response.IsSuccessStatusCode;
         }

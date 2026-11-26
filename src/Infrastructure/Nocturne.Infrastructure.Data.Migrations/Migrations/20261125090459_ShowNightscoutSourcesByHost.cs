@@ -10,10 +10,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <summary>
         /// Rewrites the URL of every API-mode migration source, and the description of each of its
         /// runs, to the form <c>NightscoutAddress.Shown</c> gives: host and port, then <c>/…</c> when a
-        /// path follows. It is read off the stored <c>NightscoutAddress.Masked</c> form, which has no
-        /// scheme, query or user info. A <c>\</c> also starts the path: <c>MaskNightscoutSourceUrls</c>
-        /// ended a legacy URL's host only at a <c>/</c>, so a raw URL with a backslash path was stored
-        /// whole as its host. The digest identifier is not read or changed, so no two sources merge.
+        /// path follows. It is read off the stored masked form (host, port and path with each long
+        /// segment cut), which has no scheme, query or user info. A <c>\</c> also starts the path:
+        /// <c>MaskNightscoutSourceUrls</c> ended a legacy URL's host only at a <c>/</c>, so a raw URL
+        /// with a backslash path was stored whole as its host. The digest identifier is not read or
+        /// changed, so no two sources merge.
         /// The migration tables carry no row level security, so no tenant context is set.
         /// </summary>
         internal const string RewriteSql = """
