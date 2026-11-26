@@ -110,7 +110,7 @@ public class V4ToLegacyProjectionServiceTests
     private static void NoDeletedRows<T>(Mock repository) where T : class, IV4Record =>
         repository.As<ILegacyKeyedRepository<T>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
     private void SetupBoluses(IEnumerable<Bolus> boluses) =>
@@ -609,7 +609,7 @@ public class V4ToLegacyProjectionServiceTests
         var from = Cursor.AddDays(-1);
         var to = Cursor.AddDays(1);
         _noteRepo.As<ILegacyKeyedRepository<Note>>()
-            .Setup(r => r.GetIncludingDeletedAsync(from, to, 10, true, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetIncludingDeletedAsync(from, to, null, 10, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<Note>(live, false), new HistoryRecord<Note>(deleted, true)]);
 
         var result = (await _service.GetProjectedTreatmentsAsync(
@@ -660,11 +660,11 @@ public class V4ToLegacyProjectionServiceTests
         };
         _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<Bolus>(bolus, true)]);
         _carbIntakeRepo.As<ILegacyKeyedRepository<CarbIntake>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<CarbIntake>(carb, false)]);
 
         var result = (await _service.GetProjectedTreatmentsAsync(ProjectionWindowReads.Range(null, null, 10, includeDeleted: true))).ToList();
@@ -686,7 +686,7 @@ public class V4ToLegacyProjectionServiceTests
         };
         _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<Bolus>(bolus, true)]);
         await AddModifiedAsync((
             new NoteEntity
@@ -713,7 +713,7 @@ public class V4ToLegacyProjectionServiceTests
         };
         _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<Bolus>(bolus, false)]);
         await AddModifiedAsync((
             new NoteEntity
@@ -732,11 +732,11 @@ public class V4ToLegacyProjectionServiceTests
     {
         _bolusRepo.As<ILegacyKeyedRepository<Bolus>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<Bolus>(bolus, true)]);
         _carbIntakeRepo.As<ILegacyKeyedRepository<CarbIntake>>()
             .Setup(r => r.GetIncludingDeletedAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new HistoryRecord<CarbIntake>(carb, true)]);
     }
 

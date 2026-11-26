@@ -60,7 +60,8 @@ internal class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
     {
-        var find = FindQuery.Parse(query.Find, FindQuery.TreatmentBareRegexFields);
+        var parsed = FindQuery.Parse(query.Find, FindQuery.TreatmentBareRegexFields);
+        var find = query.IncludesDeletedWhenNamed ? parsed : parsed.OnlyValid();
 
         var descending = !query.ReverseResults;
 
@@ -119,10 +120,8 @@ internal class TreatmentReadService : ITreatmentStore
         FindQuery find, int limit, bool descending, CancellationToken ct) =>
         _projection.GetProjectedTreatmentsAsync(
             LegacyTreatmentRange.FromMills(
-                find.FromMills, find.ToMills, limit, descending, includeDeleted: NamesIsValid(find)),
+                find.FromMills, find.ToMills, limit, descending, includeDeleted: find.ReadsDeleted),
             ct);
-
-    private static bool NamesIsValid(FindQuery find) => find.Fields.Contains("isValid");
 
     private static IEnumerable<Treatment> OrderByTime(IEnumerable<Treatment> treatments, bool descending) =>
         descending ? treatments.OrderByDescending(t => t.Mills) : treatments.OrderBy(t => t.Mills);

@@ -2,14 +2,15 @@ using FluentAssertions;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Treatments;
 
 /// <summary>
 /// The tables that carry the unfiltered tenant timestamp index are listed in Infrastructure, while the
-/// legacy treatment window reads that take soft-deleted rows live here, so only this test ties the two
-/// together.
+/// legacy window reads that take soft-deleted rows live here and in the repositories, so only this test
+/// ties the two together.
 /// </summary>
 [Trait("Category", "Unit")]
 public class DeletedInclusiveWindowIndexTests
@@ -28,5 +29,31 @@ public class DeletedInclusiveWindowIndexTests
 
         read.Should().BeSubsetOf(NocturneDbContext.V4DeletedInclusiveWindowEntities,
             "a legacy treatment window read that takes deleted rows walks the tenant timestamp index, which the partial list indexes cannot stand in for");
+    }
+
+    [Fact]
+    public void EveryEntryAndDeviceStatusWindowTable_HasTheUnfilteredTenantTimestampIndex()
+    {
+        var read = new[] { typeof(SensorGlucoseRepository), typeof(MeterGlucoseRepository), typeof(CalibrationRepository) }
+            .Select(EntityOf)
+            .Concat(typeof(DeviceStatusGroupRepository.Rows).GetProperties()
+                .Select(p => p.PropertyType.GetGenericArguments().Single()))
+            .ToList();
+
+        read.Should().HaveCount(7, "three entry tables and the four tables a device status is stored in");
+
+        read.Should().BeSubsetOf(NocturneDbContext.V4DeletedInclusiveWindowEntities,
+            "an entry or device status window read that takes deleted rows walks the tenant timestamp index, which the partial list indexes cannot stand in for");
+    }
+
+    private static Type EntityOf(Type repository)
+    {
+        for (var type = repository; type is not null; type = type.BaseType)
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(V4RepositoryBase<,>))
+                return type.GetGenericArguments()[1];
+        }
+
+        throw new InvalidOperationException($"{repository.Name} does not read through V4RepositoryBase");
     }
 }

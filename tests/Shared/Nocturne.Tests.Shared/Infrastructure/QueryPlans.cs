@@ -52,7 +52,10 @@ public static class QueryPlans
 
     public sealed class LastReaderCapture : DbCommandInterceptor
     {
-        public NpgsqlCommand? Command { get; private set; }
+        public NpgsqlCommand? Command => Commands.Count == 0 ? null : Commands[^1];
+
+        /// <summary>Every reader command sent, in order, for a read that sends several.</summary>
+        public List<NpgsqlCommand> Commands { get; } = [];
 
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
@@ -61,7 +64,7 @@ public static class QueryPlans
             var copy = new NpgsqlCommand(command.CommandText);
             foreach (NpgsqlParameter p in command.Parameters)
                 copy.Parameters.Add(p.Clone());
-            Command = copy;
+            Commands.Add(copy);
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }

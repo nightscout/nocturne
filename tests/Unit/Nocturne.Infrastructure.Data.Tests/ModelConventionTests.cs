@@ -169,16 +169,31 @@ public class ModelConventionTests
         var model = Model();
 
         NocturneDbContext.V4DeletedInclusiveWindowEntities.Select(model.FindEntityType)
-            .Where(e => e is null
-                || !e.GetIndexes().Any(i =>
-                    i.GetDatabaseName() == $"ix_{e.GetTableName()}_tenant_{i.Properties[^1].GetColumnName()}"
-                    && Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp)])
-                    && !i.IsUnique
-                    && i.IsDescending is not null
-                    && i.IsDescending.SequenceEqual([false, true])
-                    && i.GetFilter() is null))
+            .Where(e => e is null || !e.GetIndexes().Any(i => IsDeletedInclusiveWindowIndex(e, i)))
             .Select(e => e?.ShortName() ?? "<unmapped>")
             .Should().BeEmpty("a window read over deleted rows needs a tenant-led timestamp index that holds them");
+    }
+
+    /// <summary>
+    /// A table with a list index takes that index's columns, so the partial list index stays the
+    /// smaller for a live read; see <see cref="ModelConventions"/>.
+    /// </summary>
+    private static bool IsDeletedInclusiveWindowIndex(IEntityType entity, IIndex index)
+    {
+        var prefix = $"ix_{entity.GetTableName()}_tenant_{entity.FindProperty(nameof(IObservationTimestamped.Timestamp))!.GetColumnName()}";
+        var (name, columns, descending) = NocturneDbContext.V4SortedListEntities.Contains(entity.ClrType)
+            ? ($"{prefix}_id_any",
+                new[] { nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp), nameof(IIdentified.Id) },
+                new[] { false, true, true })
+            : (prefix,
+                new[] { nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp) },
+                new[] { false, true });
+        return index.GetDatabaseName() == name
+            && Columns(index).SequenceEqual(columns)
+            && !index.IsUnique
+            && index.IsDescending is not null
+            && index.IsDescending.SequenceEqual(descending)
+            && index.GetFilter() is null;
     }
 
     [Fact]

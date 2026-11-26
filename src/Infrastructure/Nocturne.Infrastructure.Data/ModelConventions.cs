@@ -97,6 +97,21 @@ internal static class ModelConventions
         foreach (var entity in V4DeletedInclusiveWindowEntities.Select(t => modelBuilder.Entity(t)))
         {
             var column = entity.Property(nameof(IObservationTimestamped.Timestamp)).Metadata.GetColumnName();
+            if (V4SortedListEntities.Contains(entity.Metadata.ClrType))
+            {
+                // The list index's columns, so a live read keeps the partial list index, the smaller of
+                // the two once any row is deleted (until then they hold the same entries), and only a
+                // read that takes deleted rows needs this one. With fewer columns this index would be
+                // the smaller, and a live read ordered by timestamp alone would walk it past deleted
+                // rows. Named in HasIndex because EF keys an unnamed index by its columns, which the
+                // list index already holds.
+                var name = $"ix_{entity.Metadata.GetTableName()}_tenant_{column}_id_any";
+                entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp), nameof(IIdentified.Id)], name)
+                    .HasDatabaseName(name)
+                    .IsDescending(false, true, true);
+                continue;
+            }
+
             entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp))
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_{column}")
                 .IsDescending(false, true);

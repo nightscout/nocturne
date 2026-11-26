@@ -84,17 +84,3 @@ internal sealed class SensorStateReportEntityConfiguration : IEntityTypeConfigur
             .HasFilter("deleted_at IS NULL");
     }
 }
-
-internal sealed class DeviceStatusExtrasEntityConfiguration : IEntityTypeConfiguration<DeviceStatusExtrasEntity>
-{
-    public void Configure(EntityTypeBuilder<DeviceStatusExtrasEntity> entity)
-    {
-        // The device status list walks extras newest-first beside the snapshots; see
-        // DeviceStatusGroupRepository.GetAsync.
-        entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_device_status_extras_tenant_timestamp")
-            .IsDescending(false, true)
-            .HasFilter("deleted_at IS NULL");
-    }
-}

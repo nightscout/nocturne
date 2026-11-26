@@ -147,6 +147,30 @@ public class DeviceStatusGroupRepositoryTests
     }
 
     [Fact]
+    public async Task WindowIncludingDeleted_ListsAStatusAsDeletedOnlyOnceEveryRowIs()
+    {
+        using var scope = await _fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var r = new Repos(scope);
+        var partlyRemoved = await r.StatusAsync(T0, aps: true, pump: true);
+        var removed = await r.StatusAsync(T0.AddMinutes(-1), aps: true, uploader: true);
+        var live = await r.StatusAsync(T0.AddMinutes(-2), uploader: true);
+        await r.Aps.DeleteAsync((await r.Aps.GetByCorrelationIdsAsync([partlyRemoved!.Value])).Single().Id, WriteOrigin.Backfill);
+        await r.Aps.DeleteAsync((await r.Aps.GetByCorrelationIdsAsync([removed!.Value])).Single().Id, WriteOrigin.Backfill);
+        await r.Uploaders.DeleteAsync((await r.Uploaders.GetByCorrelationIdsAsync([removed.Value])).Single().Id, WriteOrigin.Backfill);
+
+        var window = await r.Groups.GetIncludingDeletedAsync(null, null, null, limit: 10, offset: 0, descending: true);
+
+        window.Select(h => (Shape(h.Record), h.Deleted)).Should().Equal(
+            ((partlyRemoved, "P"), false),
+            ((removed, "AU"), true),
+            ((live, "U"), false));
+        (await r.Groups.GetIncludingDeletedAsync(null, null, null, limit: 1, offset: 1, descending: true))
+            .Select(h => Shape(h.Record).Correlation).Should().Equal(removed);
+        (await r.Groups.GetAsync(null, null, null, 10, 0, descending: true)).Select(g => Shape(g).Correlation)
+            .Should().Equal(partlyRemoved, live);
+    }
+
+    [Fact]
     public async Task Ties_AreOrderedByAnchorIdNewestFirst()
     {
         using var scope = await _fx.BeginTenantScopeAsync(Guid.NewGuid());

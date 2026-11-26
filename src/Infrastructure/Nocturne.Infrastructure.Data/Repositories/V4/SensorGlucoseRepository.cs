@@ -84,32 +84,42 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
+    public async Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         DateTime? afterTimestamp = null, Guid? afterId = null,
         CancellationToken ct = default, Guid? patientDeviceId = null,
         GlucoseStreams streams = GlucoseStreams.All) =>
-        ReadForEntriesAsync(from, to, device, source, limit, offset, descending,
-            afterTimestamp, afterId, patientDeviceId, streams, orderByValue: false, ct);
+        Readings(await ReadForEntriesAsync(from, to, device, source, limit, offset, descending,
+            afterTimestamp, afterId, patientDeviceId, streams, orderByValue: false, includeDeleted: false, ct));
 
     /// <inheritdoc />
-    public Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
+    public async Task<IEnumerable<SensorGlucose>> GetForEntriesByValueAsync(
         DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending,
         CancellationToken ct = default, GlucoseStreams streams = GlucoseStreams.All) =>
-        ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending,
-            afterTimestamp: null, afterId: null, patientDeviceId: null, streams, orderByValue: true, ct);
+        Readings(await ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending,
+            afterTimestamp: null, afterId: null, patientDeviceId: null, streams, orderByValue: true, includeDeleted: false, ct));
 
-    private async Task<IEnumerable<SensorGlucose>> ReadForEntriesAsync(
+    /// <inheritdoc />
+    public Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> GetForEntriesIncludingDeletedAsync(
+        DateTime? from, DateTime? to, string? source, int limit, int offset, bool descending, bool orderByValue,
+        GlucoseStreams streams, CancellationToken ct = default) =>
+        ReadForEntriesAsync(from, to, device: null, source, limit, offset, descending,
+            afterTimestamp: null, afterId: null, patientDeviceId: null, streams, orderByValue, includeDeleted: true, ct);
+
+    private static IEnumerable<SensorGlucose> Readings(IReadOnlyList<HistoryRecord<SensorGlucose>> rows) =>
+        rows.Select(r => r.Record).ToList();
+
+    private async Task<IReadOnlyList<HistoryRecord<SensorGlucose>>> ReadForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        GlucoseStreams streams, bool orderByValue, CancellationToken ct)
+        GlucoseStreams streams, bool orderByValue, bool includeDeleted, CancellationToken ct)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId, streams, orderByValue)
-            .Select(e => new SensorGlucose
+                descending, afterTimestamp, afterId, patientDeviceId, streams, orderByValue, includeDeleted)
+            .Select(e => new HistoryRecord<SensorGlucose>(new SensorGlucose
             {
                 Id = e.Id,
                 LegacyId = e.LegacyId,
@@ -129,7 +139,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 Unfiltered = e.Unfiltered,
                 Delta = e.Delta,
                 Rssi = e.Rssi,
-            })
+            }, e.DeletedAt != null))
             .ToListAsync(ct);
     }
 
@@ -279,11 +289,12 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        GlucoseStreams streams, bool orderByValue = false)
+        GlucoseStreams streams, bool orderByValue = false, bool includeDeleted = false)
     {
         return PagedRead(
-            ctx.SensorGlucose.AsNoTracking(), from, to, device, source, limit, offset, descending,
-            query => WithAttribution(query, patientDeviceId, streams),
+            includeDeleted ? ctx.SensorGlucose.IncludingDeleted().AsNoTracking() : ctx.SensorGlucose.AsNoTracking(),
+            from, to, device, source, limit, offset, descending,
+            query => WithAttribution(query, patientDeviceId, streams, includeDeleted),
             afterTimestamp, afterId,
             query => orderByValue
                 ? descending
@@ -292,13 +303,19 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 : query.InObservationOrder(descending));
     }
 
+    /// <remarks>
+    /// With <paramref name="includeDeleted"/>, a deleted reading is kept whichever stream it was, as
+    /// <see cref="GetCanonicalModifiedSinceAsync"/> keeps it.
+    /// </remarks>
     private static IQueryable<SensorGlucoseEntity> WithAttribution(
-        IQueryable<SensorGlucoseEntity> query, Guid? patientDeviceId, GlucoseStreams streams)
+        IQueryable<SensorGlucoseEntity> query, Guid? patientDeviceId, GlucoseStreams streams, bool includeDeleted = false)
     {
         if (patientDeviceId.HasValue)
             query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
         if (streams != GlucoseStreams.All)
-            query = query.Where(e => !e.IsSecondaryStream);
+            query = includeDeleted
+                ? query.Where(e => e.DeletedAt != null || !e.IsSecondaryStream)
+                : query.Where(e => !e.IsSecondaryStream);
         if (streams == GlucoseStreams.CanonicalExcludingEphemeral)
             query = query.Where(e => e.DataSource == null
                 || (e.DataSource != DataSources.DemoService && e.DataSource != DataSources.Testing));

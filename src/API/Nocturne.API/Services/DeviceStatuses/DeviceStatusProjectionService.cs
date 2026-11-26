@@ -126,7 +126,7 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
         }
 
         var (matching, truncated) = await FindFilteredFetch.MatchAsync<DeviceStatus>(
-            async (limit, offset) => await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, descending, ct), ct),
+            async (limit, offset) => await ReadWindowAsync(from, to, device, limit, offset, descending, find.ReadsDeleted, ct),
             find.Matches, status => status.Id, (long)count + skip, MaxFilterFetch);
 
         if (truncated)
@@ -139,6 +139,17 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
 
         return matching.Skip(skip).Take(count).ToList();
     }
+
+    /// <summary>
+    /// The statuses of one window. With <paramref name="includeDeleted"/> it reads the statuses stored
+    /// deleted as well, each served with <c>isValid: false</c> (<see cref="FindQuery.ReadsDeleted"/>).
+    /// </summary>
+    private async Task<IReadOnlyList<DeviceStatus>> ReadWindowAsync(
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, bool includeDeleted,
+        CancellationToken ct) =>
+        includeDeleted
+            ? await ProjectAsync(await _groupRepo.GetIncludingDeletedAsync(from, to, device, limit, offset, descending, ct), ct)
+            : await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, descending, ct), ct);
 
     /// <inheritdoc />
     public async Task<long> CountMatchingAsync(FindQuery find, CancellationToken ct)
@@ -295,11 +306,17 @@ internal class DeviceStatusProjectionService : IDeviceStatusStore
         long lastModified, int limit, CancellationToken ct)
     {
         var page = await _groupRepo.GetModifiedSinceAsync(lastModified, limit, ct);
-        var statuses = await ProjectAsync(page.Select(r => r.Record).ToList(), ct);
+        return await ProjectAsync(page, ct);
+    }
 
-        for (var i = 0; i < page.Count; i++)
+    /// <summary>Projects each status as the overload over groups does, a deleted one served with <c>isValid: false</c>.</summary>
+    private async Task<List<DeviceStatus>> ProjectAsync(
+        IReadOnlyList<HistoryRecord<DeviceStatusGroup>> rows, CancellationToken ct)
+    {
+        var statuses = await ProjectAsync(rows.Select(r => r.Record).ToList(), ct);
+        for (var i = 0; i < rows.Count; i++)
         {
-            if (page[i].Deleted)
+            if (rows[i].Deleted)
                 statuses[i].IsValid = false;
         }
 

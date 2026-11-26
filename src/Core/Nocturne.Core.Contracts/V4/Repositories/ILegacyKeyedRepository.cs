@@ -200,11 +200,11 @@ public interface ILegacyKeyedRepository<TRecord>
 
     /// <summary>
     /// <see cref="IV4Repository{T}.GetAsync"/> over the rows stored deleted as well as the live ones, with
-    /// the same window, duplicate rule and order: one row per dose, a deleted one flagged
+    /// the same window, source, duplicate rule and order: one row per dose, a deleted one flagged
     /// (<see cref="HistoryRecord{T}"/>). A deleted copy that another copy stands in for is not listed.
     /// </summary>
     Task<IReadOnlyList<HistoryRecord<TRecord>>> GetIncludingDeletedAsync(
-        DateTime? from, DateTime? to, int limit, bool descending, CancellationToken ct = default);
+        DateTime? from, DateTime? to, string? source, int limit, bool descending, CancellationToken ct = default);
 
     /// <summary>
     /// The stored, non-empty correlation id of each live row carrying one of

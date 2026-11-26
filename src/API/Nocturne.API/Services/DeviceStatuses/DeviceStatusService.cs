@@ -121,7 +121,7 @@ internal sealed class DeviceStatusService(
                 "Bulk delete matched the maximum of {Limit} records — results may be truncated", BulkDeleteLimit);
 
         long deletedCount = 0;
-        foreach (var status in matching)
+        foreach (var status in matching.Where(s => s.IsValid != false))
         {
             if (!string.IsNullOrEmpty(status.Id)
                 && await decomposer.DeleteStoredAsync(status.Id, WriteOrigin.Live, cancellationToken) > 0)

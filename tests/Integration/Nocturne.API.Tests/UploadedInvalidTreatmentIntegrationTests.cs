@@ -395,6 +395,18 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
         (await HistoryAsync(client)).Should().Contain(t => IsDeleted(t));
     }
 
+    [Fact]
+    public async Task A_v3_search_naming_isValid_lists_no_treatment_stored_deleted()
+    {
+        var client = CreateAuthenticatedClient();
+        await UploadAsync(client, Treatment("Correction Bolus", NewId(), isValid: false), v3: false);
+        (await GetAsync(client, "/api/v1/treatments?find[isValid]=false&count=100")).AsArray().Should().ContainSingle();
+
+        var search = await GetAsync(client, "/api/v3/treatments?isValid$eq=false&limit=100");
+
+        search["result"]!.AsArray().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
