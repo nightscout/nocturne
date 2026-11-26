@@ -24509,9 +24509,8 @@ msgstr "Změna cesty databázi nepřesune"
 msgid "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
 msgstr "Zastavte stack bez odstranění kontejnerů nebo volumes a poté si poznamenejte zastavený kontejner PostgreSQL: <0/>"
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
-msgstr "Při zastavené databázi vytvořte a zkontrolujte záložní archiv vlastněný rootem: <0/> Před pokračováním archiv bezpečně uložte."
+#~ msgid "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+#~ msgstr "Při zastavené databázi vytvořte a zkontrolujte záložní archiv vlastněný rootem: <0/> Před pokračováním archiv bezpečně uložte."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
@@ -51102,4 +51101,120 @@ msgstr[1] ""
 
 #: src/lib/components/teams/TeamStaffSection.svelte
 msgid "Sees no one through the team."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The guide also has the procedure to move Nocturne to another server. Before you use it, run <0/> on the old server. Without this, the old server starts the stack again when it restarts."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/install-script/+page.svelte
+msgid "The install script made <0/> and its <1/> file as root. Put <2/> before each <3/> command in the move procedure, and use <4/> to remove the archive. To copy <5/>, first make a copy that you can read: <6/>. Send <7/>, and on the new server, name it <8/>. Then remove <9/> on both servers."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create and inspect a backup archive that only you can read, while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "<0>Passkeys.</0> The relying party ID of a passkey is the host name in <1/>. A passkey works only on that domain and its subdomains. A passkey from the old domain does not work on a new domain."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "<0>Sign-in providers.</0> The callback URL of each OpenID Connect provider is <1/>. On a new domain, register the new URL with each provider."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "<0>Share links.</0> A public share link has the form <1/>. A link that you sent still names the old domain."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "<0>Tenants.</0> Nocturne finds a tenant from the first label of the host name. A tenant answers at <1/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The PostgreSQL container has your host directory mounted, so the command archives that directory."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the new server, create the PostgreSQL data directory as in \"Set the PostgreSQL data directory\" above. The directory must be empty. If its path is not the same as on the old server, change <0/> in <1/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Your own reverse proxy serves the domain. Point it at port 8080 of the new server, or move it to the new server and change the records to that server."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Change the <0>A</0> record for <1/>. If you have a wildcard record for <2/>, change it also. The bundled proxy uses the HTTP-01 challenge to get its certificates, so the records must point at the new server on the first start. The old certificates stay on the old server."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If it shows files, stop. Make sure that this is the new server. Then run <0/>, make a new empty directory, set <1/> to it, and do the create step again."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If it shows files, stop. Make sure that this is the new server, and that its database holds no data that you need. Then run <0/> and do the create step again."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Restore the archive into the empty PostgreSQL data directory:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Restore the archive into the empty PostgreSQL volume:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the old server, update Nocturne to the latest release, as in \"Update Nocturne\" above. Check that Nocturne works. Then both servers use the same images."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the new server, install Docker and do Step 1 to download the release bundle. Do this before the downtime. Do not do Step 2: a new <0/> file holds passwords that the restored database does not accept."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the old server, stop the stack without removing its containers or volumes. Then record the stopped PostgreSQL container. Do not use <0/>. It deletes the volumes. <1/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the old server, make an archive of the stopped PostgreSQL data, and list its first files. The archive holds your whole database, so only you can read it. The command keeps the numeric owner of each file. <0/> <1/> Look at the PostgreSQL image tag in <2/> on both servers. The two tags must be the same. An update replaces images, not <3/>, so an older install can name another tag. <4/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Copy these files to the <0/> folder on the new server. Use an encrypted channel, for example <1/>. Replace the values in angle brackets. Add the other files in this list to the command. <2/> <3><0/> <1><0/>. It holds <1/> and the database passwords. The database does not hold them. For what you lose without it, see \"If you lose the .env file\" above.</1> <2>Any override files that you made, such as <0/>.</2> <3><0/>, only if the image tags are not the same.</3></3>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "At your DNS provider, change each record that points at the old server to the address of the new server. Do this before you start the stack. <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the new server, create the PostgreSQL container without starting it: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "On the new server, check that the PostgreSQL data location is empty. The command must show nothing. <0/> <1/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Start the stack. Then do Step 4 to verify the installation, and check your existing Nocturne data: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Move Nocturne to another server"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Use these steps to move Nocturne to new hardware. You copy the stopped PostgreSQL data to the new server and start the same stack there. Schedule downtime first. Nocturne is off from the time you stop the old server until the new server runs."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This copies PostgreSQL's physical data directory. The new server must use the same PostgreSQL major version and the same processor type, for example both x86_64 or both ARM64. PostgreSQL does not support a copy of its files between processor types. These commands assume that Docker runs on a Linux host and that you are in the directory with the Compose files and <0/>. On a server that the install script made, that directory is <1/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "<0>Keep the same domain.</0> Do not change <1/> in <2/>. Nocturne uses the domain in many places. For example:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep the old server and its volume until the new server is verified. Do not start the old stack again after the new server takes new data. Then the two databases are different, and you cannot merge them. When the new server is verified, delete <0/> on both servers. It holds your whole database."
 msgstr ""
