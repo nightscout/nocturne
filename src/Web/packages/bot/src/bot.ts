@@ -2,11 +2,11 @@ import { randomBytes } from "node:crypto";
 import { Chat } from "chat";
 import type { Adapter } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createResendAdapter } from "@resend/chat-sdk-adapter";
 import { createPostgresState } from "@chat-adapter/state-pg";
 import { AccentedDiscordAdapter } from "./adapters/accented-discord.js";
 import { AccentedSlackAdapter } from "./adapters/accented-slack.js";
+import { NocturneWhatsAppAdapter } from "./adapters/nocturne-whatsapp.js";
 import { createLogger } from "./lib/logger.js";
 
 const logger = createLogger();
@@ -50,6 +50,15 @@ function telegramWebhookSecretToken(configured: string | undefined): string {
     "No Telegram webhook secret token is configured; Telegram webhook calls will be refused until one is set.",
   );
   return randomBytes(32).toString("hex");
+}
+
+/** A WhatsApp setting from the stored platform settings, else the environment. Refuses to start without one. */
+function whatsappSetting(name: string, stored: string | undefined, envVar: string): string {
+  const value = stored || process.env[envVar];
+  if (!value) {
+    throw new Error(`WhatsApp ${name} is required. Set it in the WhatsApp settings or ${envVar}.`);
+  }
+  return value;
 }
 
 export function createBot(options: BotOptions): Chat {
@@ -98,25 +107,16 @@ export function createBot(options: BotOptions): Chat {
   const whatsapp = platforms.whatsapp;
   if (whatsapp) {
     logger.info("Enabling WhatsApp adapter");
-    if (typeof whatsapp === "object") {
-      adapters.whatsapp = createWhatsAppAdapter({
-        accessToken: whatsapp.accessToken!,
-        appSecret: whatsapp.appSecret!,
-        phoneNumberId: whatsapp.phoneNumberId!,
-        verifyToken: whatsapp.verifyToken!,
-        userName: "nocturne",
-        logger,
-      });
-    } else {
-      adapters.whatsapp = createWhatsAppAdapter({
-        accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,
-        appSecret: process.env.WHATSAPP_APP_SECRET!,
-        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
-        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
-        userName: "nocturne",
-        logger,
-      });
-    }
+    const configured = typeof whatsapp === "object" ? whatsapp : undefined;
+    adapters.whatsapp = new NocturneWhatsAppAdapter({
+      accessToken: whatsappSetting("accessToken", configured?.accessToken, "WHATSAPP_ACCESS_TOKEN"),
+      appSecret: whatsappSetting("appSecret", configured?.appSecret, "WHATSAPP_APP_SECRET"),
+      phoneNumberId: whatsappSetting("phoneNumberId", configured?.phoneNumberId, "WHATSAPP_PHONE_NUMBER_ID"),
+      verifyToken: whatsappSetting("verifyToken", configured?.verifyToken, "WHATSAPP_VERIFY_TOKEN"),
+      apiUrl: process.env.WHATSAPP_API_URL,
+      userName: "nocturne",
+      logger,
+    });
   }
 
   const resend = platforms.resend;

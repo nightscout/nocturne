@@ -423,6 +423,9 @@ internal sealed class AlertDeliveryService(
         await using var db = await contextFactory.CreateAsync(ct);
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
+        // The platform's failure of this same message can land first; see MarkSentMessageFailedAsync.
+        if (delivery.Status == "failed" && platformMessageId is not null
+                                        && delivery.PlatformMessageId == platformMessageId) return;
 
         delivery.Status = "delivered";
         delivery.DeliveredAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -440,6 +443,19 @@ internal sealed class AlertDeliveryService(
         delivery.Status = "failed";
         delivery.RetryCount++;
         delivery.LastError = error;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkSentMessageFailedAsync(Guid deliveryId, string platformMessageId, string error, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateAsync(ct);
+        var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
+        if (delivery is null) return;
+
+        delivery.Status = "failed";
+        delivery.RetryCount++;
+        delivery.LastError = error;
+        delivery.PlatformMessageId = platformMessageId;
         await db.SaveChangesAsync(ct);
     }
 
