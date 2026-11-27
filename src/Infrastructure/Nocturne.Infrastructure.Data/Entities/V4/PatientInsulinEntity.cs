@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -35,7 +36,7 @@ public class PatientInsulinEntity : ITenantScoped, IAuditable, ISoftDeletable, I
     /// Insulin name (e.g. "Humalog", "Lantus")
     /// </summary>
     [Column("name")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.PatientInsulin.Name)]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
@@ -60,14 +61,14 @@ public class PatientInsulinEntity : ITenantScoped, IAuditable, ISoftDeletable, I
     /// Free-text notes about the insulin
     /// </summary>
     [Column("notes")]
-    [MaxLength(4096)]
+    [MaxLength(ColumnLengths.PatientInsulin.Notes)]
     public string? Notes { get; set; }
 
     /// <summary>
     /// Reference to a specific insulin formulation definition
     /// </summary>
     [Column("formulation_id")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PatientInsulin.FormulationId)]
     public string? FormulationId { get; set; }
 
     /// <summary>
@@ -86,7 +87,7 @@ public class PatientInsulinEntity : ITenantScoped, IAuditable, ISoftDeletable, I
     /// Insulin activity curve type (e.g. "rapid-acting", "ultra-rapid")
     /// </summary>
     [Column("curve")]
-    [MaxLength(32)]
+    [MaxLength(ColumnLengths.PatientInsulin.Curve)]
     public string Curve { get; set; } = "rapid-acting";
 
     /// <summary>

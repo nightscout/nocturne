@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -39,7 +40,7 @@ public class CoachMarkStateEntity : ITenantScoped
     /// Current status of the coach mark (e.g. unseen, seen, completed)
     /// </summary>
     [Column("status")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.CoachMarkState.Status)]
     public string Status { get; set; } = "unseen";
 
     /// <summary>

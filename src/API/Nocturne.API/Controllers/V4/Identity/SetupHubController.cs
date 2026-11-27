@@ -6,6 +6,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.SetupHub;
@@ -117,6 +118,6 @@ public record DismissSetupStripRequest
 {
     /// <summary>The <see cref="SetupHubStatus.Revision"/> the strip was showing.</summary>
     [JsonRequired]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.Tenant.SetupStripDismissedRevision)]
     public string Revision { get; init; } = "";
 }

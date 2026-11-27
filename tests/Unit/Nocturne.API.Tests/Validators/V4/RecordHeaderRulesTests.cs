@@ -1,6 +1,8 @@
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Validators.Alerts;
 using Nocturne.API.Validators.V4;
 using Nocturne.Core.Constants;
 using Xunit;
@@ -53,6 +55,14 @@ public class RecordHeaderRulesTests
         typeof(UpdateBasalInjectionRequestValidator),
     };
 
+    public static TheoryData<Type> SyncKeyedRecordValidators() => new()
+    {
+        typeof(UpsertBGCheckRequestValidator),
+        typeof(UpsertDeviceEventRequestValidator),
+        typeof(UpsertNoteRequestValidator),
+        typeof(BodyWeightValidator),
+    };
+
     public static TheoryData<Type> HealthSampleValidators() => new()
     {
         typeof(UpsertHeartRateRequestValidator),
@@ -100,6 +110,17 @@ public class RecordHeaderRulesTests
     }
 
     [Theory]
+    [MemberData(nameof(SyncKeyedRecordValidators))]
+    public void A_sync_key_needs_a_data_source_in_the_words_every_record_uses(Type validatorType)
+    {
+        var failures = Validate(validatorType, ("DataSource", null), ("SyncIdentifier", "abc"));
+
+        failures.Should().Contain(f => f.PropertyName == "DataSource" && f.ErrorMessage == RecordColumnRules.DataSourceRequiredMessage);
+        Errors(validatorType, ("DataSource", "loop"), ("SyncIdentifier", "abc")).Should().NotContain("DataSource");
+        Errors(validatorType, ("DataSource", null), ("SyncIdentifier", null)).Should().NotContain("DataSource");
+    }
+
+    [Theory]
     [MemberData(nameof(BasalInjectionValidators))]
     public void Basal_injection_notes_are_capped_at_their_column(Type validatorType)
     {
@@ -123,6 +144,10 @@ public class RecordHeaderRulesTests
         { typeof(BodyWeightValidator), "Device", RecordColumnLengths.HealthSampleLabel },
         { typeof(BodyWeightValidator), "EnteredBy", RecordColumnLengths.HealthSampleLabel },
         { typeof(BodyWeightValidator), "CreatedAt", 50 },
+        { typeof(SleepSessionValidator), "Timezone", 100 },
+        { typeof(SleepSessionValidator), "SourceDevice", 200 },
+        { typeof(SleepSessionValidator), "SourceApp", 200 },
+        { typeof(SleepSessionValidator), "OriginalId", 255 },
         { typeof(CreateStateSpanRequestValidator), "State", 100 },
         { typeof(CreateStateSpanRequestValidator), "Source", 50 },
         { typeof(CreateStateSpanRequestValidator), "OriginalId", 255 },
@@ -139,6 +164,38 @@ public class RecordHeaderRulesTests
         { typeof(CarbRatioScheduleValidator), "ProfileName", RecordColumnLengths.ScheduleProfileName },
         { typeof(SensitivityScheduleValidator), "ProfileName", RecordColumnLengths.ScheduleProfileName },
         { typeof(TargetRangeScheduleValidator), "ProfileName", RecordColumnLengths.ScheduleProfileName },
+        { typeof(CreateLabHbA1cResultRequestValidator), "Note", 500 },
+        { typeof(StartTrackerInstanceRequestValidator), "StartNotes", 1000 },
+        { typeof(StartTrackerInstanceRequestValidator), "StartTreatmentId", 255 },
+        { typeof(CompleteTrackerInstanceRequestValidator), "CompletionNotes", 1000 },
+        { typeof(CompleteTrackerInstanceRequestValidator), "CompleteTreatmentId", 255 },
+        { typeof(ApplyPresetRequestValidator), "OverrideNotes", 1000 },
+        { typeof(CreateNotificationThresholdRequestValidator), "Description", 500 },
+        { typeof(ConnectorFoodEntryImportValidator), "ConnectorSource", 50 },
+        { typeof(ConnectorFoodEntryImportValidator), "ExternalEntryId", 255 },
+        { typeof(ConnectorFoodEntryImportValidator), "ExternalFoodId", 255 },
+        { typeof(ConnectorFoodEntryImportValidator), "MealName", 50 },
+        { typeof(ConnectorFoodEntryImportValidator), "ServingDescription", 100 },
+        { typeof(ConnectorFoodImportValidator), "ExternalId", 255 },
+        { typeof(ConnectorFoodImportValidator), "Name", 500 },
+        { typeof(ConnectorFoodImportValidator), "BrandName", 200 },
+        { typeof(UpsertTimezoneEntryRequestValidator), "Timezone", 64 },
+        { typeof(UpdateCoachMarkRequestValidator), "Status", 50 },
+        { typeof(AcknowledgeRequestValidator), "AcknowledgedBy", 256 },
+        { typeof(MarkDeliveredRequestValidator), "PlatformMessageId", 256 },
+        { typeof(MarkDeliveredRequestValidator), "PlatformThreadId", 256 },
+        { typeof(MarkFailedRequestValidator), "PlatformMessageId", 256 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "TraceId", 128 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "RequestMethod", 10 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "RequestPath", 2048 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "Summary", 1000 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "SelectedResponseTarget", 50 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "SelectionReason", 500 },
+        { typeof(DiscrepancyAnalysisDtoValidator), "ErrorMessage", 2000 },
+        { typeof(DiscrepancyDetailDtoValidator), "Field", 500 },
+        { typeof(DiscrepancyDetailDtoValidator), "NightscoutValue", 2000 },
+        { typeof(DiscrepancyDetailDtoValidator), "NocturneValue", 2000 },
+        { typeof(DiscrepancyDetailDtoValidator), "Description", 1000 },
     };
 
     [Theory]
@@ -166,7 +223,9 @@ public class RecordHeaderRulesTests
     private static IList<FluentValidation.Results.ValidationFailure> Validate(Type validatorType, params (string Property, object? Value)[] values)
     {
         var requestType = RequestTypeOf(validatorType);
-        var request = Activator.CreateInstance(requestType)!;
+        var request = requestType.GetConstructor(Type.EmptyTypes) is not null
+            ? Activator.CreateInstance(requestType)!
+            : RuntimeHelpers.GetUninitializedObject(requestType);
         if (requestType.GetProperty("Timestamp") is { } timestamp)
         {
             timestamp.SetValue(request, timestamp.PropertyType == typeof(DateTime) ? DateTime.UtcNow : (object)DateTimeOffset.UtcNow);

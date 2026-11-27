@@ -7,6 +7,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.SetupHub;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
@@ -140,7 +141,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
 public record ConfirmSetupDeviceRequest
 {
     [Required]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PatientDevice.CatalogId)]
     public string CatalogId { get; init; } = "";
 
     /// <summary>The AID algorithm to record on a pump; ignored for a CGM.</summary>
@@ -151,7 +152,7 @@ public record ConfirmSetupDeviceRequest
 public record AddSetupInsulinRequest
 {
     [Required]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PatientInsulin.FormulationId)]
     public string FormulationId { get; init; } = "";
 }
 

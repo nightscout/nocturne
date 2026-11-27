@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -35,21 +36,21 @@ public class PatientDeviceEntity : ITenantScoped, IAuditable, ISoftDeletable, IS
     /// Device manufacturer name
     /// </summary>
     [Column("manufacturer")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.PatientDevice.Manufacturer)]
     public string Manufacturer { get; set; } = string.Empty;
 
     /// <summary>
     /// Device model name
     /// </summary>
     [Column("model")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.PatientDevice.Model)]
     public string Model { get; set; } = string.Empty;
 
     /// <summary>
     /// Reference to the device catalog entry (e.g. "dexcom-g7")
     /// </summary>
     [Column("catalog_id")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.PatientDevice.CatalogId)]
     public string? CatalogId { get; set; }
 
     /// <summary>
@@ -63,7 +64,7 @@ public class PatientDeviceEntity : ITenantScoped, IAuditable, ISoftDeletable, IS
     /// Device serial number
     /// </summary>
     [Column("serial_number")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.PatientDevice.SerialNumber)]
     public string? SerialNumber { get; set; }
 
     /// <summary>
@@ -100,7 +101,7 @@ public class PatientDeviceEntity : ITenantScoped, IAuditable, ISoftDeletable, IS
     /// Free-text notes about the device
     /// </summary>
     [Column("notes")]
-    [MaxLength(4096)]
+    [MaxLength(ColumnLengths.PatientDevice.Notes)]
     public string? Notes { get; set; }
 
     /// <summary>

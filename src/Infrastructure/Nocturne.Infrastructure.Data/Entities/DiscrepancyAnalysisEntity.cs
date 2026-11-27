@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -27,7 +28,7 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// Request trace identifier for tracking
     /// </summary>
     [Column("correlation_id")]
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.TraceId)]
     [Required]
     public string TraceId { get; set; } = string.Empty;
 
@@ -42,7 +43,7 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// HTTP method of the intercepted request
     /// </summary>
     [Column("request_method")]
-    [MaxLength(10)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.RequestMethod)]
     [Required]
     public string RequestMethod { get; set; } = string.Empty;
 
@@ -50,7 +51,7 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// Request path and query string
     /// </summary>
     [Column("request_path")]
-    [MaxLength(2048)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.RequestPath)]
     [Required]
     public string RequestPath { get; set; } = string.Empty;
 
@@ -110,7 +111,7 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// Summary of comparison results
     /// </summary>
     [Column("summary")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.Summary)]
     [Required]
     public string Summary { get; set; } = string.Empty;
 
@@ -118,14 +119,14 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// Selected response target (Nightscout or Nocturne)
     /// </summary>
     [Column("selected_response_target")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.SelectedResponseTarget)]
     public string? SelectedResponseTarget { get; set; }
 
     /// <summary>
     /// Reason for response selection
     /// </summary>
     [Column("selection_reason")]
-    [MaxLength(500)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.SelectionReason)]
     public string? SelectionReason { get; set; }
 
     /// <summary>
@@ -173,6 +174,6 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// Error message if comparison failed
     /// </summary>
     [Column("error_message")]
-    [MaxLength(2000)]
+    [MaxLength(ColumnLengths.DiscrepancyAnalysis.ErrorMessage)]
     public string? ErrorMessage { get; set; }
 }

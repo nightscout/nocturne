@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -50,7 +51,7 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
     /// Who acknowledged the excursion (subject display name or external identifier).
     /// </summary>
     [Column("acknowledged_by")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.AlertExcursion.AcknowledgedBy)]
     public string? AcknowledgedBy { get; set; }
 
     /// <summary>

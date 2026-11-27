@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -67,28 +68,28 @@ public class TrackerInstanceEntity : ITenantScoped
     /// Optional: Treatment ID that started this tracker
     /// </summary>
     [Column("start_treatment_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.TrackerInstance.StartTreatmentId)]
     public string? StartTreatmentId { get; set; }
 
     /// <summary>
     /// Optional: Treatment ID that completed this tracker
     /// </summary>
     [Column("complete_treatment_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.TrackerInstance.CompleteTreatmentId)]
     public string? CompleteTreatmentId { get; set; }
 
     /// <summary>
     /// Notes when starting (e.g., "Left arm", "Lot #12345")
     /// </summary>
     [Column("start_notes")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.TrackerInstance.StartNotes)]
     public string? StartNotes { get; set; }
 
     /// <summary>
     /// Notes when completing (e.g., "Sensor error E2 on day 8")
     /// </summary>
     [Column("completion_notes")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.TrackerInstance.CompletionNotes)]
     public string? CompletionNotes { get; set; }
 
     /// <summary>

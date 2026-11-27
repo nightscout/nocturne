@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -56,7 +57,7 @@ public class TreatmentFoodEntity : ITenantScoped, ISystemTimestamped
     /// Optional note (especially for "other" entries)
     /// </summary>
     [Column("note")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.TreatmentFood.Note)]
     public string? Note { get; set; }
 
     /// <summary>

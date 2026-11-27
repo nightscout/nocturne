@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -46,7 +47,7 @@ public class TrackerNotificationThresholdEntity : ITenantScoped
     /// Optional description shown when this threshold is triggered
     /// </summary>
     [Column("description")]
-    [MaxLength(500)]
+    [MaxLength(ColumnLengths.TrackerNotificationThreshold.Description)]
     public string? Description { get; set; }
 
     /// <summary>

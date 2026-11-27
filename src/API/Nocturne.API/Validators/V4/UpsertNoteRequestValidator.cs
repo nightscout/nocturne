@@ -9,7 +9,7 @@ namespace Nocturne.API.Validators.V4;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>Timestamp must be a valid non-default <see cref="DateTimeOffset"/>.</description></item>
-/// <item><description>The header caps of <see cref="RecordColumnRules"/>.</description></item>
+/// <item><description>The header rules of <see cref="RecordColumnRules"/>: caps on DataSource, SyncIdentifier, Device and App, and DataSource required when SyncIdentifier is supplied.</description></item>
 /// <item><description>Text capped at 10,000 characters; EventType at 200.</description></item>
 /// </list>
 /// </remarks>
@@ -30,5 +30,6 @@ public class UpsertNoteRequestValidator : AbstractValidator<UpsertNoteRequest>
         RuleFor(x => x.Text).MaximumLength(10000).When(x => x.Text is not null);
         RuleFor(x => x.EventType).MaximumLength(200).When(x => x.EventType is not null);
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
+        RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -483,11 +484,8 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         entity.Energy = (double)food.Energy;
     }
 
-    private static string TruncateUnit(string unit)
-    {
-        const int maxLength = 30;
-        return unit.Length <= maxLength ? unit : unit[..maxLength];
-    }
+    private static string TruncateUnit(string unit) =>
+        unit.Length <= ColumnLengths.Food.Unit ? unit : unit[..ColumnLengths.Food.Unit];
 
     private static ConnectorFoodEntry MapToDomain(ConnectorFoodEntryEntity entity) =>
         MapToDomain(entity, entity.Food);

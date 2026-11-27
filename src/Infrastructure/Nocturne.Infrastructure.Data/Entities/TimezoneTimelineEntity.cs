@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -31,7 +32,7 @@ public class TimezoneTimelineEntity : ITenantScoped
 
     /// <summary>IANA timezone id (e.g. "Australia/Sydney").</summary>
     [Column("timezone")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.TimezoneTimeline.Timezone)]
     [Required]
     public string Timezone { get; set; } = string.Empty;
 

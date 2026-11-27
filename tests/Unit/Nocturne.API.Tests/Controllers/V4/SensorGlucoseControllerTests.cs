@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Tests.Controllers.V4.Base;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 
@@ -427,9 +428,12 @@ public class SensorGlucoseControllerTests
             new UpsertSensorGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 120, SyncIdentifier = "sg-1" },
         };
 
-        var result = await CreateController().CreateBulk(requests);
+        var result = await RegisteredValidators.On(CreateController()).CreateBulk(requests);
 
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        objectResult.Value.Should().BeOfType<ProblemDetails>().Which.Detail
+            .Should().Be("Sensor glucose at index 0 is invalid: DataSource: DataSource is required when SyncIdentifier is supplied.");
         _repoMock.Verify(
             r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);

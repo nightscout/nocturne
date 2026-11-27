@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -35,7 +36,7 @@ public class SleepSessionEntity : ITenantScoped, IAuditable, ISoftDeletable, IOr
     /// IANA timezone of the sleeper at the time of the session.
     /// </summary>
     [Column("timezone")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.SleepSession.Timezone)]
     public string? Timezone { get; set; }
 
     /// <summary>
@@ -162,21 +163,21 @@ public class SleepSessionEntity : ITenantScoped, IAuditable, ISoftDeletable, IOr
     /// Device that recorded the session (e.g. "Fitbit Sense 2").
     /// </summary>
     [Column("source_device")]
-    [MaxLength(200)]
+    [MaxLength(ColumnLengths.SleepSession.SourceDevice)]
     public string? SourceDevice { get; set; }
 
     /// <summary>
     /// Application that provided the data (e.g. "Fitbit iOS 4.12").
     /// </summary>
     [Column("source_app")]
-    [MaxLength(200)]
+    [MaxLength(ColumnLengths.SleepSession.SourceApp)]
     public string? SourceApp { get; set; }
 
     /// <summary>
     /// Original ID from the source system for deduplication.
     /// </summary>
     [Column("original_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.SleepSession.OriginalId)]
     public string? OriginalId { get; set; }
 
     /// <summary>

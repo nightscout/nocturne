@@ -36,7 +36,7 @@ public class BasalInjectionEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDev
     /// Optional user-supplied note.
     /// </summary>
     [Column("notes")]
-    [MaxLength(4096)]
+    [MaxLength(ColumnLengths.BasalInjection.Notes)]
     public string? Notes { get; set; }
 
     /// <summary>

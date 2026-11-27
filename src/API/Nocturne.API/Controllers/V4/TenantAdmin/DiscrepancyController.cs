@@ -389,7 +389,7 @@ public class DiscrepancyController : ControllerBase
             request.Analysis.NightscoutResponseTimeMs,
             request.Analysis.NocturneResponseTimeMs,
             request.Analysis.TotalProcessingTimeMs,
-            $"[{sourceId}] {request.Analysis.Summary}",
+            ForwardedSummary(sourceId, request.Analysis.Summary),
             request.Analysis.SelectedResponseTarget,
             request.Analysis.SelectionReason,
             discrepancies,
@@ -413,6 +413,9 @@ public class DiscrepancyController : ControllerBase
             sourceId,
         });
     }
+
+    /// <summary>The summary of a forwarded analysis as it is stored: marked with the instance that sent it.</summary>
+    public static string ForwardedSummary(string sourceId, string summary) => $"[{sourceId}] {summary}";
 
     /// <summary>
     /// Returns whether the request carries a bearer token matching the configured forwarding

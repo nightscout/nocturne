@@ -51,7 +51,7 @@ public class BodyWeightEntity
 
     /// <summary>Client-supplied ISO-8601 creation timestamp string.</summary>
     [Column("created_at")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.BodyWeight.CreatedAt)]
     public string? CreatedAt { get; set; }
 
     /// <summary>UTC offset in minutes at the time of measurement.</summary>

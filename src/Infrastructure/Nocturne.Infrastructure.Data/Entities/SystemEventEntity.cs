@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -33,14 +34,14 @@ public class SystemEventEntity : ITenantScoped
     /// Device-specific event code
     /// </summary>
     [Column("code")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.SystemEvent.Code)]
     public string? Code { get; set; }
 
     /// <summary>
     /// Human-readable description
     /// </summary>
     [Column("description")]
-    [MaxLength(1000)]
+    [MaxLength(ColumnLengths.SystemEvent.Description)]
     public string? Description { get; set; }
 
     /// <summary>
@@ -53,7 +54,7 @@ public class SystemEventEntity : ITenantScoped
     /// Data source identifier
     /// </summary>
     [Column("source")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.SystemEvent.Source)]
     public string? Source { get; set; }
 
     /// <summary>
@@ -66,7 +67,7 @@ public class SystemEventEntity : ITenantScoped
     /// Original ID from source system for deduplication
     /// </summary>
     [Column("original_id")]
-    [MaxLength(255)]
+    [MaxLength(ColumnLengths.SystemEvent.OriginalId)]
     public string? OriginalId { get; set; }
 
     /// <summary>

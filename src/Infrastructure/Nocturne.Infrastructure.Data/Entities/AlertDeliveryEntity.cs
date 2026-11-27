@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -67,14 +68,14 @@ public class AlertDeliveryEntity : ITenantScoped
     /// Platform-specific message ID for update/thread operations.
     /// </summary>
     [Column("platform_message_id")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.AlertDelivery.PlatformMessageId)]
     public string? PlatformMessageId { get; set; }
 
     /// <summary>
     /// Platform-specific thread ID for grouped messages.
     /// </summary>
     [Column("platform_thread_id")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.AlertDelivery.PlatformThreadId)]
     public string? PlatformThreadId { get; set; }
 
     /// <summary>

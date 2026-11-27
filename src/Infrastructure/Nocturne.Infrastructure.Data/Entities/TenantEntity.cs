@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -69,7 +70,7 @@ public class TenantEntity : ISystemTimestamped
 
     /// <summary>The setup hub revision at which the owner dismissed the dashboard strip.</summary>
     [Column("setup_strip_dismissed_revision")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.Tenant.SetupStripDismissedRevision)]
     public string? SetupStripDismissedRevision { get; set; }
 
     /// <summary>

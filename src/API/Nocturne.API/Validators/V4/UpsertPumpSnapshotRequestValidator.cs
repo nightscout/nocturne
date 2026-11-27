@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -18,11 +19,11 @@ public class UpsertPumpSnapshotRequestValidator : AbstractValidator<UpsertPumpSn
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
         RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
-        RuleFor(x => x.Manufacturer).MaximumLength(128);
-        RuleFor(x => x.Model).MaximumLength(128);
-        RuleFor(x => x.ReservoirDisplay).MaximumLength(64);
-        RuleFor(x => x.PumpStatus).MaximumLength(64);
-        RuleFor(x => x.PumpMode).MaximumLength(64);
-        RuleFor(x => x.Clock).MaximumLength(64);
+        RuleFor(x => x.Manufacturer).MaximumLength(ColumnLengths.PumpSnapshot.Manufacturer);
+        RuleFor(x => x.Model).MaximumLength(ColumnLengths.PumpSnapshot.Model);
+        RuleFor(x => x.ReservoirDisplay).MaximumLength(ColumnLengths.PumpSnapshot.ReservoirDisplay);
+        RuleFor(x => x.PumpStatus).MaximumLength(ColumnLengths.PumpSnapshot.PumpStatus);
+        RuleFor(x => x.PumpMode).MaximumLength(ColumnLengths.PumpSnapshot.PumpMode);
+        RuleFor(x => x.Clock).MaximumLength(ColumnLengths.PumpSnapshot.Clock);
     }
 }
