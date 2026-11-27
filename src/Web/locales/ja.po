@@ -4812,6 +4812,7 @@ msgstr ""
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderRow.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 msgid "min"
@@ -5204,6 +5205,8 @@ msgstr ""
 msgid "<0/> Add"
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -9341,6 +9344,8 @@ msgstr ""
 #~ msgid "Auto Basal"
 #~ msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 msgid "Percent"
 msgstr ""
@@ -14492,6 +14497,7 @@ msgstr ""
 #~ msgid "no data for ≥"
 #~ msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -22804,10 +22810,12 @@ msgstr ""
 msgid "Low episodes"
 msgstr ""
 
+#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Lowest"
 msgstr ""
 
+#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Highest"
 msgstr ""
@@ -23051,6 +23059,9 @@ msgstr ""
 #~ msgid "Compare patterns across days"
 #~ msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -46023,6 +46034,7 @@ msgstr ""
 msgid "glucose.read"
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "glucose"
@@ -47001,9 +47013,8 @@ msgstr ""
 msgid "Minutes until a glucose reading counts as missing"
 msgstr ""
 
-#: src/lib/components/alerts/AdvancedSection.svelte
-msgid "The rule counts a glucose reading as missing when Nocturne received it more than this number of minutes ago. This applies to conditions on the glucose value, rate of change, trend and glucose range. It does not apply to signal loss, data age, predicted glucose or Smart snooze conditions. <0/>"
-msgstr ""
+#~ msgid "The rule counts a glucose reading as missing when Nocturne received it more than this number of minutes ago. This applies to conditions on the glucose value, rate of change, trend and glucose range. It does not apply to signal loss, data age, predicted glucose or Smart snooze conditions. <0/>"
+#~ msgstr ""
 
 #: src/lib/components/alerts/AdvancedSection.svelte
 msgid "Use the default"
@@ -47584,9 +47595,8 @@ msgstr ""
 msgid "A clear margin must be a number, 0 or more."
 msgstr ""
 
-#: src/lib/components/alerts/conditionIssues.svelte.ts
-msgid "A clear margin on a rate of change cannot be more than the rate."
-msgstr ""
+#~ msgid "A clear margin on a rate of change cannot be more than the rate."
+#~ msgstr ""
 
 #: src/lib/components/alerts/conditionIssues.svelte.ts
 msgid "A condition inside “for at least” cannot have a clear margin. Remove the margin or the “for at least”."
@@ -48537,6 +48547,7 @@ msgstr ""
 msgid "If your profile has no target range, this condition does not know if it is true."
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/alert-labels.svelte.ts
 msgid "Number"
 msgstr ""
@@ -52259,4 +52270,142 @@ msgstr ""
 
 #: src/lib/components/teams/TeamFlagRulesSection.svelte
 msgid "Flag rules"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The rule counts a glucose reading as missing when Nocturne received it more than this number of minutes ago. This applies to conditions on the glucose value, rate of change, trend, glucose range and time windows. It does not apply to signal loss, data age, predicted glucose or Smart snooze conditions. In a time window, a gap in the readings that is longer than this can leave the condition unknown. <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Window minutes"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "in"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "The time window ends at the newest reading."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "The time window ends at the newest reading. The change is the newest reading minus the oldest reading in the window. A fall is a negative number."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Lowest or highest"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Number or percent"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Reading comparison"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Reading value"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Number of readings"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "of readings"
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A clear margin on a rate of change or a glucose change cannot be more than the rate or the change."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A reading count condition can compare a number of readings or a percent of readings, not both."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A reading count condition needs a number of readings or a percent of readings, with a comparison and a value."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A number of readings needs a comparison and a whole number, 0 or more."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A percent of readings needs a comparison and a number from 0 to 100."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A reading count condition needs a comparison and a glucose level for each reading."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A time window must be from 5 to 180 minutes."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A condition on a time window needs the window in minutes."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A time window must be a whole number of minutes, from 5 to 180."
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "Glucose change"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "Lowest or highest glucose"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "Reading count"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The change from the oldest to the newest reading in a time window"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The lowest or highest reading in a time window is above or below a level"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The number or percent of readings in a time window that are above or below a level"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Recent glucose readings"
+msgstr ""
+
+#. 0: formatMinutes(p.window_minutes ?? 0); 1: opSymbol(p.operator); 2: bgDelta(p.value ?? 0); 3: bgLabel()
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Glucose change in {0} {1} {2} {3}"
+msgstr ""
+
+#. 0: minutes; 1: limit
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Highest glucose in {0} {1}"
+msgstr ""
+
+#. 0: minutes; 1: limit
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Lowest glucose in {0} {1}"
+msgstr ""
+
+#. 0: reading; 1: minutes; 2: opSymbol(p.percent?.operator); 3: p.percent?.value ?? 0
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Percent of readings {0} in {1} {2} {3}%"
+msgstr ""
+
+#. 0: reading; 1: minutes; 2: opSymbol(p.count?.operator); 3: p.count?.value ?? 0
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Number of readings {0} in {1} {2} {3}"
 msgstr ""
