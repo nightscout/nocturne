@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -23,21 +24,7 @@ public class ConnectorBestEffortStateTests
 
     public class TestConfig : BaseConnectorConfiguration;
 
-    private sealed class RecordingLogger : ILogger<ProbeConnector>
-    {
-        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception), exception));
-    }
-
-    private sealed class ProbeConnector(IConnectorPublisher publisher, RecordingLogger logger)
+    private sealed class ProbeConnector(IConnectorPublisher publisher, ListLogger<ProbeConnector> logger)
         : BaseConnectorService<TestConfig>(
             new HttpClient(),
             new ConnectorServerResolver<TestConfig>(null, null, null),
@@ -71,9 +58,9 @@ public class ConnectorBestEffortStateTests
                 "record the stamp", () => SetResumeStampAsync("stamp", Earlier, cancellationToken), cancellationToken);
     }
 
-    private static (ProbeConnector Connector, RecordingLogger Log) Probe(InMemoryConnectorStateStore store)
+    private static (ProbeConnector Connector, ListLogger<ProbeConnector> Log) Probe(InMemoryConnectorStateStore store)
     {
-        var log = new RecordingLogger();
+        var log = new ListLogger<ProbeConnector>();
         return (new ProbeConnector(new StoringConnectorPublisher(store), log), log);
     }
 

@@ -19,6 +19,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Logging;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -107,7 +108,7 @@ public partial class TeamAccessEndPostgresTests
         foreach (var site in hidden)
             await NpgsqlTestCommands.ExecuteAsync(database.MigratorConnectionString,
                 $"UPDATE tenants SET display_name = 'Hidden {site.Tenant:N}' WHERE id = '{site.Tenant}'");
-        var errors = new TenantOverviewTestKit.ErrorLog();
+        var errors = new ListLogger<TenantOverviewService>();
         var overview = Overview(errors, withReading: calm.Tenant);
 
         (await Teams().GetPeopleOfStaffGroupAsync(group, staff, Now, Ct)).Should().BeEquivalentTo(
@@ -137,7 +138,7 @@ public partial class TeamAccessEndPostgresTests
             .Should().BeNull("a manager is not in the group");
         (await overview.GetGroupOverviewAsync(staff, await GroupAsync(team, "Oak cabin"), SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct))
             .Should().BeNull("the staff member is not in that group");
-        errors.Messages.Should().BeEmpty("every person was read, none stood in for by a failed read");
+        errors.Errors.Should().BeEmpty("every person was read, none stood in for by a failed read");
     }
 
     [Fact]
@@ -175,7 +176,7 @@ public partial class TeamAccessEndPostgresTests
         string.CompareOrdinal(oak.ToString(), elm.ToString()).Should().BeNegative("an order by id would put Oak first");
         (await Teams().GetGroupsOfStaffAsync(staff, Now, Ct)).Select(g => g.Id).Should().Equal(birch, elm, oak);
 
-        var overview = Overview(new TenantOverviewTestKit.ErrorLog(), withReading: Guid.Empty);
+        var overview = Overview(new ListLogger<TenantOverviewService>(), withReading: Guid.Empty);
         var everyone = await overview.GetOverviewAsync(staff, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
         everyone.Tenants.ToDictionary(t => t.TenantId, t => t.FirstGroupId).Should().BeEquivalentTo(new Dictionary<Guid, Guid?>
         {
@@ -213,7 +214,7 @@ public partial class TeamAccessEndPostgresTests
         foreach (var site in new[] { amy, bo, pending })
             await PutSiteAsync(team, group, site);
 
-        var overview = Overview(new TenantOverviewTestKit.ErrorLog(), withReading: Guid.Empty);
+        var overview = Overview(new ListLogger<TenantOverviewService>(), withReading: Guid.Empty);
         var one = await overview.GetGroupOverviewAsync(first, group, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
         var two = await overview.GetGroupOverviewAsync(second, group, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
 
@@ -276,7 +277,7 @@ public partial class TeamAccessEndPostgresTests
     }
 
     /// <summary>The overview on this database, reading as nobody but the subject it is asked for; only <paramref name="withReading"/> has a reading.</summary>
-    private TenantOverviewService Overview(TenantOverviewTestKit.ErrorLog errors, Guid withReading)
+    private TenantOverviewService Overview(ListLogger<TenantOverviewService> errors, Guid withReading)
     {
         var current = Guid.Empty;
         var accessor = new Mock<ITenantAccessor>();

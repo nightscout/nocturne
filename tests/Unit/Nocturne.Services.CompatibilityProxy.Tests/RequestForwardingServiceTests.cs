@@ -11,6 +11,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Services.CompatibilityProxy.Tests.Unit;
 
@@ -198,25 +199,6 @@ public class RequestForwardingServiceTests
         Assert.Null(handler.RequestUri);
     }
 
-    private sealed class CapturingLogger : ILogger<RequestForwardingService>
-    {
-        public List<string> Lines { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            Lines.Add(formatter(state, exception));
-            if (state is IReadOnlyList<KeyValuePair<string, object?>> values)
-                Lines.AddRange(values.Select(v => v.Value?.ToString() ?? string.Empty));
-            if (exception is not null)
-                Lines.Add(exception.ToString());
-        }
-    }
-
     [Theory]
     [InlineData("https://ns.example/nightscout?token=abc123")]
     [InlineData("https://ns.example/AGYLdvgzOeq?token=abc123&key=k")]
@@ -226,7 +208,7 @@ public class RequestForwardingServiceTests
         _httpClientFactoryMock
             .Setup(f => f.CreateClient("NightscoutClient"))
             .Returns(() => new HttpClient(handler, disposeHandler: false));
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<RequestForwardingService>();
         var service = new RequestForwardingService(
             _httpClientFactoryMock.Object,
             Options.Create(new CompatibilityProxyConfiguration()),
@@ -240,8 +222,8 @@ public class RequestForwardingServiceTests
         await service.ForwardToNightscoutAsync(new ClonedRequest { Method = "GET", Path = "/../status" });
 
         Assert.Contains("token=abc123", handler.RequestUri!.Query);
-        Assert.NotEmpty(logger.Lines);
-        Assert.All(logger.Lines, line =>
+        Assert.NotEmpty(logger.Text);
+        Assert.All(logger.Text, line =>
         {
             Assert.DoesNotContain("abc123", line);
             Assert.DoesNotContain("caller456", line);
@@ -274,7 +256,7 @@ public class RequestForwardingServiceTests
         _httpClientFactoryMock
             .Setup(f => f.CreateClient(It.IsAny<string>()))
             .Returns(() => new HttpClient(new UncallableHandler()));
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<RequestForwardingService>();
         var service = new RequestForwardingService(
             _httpClientFactoryMock.Object,
             Options.Create(new CompatibilityProxyConfiguration()),
@@ -304,7 +286,7 @@ public class RequestForwardingServiceTests
         Assert.Equal(CredentialPathRedactor.CredentialRouteMessage, result.ErrorMessage);
         Assert.Null(result.Body);
         _httpClientFactoryMock.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never);
-        Assert.All(logger.Lines, line => Assert.DoesNotContain("synthetic9f3c", line));
+        Assert.All(logger.Text, line => Assert.DoesNotContain("synthetic9f3c", line));
         lock (spans)
         {
             Assert.DoesNotContain(spans, span =>

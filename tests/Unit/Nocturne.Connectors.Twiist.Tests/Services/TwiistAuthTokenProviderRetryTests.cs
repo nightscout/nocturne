@@ -9,6 +9,7 @@ using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Services;
 using Xunit;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.Twiist.Tests.Services;
 
@@ -56,13 +57,14 @@ public class TwiistAuthTokenProviderRetryTests
     public async Task GetValidTokenAsync_DoesNotRetry_AndNamesTheChallenge_WhenCognitoIssuesOne()
     {
         var handler = new CognitoHandler { LoginBody = "{\"ChallengeName\":\"SOFTWARE_TOKEN_MFA\"}" };
-        var logger = new RecordingLogger();
+        var logger = new ListLogger<TwiistAuthTokenProvider>();
 
         var token = await AuthenticateAsync(handler, logger: logger);
 
         token.Should().BeNull();
         handler.LoginCalls.Should().Be(1, "a challenge is Cognito's answer, not a transient failure");
-        logger.Errors.Should().ContainMatch("*SOFTWARE_TOKEN_MFA*");
+        logger.Entries.Where(e => e.Level == LogLevel.Error).Select(e => e.Message)
+            .Should().ContainMatch("*SOFTWARE_TOKEN_MFA*");
     }
 
     /// <summary>
@@ -108,26 +110,6 @@ public class TwiistAuthTokenProviderRetryTests
         };
 
         return await provider.GetValidTokenAsync(config, CancellationToken.None);
-    }
-
-    private sealed class RecordingLogger : ILogger<TwiistAuthTokenProvider>
-    {
-        public List<string> Errors { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel == LogLevel.Error)
-                Errors.Add(formatter(state, exception));
-        }
     }
 
     /// <summary>Answers the Cognito InitiateAuth call, with per-test failure injection.</summary>

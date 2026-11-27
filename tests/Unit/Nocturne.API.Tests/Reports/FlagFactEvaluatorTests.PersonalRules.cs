@@ -143,7 +143,7 @@ public partial class FlagFactEvaluatorTests
         second[1].Should().BeEmpty();
         third[1].Should().BeEmpty();
         harness.PumpReads.Should().Be(2, "the failure is kept, so the person is not read again on every call");
-        harness.Errors.Should().ContainSingle("the failure is logged once for the keep it makes");
+        harness.Log.Errors.Should().ContainSingle("the failure is logged once for the keep it makes");
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public partial class FlagFactEvaluatorTests
         harness.GlucoseReads.Should().Be(1, "a defect is kept as a failure, so the person is not read again on every call");
         pending.Should().Equal([1, 0, 0], "a failed read is not still being checked");
         reasons.Should().OnlyContain(r => r.Count == 0);
-        harness.Errors.Should().ContainSingle();
+        harness.Log.Errors.Should().ContainSingle();
     }
 
     [Fact]

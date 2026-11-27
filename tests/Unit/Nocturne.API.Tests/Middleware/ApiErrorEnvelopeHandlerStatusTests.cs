@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Attributes;
 using Nocturne.API.Middleware;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;

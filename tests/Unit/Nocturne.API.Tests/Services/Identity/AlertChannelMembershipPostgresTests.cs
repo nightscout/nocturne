@@ -11,6 +11,7 @@ using Moq;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.API.Tests.Services.Alerts;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Identity;
@@ -189,15 +190,12 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
             .AddSingleton(new ChatBotProvider(http.Object, configuration, tenantAccessor, NullLogger<ChatBotProvider>.Instance))
             .BuildServiceProvider();
 
-        return new AlertDeliveryService(
+        return DeliveryServices.Build(
             site.Contexts,
-            site.Members,
             tenantAccessor,
-            Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<IEngineAlarmRelay>(),
-            services,
-            NullLogger<AlertDeliveryService>.Instance,
-            site.Clock);
+            providers: services,
+            members: site.Members,
+            clock: site.Clock);
     }
 
     private async Task<Guid> MemberIdAsync(Site site) =>

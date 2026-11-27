@@ -12,7 +12,7 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -67,15 +67,12 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
 
-        return new AlertDeliveryService(
+        return DeliveryServices.Build(
             _factory.AsNocturneFactory(),
-            new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             SettableTenantAccessor.Resolved(Tenant),
-            _broadcast.Object,
-            Mock.Of<IEngineAlarmRelay>(),
-            provider,
-            logger ?? NullLogger<AlertDeliveryService>.Instance,
-            TimeProvider.System);
+            providers: provider,
+            broadcast: _broadcast.Object,
+            logger: logger);
     }
 
     private async Task<Guid> SeedInstanceAsync()

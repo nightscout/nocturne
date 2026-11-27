@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -110,20 +111,6 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
     }
 
     public List<PublishKind> Published { get; }
-}
-
-/// <summary>Keeps every formatted message a service logs.</summary>
-internal sealed class MessageLogger<T> : ILogger<T>
-{
-    public List<string> Messages { get; } = [];
-
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-    public bool IsEnabled(LogLevel logLevel) => true;
-
-    public void Log<TState>(
-        LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-        Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
 }
 
 /// <summary>

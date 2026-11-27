@@ -6,25 +6,13 @@ using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.Glooko.Tests.Mappers;
 
 public class GlookoSensorGlucoseTrendTests
 {
     private const string ConnectorSource = "glooko_test";
-
-    private sealed class RecordingLogger : ILogger
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
-    }
 
     private static GlookoSensorGlucoseMapper MapperWith(ILogger logger)
     {
@@ -69,7 +57,7 @@ public class GlookoSensorGlucoseTrendTests
     [Fact]
     public void UnrecognisedTrend_IsLoggedOncePerDistinctValue()
     {
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
 
         MapperWith(logger).TransformBatchDataToSensorGlucose(BatchOf("SIDEWAYS", "sideways", "SIDEWAYS", "42"));
 
@@ -81,7 +69,7 @@ public class GlookoSensorGlucoseTrendTests
     [Fact]
     public void UnrecognisedTrend_IsLoggedOncePerSyncRun()
     {
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
 
         MapperWith(logger).TransformBatchDataToSensorGlucose(BatchOf("SIDEWAYS"));
         MapperWith(logger).TransformBatchDataToSensorGlucose(BatchOf("SIDEWAYS"));
@@ -92,7 +80,7 @@ public class GlookoSensorGlucoseTrendTests
     [Fact]
     public void RecognisedAndBlankTrends_AreNotLoggedAsUnrecognised()
     {
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
 
         MapperWith(logger).TransformBatchDataToSensorGlucose(BatchOf("FLAT", null, "", "NOT COMPUTABLE"));
 

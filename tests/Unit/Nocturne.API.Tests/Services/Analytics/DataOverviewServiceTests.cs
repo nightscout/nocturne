@@ -20,6 +20,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 

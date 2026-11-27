@@ -19,6 +19,7 @@ using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Logging;
 using Xunit;
 using static Nocturne.API.Tests.Services.Identity.TenantOverviewTestKit;
 
@@ -39,7 +40,7 @@ public class TenantOverviewGroupTests
     private readonly DbContextOptions<NocturneDbContext> _options = NewOptions();
     private readonly Mock<ITeamRepository> _teams = InNoGroup();
     private readonly Dictionary<Guid, SensorGlucose> _latest = [];
-    private readonly ErrorLog _errors = new();
+    private readonly ListLogger<TenantOverviewService> _errors = new();
     private readonly ScriptedRules _rules = new();
 
     [Fact]
@@ -58,7 +59,7 @@ public class TenantOverviewGroupTests
             _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, CancellationToken.None);
 
         group.Should().NotBeNull();
-        _errors.Messages.Should().BeEmpty();
+        _errors.Errors.Should().BeEmpty();
         group!.Tenants.Select(t => t.Slug).Should().Equal("zed", "bo", "cy");
         group.Tenants[0].Attention.Should().NotBeEmpty("zed has no reading, so the flag puts them first");
         group.Tenants.Skip(1).Should().OnlyContain(t => t.Attention.Count == 0);

@@ -96,15 +96,10 @@ public class AlertDeliveryWebhookSigningTests
         var services = new ServiceCollection();
         services.AddSingleton(provider);
 
-        var service = new AlertDeliveryService(
+        var service = DeliveryServices.Build(
             factory.AsNocturneFactory(),
-            new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             SettableTenantAccessor.Resolved(Tenant),
-            Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<IEngineAlarmRelay>(),
-            services.BuildServiceProvider(),
-            NullLogger<AlertDeliveryService>.Instance,
-            TimeProvider.System);
+            providers: services.BuildServiceProvider());
 
         return (service, channels);
     }

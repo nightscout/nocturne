@@ -15,6 +15,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Controllers.V4.Platform;
 
@@ -27,30 +28,6 @@ public class CompatibilityManualTestTests
 {
     /// <summary>Nothing listens on the discard port, so both sides fail at once without leaving the machine.</summary>
     private const string Unanswered = "127.0.0.1:9";
-
-    private sealed class RecordingLogger : ILogger<CompatibilityController>
-    {
-        public List<IReadOnlyList<KeyValuePair<string, object?>>> States { get; } = [];
-
-        public List<string> Lines { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            Lines.Add(formatter(state, exception));
-            if (exception is not null)
-                Lines.Add(exception.ToString());
-            if (state is IReadOnlyList<KeyValuePair<string, object?>> values)
-                States.Add(values);
-        }
-
-        public object? Value(string name) =>
-            States.SelectMany(s => s).FirstOrDefault(kv => kv.Key == name).Value;
-    }
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
@@ -65,7 +42,7 @@ public class CompatibilityManualTestTests
     }
 
     private static CompatibilityController Controller(
-        RecordingLogger logger,
+        ListLogger<CompatibilityController> logger,
         NightscoutConnectorConfiguration? nightscoutConfig = null,
         RecordingHandler? nightscout = null)
     {
@@ -101,7 +78,7 @@ public class CompatibilityManualTestTests
     {
         var nightscout = new RecordingHandler();
 
-        var response = await Controller(new RecordingLogger(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
+        var response = await Controller(new ListLogger<CompatibilityController>(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
         {
             NightscoutUrl = nightscoutUrl,
             QueryPath = queryPath,
@@ -118,7 +95,7 @@ public class CompatibilityManualTestTests
     {
         var nightscout = new RecordingHandler();
 
-        await Controller(new RecordingLogger(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
+        await Controller(new ListLogger<CompatibilityController>(), nightscout: nightscout).TestApiComparison(new ManualTestRequest
         {
             NightscoutUrl = $"http://{Unanswered}/api/v2/s3cr3t?token=synthetic-token",
             QueryPath = queryPath,
@@ -134,7 +111,7 @@ public class CompatibilityManualTestTests
     [InlineData($"http://{Unanswered}/AGYLdvgzOeq/?token=synthetic-token&key=k", "api/v1/entries.json?count=1")]
     public async Task No_log_line_carries_the_nightscout_urls_path_or_query(string nightscoutUrl, string queryPath)
     {
-        var logger = new RecordingLogger();
+        var logger = new ListLogger<CompatibilityController>();
 
         var response = await Controller(logger).TestApiComparison(new ManualTestRequest
         {
@@ -143,15 +120,16 @@ public class CompatibilityManualTestTests
         }, CredentialRouteRedactor.Create());
 
         response.Result.Should().BeOfType<OkObjectResult>();
-        logger.Value("NightscoutOrigin").Should().Be($"http://{Unanswered}");
-        logger.Lines.Should().NotBeEmpty().And.OnlyContain(line =>
+        logger.Properties.Should().Contain(p => p.ContainsKey("NightscoutOrigin"))
+            .Which["NightscoutOrigin"].Should().Be($"http://{Unanswered}");
+        logger.Text.Should().NotBeEmpty().And.OnlyContain(line =>
             !line.Contains("synthetic-token") && !line.Contains("AGYLdvgzOeq") && !line.Contains("nightscout/"));
     }
 
     [Fact]
     public async Task An_address_that_is_not_http_is_refused()
     {
-        var response = await Controller(new RecordingLogger()).TestApiComparison(new ManualTestRequest
+        var response = await Controller(new ListLogger<CompatibilityController>()).TestApiComparison(new ManualTestRequest
         {
             NightscoutUrl = "ftp://ns.example/nightscout",
             QueryPath = "/api/v1/status",
@@ -169,7 +147,7 @@ public class CompatibilityManualTestTests
     [InlineData("", "")]
     public void The_configuration_shows_the_nightscout_url_as_its_host_with_no_path(string configured, string expected)
     {
-        var response = Controller(new RecordingLogger(), new NightscoutConnectorConfiguration { Url = configured })
+        var response = Controller(new ListLogger<CompatibilityController>(), new NightscoutConnectorConfiguration { Url = configured })
             .GetConfiguration();
 
         response.Result.Should().BeOfType<OkObjectResult>()
@@ -182,7 +160,7 @@ public class CompatibilityManualTestTests
     [InlineData("/../api/v1/status")]
     public async Task A_query_path_that_leaves_the_nightscout_url_is_refused(string queryPath)
     {
-        var logger = new RecordingLogger();
+        var logger = new ListLogger<CompatibilityController>();
         var nightscout = new RecordingHandler();
 
         var response = await Controller(logger, nightscout: nightscout).TestApiComparison(new ManualTestRequest
@@ -194,7 +172,7 @@ public class CompatibilityManualTestTests
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutAddress.OutsideBaseMessage);
-        logger.States.Should().BeEmpty("nothing is fetched");
+        logger.Entries.Should().BeEmpty("nothing is fetched");
         nightscout.Requests.Should().BeEmpty();
     }
 
@@ -207,7 +185,7 @@ public class CompatibilityManualTestTests
     [InlineData("http", "/api/v4/alert-invites/noc_synthetictoken")]
     public async Task A_query_path_that_holds_a_nocturne_credential_is_refused(string scheme, string queryPath)
     {
-        var logger = new RecordingLogger();
+        var logger = new ListLogger<CompatibilityController>();
         var nightscout = new RecordingHandler();
 
         var response = await Controller(logger, nightscout: nightscout).TestApiComparison(new ManualTestRequest
@@ -220,7 +198,7 @@ public class CompatibilityManualTestTests
         problem.StatusCode.Should().Be(400);
         problem.Value.Should().BeOfType<ProblemDetails>()
             .Which.Detail.Should().Be(CredentialPathRedactor.CredentialRouteMessage);
-        logger.States.Should().BeEmpty("nothing is fetched");
+        logger.Entries.Should().BeEmpty("nothing is fetched");
         nightscout.Requests.Should().BeEmpty();
     }
 }

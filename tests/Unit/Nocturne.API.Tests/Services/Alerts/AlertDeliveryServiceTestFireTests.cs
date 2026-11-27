@@ -39,15 +39,11 @@ public class AlertDeliveryServiceTestFireTests
         var tenantAccessor = SettableTenantAccessor.Resolved(Tenant);
         // Empty provider: every channel provider resolves to null, so dispatch is a no-op.
         var serviceProvider = new ServiceCollection().BuildServiceProvider();
-        var service = new AlertDeliveryService(
+        var service = DeliveryServices.Build(
             factory.AsNocturneFactory(),
-            new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             tenantAccessor,
-            Mock.Of<ISignalRBroadcastService>(),
-            alarmRelay ?? Mock.Of<IEngineAlarmRelay>(),
-            serviceProvider,
-            NullLogger<AlertDeliveryService>.Instance,
-            TimeProvider.System);
+            providers: serviceProvider,
+            alarmRelay: alarmRelay);
         return (service, factory);
     }
 

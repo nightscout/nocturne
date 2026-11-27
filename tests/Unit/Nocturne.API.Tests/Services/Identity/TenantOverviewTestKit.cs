@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
@@ -161,23 +160,6 @@ internal static class TenantOverviewTestKit
             }
 
             public void Finish() => owner.FinishedAfter = owner.Judged.Count;
-        }
-    }
-
-    /// <summary>The errors the overview logs, each a read of one person that failed and was stood in for.</summary>
-    public sealed class ErrorLog : ILogger<TenantOverviewService>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= LogLevel.Error)
-                Messages.Add($"{formatter(state, exception)}: {exception}");
         }
     }
 }

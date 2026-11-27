@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -35,19 +36,6 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
         new InvalidOperationException("context disposed"),
         new NullReferenceException(),
     };
-
-    private sealed class CapturingLogger : ILogger<SensorGlucoseRepository>
-    {
-        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, exception));
-    }
 
     private sealed class Exposed(
         INocturneDbContextFactory contexts, ILogger<SensorGlucoseRepository> logger, IGlucoseReadingBroadcaster? broadcaster = null)
@@ -89,7 +77,7 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
     [MemberData(nameof(Failures))]
     public async Task The_canonical_stream_gate_fails_open_and_logs_at_error(Exception failure)
     {
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<SensorGlucoseRepository>();
 
         var shown = await new Exposed(ContextsThatThrow(failure), logger).Gate(Readings);
 
@@ -102,7 +90,7 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
     {
         using var shutdown = new CancellationTokenSource();
         await shutdown.CancelAsync();
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<SensorGlucoseRepository>();
 
         var gate = () => new Exposed(ContextsThatThrow(new OperationCanceledException(shutdown.Token)), logger)
             .Gate(Readings, shutdown.Token);
@@ -116,7 +104,7 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
     public async Task The_relay_is_skipped_and_logged_at_error_when_the_last_reading_cannot_be_read(Exception failure)
     {
         var broadcaster = new Mock<IGlucoseReadingBroadcaster>();
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<SensorGlucoseRepository>();
 
         await new Exposed(ContextsThatThrow(failure), logger, broadcaster.Object).Relay(Readings);
 
@@ -132,7 +120,7 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
         var broadcaster = new Mock<IGlucoseReadingBroadcaster>();
 
         var relay = () => new Exposed(
-            ContextsThatThrow(new OperationCanceledException(shutdown.Token)), new CapturingLogger(), broadcaster.Object)
+            ContextsThatThrow(new OperationCanceledException(shutdown.Token)), new ListLogger<SensorGlucoseRepository>(), broadcaster.Object)
             .Relay(Readings, shutdown.Token);
 
         await relay.Should().ThrowAsync<OperationCanceledException>();
@@ -146,7 +134,7 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
         var interceptor = new FailsTheLastReadingRead(failure);
         using var db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, "test", interceptor);
         using var context = db.CreateContext();
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<SensorGlucoseRepository>();
         var broadcaster = new Mock<IGlucoseReadingBroadcaster>();
         var repository = new Exposed(new TestNocturneDbContextFactory(context), logger, broadcaster.Object);
         var timestamp = DateTime.UtcNow.AddMinutes(-1);

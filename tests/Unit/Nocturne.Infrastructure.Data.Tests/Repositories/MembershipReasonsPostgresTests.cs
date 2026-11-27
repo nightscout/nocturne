@@ -12,6 +12,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
@@ -276,7 +277,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         var teamReasonsBefore = await NpgsqlTestCommands.ScalarAsync<long>(
             migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");
 
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
         await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         (await RowsAsync(migrator)).Where(r => !r.StartsWith(team.ToString())).Should().Equal(
@@ -309,7 +310,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     public async Task TheStartupCheck_OnACleanDatabase_LogsAndWritesNothing()
     {
         var (app, migrator) = await FreshDatabaseAsync("reasons_clean");
-        var empty = new RecordingLogger();
+        var empty = new ListLogger();
         await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), empty, Ct);
         empty.Entries.Should().BeEmpty("no table holds a row");
 
@@ -317,7 +318,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await s.Members.AddMemberAsync(new NewTenantMember(s.Tenant, await NewSubjectAsync(s, "clean-member"), [s.ViewerRole], []) { How = MembershipJoinHow.Direct, By = null }, Ct);
         var reasonsBefore = await ReasonsAsync(migrator);
 
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
         await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         logger.Entries.Should().BeEmpty();
@@ -431,7 +432,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         var s = await SeedTenantAsync("malformed", app);
         await SeedBareMemberAsync(s, await NewSubjectAsync(s, "malformed-member"), """{"not":"a list"}""", s.ViewerRole, migrator);
 
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
         var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         await check.Should().NotThrowAsync();
@@ -451,7 +452,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             {TeamReasonSql.Staff(access, subject, s.CaretakerRole, false, null)}
             """);
 
-        var logger = new RecordingLogger();
+        var logger = new ListLogger();
         var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
             migrator, Now, (_, _, _) => throw new NullReferenceException(), logger, Ct);
 
@@ -525,18 +526,5 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         while (await reader.ReadAsync())
             rows.Add(reader.GetString(0));
         return rows;
-    }
-
-    private sealed class RecordingLogger : ILogger
-    {
-        public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception)));
     }
 }

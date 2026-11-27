@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Npgsql;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -35,7 +36,7 @@ public class MigrationNoticeForwardingTests
     [Fact]
     public async Task ANoticeRaisedOnTheMigratorContext_ReachesTheLogger()
     {
-        var captured = new List<string>();
+        var logger = new ListLogger();
 
         await using var dataSource =
             new NpgsqlDataSourceBuilder(_fixture.MigratorConnectionString).Build();
@@ -43,12 +44,12 @@ public class MigrationNoticeForwardingTests
         using var context = DatabaseInitializationExtensions.CreateMigratorContext(
             dataSource,
             new TenantConnectionInterceptor(),
-            new CapturingLogger(captured));
+            logger);
 
         await context.Database.ExecuteSqlRawAsync(
             $"DO $$ BEGIN RAISE NOTICE '{Message}'; END $$;");
 
-        captured.Should().ContainMatch($"*{Message}*",
+        logger.Messages.Should().ContainMatch($"*{Message}*",
             "a migration that skips work says so only by raising a notice, and the skip is "
             + "permanent — so a notice that reaches no log leaves the skip unobservable");
     }
@@ -61,7 +62,7 @@ public class MigrationNoticeForwardingTests
     [Fact]
     public async Task NoticesSurviveTheOpenAndCloseAroundEachSuppressedTransaction()
     {
-        var captured = new List<string>();
+        var logger = new ListLogger();
 
         await using var dataSource =
             new NpgsqlDataSourceBuilder(_fixture.MigratorConnectionString).Build();
@@ -69,7 +70,7 @@ public class MigrationNoticeForwardingTests
         using var context = DatabaseInitializationExtensions.CreateMigratorContext(
             dataSource,
             new TenantConnectionInterceptor(),
-            new CapturingLogger(captured));
+            logger);
 
         for (var i = 0; i < 3; i++)
         {
@@ -80,29 +81,6 @@ public class MigrationNoticeForwardingTests
             await context.Database.CloseConnectionAsync();
         }
 
-        captured.Should().HaveCount(3, "each cycle raises one notice and all three have to arrive");
-    }
-
-    private sealed class CapturingLogger(List<string> sink) : ILogger
-    {
-        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) => sink.Add(formatter(state, exception));
-
-        private sealed class NullScope : IDisposable
-        {
-            public static readonly NullScope Instance = new();
-
-            public void Dispose()
-            {
-            }
-        }
+        logger.Messages.Should().HaveCount(3, "each cycle raises one notice and all three have to arrive");
     }
 }

@@ -17,6 +17,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using GlookoSsv2Cursor = Nocturne.Connectors.Glooko.Models.GlookoSsv2Cursor;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -195,7 +196,7 @@ public class GlookoSsv2SyncTests
     public async Task Ssv2_AMalformedEgv_IsDroppedWithAWarning_AndTheOtherEgvsAndFeedsStillLand()
     {
         var published = new List<SensorGlucose>();
-        var log = new RecordingLogger();
+        var log = new ListLogger<GlookoConnectorService>();
         var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
             ? Json("{\"egvs\":["
                 + "{\"displayTime\":\"0001-01-01T00:00:00.000Z\",\"glucoseValue\":10000,\"guid\":\"bad\"},"
@@ -212,7 +213,7 @@ public class GlookoSsv2SyncTests
         result.Success.Should().BeTrue();
         result.Errors.Should().BeEmpty();
         published.Should().ContainSingle().Which.LegacyId.Should().EndWith("good");
-        log.Warnings.Should().ContainSingle(w => w.Message.Contains("Skipped malformed SSV2 egv bad"))
+        log.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains("Skipped malformed SSV2 egv bad"))
             .Which.Exception.Should().BeAssignableTo<ArgumentException>();
         handler.RequestedPaths.Should().Contain(p => p.Contains("/api/v2/foods"),
             "the feeds after egvs must still be fetched");
@@ -598,23 +599,6 @@ public class GlookoSsv2SyncTests
         start += marker.Length;
         var end = pathAndQuery.IndexOf('&', start);
         return end < 0 ? pathAndQuery[start..] : pathAndQuery[start..end];
-    }
-
-    private sealed class RecordingLogger : ILogger<GlookoConnectorService>
-    {
-        private readonly List<(LogLevel Level, string Message, Exception? Exception)> _entries = [];
-
-        public IEnumerable<(string Message, Exception? Exception)> Warnings =>
-            _entries.Where(e => e.Level == LogLevel.Warning).Select(e => (e.Message, e.Exception));
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) =>
-            _entries.Add((logLevel, formatter(state, exception), exception));
     }
 
     private sealed class RoutingHandler(Func<string, HttpResponseMessage> route) : HttpMessageHandler

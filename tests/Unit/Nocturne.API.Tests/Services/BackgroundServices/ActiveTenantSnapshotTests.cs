@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.BackgroundServices;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;

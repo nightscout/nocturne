@@ -10,7 +10,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
