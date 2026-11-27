@@ -967,6 +967,27 @@ public class StatisticsServiceTDDTests
             (Day1Mills + 45 * Minute, Day1Mills + 50 * Minute));
     }
 
+    [Theory]
+    [InlineData("aaps-1", "AAPS", "Pixel", false)]
+    [InlineData("aaps-1", null, "AAPS", true)]
+    [InlineData(null, "Trio", null, true)]
+    public void Clip_AClosedLoopUploadersStream_IsNamedByTheDecomposersDeviceOrAV4ClientsApp(
+        string? legacyId, string? app, string? device, bool beatsTheBusierMirror)
+    {
+        var uploads = Stream("uploader", Day1Mills, count: 2, everyMinutes: 30, durationMinutes: 30);
+        foreach (var tb in uploads)
+        {
+            tb.LegacyId = legacyId;
+            tb.App = app;
+            tb.Device = device;
+        }
+        var mirror = Stream("tidepool", Day1Mills, count: 4, everyMinutes: 15, durationMinutes: 15);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals([.. uploads, .. mirror], Now);
+
+        clipped.Select(tb => tb.Device == "tidepool").Distinct().Should().Equal(!beatsTheBusierMirror);
+    }
+
     [Fact]
     public void Clip_PumpSwitch_TheOldStreamsRunningLastRecordEndsAtTheNewStreamsFirstRecord()
     {

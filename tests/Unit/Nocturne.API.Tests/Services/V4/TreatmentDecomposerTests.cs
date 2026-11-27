@@ -1412,6 +1412,8 @@ public class TreatmentDecomposerTests : IDisposable
         upload.IsValid = true;
         upload.PumpType = "OMNIPOD_DASH";
         upload.PumpSerial = "4241";
+        upload.IsReadOnly = false;
+        upload.AdditionalProperties = new Dictionary<string, object> { ["app"] = "AAPS" };
 
         var record = TreatmentDecomposer.MapToTempBasal(upload, correlationId: null);
         record.AdditionalProperties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
@@ -1422,12 +1424,17 @@ public class TreatmentDecomposerTests : IDisposable
         served.IsValid.Should().BeTrue();
         served.PumpType.Should().Be("OMNIPOD_DASH");
         served.PumpSerial.Should().Be("4241");
+        record.App.Should().Be("AAPS");
+        served.AdditionalProperties!["app"].Should().Be("AAPS");
+        served.EnteredBy.Should().Be("openaps://AndroidAPS");
+        served.IsReadOnly.Should().BeFalse();
     }
 
     [Theory]
     [InlineData(V4Models.TempBasalOrigin.Manual, null, "Trio", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(V4Models.TempBasalOrigin.Manual, null, "loop://Test Phone", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(V4Models.TempBasalOrigin.Manual, V4Models.TempBasalOriginEvidence.Uploader, "Trio", V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(V4Models.TempBasalOrigin.Manual, V4Models.TempBasalOriginEvidence.Uploader, "AAPS", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(V4Models.TempBasalOrigin.Manual, V4Models.TempBasalOriginEvidence.Snapshot, "Trio", V4Models.TempBasalOrigin.Algorithm)]
     [InlineData(V4Models.TempBasalOrigin.Algorithm, V4Models.TempBasalOriginEvidence.Uncorroborated, "xdrip", V4Models.TempBasalOrigin.Manual)]
     [InlineData(V4Models.TempBasalOrigin.Manual, V4Models.TempBasalOriginEvidence.Reported, "Trio", V4Models.TempBasalOrigin.Manual)]
@@ -1692,7 +1699,8 @@ public class TreatmentDecomposerTests : IDisposable
         var tempBasal = TreatmentDecomposer.MapToTempBasal(treatment, correlationId: null);
 
         tempBasal.Device.Should().Be(expected);
-        tempBasal.App.Should().Be(enteredBy);
+        tempBasal.App.Should().BeNull();
+        KeptField.String(tempBasal.AdditionalProperties, UploadedAppFields.EnteredByKey).Should().Be(enteredBy);
     }
 
     [Theory]

@@ -87,6 +87,7 @@ public class TempBasalControllerTests
     [Theory]
     [InlineData("Trio", TempBasalOrigin.Algorithm)]
     [InlineData("openaps://AndroidAPS", TempBasalOrigin.Algorithm)]
+    [InlineData("AAPS", TempBasalOrigin.Algorithm)]
     [InlineData("xdrip", TempBasalOrigin.Manual)]
     [InlineData(null, TempBasalOrigin.Manual)]
     public async Task CreateBulk_DefaultsAnOmittedOriginByUploaderAndLeavesAutomaticUnstamped(
