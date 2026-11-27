@@ -39,6 +39,7 @@
   import type { SyncRequestInput } from "@nocturne/api-client/schemas";
   import { formatNumber } from "#lib/utils/formatting.js";
   import ConnectionTime from "./ConnectionTime.svelte";
+  import HistoryReach from "./HistoryReach.svelte";
   import { SkippedRecordsNote } from "#lib/components/shared/index.js";
 
   interface Props {
@@ -236,15 +237,10 @@
               class="rounded-lg border border-info/30 bg-info/10 p-3 text-xs text-info"
             >
               Historical sync is not supported for this connector.
-              {#if selectedConnectorCapabilities.maxHistoricalDays}
-                Recent data only (last {selectedConnectorCapabilities.maxHistoricalDays}
-                days).
-              {/if}
             </div>
-          {:else if selectedConnectorCapabilities.maxHistoricalDays}
+          {:else if selectedConnectorCapabilities.supportsHistoricalSync}
             <div class="text-xs text-muted-foreground">
-              Historical sync limited to the last {selectedConnectorCapabilities.maxHistoricalDays}
-              days.
+              <HistoryReach reach={selectedConnectorCapabilities.historyReach} />
             </div>
           {/if}
         {/if}

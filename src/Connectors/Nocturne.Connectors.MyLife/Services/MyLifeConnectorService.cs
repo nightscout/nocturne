@@ -71,12 +71,6 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    ///     No limit of MyLife's is known, and the month-by-month stream needs a concrete start, so a
-    ///     range naming no lower bound reads as far back as the first sync does.
-    /// </summary>
-    protected override DateTime? HistoryStart => DefaultInitialSyncFloor();
-
-    /// <summary>
     ///     The run starts at the earlier of the glucose and treatment points, which only an
     ///     open-ended request reads.
     /// </summary>

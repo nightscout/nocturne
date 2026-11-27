@@ -1,6 +1,8 @@
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models.Services;
 
 namespace Nocturne.Connectors.MyLife.Configurations;
 
@@ -15,6 +17,8 @@ namespace Nocturne.Connectors.MyLife.Configurations;
     "Connect to MyLife for pump data",
     "MyLife",
     SupportsHistoricalSync = true,
+    HistoryReachUnit = HistoryReachUnit.Months,
+    HistoryReachAmount = ConnectorRunLimits.DefaultInitialSyncMonths,
     SupportsManualSync = true,
     DefaultActiveThresholdMinutes = 180,
     DefaultStaleThresholdMinutes = 360,

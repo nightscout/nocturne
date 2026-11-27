@@ -11,7 +11,6 @@ namespace Nocturne.Connectors.GoogleHealth.Configurations;
     nameof(ConnectSource.GoogleHealth), DataSources.GoogleHealthConnector, "google-health",
     ConnectorCategory.Sync, "Import health and fitness data from Google Health", "Google Health",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 0,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Steps, SyncDataType.HeartRate, SyncDataType.BodyWeight, SyncDataType.Sleep],
     DefaultActiveThresholdMinutes = 30,

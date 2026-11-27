@@ -16,7 +16,6 @@ namespace Nocturne.Connectors.Nightscout.Configurations;
     "Sync glucose, treatment, device status, and profile data from a Nightscout instance",
     "Nightscout",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 365,
     SupportsManualSync = true,
     SupportedDataTypes = [
         SyncDataType.Glucose,

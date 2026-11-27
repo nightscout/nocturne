@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Core.Models.Services;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -23,7 +24,7 @@ public class GoogleHealthConnectorConfigurationTests
             SyncDataType.Sleep
         });
         registration.SupportsHistoricalSync.Should().BeTrue();
-        registration.MaxHistoricalDays.Should().Be(0);
+        registration.HistoryReach.Should().Be(ConnectorHistoryReach.Whole);
     }
 
     [Fact]

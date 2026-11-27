@@ -49,6 +49,7 @@
   import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
   import { EmptyState } from "#lib/components/shared/index.js";
   import ConnectorDangerZone from "#lib/components/connectors/ConnectorDangerZone.svelte";
+  import HistoryReach from "#lib/components/connectors/HistoryReach.svelte";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   interface Props {
@@ -569,15 +570,10 @@
                   : "Not supported"}
               </Badge>
             </div>
-            {#if connectorCapabilities.maxHistoricalDays}
-              <div class="flex items-center justify-between gap-4">
-                <span class="text-sm text-muted-foreground"
-                  >Max historical days</span
-                >
-                <span class="text-sm font-medium">
-                  {connectorCapabilities.maxHistoricalDays}
-                </span>
-              </div>
+            {#if connectorCapabilities.supportsHistoricalSync}
+              <p class="text-sm text-muted-foreground">
+                <HistoryReach reach={connectorCapabilities.historyReach} />
+              </p>
             {/if}
             <div class="flex items-center justify-between gap-4">
               <span class="text-sm text-muted-foreground">Manual sync</span>

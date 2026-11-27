@@ -343,10 +343,10 @@ public class GlookoConnectorService
 
             // The request window is real-UTC; Glooko queries expect fake-UTC (local wall-clock). Pad by
             // a day each side so a non-zero offset between the two never clips edge data (dedup absorbs
-            // the overlap). A request with neither bound reaches back as far as a full walk.
+            // the overlap).
             var now = Clock.GetUtcNow().UtcDateTime;
             var from = context.TimeMapper.ToGlookoTime(
-                WindowStart(request, ResumeFamily.Glucose) ?? FullWalkStart(now)).AddDays(-1);
+                ConcreteWindowStart(request, ResumeFamily.Glucose)).AddDays(-1);
             var to = context.TimeMapper.ToGlookoTime(request.To ?? now).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
@@ -413,12 +413,6 @@ public class GlookoConnectorService
             return result;
         }
     }
-
-    /// <summary>
-    ///     No limit of Glooko's is known, and the date-windowed fetch needs a concrete start, so a
-    ///     range naming no lower bound reads as far back as a full walk.
-    /// </summary>
-    protected override DateTime? HistoryStart => FullWalkStart(Clock.GetUtcNow().UtcDateTime);
 
     /// <summary>Where a full walk from <paramref name="now"/> starts.</summary>
     public static DateTime FullWalkStart(DateTime now) => now.AddMonths(-GlookoConstants.FullWalkMonths);

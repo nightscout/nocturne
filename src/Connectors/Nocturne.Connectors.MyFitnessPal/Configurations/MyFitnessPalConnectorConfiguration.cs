@@ -15,7 +15,6 @@ namespace Nocturne.Connectors.MyFitnessPal.Configurations;
     "Sync food diary entries from MyFitnessPal for meal matching",
     "MyFitnessPal",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 365,
     SupportsManualSync = true,
     DefaultActiveThresholdMinutes = 180,
     DefaultStaleThresholdMinutes = 360,

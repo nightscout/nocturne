@@ -1,6 +1,7 @@
 using System.Reflection;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Services;
 
 namespace Nocturne.Connectors.Core.Extensions;
 
@@ -132,9 +133,20 @@ public class ConnectorRegistrationAttribute(
     public bool SupportsHistoricalSync { get; set; } = true;
 
     /// <summary>
-    ///     Maximum historical days allowed for sync. 0 means unlimited.
+    ///     What <see cref="HistoryReachAmount"/> counts. The default, <see cref="HistoryReachUnit.Whole"/>,
+    ///     declares a source that serves its whole history.
     /// </summary>
-    public int MaxHistoricalDays { get; set; }
+    public HistoryReachUnit HistoryReachUnit { get; set; } = HistoryReachUnit.Whole;
+
+    /// <summary>How many <see cref="HistoryReachUnit"/>s back the source serves records.</summary>
+    public int HistoryReachAmount { get; set; }
+
+    /// <summary>
+    ///     How far back the source serves records. This is the one declaration of it: a range naming
+    ///     no lower bound starts at it (<c>BaseConnectorService.HistoryStart</c>) and the connector
+    ///     dialogs show it, so neither keeps a figure of its own.
+    /// </summary>
+    public ConnectorHistoryReach HistoryReach => new(HistoryReachUnit, HistoryReachAmount);
 
     /// <summary>
     ///     Whether the connector supports manual sync triggers.

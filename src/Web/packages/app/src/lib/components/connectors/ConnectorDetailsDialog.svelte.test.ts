@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { ApiException, type SyncResult } from "@nocturne/api-client";
+import { ApiException, HistoryReachUnit, type SyncResult } from "@nocturne/api-client";
 import { SyncRequestSchema } from "@nocturne/api-client/schemas";
 
 let syncImpl: () => Promise<SyncResult>;
@@ -347,5 +347,63 @@ describe("ConnectorDetailsDialog", () => {
     );
 
     vi.restoreAllMocks();
+  });
+
+  describe("history reach", () => {
+    function renderWithReach(
+      supportsHistoricalSync: boolean,
+      historyReach: { unit: HistoryReachUnit; amount: number }
+    ) {
+      render(ConnectorDetailsDialog, {
+        props: {
+          open: true,
+          selectedConnector: {
+            id: "dexcom",
+            name: "Dexcom",
+            status: "Active",
+            state: "Configured",
+            isHealthy: true,
+          },
+          selectedConnectorCapabilities: {
+            supportsManualSync: true,
+            supportsHistoricalSync,
+            historyReach,
+          },
+        },
+      });
+    }
+
+    it("states no reach for a connector without historical sync", async () => {
+      renderWithReach(false, { unit: HistoryReachUnit.Hours, amount: 12 });
+
+      await expect
+        .element(page.getByText("Historical sync is not supported for this connector."))
+        .toBeVisible();
+      expect(page.getByText("A date range with no start date").elements()).toHaveLength(0);
+    });
+
+    it("words the reach of a connector with historical sync", async () => {
+      renderWithReach(true, { unit: HistoryReachUnit.Months, amount: 6 });
+
+      await expect
+        .element(page.getByText("A date range with no start date gets the last 6 months of data."))
+        .toBeVisible();
+    });
+
+    it("uses the singular for one unit", async () => {
+      renderWithReach(true, { unit: HistoryReachUnit.Days, amount: 1 });
+
+      await expect
+        .element(page.getByText("A date range with no start date gets the last 1 day of data."))
+        .toBeVisible();
+    });
+
+    it("words the reach of a connector that serves its whole history", async () => {
+      renderWithReach(true, { unit: HistoryReachUnit.Whole, amount: 0 });
+
+      await expect
+        .element(page.getByText("A date range with no start date gets all of the history."))
+        .toBeVisible();
+    });
   });
 });

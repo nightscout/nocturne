@@ -1,6 +1,7 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models.Services;
 
 namespace Nocturne.Connectors.Glooko.Configurations;
 
@@ -18,6 +19,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     "Import data from Glooko platform",
     "Glooko",
     SupportsHistoricalSync = true,
+    HistoryReachUnit = HistoryReachUnit.Months,
+    HistoryReachAmount = GlookoConstants.FullWalkMonths,
     SupportsManualSync = true,
     DefaultActiveThresholdMinutes = 180,
     DefaultStaleThresholdMinutes = 360,

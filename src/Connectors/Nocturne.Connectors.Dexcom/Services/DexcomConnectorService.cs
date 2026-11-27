@@ -41,7 +41,7 @@ public class DexcomConnectorService
     ///     Fetches SensorGlucose records from the Dexcom Share API.
     /// </summary>
     private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(
-        DexcomConnectorConfiguration config, TokenSession session, DateTime? since, CancellationToken cancellationToken)
+        DexcomConnectorConfiguration config, TokenSession session, DateTime since, CancellationToken cancellationToken)
     {
         var batchData = await FetchBatchDataAsync(config, session, since, cancellationToken);
         if (batchData == null) return [];
@@ -58,9 +58,6 @@ public class DexcomConnectorService
     /// <inheritdoc />
     protected override bool NeedsSignIn(SyncRequest request, DexcomConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Contains(SyncDataType.Glucose);
-
-    /// <summary>Share serves only the last day of readings.</summary>
-    protected override DateTime? HistoryStart => Clock.GetUtcNow().UtcDateTime.AddDays(-1);
 
     protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, DexcomConnectorConfiguration config) =>
         WindowResumesFrom(request, ResumeFamily.Glucose);
@@ -85,7 +82,7 @@ public class DexcomConnectorService
         try
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(
-                config, session, WindowStart(request, ResumeFamily.Glucose), cancellationToken);
+                config, session, ConcreteWindowStart(request, ResumeFamily.Glucose), cancellationToken);
 
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorGlucose.ToList(), config, cancellationToken);
@@ -99,7 +96,7 @@ public class DexcomConnectorService
     }
 
     private async Task<DexcomEntry[]?> FetchBatchDataAsync(
-        DexcomConnectorConfiguration config, TokenSession session, DateTime? since, CancellationToken cancellationToken)
+        DexcomConnectorConfiguration config, TokenSession session, DateTime since, CancellationToken cancellationToken)
     {
         var fetched = await ExecuteWithRetryAsync(
             async () => await FetchRawDataCoreAsync(config, session.Token, since, cancellationToken),
@@ -127,16 +124,11 @@ public class DexcomConnectorService
         return result;
     }
 
-    internal static DateTime CalculateStartTime(DateTime? since, DateTime now) =>
-        since ?? now.AddDays(-2);
-
     private async Task<DexcomEntry[]?> FetchRawDataCoreAsync(
-        DexcomConnectorConfiguration config, string sessionId, DateTime? since, CancellationToken cancellationToken)
+        DexcomConnectorConfiguration config, string sessionId, DateTime since, CancellationToken cancellationToken)
     {
         var now = Clock.GetUtcNow().UtcDateTime;
-        var startTime = CalculateStartTime(since, now);
-
-        var timeDiff = now - startTime;
+        var timeDiff = now - since;
         var maxCount = Math.Ceiling(timeDiff.TotalMinutes / 5);
         var minutes = (int)(maxCount * 5);
 
