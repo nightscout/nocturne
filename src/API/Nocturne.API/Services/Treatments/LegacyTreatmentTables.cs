@@ -1073,7 +1073,7 @@ internal static class LegacyTreatmentTables
     internal static void RestoreServedFields(Treatment treatment, IDictionary<string, object>? metadata)
     {
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
-        treatment.EnteredBy = metadata.TryReadString(ProfileActivationLegacyFields.EnteredByKey);
+        treatment.EnteredBy = metadata.TryReadString(UploadedAppFields.EnteredByKey);
         treatment.Notes = metadata.TryReadString(NotesKey);
         treatment.SyncIdentifier = metadata.TryReadString(SyncIdentifierKey);
         treatment.InsulinType = metadata.TryReadString(InsulinTypeKey);

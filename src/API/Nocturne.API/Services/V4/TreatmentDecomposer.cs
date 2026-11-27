@@ -636,7 +636,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             EndTimestamp = (treatment.Mills + Math.Max(durationMs, 0)).ToUtcDateTime(),
             UtcOffset = treatment.UtcOffset,
             Device = UploadedDevice(treatment),
-            App = treatment.EnteredBy,
+            App = UploadedString(treatment, "app"),
             DataSource = treatment.DataSource,
             CorrelationId = correlationId,
             Rate = percent is null ? treatment.Absolute ?? 0 : treatment.Rate,
@@ -1311,7 +1311,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static void AddServedTreatmentFields(Dictionary<string, object> metadata, Treatment treatment)
     {
         if (!string.IsNullOrEmpty(treatment.EnteredBy))
-            metadata["enteredBy"] = treatment.EnteredBy;
+            metadata[UploadedAppFields.EnteredByKey] = treatment.EnteredBy;
 
         if (!string.IsNullOrEmpty(treatment.Notes))
             metadata[LegacyTreatmentTables.NotesKey] = treatment.Notes;

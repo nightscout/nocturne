@@ -162,6 +162,19 @@ public class TempBasalOriginProvenanceTests
             .Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(LegacyId, "openaps://AndroidAPS", "AAPS", TempBasalOriginEvidence.Uploader)]
+    [InlineData(LegacyId, "xdrip", "Trio", TempBasalOriginEvidence.Reported)]
+    [InlineData(null, "xdrip", "Trio", TempBasalOriginEvidence.Uploader)]
+    [InlineData(null, "Trio", "xdrip", TempBasalOriginEvidence.Reported)]
+    public void A_stored_row_names_its_uploader_by_its_device_from_the_decomposer_and_by_its_app_from_a_V4_client(
+        string? legacyId, string device, string app, TempBasalOriginEvidence expected)
+    {
+        var tempBasal = new TempBasal { Origin = TempBasalOrigin.Algorithm, LegacyId = legacyId, Device = device, App = app };
+
+        TempBasalOriginProvenance.EvidenceOf(tempBasal).Should().Be(expected);
+    }
+
     [Fact]
     public void Stored_evidence_stands()
     {

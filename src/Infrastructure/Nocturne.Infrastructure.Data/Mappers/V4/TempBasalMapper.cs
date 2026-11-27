@@ -134,7 +134,7 @@ public static class TempBasalMapper
             TempBasalOriginColumns.EvidenceOf(entity.OriginEvidence),
             TempBasalAutomaticFlag.Of(
                 MapperHelpers.DeserializeJson<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)),
-            entity.App,
+            TempBasalOriginProvenance.UploaderOf(entity.Device, entity.App, entity.LegacyId),
             entity.DataSource,
             entity.LegacyId);
         return new TempBasalOriginState(origin, evidence, entity.ApsSnapshotId, entity.Timestamp.ToMills(), entity.Rate);

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Core.Models.Tests;
@@ -35,7 +36,7 @@ public class UploadedIsValidTests
         var record = TempBasalUploadedFields.Keep(null, new Treatment { IsValid = uploaded });
 
         var served = new Treatment();
-        TempBasalUploadedFields.Restore(served, record, pumpRecordId: null);
+        TempBasalUploadedFields.Restore(served, new TempBasal { AdditionalProperties = record });
 
         served.IsValid.Should().Be(kept);
     }

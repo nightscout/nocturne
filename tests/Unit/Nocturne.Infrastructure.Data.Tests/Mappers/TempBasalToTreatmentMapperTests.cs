@@ -25,11 +25,12 @@ public class TempBasalToTreatmentMapperTests
             Rate = 1.5,
             ScheduledRate = 0.8,
             Origin = TempBasalOrigin.Algorithm,
-            App = "openaps",
-            Device = "medtronic-pump",
+            App = "AAPS",
+            Device = "openaps",
             DataSource = "openaps-connector",
             UtcOffset = -300,
             LegacyId = "legacy-basal-123",
+            AdditionalProperties = new() { [UploadedAppFields.EnteredByKey] = "openaps" },
         };
 
         // Act
@@ -44,8 +45,26 @@ public class TempBasalToTreatmentMapperTests
         result.Absolute.Should().Be(1.5);
         result.Temp.Should().Be("absolute");
         result.EnteredBy.Should().Be("openaps");
+        result.AdditionalProperties!["app"].Should().Be("AAPS");
         result.DataSource.Should().Be("openaps-connector");
         result.UtcOffset.Should().Be(-300);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("legacy-basal-123", null)]
+    [InlineData(null, "Trio")]
+    public void ToTreatment_ServesAnEnteredByOnlyAsUploadedOrAsAV4ClientsApp(string? legacyId, string? enteredBy)
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.2);
+        tempBasal.LegacyId = legacyId;
+        tempBasal.App = "Trio";
+        tempBasal.Device = "Trio";
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.EnteredBy.Should().Be(enteredBy);
+        result.AdditionalProperties!["app"].Should().Be("Trio");
     }
 
     [Fact]

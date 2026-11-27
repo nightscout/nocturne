@@ -2539,9 +2539,12 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
         tb.OriginEvidence == TempBasalOriginEvidence.Snapshot
         || tb.ApsSnapshotId is not null && tb.OriginEvidence != TempBasalOriginEvidence.OtherDevice;
 
-    private static bool IsAidUploaderTemp(TempBasal tb) =>
-        TempBasalOriginProvenance.IsAidUploader(tb.App, tb.App)
-        || TempBasalOriginProvenance.IsAidUploader(tb.Device, app: null);
+    private static bool IsAidUploaderTemp(TempBasal tb)
+    {
+        var uploader = TempBasalOriginProvenance.UploaderOf(tb.Device, tb.App, tb.LegacyId);
+        return TempBasalOriginProvenance.IsAidUploader(uploader, uploader)
+            || TempBasalOriginProvenance.IsAidUploader(tb.Device, app: null);
+    }
 
     /// <summary>
     /// The insulin (U) a delivered temp basal from <see cref="ClipOverlappingTempBasals"/> gave.

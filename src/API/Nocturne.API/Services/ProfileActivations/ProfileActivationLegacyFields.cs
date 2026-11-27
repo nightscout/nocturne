@@ -17,8 +17,6 @@ namespace Nocturne.API.Services.ProfileActivations;
 /// </remarks>
 internal static class ProfileActivationLegacyFields
 {
-    internal const string EnteredByKey = "enteredBy";
-
     /// <summary>
     /// Residue marker for a Profile Switch uploaded without a <c>percentage</c>, which reads back
     /// without one rather than with the 100 its column holds.
@@ -41,7 +39,7 @@ internal static class ProfileActivationLegacyFields
         ProfileSpanMetadata.OriginalPercentageKey,
         ProfileSpanMetadata.OriginalTimeshiftKey,
         ProfileSpanMetadata.AppKey,
-        EnteredByKey,
+        UploadedAppFields.EnteredByKey,
         StateSpanMetadataExtensions.UtcOffsetKey,
         InsulinNameKey,
         InsulinDiaKey,
@@ -103,7 +101,7 @@ internal static class ProfileActivationLegacyFields
                 : RequestedDurationOf(metadata, span, start, end, superseded),
             EndTimestamp = span.IsEffective ? EffectiveEnd(span, startMills) : null,
             App = span.App,
-            EnteredBy = metadata.TryReadString(EnteredByKey),
+            EnteredBy = metadata.TryReadString(UploadedAppFields.EnteredByKey),
             UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey),
             Snapshot = ProfileActivationSnapshots.From(span.ProfileJson, InsulinOf(metadata)),
             SnapshotIsCustomized = span.IsEffective,
@@ -141,7 +139,7 @@ internal static class ProfileActivationLegacyFields
         if (activation.App is { } app)
             metadata[ProfileSpanMetadata.AppKey] = app;
         if (activation.EnteredBy is { } enteredBy)
-            metadata[EnteredByKey] = enteredBy;
+            metadata[UploadedAppFields.EnteredByKey] = enteredBy;
         if (activation.UtcOffset is { } utcOffset)
             metadata[StateSpanMetadataExtensions.UtcOffsetKey] = utcOffset;
 

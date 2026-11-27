@@ -109,7 +109,7 @@ public sealed record ProfileSpanMetadata
         {
             uploaded = timeshift;
             unit = timeshift is { } raw
-                ? UnitOfUploadedTimeshift(raw, metadata.TryReadString("enteredBy"), metadata.TryReadString(AppKey), originalProfileName)
+                ? UnitOfUploadedTimeshift(raw, metadata.TryReadString(UploadedAppFields.EnteredByKey), metadata.TryReadString(AppKey), originalProfileName)
                 : null;
             hours = timeshift is { } value ? ToHours(value, unit!.Value) : 0;
         }

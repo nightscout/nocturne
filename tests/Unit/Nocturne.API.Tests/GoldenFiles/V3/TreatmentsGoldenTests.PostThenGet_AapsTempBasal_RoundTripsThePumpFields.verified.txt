@@ -35,6 +35,8 @@
         pumpSerial: 1,
         pumpType: OMNIPOD_DASH,
         isValid: true,
+        isReadOnly: false,
+        app: AAPS,
         basalOrigin: Algorithm,
         originEvidence: Uploader,
         device: Pixel

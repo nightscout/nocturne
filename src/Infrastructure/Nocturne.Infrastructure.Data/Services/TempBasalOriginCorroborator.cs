@@ -339,7 +339,7 @@ public static class TempBasalOriginCorroborator
         DateTime Start,
         double? Rate,
         string? Device,
-        string? EnteredBy,
+        string? App,
         string? DataSource,
         TempBasalOrigin Origin,
         string? Evidence,
@@ -371,8 +371,9 @@ public static class TempBasalOriginCorroborator
     private static Verdict Settle(Row row, List<(string? Device, Proposal Proposal)> proposals)
     {
         var stored = TempBasalOriginColumns.EvidenceOf(row.Evidence);
+        var uploader = TempBasalOriginProvenance.UploaderOf(row.Device, row.App, row.LegacyId);
         var evidence = TempBasalOriginProvenance.EvidenceOf(
-            row.Origin, stored, row.AutomaticFlag, row.EnteredBy, row.DataSource, row.LegacyId);
+            row.Origin, stored, row.AutomaticFlag, uploader, row.DataSource, row.LegacyId);
         if (evidence == TempBasalOriginEvidence.Reported)
             return new Verdict(row.Origin, TempBasalOriginEvidence.Reported, row.SnapshotId);
 
@@ -381,7 +382,7 @@ public static class TempBasalOriginCorroborator
             return new Verdict(TempBasalOrigin.Algorithm, TempBasalOriginEvidence.Snapshot, linked);
 
         var uploaderDefault = stored is null
-            ? TempBasalOriginProvenance.UploaderDefault(row.EnteredBy, app: null)
+            ? TempBasalOriginProvenance.UploaderDefault(uploader, app: null)
             : row.Origin;
         var (loop, otherDevice) = ProposalsFor(row.Device, row.Start, proposals);
         return Judge(uploaderDefault, row.Start, row.Rate, loop, otherDevice);
