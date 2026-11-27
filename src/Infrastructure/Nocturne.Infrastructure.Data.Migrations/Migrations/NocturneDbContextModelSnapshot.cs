@@ -1042,6 +1042,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SysCreatedAt")
                         .HasDatabaseName("ix_body_weights_sys_created_at");
 
+                    b.HasIndex("TenantId", "DataSource")
+                        .HasDatabaseName("ix_body_weights_tenant_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "Mills")
                         .HasDatabaseName("ix_body_weights_tenant_mills");
 
@@ -1049,6 +1053,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_body_weights_tenant_source_sync_id")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_body_weights_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex(new[] { "TenantId", "DataSource", "SyncIdentifier" }, "ix_body_weights_tenant_source_sync_id_user_deleted")
                         .HasDatabaseName("ix_body_weights_tenant_source_sync_id_user_deleted")
@@ -2639,6 +2647,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_heart_rates_tenant_source_timestamp");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_heart_rates_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex(new[] { "TenantId", "DataSource", "SyncIdentifier" }, "ix_heart_rates_tenant_source_sync_id_user_deleted")
                         .HasDatabaseName("ix_heart_rates_tenant_source_sync_id_user_deleted")
@@ -5368,6 +5380,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_step_counts_tenant_source_timestamp");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_step_counts_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex(new[] { "TenantId", "DataSource", "SyncIdentifier" }, "ix_step_counts_tenant_source_sync_id_user_deleted")
                         .HasDatabaseName("ix_step_counts_tenant_source_sync_id_user_deleted")
@@ -8289,6 +8305,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_basal_schedules_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_basal_schedules_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "ProfileName", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_basal_schedules_tenant_profile_timestamp");
@@ -8832,6 +8852,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_calibrations_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_calibrations_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_calibrations_tenant_history");
 
@@ -9129,6 +9153,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_carb_ratio_schedules_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_carb_ratio_schedules_tenant_device_source")
                         .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "ProfileName", "Timestamp")
@@ -10217,6 +10245,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_profile_activations_tenant_source_sync_id")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "DataSource", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_profile_activations_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_profile_activations_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_profile_activations_tenant_history");
 
@@ -10415,6 +10452,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_pump_snapshots_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_pump_snapshots_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_pump_snapshots_tenant_history");
 
@@ -10546,6 +10587,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_sensitivity_schedules_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_sensitivity_schedules_tenant_device_source")
                         .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "ProfileName", "Timestamp")
@@ -10875,6 +10920,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_sensor_state_reports_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_sensor_state_reports_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "Timestamp", "Id")
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_sensor_state_reports_tenant_timestamp_id")
@@ -10996,6 +11045,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_target_range_schedules_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_target_range_schedules_tenant_device_source")
                         .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "ProfileName", "Timestamp")
@@ -11411,6 +11464,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_therapy_settings_tenant_source_timestamp")
                         .HasFilter("deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_therapy_settings_tenant_device_source")
+                        .HasFilter("deleted_at IS NULL");
+
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")
                         .HasDatabaseName("ix_therapy_settings_tenant_history");
 
@@ -11563,6 +11620,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_uploader_snapshots_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Device", "DataSource")
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_device_source")
                         .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "SysUpdatedAt", "Id")

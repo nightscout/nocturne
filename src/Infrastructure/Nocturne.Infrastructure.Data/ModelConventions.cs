@@ -43,12 +43,23 @@ internal static class ModelConventions
                 .HasFilter("deleted_at IS NULL");
         }
 
-        // A source's stats (V4RecordTables.Counted) and its counts read the rows only their Device names as ranges of
-        // this index (SourceFilter.Parts). Without it each read scans the whole table, for every
-        // connector on every Connections page load. Rows a connector writes usually carry its id in
-        // both handles, so the ranges that leave out DataSource = Device are usually empty.
-        foreach (var entity in V4RecordTables.Counted
-                     .Select(t => t.Table.Entity)
+        // The DataSource = source part of a source's count (SourceFilter.Parts) on a table the
+        // watermark index cannot cover: its only (tenant_id, data_source) index is the partial sync
+        // key, which a count does not imply.
+        foreach (var entity in SourceCountedWithoutTimestampEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(ISourcedEntity.DataSource))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_source")
+                .HasFilter("deleted_at IS NULL");
+        }
+
+        // The connector page's per-source count (CountsBySourceAsync, every table in V4RecordTables.All)
+        // and the stats over V4RecordTables.Counted read the rows only their Device names as ranges
+        // of this index (SourceFilter.Parts). Without it each read goes through the tenant's rows of
+        // that table, for every connector on every page load. Rows a connector writes usually carry
+        // its id in both handles, so the ranges that leave out DataSource = Device are usually empty.
+        foreach (var entity in V4RecordTables.All
+                     .Select(t => t.Entity)
                      .Where(typeof(ISourcedEntity).IsAssignableFrom)
                      .Select(t => modelBuilder.Entity(t)))
         {

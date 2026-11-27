@@ -127,6 +127,33 @@ public class ModelConventionTests
                 && i.IsDescending.SequenceEqual([false, false, true])
                 && i.GetFilter() == "deleted_at IS NULL");
 
+    [Fact]
+    public void EverySourceCountedTableWithoutATimestamp_HasTheTenantSourceIndex() =>
+        AssertFamily(
+            NocturneDbContext.SourceCountedWithoutTimestampEntities,
+            "_tenant_source",
+            i => Columns(i).SequenceEqual([
+                    nameof(ITenantScoped.TenantId),
+                    nameof(ISourcedEntity.DataSource)])
+                && !i.IsUnique
+                && i.GetFilter() == "deleted_at IS NULL");
+
+    /// <summary>
+    /// A source's count and stats read the rows only their device names (SourceFilter.Parts) off this
+    /// index, on every sourced table the record registry holds.
+    /// </summary>
+    [Fact]
+    public void EverySourcedRecordTable_HasTheTenantDeviceSourceIndex() =>
+        AssertFamily(
+            [.. V4RecordTables.All.Select(t => t.Entity).Where(typeof(ISourcedEntity).IsAssignableFrom)],
+            "_tenant_device_source",
+            i => Columns(i).SequenceEqual([
+                    nameof(ITenantScoped.TenantId),
+                    nameof(ISourcedEntity.Device),
+                    nameof(ISourcedEntity.DataSource)])
+                && !i.IsUnique
+                && i.GetFilter() == "deleted_at IS NULL");
+
     /// <summary>
     /// GetLatestAsync and the pump GetTimelineAsync pin no data source, so the watermark index above
     /// cannot serve them.

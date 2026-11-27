@@ -627,12 +627,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
-    /// The tables a connector watermarks on their newest timestamp, adding the span-shaped
-    /// <see cref="TempBasalEntity"/>, whose <see cref="IObservationTimestamped.Timestamp"/> is the
-    /// span start.
+    /// The tables a connector watermarks on their newest timestamp, or counts a source's rows of by
+    /// <c>(tenant_id, data_source)</c>, adding the span-shaped <see cref="TempBasalEntity"/> and
+    /// <see cref="ProfileActivationEntity"/>, whose <see cref="IObservationTimestamped.Timestamp"/> is
+    /// the span start.
     /// </summary>
     internal static readonly Type[] V4WatermarkedEntities =
-        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
+        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity), typeof(ProfileActivationEntity)];
+
+    /// <summary>
+    /// The source-owned tables with no <see cref="IObservationTimestamped.Timestamp"/>, which the
+    /// <see cref="V4WatermarkedEntities"/> index cannot cover, so a source's count has its own
+    /// <c>(tenant_id, data_source)</c> index.
+    /// </summary>
+    internal static readonly Type[] SourceCountedWithoutTimestampEntities =
+    [.. V4RecordTables.All.Select(t => t.Entity)
+        .Where(t => typeof(ISourcedEntity).IsAssignableFrom(t) && !typeof(IObservationTimestamped).IsAssignableFrom(t))];
 
     /// <summary>
     /// V4 record tables whose lists read one tenant newest-first by timestamp, then id on the tables
