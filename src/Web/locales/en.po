@@ -1122,6 +1122,8 @@ msgid "Started"
 msgstr "Started"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
+#: src/lib/components/alerts/DurationInput.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
 msgid "Duration"
@@ -3558,6 +3560,7 @@ msgstr "Carbs (g)"
 msgid "Portion"
 msgstr "Portion"
 
+#: src/lib/components/alerts/DurationInput.svelte
 #: src/lib/components/food/FoodFields.svelte
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Unit"
@@ -4820,7 +4823,6 @@ msgstr "Peak"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderRow.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 msgid "min"
@@ -5213,7 +5215,6 @@ msgstr "Set your desired low and high targets throughout the day"
 msgid "<0/> Add"
 msgstr "<0/> Add"
 
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -15656,10 +15657,8 @@ msgstr "Liberty"
 msgid "{0} within"
 msgstr "{0} within"
 
-#. 0: bgLabel()
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-msgid "{0}/min"
-msgstr "{0}/min"
+#~ msgid "{0}/min"
+#~ msgstr "{0}/min"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 msgid "Select a tracker"
@@ -23087,6 +23086,8 @@ msgstr "Discover what affects your glucose"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Comparison"
@@ -23205,10 +23206,8 @@ msgstr "A condition has no comparison chosen. Pick one and save again."
 #~ msgid "A condition has a comparison that isn't recognised. Pick one from the list and save again."
 #~ msgstr "A condition has a comparison that isn't recognised. Pick one from the list and save again."
 
-#: src/lib/components/alerts/conditionIssues.svelte.ts
-#: src/lib/components/alerts/conditionIssues.svelte.ts
-msgid "A glucose condition needs a direction: above or below, rising or falling."
-msgstr "A glucose condition needs a direction: above or below, rising or falling."
+#~ msgid "A glucose condition needs a direction: above or below, rising or falling."
+#~ msgstr "A glucose condition needs a direction: above or below, rising or falling."
 
 #: src/lib/components/alerts/conditionIssues.svelte.ts
 #: src/lib/components/alerts/conditionIssues.svelte.ts
@@ -23841,10 +23840,8 @@ msgstr "Glucose value"
 msgid "Rate"
 msgstr "Rate"
 
-#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-msgid "at least"
-msgstr "at least"
+#~ msgid "at least"
+#~ msgstr "at least"
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 msgid "Minutes without a reading"
@@ -28555,7 +28552,6 @@ msgstr "This page shows how much of the time the loop was closed, why it stopped
 msgid "This page compares your profile settings with observations from your data. Speak to your diabetes care team before you change a setting."
 msgstr "This page compares your profile settings with observations from your data. Speak to your diabetes care team before you change a setting."
 
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/alerts/wizard/templates.svelte.ts
@@ -37137,22 +37133,20 @@ msgstr "Not ({0})"
 msgid "{0} {1} per minute"
 msgstr "{0} {1} per minute"
 
-#. 0: rate
+#. 0: ratePerMinuteText(-value)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Glucose falling at least {0}"
 msgstr "Glucose falling at least {0}"
 
-#. 0: rate
+#. 0: ratePerMinuteText(value)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Glucose rising at least {0}"
 msgstr "Glucose rising at least {0}"
 
-#. 0: rate
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
-msgid "Glucose changing at least {0}"
-msgstr "Glucose changing at least {0}"
+#~ msgid "Glucose changing at least {0}"
+#~ msgstr "Glucose changing at least {0}"
 
-#. 0: opSymbol(p.operator); 1: formatMinutes(p.value ?? 0)
+#. 0: opSymbol(p.operator); 1: formatDuration(p.minutes ?? 0)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Sensor data age {0} {1}"
 msgstr "Sensor data age {0} {1}"
@@ -37180,12 +37174,12 @@ msgstr "Carbs on board {0} {1} g"
 msgid "Reservoir {0} {1} U"
 msgstr "Reservoir {0} {1} U"
 
-#. 0: opSymbol(p.operator); 1: formatHours(p.value ?? 0)
+#. 0: opSymbol(p.operator); 1: formatDuration(p.minutes ?? 0)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Site age {0} {1}"
 msgstr "Site age {0} {1}"
 
-#. 0: opSymbol(p.operator); 1: formatDays(p.value ?? 0)
+#. 0: opSymbol(p.operator); 1: formatDuration(p.minutes ?? 0)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Sensor age {0} {1}"
 msgstr "Sensor age {0} {1}"
@@ -37497,11 +37491,9 @@ msgid "Falling fast"
 msgstr "Falling fast"
 
 #: src/lib/components/alerts/alert-labels.svelte.ts
-#: src/lib/components/alerts/alert-labels.svelte.ts
 msgid "Falling"
 msgstr "Falling"
 
-#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/alerts/alert-labels.svelte.ts
 msgid "Rising"
 msgstr "Rising"
@@ -41211,6 +41203,10 @@ msgid "Alert when glucose decreases this fast, or faster"
 msgstr "Alert when glucose decreases this fast, or faster"
 
 #. 0: bgLabel()
+#. 0: bgLabel()
+#. 0: bgLabel()
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "{0} per minute"
 msgstr "{0} per minute"
@@ -41569,10 +41565,8 @@ msgstr "Group: any of"
 msgid "One condition in the group is enough"
 msgstr "One condition in the group is enough"
 
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-msgid "Direction"
-msgstr "Direction"
+#~ msgid "Direction"
+#~ msgstr "Direction"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 msgid "Trend"
@@ -41672,13 +41666,11 @@ msgstr "The minutes since the last bolus"
 msgid "The units of insulin left in the pump"
 msgstr "The units of insulin left in the pump"
 
-#: src/lib/components/alerts/factText.svelte.ts
-msgid "The hours since the last infusion site change"
-msgstr "The hours since the last infusion site change"
+#~ msgid "The hours since the last infusion site change"
+#~ msgstr "The hours since the last infusion site change"
 
-#: src/lib/components/alerts/factText.svelte.ts
-msgid "The days since the sensor started"
-msgstr "The days since the sensor started"
+#~ msgid "The days since the sensor started"
+#~ msgstr "The days since the sensor started"
 
 #: src/lib/components/alerts/factText.svelte.ts
 msgid "The battery level of the pump"
@@ -48594,12 +48586,12 @@ msgstr "A glucose condition compares with a value that Nocturne does not know. C
 msgid "A glucose condition compares with a value, but no value is chosen. Choose one from the list and save again."
 msgstr "A glucose condition compares with a value, but no value is chosen. Choose one from the list and save again."
 
-#. 0: limitPhrase(p)
+#. 0: limit
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Glucose below {0}"
 msgstr "Glucose below {0}"
 
-#. 0: limitPhrase(p)
+#. 0: limit
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Glucose above {0}"
 msgstr "Glucose above {0}"
@@ -50372,12 +50364,12 @@ msgstr "The team decides who on its staff can see this site."
 msgid "An owner of this site approves each staff member of this team."
 msgstr "An owner of this site approves each staff member of this team."
 
-#. 0: ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)
+#. 0: ratePerMinuteText(rateMagnitude(leaf?.rate_of_change))
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Falling fast: {0}"
 msgstr "Falling fast: {0}"
 
-#. 0: ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)
+#. 0: ratePerMinuteText(rateMagnitude(leaf?.rate_of_change))
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Rising fast: {0}"
 msgstr "Rising fast: {0}"
@@ -52877,3 +52869,48 @@ msgstr "You have a view with this name. Use a different name."
 #: src/lib/components/people/people-views.svelte.ts
 msgid "Your views changed. Try again."
 msgstr "Your views changed. Try again."
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "A fall is a negative number."
+msgstr "A fall is a negative number."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A time in a condition must be a whole number of minutes, 0 or more."
+msgstr "A time in a condition must be a whole number of minutes, 0 or more."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "This rule's conditions were saved in an old format. Check the conditions and save the rule again."
+msgstr "This rule's conditions were saved in an old format. Check the conditions and save the rule again."
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The time since the last infusion site change"
+msgstr "The time since the last infusion site change"
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The time since the sensor started"
+msgstr "The time since the sensor started"
+
+#. 0: opSymbol(operator); 1: limit
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Glucose {0} {1}"
+msgstr "Glucose {0} {1}"
+
+#. 0: ratePerMinuteText(-value)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Glucose falling more than {0}"
+msgstr "Glucose falling more than {0}"
+
+#. 0: ratePerMinuteText(value)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Glucose rising more than {0}"
+msgstr "Glucose rising more than {0}"
+
+#. 0: opSymbol(operator); 1: ratePerMinuteText(value)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Rate of change {0} {1}"
+msgstr "Rate of change {0} {1}"
+
+#: src/lib/components/alerts/DurationInput.svelte
+msgid "Enter a whole number of minutes, 0 or more."
+msgstr "Enter a whole number of minutes, 0 or more."
