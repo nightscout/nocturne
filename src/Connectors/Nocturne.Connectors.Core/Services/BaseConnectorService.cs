@@ -517,8 +517,14 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     start overrides it.
     /// </summary>
     /// <remarks><see cref="FirstSyncStart"/> also bounds a scheduled first sync by it.</remarks>
-    protected virtual DateTime? HistoryStart =>
-        Registration?.HistoryReach.StartFrom(Clock.GetUtcNow().UtcDateTime);
+    protected virtual DateTime? HistoryStart => HistoryStartAt(Clock.GetUtcNow().UtcDateTime);
+
+    /// <summary>
+    ///     The oldest instant the declared <see cref="ConnectorRegistrationAttribute.HistoryReach"/> covers
+    ///     from <paramref name="now"/>, for a static member that has no <see cref="Clock"/>.
+    ///     <c>null</c> for a source that serves its whole history.
+    /// </summary>
+    protected static DateTime? HistoryStartAt(DateTime now) => Registration?.HistoryReach.StartFrom(now);
 
     /// <summary>
     ///     Core synchronization logic: fetches and publishes the data types

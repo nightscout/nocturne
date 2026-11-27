@@ -75,7 +75,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
         result.Success.Should().BeTrue();
         handler.WindowCount.Should().Be(FullWalkChunks());
         Parse(handler.Windows[0].Start).Should().Be(
-            Instant.UtcDateTime.AddMonths(-GlookoConstants.FullWalkMonths).AddDays(-1));
+            GlookoSyncHarness.DeclaredFullWalkStart(Instant.UtcDateTime).AddDays(-1));
 
         store.Resume.Keys.Should().BeEquivalentTo([Completed, Attempted, LookbackRead]);
         store.Resume[LookbackRead].Should().Be(
@@ -528,7 +528,7 @@ public class GlookoConnectorServiceBackgroundWindowTests
     {
         var now = Instant.UtcDateTime;
         return DateChunker.Chunk(
-                now.AddMonths(-GlookoConstants.FullWalkMonths).AddDays(-1), now.AddDays(1),
+                GlookoSyncHarness.DeclaredFullWalkStart(now).AddDays(-1), now.AddDays(1),
                 GlookoConstants.SyncChunkSize)
             .Count();
     }

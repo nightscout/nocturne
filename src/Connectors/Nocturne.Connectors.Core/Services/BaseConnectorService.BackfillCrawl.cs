@@ -333,9 +333,17 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         }
     }
 
-    private static DateTime? Earlier(DateTime? a, DateTime? b) => a is { } x && b is { } y ? (x < y ? x : y) : a ?? b;
+    /// <summary>The earlier of two bounds, where <c>null</c> is no bound: one alone stands.</summary>
+    protected static DateTime? Earlier(DateTime? a, DateTime? b) => a is { } x && b is { } y ? (x < y ? x : y) : a ?? b;
 
-    private static DateTime? Later(DateTime? a, DateTime? b) => a is { } x && b is { } y ? (x > y ? x : y) : a ?? b;
+    /// <summary><see cref="Earlier(DateTime?, DateTime?)"/> of a concrete value and an optional ceiling.</summary>
+    protected static DateTime Earlier(DateTime value, DateTime? ceiling) => Earlier((DateTime?)value, ceiling) ?? value;
+
+    /// <summary>The later of two bounds, where <c>null</c> is no bound: one alone stands.</summary>
+    protected static DateTime? Later(DateTime? a, DateTime? b) => a is { } x && b is { } y ? (x > y ? x : y) : a ?? b;
+
+    /// <summary><see cref="Later(DateTime?, DateTime?)"/> of a concrete value and an optional floor.</summary>
+    protected static DateTime Later(DateTime value, DateTime? floor) => Later((DateTime?)value, floor) ?? value;
 
     private sealed record PageCrawl<T>(
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> Pages,
