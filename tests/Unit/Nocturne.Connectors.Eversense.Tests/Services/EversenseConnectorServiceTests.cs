@@ -124,7 +124,7 @@ public class EversenseConnectorServiceTests
             }
         };
 
-        var publisherMock = new Mock<IConnectorPublisher>();
+        var publisherMock = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
         publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
                 It.IsAny<IEnumerable<SensorGlucose>>(),
@@ -175,7 +175,7 @@ public class EversenseConnectorServiceTests
             }
         };
 
-        var publisherMock = new Mock<IConnectorPublisher>();
+        var publisherMock = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
         publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
                 It.IsAny<IEnumerable<SensorGlucose>>(),
@@ -237,7 +237,7 @@ public class EversenseConnectorServiceTests
     public async Task SyncDataAsync_EmptyPatientList_ReportsUnhealthyWithGuidance()
     {
         // Arrange
-        var publisherMock = new Mock<IConnectorPublisher>();
+        var publisherMock = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
 
         var fixture = new ServiceFixture(
@@ -270,7 +270,7 @@ public class EversenseConnectorServiceTests
     {
         // Arrange — the API call fails at the transport layer, not as a refused credential, so the
         // error must not send the tenant to re-enter a working password.
-        var publisherMock = new Mock<IConnectorPublisher>();
+        var publisherMock = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
 
         var fixture = new ServiceFixture(
@@ -317,7 +317,7 @@ public class EversenseConnectorServiceTests
             }
         };
 
-        var publisherMock = new Mock<IConnectorPublisher>();
+        var publisherMock = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
 
         var fixture = new ServiceFixture(
@@ -483,17 +483,6 @@ public class EversenseConnectorServiceTests
     #region History window Tests
 
     [Fact]
-    public void HistoryWindows_WithoutResumePoint_CoversTheNowGraphWindow()
-    {
-        var now = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
-
-        var windows = EversenseConnectorService.HistoryWindows(from: null, to: null, now);
-
-        windows.Should().ContainSingle()
-            .Which.Should().Be((now - EversenseConnectorService.DefaultHistoryWindow, now.AddMinutes(5)));
-    }
-
-    [Fact]
     public void HistoryWindows_LongCatchUp_SplitsIntoContiguousDays()
     {
         var now = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
@@ -526,10 +515,16 @@ public class EversenseConnectorServiceTests
         fixture.FloorProbe.Floor.Should().Be(new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc));
     }
 
-    [Fact]
-    public async Task SyncDataAsync_WithoutResumePoint_AsksForTheFourHoursBeforeTheClock()
+    /// <summary>An open request is the scheduled catch-up: it asks from the resume point, not a fixed window.</summary>
+    [Theory]
+    [InlineData(null, "2026-10-15T12%3A00%3A00")]
+    [InlineData("2026-10-16T11:30:00Z", "2026-10-16T11%3A25%3A00")]
+    public async Task SyncDataAsync_AnOpenRequest_AsksFromTheResumePoint(string? storedNewest, string expectedStart)
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero));
+        var publisher = CreatePublisher();
+        publisher.Setup(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(storedNewest is null ? null : DateTime.Parse(storedNewest, null, System.Globalization.DateTimeStyles.AdjustToUniversal));
         var fixture = new ServiceFixture(
             httpResponses: new Dictionary<string, HttpResponseMessage>
             {
@@ -541,16 +536,16 @@ public class EversenseConnectorServiceTests
                 [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
                     CreateJsonResponse(new List<EversenseUserEvent>())
             },
-            publisher: CreatePublisher().Object,
+            publisher: publisher.Object,
             clock: clock);
 
         await fixture.Service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
 
-        var history = fixture.RequestedUris.Should().ContainSingle(u =>
-            u.AbsolutePath == EversenseConstants.Endpoints.GetFollowingUserSensorGlucose).Subject;
-        history.Query.Should().Contain("startDate=2026-10-16T08%3A00%3A00")
-            .And.Contain("endDate=2026-10-16T12%3A05%3A00");
+        var histories = fixture.RequestedUris.Where(u =>
+            u.AbsolutePath == EversenseConstants.Endpoints.GetFollowingUserSensorGlucose).ToList();
+        histories[0].Query.Should().Contain($"startDate={expectedStart}");
+        histories[^1].Query.Should().Contain("endDate=2026-10-16T12%3A05%3A00");
     }
 
     [Theory]
@@ -691,7 +686,7 @@ public class EversenseConnectorServiceTests
 
     private static Mock<IConnectorPublisher> CreatePublisher(Action<IEnumerable<SensorGlucose>>? onPublish = null)
     {
-        var publisherMock = new Mock<IConnectorPublisher>();
+        var publisherMock = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
         publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
                 It.IsAny<IEnumerable<SensorGlucose>>(),

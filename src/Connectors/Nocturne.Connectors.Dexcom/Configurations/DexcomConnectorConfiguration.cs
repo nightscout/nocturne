@@ -1,6 +1,7 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models.Services;
 
 namespace Nocturne.Connectors.Dexcom.Configurations;
 
@@ -18,7 +19,9 @@ namespace Nocturne.Connectors.Dexcom.Configurations;
     "Connect to Dexcom Share or Clarity",
     "Dexcom",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 90,
+    // Share serves only the last day of readings.
+    HistoryReachUnit = HistoryReachUnit.Days,
+    HistoryReachAmount = 1,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
     SensorReadingIntervalSeconds = 300,

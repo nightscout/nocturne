@@ -343,10 +343,10 @@ public class GlookoConnectorService
 
             // The request window is real-UTC; Glooko queries expect fake-UTC (local wall-clock). Pad by
             // a day each side so a non-zero offset between the two never clips edge data (dedup absorbs
-            // the overlap). A request with neither bound reaches back as far as a full walk.
+            // the overlap).
             var now = Clock.GetUtcNow().UtcDateTime;
             var from = context.TimeMapper.ToGlookoTime(
-                WindowStart(request, ResumeFamily.Glucose) ?? FullWalkStart(now)).AddDays(-1);
+                ConcreteWindowStart(request, ResumeFamily.Glucose)).AddDays(-1);
             var to = context.TimeMapper.ToGlookoTime(request.To ?? now).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
@@ -414,12 +414,6 @@ public class GlookoConnectorService
         }
     }
 
-    /// <summary>
-    ///     No limit of Glooko's is known, and the date-windowed fetch needs a concrete start, so a
-    ///     range naming no lower bound reads as far back as a full walk.
-    /// </summary>
-    protected override DateTime? HistoryStart => FullWalkStart(Clock.GetUtcNow().UtcDateTime);
-
     /// <summary>Where a full walk from <paramref name="now"/> starts.</summary>
     public static DateTime FullWalkStart(DateTime now) => now.AddMonths(-GlookoConstants.FullWalkMonths);
 
@@ -456,13 +450,16 @@ public class GlookoConnectorService
     ///     succeeded, so a failed one is read again next cycle. The walk is recorded only once it has
     ///     succeeded, so a run that stopped at a failed chunk is walked again — after
     ///     <see cref="GlookoConstants.FullWalkRetryInterval"/>, not on every cycle, so a persistently
-    ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
+    ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove. The
+    ///     schedule's stamps choose the window of every type, so a run narrowed to some types records
+    ///     none of them: the types it left out are still owed their walk and lookback.
     ///     <para>
     ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run,
     ///     so it takes the base's points.
     ///     </para>
     /// </remarks>
     protected override async Task<SyncResult> RunScheduledAsync(
+        SyncRequest request,
         ResumePoints resume,
         Func<ResumePoints, Task<SyncResult>> run,
         GlookoConnectorConfiguration config,
@@ -484,12 +481,15 @@ public class GlookoConnectorService
             "[{ConnectorSource}] Scheduled sync reaches back to {From:yyyy-MM-dd} ({Mode})",
             ConnectorSource, from, tier);
 
-        if (tier == WindowTier.FullWalk)
+        var coversEveryType = ResolveActiveTypes(request, config)
+            .SetEquals(ResolveActiveTypes(new SyncRequest(), config));
+
+        if (tier == WindowTier.FullWalk && coversEveryType)
             await RecordStampAsync(GlookoConstants.FullWalkAttemptStamp, now, cancellationToken);
 
         var result = await run(resume.StartingAt(from));
 
-        if (result.Success)
+        if (result.Success && coversEveryType)
         {
             if (tier == WindowTier.FullWalk)
                 await RecordStampAsync(GlookoConstants.FullWalkStamp, now, cancellationToken);

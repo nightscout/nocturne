@@ -10,8 +10,8 @@ public class ConnectorCapabilities
     [JsonPropertyName("supportsHistoricalSync")]
     public bool SupportsHistoricalSync { get; set; }
 
-    [JsonPropertyName("maxHistoricalDays")]
-    public int? MaxHistoricalDays { get; set; }
+    [JsonPropertyName("historyReach")]
+    public ConnectorHistoryReach HistoryReach { get; set; } = ConnectorHistoryReach.Whole;
 
     [JsonPropertyName("supportsManualSync")]
     public bool SupportsManualSync { get; set; }

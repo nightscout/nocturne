@@ -16,7 +16,6 @@ namespace Nocturne.Connectors.Gluroo.Configurations;
     "Sync glucose, treatment, and profile data from Gluroo Global Connect",
     "Gluroo",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 90,
     SupportsManualSync = true,
     SupportedDataTypes = [
         SyncDataType.Glucose,

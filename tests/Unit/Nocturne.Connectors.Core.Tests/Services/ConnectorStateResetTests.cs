@@ -365,6 +365,36 @@ public class ConnectorStateResetTests
         probe.FromSeen[^1].Should().Be(source[0].AddMinutes(-5));
     }
 
+    /// <summary>
+    ///     An open request is the scheduled catch-up, so its crawl of what earlier runs left owed stops at
+    ///     the backfill budget the way the poll's does, rather than working the whole range in one request.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 18)]
+    [InlineData(60, -1)]
+    public async Task An_open_request_works_through_the_owed_range_only_within_the_backfill_budget(
+        int budgetSeconds, int gapEndsAt)
+    {
+        var stale = Now.UtcDateTime.AddDays(-365);
+        var source = HourlySource(25);
+        var store = new InMemoryConnectorStateStore();
+        store.Resume["DeviceStatus.Through"] = source[0];
+        store.Resume["DeviceStatus.GapFrom"] = stale;
+        store.Resume["DeviceStatus.GapTo"] = source[9];
+        var probe = new CatchUpProbe(new StoringConnectorPublisher(store), stale, source)
+        {
+            PageSize = 10,
+            BackfillBudget = TimeSpan.FromSeconds(budgetSeconds),
+        };
+
+        await probe.SyncDataAsync(new SyncRequest(), new TestConfig(), CancellationToken.None);
+
+        if (gapEndsAt < 0)
+            store.Resume.Keys.Should().BeEquivalentTo(["DeviceStatus.Through"], "the whole owed range was worked");
+        else
+            store.Resume["DeviceStatus.GapTo"].Should().Be(source[gapEndsAt], "one page of the owed range, then the budget was spent");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

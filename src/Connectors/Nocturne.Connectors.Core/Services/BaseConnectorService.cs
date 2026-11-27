@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -118,6 +119,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             async () =>
             {
                 _pendingReset = request.IsReset ? request : null;
+                using var budget = ArmBackfillBudget(request.IsCatchUp);
                 if (!await EnsureAuthenticatedAsync(config, cancellationToken))
                     return AuthenticationFailedResult();
 
@@ -125,7 +127,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                     await SignedInAsync(config, cancellationToken);
 
                 var from = request.To is null ? request.From : request.From ?? HistoryStart;
-                return await RunAsync(from, request.To, request.DataTypes, scheduled: false, config, cancellationToken);
+                return await RunAsync(
+                    from, request.To, request.DataTypes, scheduled: request.IsCatchUp, config, cancellationToken);
             });
     }
 
@@ -399,6 +402,19 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
+    ///     <see cref="WindowStart"/> for a source that cannot read from an open start. Every run of such
+    ///     a connector has one: a range names it or resolves to <see cref="HistoryStart"/>, and a
+    ///     scheduled run's point falls back to <see cref="InitialSyncFloor"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     The connector's <see cref="HistoryStart"/> or <see cref="InitialSyncFloor"/> is open, so the
+    ///     run has no start.
+    /// </exception>
+    protected static DateTime ConcreteWindowStart(SyncRequest request, ResumeFamily family) =>
+        WindowStart(request, family)
+        ?? throw new InvalidOperationException("The run has no start, though this source cannot read from an open one.");
+
+    /// <summary>
     ///     The lower bound a whole request, or one family of it, crawls from. A range is answered as
     ///     asked, from its <see cref="SyncRequest.From"/>: widening it back to a resume point below
     ///     re-crawls everything in between. An open-ended request goes through
@@ -478,17 +494,19 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// </summary>
     protected virtual DateTime? InitialSyncFloor => DefaultInitialSyncFloor();
 
-    /// <summary>The default initial backfill window: six months before now.</summary>
-    protected DateTime DefaultInitialSyncFloor() => Clock.GetUtcNow().UtcDateTime.AddMonths(-6);
+    /// <summary>The default initial backfill window: <see cref="ConnectorRunLimits.DefaultInitialSyncMonths"/> before now.</summary>
+    protected DateTime DefaultInitialSyncFloor() =>
+        Clock.GetUtcNow().UtcDateTime.AddMonths(-ConnectorRunLimits.DefaultInitialSyncMonths);
 
     /// <summary>
-    ///     How far back the source serves records: where a range naming no lower bound starts.
-    ///     <c>null</c>, the default, for a source that reads from an open start, which then fetches
-    ///     its whole history. A connector whose source serves only a recent span, or that needs a
-    ///     concrete start, overrides it.
+    ///     Where a range naming no lower bound starts: the
+    ///     <see cref="ConnectorRegistrationAttribute.HistoryReach"/> the connector declares. <c>null</c> for a source that serves its whole
+    ///     history and reads from an open start; a connector whose whole history needs a concrete
+    ///     start overrides it.
     /// </summary>
     /// <remarks>Not <see cref="InitialSyncFloor"/>, which is a policy for the scheduled first sync.</remarks>
-    protected virtual DateTime? HistoryStart => null;
+    protected virtual DateTime? HistoryStart =>
+        Registration?.HistoryReach.StartFrom(Clock.GetUtcNow().UtcDateTime);
 
     /// <summary>
     ///     Core synchronization logic: fetches and publishes the data types
@@ -923,7 +941,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             "Starting background data sync for {ConnectorSource}",
             ConnectorSource
         );
-        _backfillDeadline = Clock.GetUtcNow() + BackfillBudget;
+        using var budget = ArmBackfillBudget();
         try
         {
             if (!await EnsureAuthenticatedAsync(config, cancellationToken))
@@ -974,19 +992,17 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                 Errors = { ex.Message }
             };
         }
-        finally
-        {
-            _backfillDeadline = null;
-        }
     }
 
     /// <summary>
     ///     The scheduled run: <paramref name="run"/> syncs with the resume points it is given. The
     ///     default runs every family from its own point. A connector with its own window policy
     ///     overrides this, and only this, to choose the window (<see cref="ResumePoints.StartingAt"/>)
-    ///     and to record what the run covered once it returns.
+    ///     and to record what the run covered once it returns. <paramref name="request"/> names the
+    ///     data types the run covers: a narrowed one covers only some of them.
     /// </summary>
     protected virtual Task<SyncResult> RunScheduledAsync(
+        SyncRequest request,
         ResumePoints resume,
         Func<ResumePoints, Task<SyncResult>> run,
         TConfig config,
@@ -1044,6 +1060,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
         return scheduled
             ? await RunScheduledAsync(
+                Request(resume),
                 resume,
                 points => PerformSyncInternalAsync(Request(points), config, cancellationToken),
                 config,

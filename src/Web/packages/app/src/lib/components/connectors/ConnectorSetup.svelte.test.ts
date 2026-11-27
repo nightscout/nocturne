@@ -9,6 +9,7 @@ const calls = vi.hoisted(() => ({
   request: undefined as Record<string, unknown> | undefined,
 }));
 const capabilities = vi.hoisted(() => ({
+  supportsHistoricalSync: true,
   savedSecretStopsAt: undefined as string | undefined,
   savedSecretMakesNoCredential: false,
 }));
@@ -79,8 +80,8 @@ vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getConnectorCapabilities: () => ({
     current: {
       supportedDataTypes: ["Glucose", "Treatments"],
-      supportsHistoricalSync: true,
-      maxHistoricalDays: 90,
+      supportsHistoricalSync: capabilities.supportsHistoricalSync,
+      historyReach: { unit: "Months", amount: 6 },
       supportsManualSync: false,
       savedSecretStopsAt: capabilities.savedSecretStopsAt,
       savedSecretMakesNoCredential: capabilities.savedSecretMakesNoCredential,
@@ -128,6 +129,7 @@ describe("ConnectorSetup", () => {
     calls.request = undefined;
     grant.scopes = ["tenant.settings"];
     grant.refusedAsDemoSubject = false;
+    capabilities.supportsHistoricalSync = true;
     capabilities.savedSecretStopsAt = undefined;
     capabilities.savedSecretMakesNoCredential = false;
     stored.lockedKeys = [];
@@ -364,6 +366,19 @@ describe("ConnectorSetup", () => {
     await expect.element(page.getByText("Treatments", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Supported", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Disabled", { exact: true })).toBeVisible();
-    await expect.element(page.getByText("90", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("A date range with no start date gets the last 6 months of data."))
+      .toBeVisible();
+  });
+
+  it("states no reach for a connector without historical sync", async () => {
+    capabilities.supportsHistoricalSync = false;
+
+    render(ConnectorSetup, {
+      props: { connectorId: "nightscout", showCapabilities: true },
+    });
+
+    await expect.element(page.getByText("Not supported", { exact: true })).toBeVisible();
+    expect(page.getByText("A date range with no start date").elements()).toHaveLength(0);
   });
 });

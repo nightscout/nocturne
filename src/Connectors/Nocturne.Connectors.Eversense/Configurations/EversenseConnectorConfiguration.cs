@@ -1,6 +1,7 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models.Services;
 
 namespace Nocturne.Connectors.Eversense.Configurations;
 
@@ -15,7 +16,8 @@ namespace Nocturne.Connectors.Eversense.Configurations;
     "Connect to Eversense Now",
     "Eversense",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = EversenseConnectorConfiguration.MaxHistoryDays,
+    HistoryReachUnit = HistoryReachUnit.Days,
+    HistoryReachAmount = EversenseConnectorConfiguration.MaxHistoryDays,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
     SensorReadingIntervalSeconds = 300,

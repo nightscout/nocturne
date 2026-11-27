@@ -28,6 +28,23 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
 
     private bool BackfillBudgetSpent => _backfillDeadline is { } deadline && Clock.GetUtcNow() >= deadline;
 
+    /// <summary>
+    ///     Starts the backfill budget when <paramref name="armed"/>, for a run that crawls like the
+    ///     scheduled poll; disposing the result ends it. Both entry points that run the scheduled
+    ///     path take it here, so they cannot budget differently.
+    /// </summary>
+    private BackfillBudgetScope ArmBackfillBudget(bool armed = true)
+    {
+        if (armed)
+            _backfillDeadline = Clock.GetUtcNow() + BackfillBudget;
+        return new BackfillBudgetScope(this);
+    }
+
+    private readonly struct BackfillBudgetScope(BaseConnectorService<TConfig> owner) : IDisposable
+    {
+        public void Dispose() => owner._backfillDeadline = null;
+    }
+
     /// <summary>The run's <see cref="ResumePointAsync"/> of each collection; null until the run asks for one.</summary>
     private Dictionary<string, DateTime>? _resumedFrom;
 

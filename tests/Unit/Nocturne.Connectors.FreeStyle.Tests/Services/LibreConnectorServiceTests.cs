@@ -88,7 +88,8 @@ public class LibreConnectorServiceTests
             connectionsJson: "{\"data\":[null,{\"patientId\":\"p1\",\"firstName\":\"A\",\"lastName\":\"B\"}]}",
             graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
                        + "{\"factoryTimestamp\":\"1/1/2024 12:10:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3}},"
-                       + "\"graphData\":[null,{\"factoryTimestamp\":\"1/1/2024 12:05:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}");
+                       + "\"graphData\":[null,{\"factoryTimestamp\":\"1/1/2024 12:05:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}",
+            clock: new FakeTimeProvider(new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero)));
         IEnumerable<SensorGlucose>? published = null;
         fixture.Glucose
             .Setup(g => g.PublishSensorGlucoseAsync(

@@ -439,9 +439,7 @@ public class DataSourceService : IDataSourceService
                 .ToList()
                 ?? new List<string>(),
             SupportsHistoricalSync = registration.SupportsHistoricalSync,
-            MaxHistoricalDays = registration.MaxHistoricalDays > 0
-                ? registration.MaxHistoricalDays
-                : null,
+            HistoryReach = registration.HistoryReach,
             SupportsManualSync = registration.SupportsManualSync
         };
     }

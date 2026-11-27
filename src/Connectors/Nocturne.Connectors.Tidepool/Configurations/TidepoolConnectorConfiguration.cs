@@ -15,7 +15,6 @@ namespace Nocturne.Connectors.Tidepool.Configurations;
     "Sync glucose, treatment, and profile data from Tidepool",
     "Tidepool",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 365,
     SupportsManualSync = true,
     DefaultActiveThresholdMinutes = 180,
     DefaultStaleThresholdMinutes = 360,

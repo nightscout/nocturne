@@ -86,6 +86,64 @@ public class GlookoConnectorServiceBackgroundWindowTests
             .Should().BeFalse("the walk that just completed is what the next run stands on");
     }
 
+    /// <summary>The "Sync now" request names no bound: it is the scheduled run, window policy included.</summary>
+    [Fact]
+    public async Task AnOpenRequest_RunsTheScheduledWindowPolicy()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = StoreWith(
+            (Completed, StampAgo(TimeSpan.FromMinutes(30))), (LookbackRead, StampAgo(TimeSpan.FromMinutes(5))));
+
+        var result = await Service(handler, state: store)
+            .SyncDataAsync(new SyncRequest(), ScheduledConfig(), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(1);
+        Parse(handler.Windows[0].Start).Should().Be(
+            Instant.UtcDateTime - GlookoConstants.ShortWindow - TimeSpan.FromDays(1),
+            "the next poll would read the short window, not the six months");
+    }
+
+    /// <summary>
+    /// The schedule's stamps choose the window of every type. A request narrowed to some types walks
+    /// what it asks for but records nothing, so the types it left out are still owed their walk.
+    /// </summary>
+    [Fact]
+    public async Task ATypedOpenRequest_WalksWhenAWalkIsDueAndLeavesTheStampsAsTheyWere()
+    {
+        var handler = new GlookoEndpointHandler();
+        var walked = StampAgo(GlookoConstants.FullWalkInterval + TimeSpan.FromHours(1));
+        var read = StampAgo(GlookoConstants.LookbackReadInterval + TimeSpan.FromMinutes(1));
+        var store = StoreWith((Completed, walked), (LookbackRead, read));
+
+        var result = await Service(handler, state: store).SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.TempBasals] }, ScheduledConfig(), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Resume.Should().HaveCount(2);
+        store.Resume[Completed].Should().Be(walked);
+        store.Resume[LookbackRead].Should().Be(read);
+    }
+
+    /// <summary>A request naming no types covers every enabled one, so its walk is the day's walk.</summary>
+    [Fact]
+    public async Task AnOpenRequestForEveryType_WalksWhenAWalkIsDueAndRecordsTheStamps()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = StoreWith(
+            (Completed, StampAgo(GlookoConstants.FullWalkInterval + TimeSpan.FromHours(1))),
+            (LookbackRead, StampAgo(GlookoConstants.LookbackReadInterval + TimeSpan.FromMinutes(1))));
+
+        var result = await Service(handler, state: store)
+            .SyncDataAsync(new SyncRequest(), ScheduledConfig(), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Resume[Completed].Should().Be(Instant.UtcDateTime);
+        store.Resume[LookbackRead].Should().Be(Instant.UtcDateTime);
+    }
+
     [Fact]
     public async Task ScheduledSyncTwice_SecondRunReachesBackOnlyTheShortWindow()
     {
@@ -459,25 +517,6 @@ public class GlookoConnectorServiceBackgroundWindowTests
 
         handler.WindowCount.Should().Be(1);
         Parse(handler.Windows[0].Start).Should().Be(Instant.UtcDateTime.AddDays(-4));
-        store.Resume.Should().BeEmpty();
-    }
-
-    /// <summary>
-    /// The tenant's own sync button sends a request with neither bound. It is not a scheduled run,
-    /// so it re-pulls the floor as it always did and never touches the schedule — clicking it does
-    /// not spend the day's walk.
-    /// </summary>
-    [Fact]
-    public async Task RequestedRun_WithNoBounds_ReadsTheFloorAndLeavesTheScheduleAlone()
-    {
-        var handler = new GlookoEndpointHandler();
-        var store = new InMemoryConnectorStateStore();
-
-        var result = await Service(handler, state: store).SyncDataAsync(
-            new SyncRequest(), ScheduledConfig(), CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        handler.WindowCount.Should().Be(FullWalkChunks());
         store.Resume.Should().BeEmpty();
     }
 

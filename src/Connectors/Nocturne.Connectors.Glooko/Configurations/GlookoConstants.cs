@@ -1,3 +1,5 @@
+using Nocturne.Connectors.Core.Constants;
+
 namespace Nocturne.Connectors.Glooko.Configurations;
 
 /// <summary>
@@ -283,7 +285,7 @@ public static class GlookoConstants
     ///     fact, so a background sync cannot resume from the newest stored record; it re-reads a
     ///     short lookback every run and this whole span once per <see cref="FullWalkInterval"/>.
     /// </summary>
-    public const int FullWalkMonths = 6;
+    public const int FullWalkMonths = ConnectorRunLimits.DefaultInitialSyncMonths;
 
     /// <summary>
     ///     How far back a scheduled run reaches between lookback reads. Re-reading the whole

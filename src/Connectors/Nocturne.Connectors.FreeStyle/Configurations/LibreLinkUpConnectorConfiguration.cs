@@ -18,7 +18,6 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     "Connect to LibreView for CGM data",
     "FreeStyle Libre",
     SupportsHistoricalSync = false,
-    MaxHistoricalDays = 7,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents],
     SensorReadingIntervalSeconds = 300,

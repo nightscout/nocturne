@@ -4,10 +4,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Services;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
@@ -149,6 +151,57 @@ public class BaseConnectorServiceTests
 
         probe.Handed!.From.Should().BeNull();
         probe.Handed.To.Should().BeNull();
+        probe.Handed.Resume.Scheduled.Should().BeTrue("an open request runs as the scheduled catch-up");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_ARequestWithABound_IsNotACatchUp()
+    {
+        var probe = new WindowProbe(SourceStart);
+
+        await probe.SyncDataAsync(new SyncRequest { From = SourceStart }, new TestConfig(), CancellationToken.None);
+        var fromOnly = probe.Handed!;
+        await probe.SyncDataAsync(new SyncRequest { To = WindowEnd }, new TestConfig(), CancellationToken.None);
+
+        fromOnly.Resume.Scheduled.Should().BeFalse();
+        probe.Handed!.Resume.Scheduled.Should().BeFalse();
+    }
+
+    [ConnectorRegistration(
+        "Declared", "declared", "DECLARED", "Declared", "declared-source",
+        HistoryReachUnit = HistoryReachUnit.Days, HistoryReachAmount = 3)]
+    public class DeclaredReachConfig : BaseConnectorConfiguration;
+
+    private sealed class DeclaredReachProbe(TimeProvider clock)
+        : BaseConnectorService<DeclaredReachConfig>(
+            new HttpClient(),
+            new ConnectorServerResolver<DeclaredReachConfig>(null, null, null),
+            NullLogger<DeclaredReachProbe>.Instance,
+            new RecordingRetryDelayStrategy(),
+            timeProvider: clock)
+    {
+        public SyncRequest? Handed { get; private set; }
+
+        public override string ServiceName => "Declared";
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request, DeclaredReachConfig config, CancellationToken cancellationToken)
+        {
+            Handed = request;
+            return Task.FromResult(new SyncResult { Success = true });
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_StartsAtTheReachTheRegistrationDeclares(string shape)
+    {
+        var now = new DateTimeOffset(WindowEnd, TimeSpan.Zero);
+        var probe = new DeclaredReachProbe(new FakeTimeProvider(now));
+
+        await probe.SyncDataAsync(NoLowerBound.Request(shape, WindowEnd), new DeclaredReachConfig(), CancellationToken.None);
+
+        probe.Handed!.From.Should().Be(WindowEnd.AddDays(-3));
     }
 
     /// <summary>A connector whose run is <paramref name="run"/>, so a test can script what the run does.</summary>

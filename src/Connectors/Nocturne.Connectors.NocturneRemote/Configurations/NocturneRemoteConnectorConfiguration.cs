@@ -16,7 +16,6 @@ namespace Nocturne.Connectors.NocturneRemote.Configurations;
     "Import data from a remote Nocturne instance",
     "Nocturne Remote",
     SupportsHistoricalSync = true,
-    MaxHistoricalDays = 0,
     SupportsManualSync = true,
     SupportedDataTypes = [
         SyncDataType.Glucose,
