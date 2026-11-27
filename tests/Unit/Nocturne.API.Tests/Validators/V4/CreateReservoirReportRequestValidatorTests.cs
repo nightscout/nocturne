@@ -1,6 +1,7 @@
 using FluentValidation.TestHelper;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Validators.V4;
+using Nocturne.Core.Constants;
 using Xunit;
 
 namespace Nocturne.API.Tests.Validators.V4;
@@ -60,7 +61,7 @@ public class CreateReservoirReportRequestValidatorTests
     [Fact]
     public void OverlongDevice_Fails()
     {
-        var result = _validator.TestValidate(new CreateReservoirReportRequest { Units = 10, Device = new string('x', 501) });
+        var result = _validator.TestValidate(new CreateReservoirReportRequest { Units = 10, Device = new string('x', RecordColumnLengths.Provenance + 1) });
         result.ShouldHaveValidationErrorFor(x => x.Device);
     }
 }

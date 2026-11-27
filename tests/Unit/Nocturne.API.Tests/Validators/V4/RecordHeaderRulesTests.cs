@@ -63,6 +63,33 @@ public class RecordHeaderRulesTests
         typeof(BodyWeightValidator),
     };
 
+    public static TheoryData<Type> ProvenanceLabelValidators() => new()
+    {
+        typeof(CreateBasalInjectionRequestValidator),
+        typeof(UpdateBasalInjectionRequestValidator),
+        typeof(CreateBolusRequestValidator),
+        typeof(UpdateBolusRequestValidator),
+        typeof(CreateCarbIntakeRequestValidator),
+        typeof(UpdateCarbIntakeRequestValidator),
+        typeof(CreateMealRequestValidator),
+        typeof(CreateReservoirReportRequestValidator),
+        typeof(BasalScheduleValidator),
+        typeof(CarbRatioScheduleValidator),
+        typeof(SensitivityScheduleValidator),
+        typeof(TargetRangeScheduleValidator),
+        typeof(TherapySettingsValidator),
+        typeof(UpsertApsSnapshotRequestValidator),
+        typeof(UpsertBGCheckRequestValidator),
+        typeof(UpsertBolusCalculationRequestValidator),
+        typeof(UpsertCalibrationRequestValidator),
+        typeof(UpsertDeviceEventRequestValidator),
+        typeof(UpsertMeterGlucoseRequestValidator),
+        typeof(UpsertNoteRequestValidator),
+        typeof(UpsertPumpSnapshotRequestValidator),
+        typeof(UpsertSensorGlucoseRequestValidator),
+        typeof(UpsertUploaderSnapshotRequestValidator),
+    };
+
     public static TheoryData<Type> HealthSampleValidators() => new()
     {
         typeof(UpsertHeartRateRequestValidator),
@@ -129,6 +156,17 @@ public class RecordHeaderRulesTests
     }
 
     [Theory]
+    [MemberData(nameof(ProvenanceLabelValidators))]
+    public void A_device_or_app_longer_than_its_column_is_refused(Type validatorType)
+    {
+        foreach (var property in new[] { "Device", "App" })
+        {
+            Errors(validatorType, (property, new string('a', RecordColumnLengths.Provenance + 1))).Should().Contain(property);
+            Errors(validatorType, (property, new string('a', RecordColumnLengths.Provenance))).Should().NotContain(property);
+        }
+    }
+
+    [Theory]
     [MemberData(nameof(HealthSampleValidators))]
     public void A_health_sample_device_or_app_longer_than_its_column_is_refused(Type validatorType)
     {
@@ -157,6 +195,14 @@ public class RecordHeaderRulesTests
         { typeof(TherapySettingsValidator), "LegacyId", 255 },
         { typeof(TherapySettingsValidator), "Timezone", 64 },
         { typeof(TherapySettingsValidator), "Units", 10 },
+        { typeof(CreateBolusRequestValidator), "InsulinType", ColumnLengths.Bolus.InsulinType },
+        { typeof(UpdateBolusRequestValidator), "InsulinType", ColumnLengths.Bolus.InsulinType },
+        { typeof(CreateMealRequestValidator), "InsulinType", ColumnLengths.Bolus.InsulinType },
+        { typeof(UpsertBolusCalculationRequestValidator), "BloodGlucoseInputSource", ColumnLengths.BolusCalculation.BloodGlucoseInputSource },
+        { typeof(UpsertNoteRequestValidator), "EventType", ColumnLengths.Note.EventType },
+        { typeof(UpsertApsSnapshotRequestValidator), "AidVersion", ColumnLengths.ApsSnapshot.AidVersion },
+        { typeof(UpsertUploaderSnapshotRequestValidator), "Name", ColumnLengths.UploaderSnapshot.Name },
+        { typeof(UpsertUploaderSnapshotRequestValidator), "Type", ColumnLengths.UploaderSnapshot.Type },
         { typeof(TherapySettingsValidator), "EnteredBy", 100 },
         { typeof(TherapySettingsValidator), "StartDate", 50 },
         { typeof(BasalScheduleValidator), "ProfileName", RecordColumnLengths.ScheduleProfileName },

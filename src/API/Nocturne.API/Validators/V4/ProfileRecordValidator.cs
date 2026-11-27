@@ -16,10 +16,10 @@ public abstract class ProfileRecordValidator<T> : AbstractValidator<T>
     protected ProfileRecordValidator()
     {
         RuleFor(x => x.Timestamp).TimestampRequired();
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
         RuleFor(x => x.DataSource).WithinProvenance();
-        RuleFor(x => x.LegacyId).MaximumLength(255);
+        RuleFor(x => x.LegacyId).MaximumLength(RecordColumnLengths.LegacyId);
         RuleFor(x => x.ProfileName).MaximumLength(RecordColumnLengths.ScheduleProfileName);
     }
 }
@@ -44,9 +44,9 @@ public class TherapySettingsValidator : ProfileRecordValidator<TherapySettings>
 {
     public TherapySettingsValidator()
     {
-        RuleFor(x => x.Timezone).MaximumLength(64);
-        RuleFor(x => x.Units).MaximumLength(10);
-        RuleFor(x => x.EnteredBy).MaximumLength(100);
-        RuleFor(x => x.StartDate).MaximumLength(50);
+        RuleFor(x => x.Timezone).MaximumLength(ColumnLengths.TherapySettings.Timezone);
+        RuleFor(x => x.Units).MaximumLength(ColumnLengths.TherapySettings.Units);
+        RuleFor(x => x.EnteredBy).MaximumLength(ColumnLengths.TherapySettings.EnteredBy);
+        RuleFor(x => x.StartDate).MaximumLength(ColumnLengths.TherapySettings.StartDate);
     }
 }

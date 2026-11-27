@@ -29,7 +29,7 @@ public class UploaderSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IW
     /// Uploader/phone name
     /// </summary>
     [Column("name")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.UploaderSnapshot.Name)]
     public string? Name { get; set; }
 
     /// <summary>
@@ -60,7 +60,7 @@ public class UploaderSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IW
     /// Uploader type identifier
     /// </summary>
     [Column("type")]
-    [MaxLength(128)]
+    [MaxLength(ColumnLengths.UploaderSnapshot.Type)]
     public string? Type { get; set; }
 
     /// <summary>

@@ -178,7 +178,7 @@ public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteB
     /// Algorithm version string (e.g. Trio app version)
     /// </summary>
     [Column("aid_version")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.ApsSnapshot.AidVersion)]
     public string? AidVersion { get; set; }
 
     /// <summary>

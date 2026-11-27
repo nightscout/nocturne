@@ -22,14 +22,14 @@ public class TherapySettingsEntity : V4TimeSeriesEntityBase, IProfileScopedEntit
     /// IANA timezone identifier (e.g. "America/New_York")
     /// </summary>
     [Column("timezone")]
-    [MaxLength(64)]
+    [MaxLength(ColumnLengths.TherapySettings.Timezone)]
     public string? Timezone { get; set; }
 
     /// <summary>
     /// Glucose display units (e.g. "mg/dl", "mmol/L")
     /// </summary>
     [Column("units")]
-    [MaxLength(10)]
+    [MaxLength(ColumnLengths.TherapySettings.Units)]
     public string? Units { get; set; }
 
     /// <summary>
@@ -120,7 +120,7 @@ public class TherapySettingsEntity : V4TimeSeriesEntityBase, IProfileScopedEntit
     /// User or system that created/modified this settings record
     /// </summary>
     [Column("entered_by")]
-    [MaxLength(100)]
+    [MaxLength(ColumnLengths.TherapySettings.EnteredBy)]
     public string? EnteredBy { get; set; }
 
     /// <summary>
@@ -133,6 +133,6 @@ public class TherapySettingsEntity : V4TimeSeriesEntityBase, IProfileScopedEntit
     /// ISO date string indicating when the profile became active
     /// </summary>
     [Column("start_date")]
-    [MaxLength(50)]
+    [MaxLength(ColumnLengths.TherapySettings.StartDate)]
     public string? StartDate { get; set; }
 }

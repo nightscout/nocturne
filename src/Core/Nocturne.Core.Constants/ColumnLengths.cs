@@ -7,6 +7,46 @@ namespace Nocturne.Core.Constants;
 /// </summary>
 public static class ColumnLengths
 {
+    /// <summary>The string columns of a bolus that a client sets.</summary>
+    public static class Bolus
+    {
+        public const int InsulinType = 128;
+    }
+
+    /// <summary>The string columns of a bolus calculation that a client sets.</summary>
+    public static class BolusCalculation
+    {
+        public const int BloodGlucoseInputSource = 256;
+    }
+
+    /// <summary>The string columns of a note that a client sets.</summary>
+    public static class Note
+    {
+        public const int EventType = 256;
+    }
+
+    /// <summary>The string columns of an APS snapshot that a client sets.</summary>
+    public static class ApsSnapshot
+    {
+        public const int AidVersion = 64;
+    }
+
+    /// <summary>The string columns of an uploader snapshot that a client sets.</summary>
+    public static class UploaderSnapshot
+    {
+        public const int Name = 256;
+        public const int Type = 128;
+    }
+
+    /// <summary>The string columns of a therapy settings record that a client sets.</summary>
+    public static class TherapySettings
+    {
+        public const int Timezone = 64;
+        public const int Units = 10;
+        public const int EnteredBy = 100;
+        public const int StartDate = 50;
+    }
+
     /// <summary>The string columns of a sleep session.</summary>
     public static class SleepSession
     {

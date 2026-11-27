@@ -2,6 +2,7 @@ using FluentAssertions;
 using FluentValidation.TestHelper;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Validators.V4;
+using Nocturne.Core.Constants;
 using Xunit;
 
 namespace Nocturne.API.Tests.Validators.V4;
@@ -45,7 +46,7 @@ public class UpsertNoteRequestValidatorTests
     public void EventType_exceeding_max_length_fails()
     {
         var request = ValidRequest();
-        request.EventType = new string('a', 201);
+        request.EventType = new string('a', ColumnLengths.Note.EventType + 1);
         var result = _validator.TestValidate(request);
         result.ShouldHaveValidationErrorFor(x => x.EventType);
     }
@@ -54,7 +55,7 @@ public class UpsertNoteRequestValidatorTests
     public void Device_exceeding_max_length_fails()
     {
         var request = ValidRequest();
-        request.Device = new string('a', 501);
+        request.Device = new string('a', RecordColumnLengths.Provenance + 1);
         var result = _validator.TestValidate(request);
         result.ShouldHaveValidationErrorFor(x => x.Device);
     }

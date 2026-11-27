@@ -26,8 +26,8 @@ public class CreateCarbIntakeRequestValidator : AbstractValidator<CreateCarbInta
     public CreateCarbIntakeRequestValidator()
     {
         RuleFor(x => x.Timestamp).TimestampRequired();
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.Carbs).GreaterThanOrEqualTo(0).WithMessage("Carbs must be >= 0");
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();

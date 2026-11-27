@@ -31,7 +31,7 @@ public class CreateReservoirReportRequestValidator : AbstractValidator<CreateRes
             .Must(t => t is null || t <= DateTimeOffset.UtcNow.AddMinutes(5))
             .WithMessage("Timestamp must not be in the future");
         RuleFor(x => x.Kind).IsInEnum().WithMessage("Kind must be a valid reservoir report kind");
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
     }
 }

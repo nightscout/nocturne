@@ -16,8 +16,9 @@ namespace Nocturne.API.Tests.Validators.V4;
 /// <summary>
 /// A V4 write body never carries a string longer than the column it is stored in unanswered: its
 /// validator caps it, so the value is refused as a 400 instead of failing the write. A column marked
-/// <see cref="FitToColumnAttribute"/> is exempt: it is cut to length on save, so a longer value
-/// is stored rather than refused.
+/// <see cref="FitToColumnAttribute"/> is exempt only from needing a cap, since a connector or a legacy
+/// upload writes it and is never refused. A validator that does cap one caps it at most at the column,
+/// so the client is never told a longer value is accepted and then sees it cut.
 /// </summary>
 /// <remarks>
 /// Every type a <c>[FromBody]</c> parameter of a V4 controller action carries (the body, and the
@@ -417,7 +418,7 @@ public class ValidatorColumnCapTests
         var caps = ValidatorCaps(requestType);
 
         var violations = new List<string>();
-        foreach (var (property, entityType, column, length) in BoundedColumns(requestType))
+        foreach (var (property, entityType, column, length, fitsToColumn) in BoundedColumns(requestType))
         {
             var found = caps.GetValueOrDefault(property.Name) ?? [];
             if (AnnotatedCap(property) is { } annotated)
@@ -426,13 +427,13 @@ public class ValidatorColumnCapTests
             }
 
             var cap = found.Count > 0 ? found.Min() : (int?)null;
-            if (cap is null)
+            if (cap is null && !fitsToColumn)
             {
                 violations.Add($"{requestType.Name}.{property.Name} has no length rule, but {entityType.ClrType.Name}.{column.Name} holds {length}");
             }
             else if (cap > length)
             {
-                violations.Add($"{requestType.Name}.{property.Name} is capped at {cap}, but {entityType.ClrType.Name}.{column.Name} holds {length}");
+                violations.Add($"{requestType.Name}.{property.Name} is capped at {cap}, but {entityType.ClrType.Name}.{column.Name} holds {length}{(fitsToColumn ? " and cuts a longer value on save" : string.Empty)}");
             }
         }
 
@@ -515,7 +516,7 @@ public class ValidatorColumnCapTests
 
     private static Type RequestTypeOf(Type validatorType) => validatorType.BaseType!.GetGenericArguments()[0];
 
-    private static IEnumerable<(PropertyInfo Property, IEntityType EntityType, IProperty Column, int Length)> BoundedColumns(Type requestType)
+    private static IEnumerable<(PropertyInfo Property, IEntityType EntityType, IProperty Column, int Length, bool FitsToColumn)> BoundedColumns(Type requestType)
     {
         var entityTypes = EntityTypesFor(requestType);
         foreach (var property in requestType.GetProperties()
@@ -526,13 +527,13 @@ public class ValidatorColumnCapTests
             {
                 // A property with no same-named column (a value kept in jsonb, or stored under another name) is not checked.
                 var column = entityType.FindProperty(columnName);
-                if (column?.GetMaxLength() is not { } length
-                    || column.PropertyInfo?.IsDefined(typeof(FitToColumnAttribute), inherit: true) == true)
+                if (column?.GetMaxLength() is not { } length)
                 {
                     continue;
                 }
 
-                yield return (property, entityType, column, length);
+                yield return (property, entityType, column, length,
+                    column.PropertyInfo?.IsDefined(typeof(FitToColumnAttribute), inherit: true) == true);
             }
         }
     }
