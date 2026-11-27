@@ -10,10 +10,6 @@ internal sealed class AuthAuditLogEntityConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<AuthAuditLogEntity> entity)
     {
         entity
-            .HasIndex(a => a.TargetSubjectId)
-            .HasDatabaseName("ix_auth_audit_log_target_subject_id");
-
-        entity
             .HasIndex(a => a.EventType)
             .HasDatabaseName("ix_auth_audit_log_event_type");
 

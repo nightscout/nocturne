@@ -26,25 +26,27 @@ internal static class ModelConventions
                 .IsDescending();
         }
 
-        // The connector watermark -- V4RepositoryBase.GetLatestTimestampAsync -- asks for the
-        // newest timestamp of one tenant and one data source. With neither column leading, the
-        // planner walks ix_<table>_timestamp backwards across every other tenant's rows, so a
-        // tenant whose newest row for that source is old reads most of the table to return one
-        // value. The deleted_at filter keeps the scan index-only: soft-deleted rows left in the
-        // index have to be skipped a heap fetch at a time, which is why it is not a size saving.
-        foreach (var entity in V4WatermarkedEntities.Select(t => modelBuilder.Entity(t)))
+        // Every table SourceTimestampIndexedEntities names gets the index, whether or not a connector
+        // watermarks it. The connector watermark -- V4RepositoryBase.GetLatestTimestampAsync and
+        // ObservedHealthSeriesRepository.GetLatestTimestampAsync -- asks for the newest timestamp of
+        // one tenant and one data source. With neither column leading, the planner walks
+        // ix_<table>_timestamp backwards across every other tenant's rows, so a tenant whose newest
+        // row for that source is old reads most of the table to return one value. The deleted_at
+        // filter keeps the scan index-only: soft-deleted rows left in the index have to be skipped a
+        // heap fetch at a time, which is why it is not a size saving.
+        foreach (var entity in SourceTimestampIndexedEntities.Select(t => modelBuilder.Entity(t)))
         {
             entity.HasIndex(
                     nameof(ITenantScoped.TenantId),
-                    nameof(IV4TimeSeriesEntity.DataSource),
-                    nameof(IV4TimeSeriesEntity.Timestamp))
+                    nameof(ISourcedEntity.DataSource),
+                    nameof(IObservationTimestamped.Timestamp))
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_source_timestamp")
                 .IsDescending(false, false, true)
                 .HasFilter("deleted_at IS NULL");
         }
 
         // The DataSource = source part of a source's count (SourceFilter.Parts) on a table the
-        // watermark index cannot cover: its only (tenant_id, data_source) index is the partial sync
+        // source-timestamp index cannot cover: its only (tenant_id, data_source) index is the partial sync
         // key, which a count does not imply.
         foreach (var entity in SourceCountedWithoutTimestampEntities.Select(t => modelBuilder.Entity(t)))
         {

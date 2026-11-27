@@ -23,13 +23,6 @@ internal sealed class StepCountEntityConfiguration : IEntityTypeConfiguration<St
             .HasIndex(s => new { s.TenantId, s.Timestamp })
             .HasDatabaseName("ix_step_counts_tenant_timestamp");
 
-        // Connector resume watermark: MAX(timestamp) for one data source, every sync cycle. A
-        // source with no rows yet would otherwise scan the tenant's whole table.
-        entity
-            .HasIndex(s => new { s.TenantId, s.DataSource, s.Timestamp })
-            .HasDatabaseName("ix_step_counts_tenant_source_timestamp")
-            .IsDescending(false, false, true);
-
         // The activity id a heart rate or step count was decomposed from, read (tombstones included)
         // on every activity write and connector reconcile.
         entity
@@ -62,13 +55,6 @@ internal sealed class HeartRateEntityConfiguration : IEntityTypeConfiguration<He
         entity
             .HasIndex(h => new { h.TenantId, h.Timestamp })
             .HasDatabaseName("ix_heart_rates_tenant_timestamp");
-
-        // Connector resume watermark, as on step_counts. Heart rate arrives at up to 1 Hz, so this
-        // is the largest table an unindexed source filter would scan.
-        entity
-            .HasIndex(h => new { h.TenantId, h.DataSource, h.Timestamp })
-            .HasDatabaseName("ix_heart_rates_tenant_source_timestamp")
-            .IsDescending(false, false, true);
 
         NocturneDbContext.ScopeKeyToTenant(entity);
     }

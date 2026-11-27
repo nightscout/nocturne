@@ -53,6 +53,45 @@ internal static class MigrationSourceFiles
     public static string Unescaped(string captured) =>
         captured.Replace("\\\"", "\"", StringComparison.Ordinal);
 
+    /// <summary>
+    /// What <see cref="ResolveTable"/> yields for a target that is not a plain name, which no
+    /// <c>CreateTable</c> can match, so a guard reports it instead of skipping it.
+    /// </summary>
+    public const string UnresolvedTable = "<table not resolvable to a literal name>";
+
+    /// <summary>
+    /// The table a captured reference names, or <see cref="UnresolvedTable"/> when it is not a
+    /// plain name: an interpolated <c>{table}</c> hole, or a loop variable.
+    /// </summary>
+    public static string ResolveTable(string captured)
+    {
+        var bare = BareTableName(captured);
+
+        return PlainTableName.IsMatch(bare) ? bare : UnresolvedTable;
+    }
+
+    /// <summary>
+    /// The table a builder call targets: the named <c>table:</c> argument, or for a positional
+    /// call the second string literal. <c>CreateIndex</c>, <c>AddUniqueConstraint</c> and
+    /// <c>AddPrimaryKey</c> all take (name, table, …).
+    /// </summary>
+    public static string FluentTable(string arguments) =>
+        TableArgument.Match(arguments) is { Success: true } named
+            ? ResolveTable(named.Groups[1].Value)
+            : PositionalTableArgument.Match(arguments) is { Success: true } positional
+                ? ResolveTable(positional.Groups[1].Value)
+                : UnresolvedTable;
+
+    /// <summary>
+    /// The tables a migration's <c>Up</c> creates, which hold no rows yet. A table that is not a
+    /// literal name is left out, so it exempts nothing.
+    /// </summary>
+    public static IReadOnlySet<string> TablesCreatedIn(string up) =>
+        new[] { FluentCreateTable, SqlCreateTable }
+            .SelectMany(r => r.Matches(up).Select(m => ResolveTable(m.Groups[1].Value)))
+            .Where(t => t != UnresolvedTable)
+            .ToHashSet(StringComparer.Ordinal);
+
     /// <summary>Migration name — the file name a guard reports and an allowlist keys on.</summary>
     public static string Name(string file) => Path.GetFileNameWithoutExtension(file);
 
@@ -132,6 +171,20 @@ internal static class MigrationSourceFiles
             .Select(n => n.ToLowerInvariant())
             .ToHashSet(StringComparer.Ordinal);
     });
+
+    private static readonly Regex PlainTableName = new(@"^\w+$", RegexOptions.Compiled);
+
+    private static readonly Regex FluentCreateTable = new(
+        @"\.CreateTable\s*\(\s*name\s*:\s*""([^""]+)""", RegexOptions.Compiled);
+
+    private static readonly Regex TableArgument = new(@"table\s*:\s*""([^""]+)""", RegexOptions.Compiled);
+
+    private static readonly Regex PositionalTableArgument = new(
+        @"^\s*""[^""]*""\s*,\s*""([^""]+)""", RegexOptions.Compiled);
+
+    private static readonly Regex SqlCreateTable = new(
+        @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
     private static readonly Regex TimestampPrefixed = new(@"^\d{14}_", RegexOptions.Compiled);
 
