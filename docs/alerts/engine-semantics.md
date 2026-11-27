@@ -852,9 +852,12 @@ in §3 plus:
   one, which comes first.
 - **Recent readings.** `GlucoseSeries` (wire `glucose_series`, an array of `{at, mgdl}`) is what the
   windowed leaves read (§3, windows). The backend fills it only for a rule that reads it: every
-  reading with a glucose value of the newest reading's stream and uploader (as `TrendRate` derives
-  its earlier reading, above), canonical as charts read them, from 180 minutes before the newest
-  reading (the longest window) up to and including the newest reading itself. A reading the
+  reading with a glucose value of the newest reading's stream and uploader, chosen as `TrendRate`
+  chooses its earlier reading (above): a copy deduplication hides and a reading of a bucket its
+  stream lost to another stream are in it, since with two apps uploading one CGM the uploader's own
+  copy is often the hidden one, and a copy in the newest reading's own duplicate group is not. It
+  runs from 180 minutes before the newest reading (the longest window) up to and including the
+  newest reading itself. A reading the
   selection tolerance leaves out of the context (above) is not in the series. Replay fills it per
   tick from the readings it loads, by the same rule. The engine reads the points in any order and
   ignores one outside a window; two at one instant are one point, the last listed.
