@@ -33624,9 +33624,8 @@ msgstr "Servicios de terceros que puedes conectar:"
 msgid "Privacy policy"
 msgstr "Política de privacidad"
 
-#: src/routes/(legal)/privacy/+page.svelte
-msgid "2. Data we DON'T collect"
-msgstr "2. Datos que NO recopilamos"
+#~ msgid "2. Data we DON'T collect"
+#~ msgstr "2. Datos que NO recopilamos"
 
 #: src/routes/(legal)/privacy/+page.svelte
 msgid "4. Third-party services and connectors"
@@ -52221,4 +52220,8 @@ msgstr ""
 
 #: src/lib/components/people/PeopleTabs.svelte
 msgid "Everyone"
+msgstr ""
+
+#: src/routes/(legal)/privacy/+page.svelte
+msgid "2. Data we do not collect"
 msgstr ""
