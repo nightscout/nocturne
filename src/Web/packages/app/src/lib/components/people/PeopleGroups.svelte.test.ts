@@ -261,7 +261,7 @@ describe("PeoplePage group tabs", () => {
     openAt("?group=0193b6a0-0000-7000-8000-000000000002&lens=review&days=30");
 
     await expect.element(page.getByText("Bo")).toBeVisible();
-    expect(calls.review).toContainEqual({ group: "0193b6a0-0000-7000-8000-000000000002", days: 30 });
+    expect(calls.review).toContainEqual({ group: "0193b6a0-0000-7000-8000-000000000002", rules: OverviewRuleSet.All, days: 30 });
   });
 
   it("states how many people of the group the viewer cannot see, for one and for many", async () => {

@@ -64,8 +64,12 @@ export function ruleReasonDetails(rule: TenantOverviewRuleReason): string[] {
   return details;
 }
 
-/** A rule as a sentence, in the editor's list. `label` is the fact's label. */
-export function ruleSentence(rule: FlagRule, label: string, unit: string | null | undefined): string {
+/** A rule, or a data filter, as a sentence. `label` is the fact's label. */
+export function ruleSentence(
+  rule: Pick<FlagRule, "days" | "comparison" | "value">,
+  label: string,
+  unit: string | null | undefined
+): string {
   const value = factValue(rule.value ?? 0, unit);
   const below = rule.comparison === FlagRuleComparison.Below;
   if (rule.days == null) {

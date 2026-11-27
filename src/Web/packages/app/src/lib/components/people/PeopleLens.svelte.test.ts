@@ -243,7 +243,7 @@ describe("PeoplePage lens", () => {
 
     await expect.element(page.getByText("Distribution")).toBeVisible();
     expect(checked("90 days")).toBe("true");
-    expect(reviewCalls.args.at(-1)).toEqual({ days: 90 });
+    expect(reviewCalls.args.at(-1)).toEqual({ rules: "All", days: 90 });
   });
 
   it.each(["?lens=nonsense&days=30", "?days=30", "?lens=REVIEW"])(
@@ -268,7 +268,7 @@ describe("PeoplePage lens", () => {
 
       await expect.element(page.getByText("Distribution")).toBeVisible();
       expect(checked("14 days")).toBe("true");
-      expect(reviewCalls.args.at(-1)).toEqual({ days: 14 });
+      expect(reviewCalls.args.at(-1)).toEqual({ rules: "All", days: 14 });
     }
   );
 
@@ -278,11 +278,11 @@ describe("PeoplePage lens", () => {
     review.data = reviewOf(people);
     openAt("?lens=review&days=14");
     await expect.element(page.getByText("Distribution")).toBeVisible();
-    expect(reviewCalls.args.at(-1)).toEqual({ days: 14 });
+    expect(reviewCalls.args.at(-1)).toEqual({ rules: "All", days: 14 });
 
     await page.getByRole("radio", { name: "30 days" }).click();
 
-    await expect.poll(() => reviewCalls.args.at(-1)).toEqual({ days: 30 });
+    await expect.poll(() => reviewCalls.args.at(-1)).toEqual({ rules: "All", days: 30 });
   });
 
   it("refreshes the overview on its poll and does not read the statistics again", async () => {

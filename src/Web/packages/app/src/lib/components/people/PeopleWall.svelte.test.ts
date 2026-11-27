@@ -7,12 +7,17 @@ import {
   GlucoseStatus,
   NotificationUrgency,
   OverviewRuleSet,
+  PeopleFilterKind,
+  PeopleLens,
+  PeopleSortColumn,
+  PeopleSortDirection,
   TenantOverviewAttentionKind,
+  type PeopleViewSummary,
   type StaffGroup,
   type TenantOverviewItem,
   type TenantOverviewResponse,
 } from "@nocturne/api-client";
-import { TenantOverviewResponseSchema } from "@nocturne/api-client/schemas";
+import { PeopleOverviewRequestSchema, TenantOverviewResponseSchema } from "@nocturne/api-client/schemas";
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { wallStep } from "./wall-layout.js";
 import { OVERLAY_REVEAL_MS } from "#lib/utils/overlay-reveal.svelte.js";
@@ -29,6 +34,8 @@ const overview = $state<{
   groupReads: Record<string, TenantOverviewResponse | undefined>;
   groupErrors: Record<string, unknown>;
 }>({ data: undefined, error: undefined, groups: [], groupsError: undefined, groupReads: {}, groupErrors: {} });
+/** The viewer's views, or the error their read gave. */
+const views = $state<{ list: PeopleViewSummary[] | undefined; error: unknown }>({ list: [], error: undefined });
 const refreshes = vi.hoisted(() => ({ count: 0, run: async () => {}, reads: [] as unknown[] }));
 const navigation = vi.hoisted(() => ({
   goto: vi.fn(async () => {}),
@@ -56,7 +63,7 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
     loading: false,
     refresh: async () => {},
   }),
-  getOverview: (args?: { group?: string; rules?: OverviewRuleSet }) => {
+  getOverview: (args?: { group?: string; rules?: OverviewRuleSet; query?: unknown }) => {
     refreshes.reads.push(args);
     const group = args?.group;
     return {
@@ -73,6 +80,19 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
       },
     };
   },
+}));
+
+vi.mock("#lib/api/generated/peopleViews.generated.remote.js", () => ({
+  getPeopleViews: () => ({
+    get current() {
+      return views.list ? { views: views.list, limit: 20 } : undefined;
+    },
+    get error() {
+      return views.error;
+    },
+    loading: false,
+    refresh: async () => {},
+  }),
 }));
 
 import PeopleWall from "./PeopleWall.svelte";
@@ -143,6 +163,8 @@ beforeEach(async () => {
   overview.groupsError = undefined;
   overview.groupReads = {};
   overview.groupErrors = {};
+  views.list = [];
+  views.error = undefined;
   feed.connected = false;
   refreshes.count = 0;
   refreshes.run = async () => {};
@@ -986,6 +1008,108 @@ describe("a group's wall", () => {
     await userEvent.keyboard("{Escape}");
 
     expect(navigation.goto).toHaveBeenCalledWith(`/people?group=${birch.id}`, { replaceState: true });
+  });
+});
+
+describe("a view's wall", () => {
+  const LOWS = "0193b6a0-0000-7000-8000-0000000000a1";
+  const lows: PeopleViewSummary = {
+    view: {
+      id: LOWS,
+      name: "Lows",
+      position: 0,
+      query: {
+        filters: [{ kind: PeopleFilterKind.AgeAtLeast, years: 18 }],
+        sort: { column: PeopleSortColumn.Glucose, direction: PeopleSortDirection.Ascending },
+      },
+      lens: PeopleLens.Now,
+    },
+    groupGone: false,
+    teamGone: false,
+  };
+  const viewRead = { rules: OverviewRuleSet.Team, query: lows.view.query };
+
+  it("reads the view's query with its teams' rules and no group, and names the view", async () => {
+    openAt(`?view=${LOWS}`);
+    overview.groups = [birch];
+    views.list = [lows];
+    overview.data = { tenants: [named(3, { firstGroupId: birch.id }), named(1)] };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 003")).toBeVisible();
+
+    expect(refreshes.reads).toContainEqual(viewRead);
+    expect(refreshes.reads.filter((read) => JSON.stringify(read) !== JSON.stringify(viewRead))).toEqual([]);
+    expect(PeopleOverviewRequestSchema.safeParse(viewRead).success).toBe(true);
+    await expect.element(page.getByTestId("wall-view")).toHaveTextContent("Lows");
+    expect(page.getByTestId("wall-group").elements()).toHaveLength(0);
+    await expect.element(page.getByTestId("wall-rules")).toHaveTextContent("Flagged by Nocturne's fixed rules.");
+  });
+
+  it("lists the view's people flat, in the API's order, under no group heading", async () => {
+    openAt(`?view=${LOWS}`);
+    overview.groups = [birch, oak];
+    views.list = [lows];
+    overview.data = {
+      tenants: [named(5, { firstGroupId: oak.id }), named(2, { firstGroupId: birch.id }), named(4), named(1, { firstGroupId: oak.id })],
+    };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+
+    expect(columnRows().flat()).toEqual(["Person 005", "Person 002", "Person 004", "Person 001"]);
+  });
+
+  it("reads the unsaved changes the address holds over the view's query", async () => {
+    openAt(`?view=${LOWS}&q=ann&sort=none`);
+    views.list = [lows];
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+
+    expect(refreshes.reads).toContainEqual({
+      rules: OverviewRuleSet.Team,
+      query: { search: "ann", filters: lows.view.query?.filters },
+    });
+  });
+
+  it("shows everyone, says why, and drops the view from the address for a view the viewer does not have", async () => {
+    openAt("?view=0193b6a0-0000-7000-8000-0000000000ee");
+    overview.groups = undefined;
+    views.list = [lows];
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+    await expect
+      .element(page.getByTestId("wall-fallback"))
+      .toHaveTextContent("You have no view with that link. The list shows everyone you follow.");
+    expect(navigation.address.searchParams.has("view")).toBe(false);
+    expect(page.getByTestId("wall-view").elements()).toHaveLength(0);
+  });
+
+  it("goes back to the view's tab on Escape, keeping the unsaved changes", async () => {
+    openAt(`?view=${LOWS}&q=ann`);
+    views.list = [lows];
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(navigation.goto).toHaveBeenCalledWith(`/people?view=${LOWS}&q=ann`, { replaceState: true });
+  });
+
+  it("lists a sorted wall of everyone flat, in the API's order", async () => {
+    openAt("?sort=glucose.desc");
+    overview.groups = [birch, oak];
+    overview.data = { tenants: [named(2, { firstGroupId: oak.id }), named(1, { firstGroupId: birch.id }), named(3)] };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 003")).toBeVisible();
+
+    expect(refreshes.reads).toContainEqual({
+      rules: OverviewRuleSet.Team,
+      query: { sort: { column: PeopleSortColumn.Glucose, direction: PeopleSortDirection.Descending } },
+    });
+    expect(columnRows().flat()).toEqual(["Person 002", "Person 001", "Person 003"]);
   });
 });
 

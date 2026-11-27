@@ -5,6 +5,7 @@
   import { untrack } from "svelte";
   import { isHttpError } from "@sveltejs/kit";
   import { getGroups } from "#lib/api/generated/myTenants.generated.remote.js";
+  import { getPeopleViews } from "#lib/api/generated/peopleViews.generated.remote.js";
   import { OverviewRuleSet, type TenantOverviewResponse } from "@nocturne/api-client";
   import RevealableOverlay from "#lib/components/shared/RevealableOverlay.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -23,12 +24,24 @@
     EVERYONE,
     fallbackOf,
     groupOf,
-    parseTab,
+    tabOf,
     tabValue,
-    withTab,
+    viewOf,
+    type Fallback,
     type PeopleTab,
-    type FallbackReason,
   } from "./people-tab.js";
+  import {
+    EMPTY_QUERY,
+    PLAIN,
+    encodeFilters,
+    encodeSort,
+    isEmptyQuery,
+    readUnsaved,
+    shownOf,
+    shownOfView,
+    withTabQuery,
+    type Unsaved,
+  } from "./people-query.js";
   import { isFlagged } from "./person.js";
   import { setReadState } from "./read-state.js";
   import WallFlagged from "./WallFlagged.svelte";
@@ -44,34 +57,64 @@
     wallStep,
   } from "./wall-layout.js";
 
-  let tab = $state<PeopleTab>(parseTab((page.shallow?.url ?? page.url).searchParams.get("group")));
-  let fellBack = $state<FallbackReason | null>(null);
+  const address = (page.shallow?.url ?? page.url).searchParams;
+  let tab = $state<PeopleTab>(tabOf(address));
+  /** The search, filters and sort the People page had not saved when it opened the wall. */
+  let unsaved = $state<Unsaved>(readUnsaved(address));
+  let fellBack = $state<Fallback | null>(null);
   const group = $derived(groupOf(tab));
   const groupsQuery = getGroups();
+  const viewsQuery = $derived(tab.kind === "view" ? getPeopleViews() : null);
+  const viewId = $derived(viewOf(tab));
+  const openView = $derived(
+    viewId ? viewsQuery?.current?.views.find((summary) => summary.view.id === viewId)?.view : undefined
+  );
+  /** The tab's query with the unsaved changes over it; null while a view is not read. */
+  const peopleQuery = $derived.by(() => {
+    const own = tab.kind === "view" ? (openView ? shownOfView(openView) : null) : PLAIN;
+    if (!own) return null;
+    const { search, filters, sort } = unsaved;
+    return shownOf(own, { search, filters, sort }).query;
+  });
   // The wall is seen by everyone in the room, so it shows the rules its teams share and never one viewer's own.
   const overview = followPeople(
-    () => group,
-    () => void groupsQuery.refresh().catch(() => {}),
+    () => (peopleQuery ? { tab, query: peopleQuery } : null),
+    () => {
+      void groupsQuery.refresh().catch(() => {});
+      void viewsQuery?.refresh().catch(() => {});
+    },
     OverviewRuleSet.Team
   );
   const query = $derived(overview.query);
-  const groupNotFound = $derived(isHttpError(query.error) && query.error.status === 404);
-  const loadError = $derived(groupNotFound ? undefined : query.error);
+  const groupNotFound = $derived(isHttpError(query?.error) && query.error.status === 404);
+  const loadError = $derived(groupNotFound ? undefined : query?.error);
   const openGroup = $derived(
     group ? groupsQuery.current?.find((listed) => listed.id === group) : undefined
   );
+  const filtered = $derived(!isEmptyQuery(peopleQuery ?? EMPTY_QUERY));
   const reveal = createOverlayReveal({ revealOnPointerMove: true });
   const clock = new Now(1000);
 
+  // A view is judged by the views list alone, never by the groups.
   $effect(() => {
-    if (tab.kind !== "group") return;
-    const reason = fallbackOf(tab.id, groupsQuery.current, !!groupsQuery.error, groupNotFound);
+    if (tab.kind === "everyone") return;
+    const kind = tab.kind;
+    const reason =
+      kind === "group"
+        ? fallbackOf(tab.id, groupsQuery.current, !!groupsQuery.error, groupNotFound)
+        : fallbackOf(
+            tab.id,
+            viewsQuery?.current?.views.map((summary) => summary.view),
+            !!viewsQuery?.error,
+            false
+          );
     if (!reason) return;
     untrack(() => {
       tab = EVERYONE;
-      fellBack = reason;
+      unsaved = {};
+      fellBack = { kind, reason };
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its query changed, already resolved
-      replaceState(withTab(new URL(page.url.href), EVERYONE), {});
+      replaceState(withTabQuery(new URL(page.url.href), EVERYONE, {}), {});
     });
   });
 
@@ -85,12 +128,20 @@
   });
 
   // The query may drop its value when a refresh fails; the wall keeps the last read of its tab that worked.
-  let lastRead = $state<{ tab: string; response: TenantOverviewResponse; at: Date } | null>(null);
+  const readKey = $derived(
+    [
+      tabValue(tab),
+      peopleQuery?.search ?? "",
+      encodeFilters(peopleQuery?.filters ?? []),
+      encodeSort(peopleQuery?.sort ?? null),
+    ].join(" ")
+  );
+  let lastRead = $state<{ key: string; response: TenantOverviewResponse; at: Date } | null>(null);
   $effect.pre(() => {
-    const current = query.current;
-    if (current) lastRead = { tab: tabValue(tab), response: current, at: new Date() };
+    const current = query?.current;
+    if (current) lastRead = { key: readKey, response: current, at: new Date() };
   });
-  const kept = $derived(lastRead?.tab === tabValue(tab) ? lastRead : null);
+  const kept = $derived(lastRead?.key === readKey ? lastRead : null);
 
   const people = $derived(kept?.response.tenants ?? []);
   const hiddenCount = $derived(kept?.response.hiddenCount ?? 0);
@@ -142,8 +193,11 @@
     return () => observer.disconnect();
   });
   const rest = $derived(people.filter((person) => !band.includes(person)));
+  // Group headings regroup the API's order, so they stand only over everyone in that order.
   const sections = $derived(
-    group ? [{ heading: null, people: rest }] : wallSections(rest, groupsQuery.current)
+    tab.kind === "everyone" && !peopleQuery?.sort
+      ? wallSections(rest, groupsQuery.current)
+      : [{ heading: null, people: rest }]
   );
   const capacity = $derived(wallColumnCapacity(columnsWidth, columnsHeight));
   const columns = $derived(
@@ -167,7 +221,7 @@
       history.back();
       return;
     }
-    const url = withTab(new URL(resolve("/(authenticated)/people"), page.url.href), tab);
+    const url = withTabQuery(new URL(resolve("/(authenticated)/people"), page.url.href), tab, unsaved);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the People page's resolved path with the tab's query
     void goto(url.pathname + url.search, { replaceState: true });
   }
@@ -236,7 +290,9 @@
     </div>
   {:else if kept}
     <p class="m-auto text-2xl text-muted-foreground">
-      {#if group && hiddenCount > 0}
+      {#if filtered}
+        No people match.
+      {:else if group && hiddenCount > 0}
         You cannot see anyone in this group.
       {:else if group}
         You can see no people in this group.
@@ -257,6 +313,9 @@
         {#if openGroup}
           <span class="font-semibold" data-testid="wall-group"><GroupName group={openGroup} /></span>
         {/if}
+        {#if openView}
+          <span class="font-semibold" data-testid="wall-view">{openView.name}</span>
+        {/if}
         {#if group && hiddenCount > 0}
           <span class="font-medium" data-testid="wall-hidden-in-group">
             <HiddenInGroup count={hiddenCount} />
@@ -264,7 +323,7 @@
         {/if}
         {#if fellBack}
           <span class="text-muted-foreground" data-testid="wall-fallback">
-            <TabFallback reason={fellBack} />
+            <TabFallback fallback={fellBack} />
           </span>
         {/if}
         <span class="text-muted-foreground" data-testid="wall-rules">
@@ -285,7 +344,7 @@
             </Badge>
           {:else if loadError}
             <span class="text-muted-foreground">The list of people did not load.</span>
-            <Button variant="overlay" size="sm" onclick={() => query.refresh()}>Try again</Button>
+            <Button variant="overlay" size="sm" onclick={() => query?.refresh()}>Try again</Button>
           {:else if pending}
             <span class="text-muted-foreground">Loading the list of people.</span>
           {:else if overview.live}

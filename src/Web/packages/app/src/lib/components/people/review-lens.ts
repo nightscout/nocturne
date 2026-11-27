@@ -1,10 +1,10 @@
 import {
   TenantReviewUnavailable,
+  type TenantOverviewItem,
   type TenantReviewPerson,
   type TenantReviewResponse,
   type TenantReviewStatistics,
 } from "@nocturne/api-client";
-import { withTab, type PeopleTab } from "./people-tab.js";
 
 export type Lens = "now" | "review";
 
@@ -22,28 +22,6 @@ export function parseLens(value: string | null): Lens {
 export function parseDays(value: string | null): ReviewDays {
   const days = Number(value);
   return REVIEW_DAYS.find((allowed) => allowed === days) ?? DEFAULT_REVIEW_DAYS;
-}
-
-/** What the page shows, which is everything its address states. */
-export interface PageView {
-  tab: PeopleTab;
-  lens: Lens;
-  days: ReviewDays;
-  person: string | null;
-}
-
-/** The page's address for a view. The Now lens carries no period. */
-export function pageUrl(current: { href: string }, view: PageView): URL {
-  const url = withTab(new URL(current.href), view.tab);
-  url.searchParams.delete("lens");
-  url.searchParams.delete("days");
-  url.searchParams.delete("person");
-  if (view.lens === "review") {
-    url.searchParams.set("lens", view.lens);
-    url.searchParams.set("days", String(view.days));
-  }
-  if (view.person) url.searchParams.set("person", view.person);
-  return url;
 }
 
 export type ReviewState =
@@ -94,4 +72,18 @@ export function reviewCell(
 /** The verdict's own flag: the period does not meet the reliability criteria. */
 export function isNotReliable(statistics: TenantReviewStatistics): boolean {
   return statistics.reliability?.meetsReliabilityCriteria === false;
+}
+
+/**
+ * The people in the review's own order, which a sort by a review figure decides: each person the review
+ * holds, then any person it lacks, in the list's order.
+ */
+export function inReviewOrder(people: TenantOverviewItem[], response: TenantReviewResponse): TenantOverviewItem[] {
+  const byTenant = new Map(people.flatMap((person) => (person.tenantId ? [[person.tenantId, person] as const] : [])));
+  const reviewed = (response.people ?? []).flatMap((entry) => {
+    const person = entry.tenantId ? byTenant.get(entry.tenantId) : undefined;
+    return person ? [person] : [];
+  });
+  const placed = new Set(reviewed);
+  return [...reviewed, ...people.flatMap((person) => (placed.has(person) ? [] : [person]))];
 }
