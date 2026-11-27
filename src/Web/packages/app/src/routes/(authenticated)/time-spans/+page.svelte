@@ -20,7 +20,8 @@
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
   import { toggled } from "#lib/utils/collections.js";
   import { endOfDay, resolveDayRange, startOfDay } from "#lib/utils/date-range.js";
-  import { formatMediumDateRange, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDateRange, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { plural } from "#lib/utils/plural.js";
   import { getChangeGlucose, getTimelineOverview, getTimelineStage } from "./data.remote";
 
   /** The longest stretch the stage draws in real time; longer ranges read as versions. */
@@ -121,7 +122,10 @@
     if (!overview?.history) return "";
     const versionCount = versions.length;
     const changeCount = changes.length;
-    return `${versionCount} ${versionCount === 1 ? "version" : "versions"}, ${changeCount} ${changeCount === 1 ? "change" : "changes"}`;
+    return formatList(
+      [plural(versionCount, ["# version", "# versions"]), plural(changeCount, ["# change", "# changes"])],
+      "unit"
+    );
   });
 </script>
 

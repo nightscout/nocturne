@@ -46,6 +46,7 @@
     type TrackerOffer,
   } from "#lib/api/index.js";
   import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { formatList } from "#lib/utils/formatting.js";
 
   const setupQuery = getDeviceSetup();
   const hubQuery = getSetupHub();
@@ -363,7 +364,7 @@
 
       {#if (setup.otherInsulins?.length ?? 0) > 0}
         <p class="text-sm text-muted-foreground" data-testid="other-insulins">
-          Also on record: {(setup.otherInsulins ?? []).map((i) => i.name).join(", ")}
+          Also on record: {formatList((setup.otherInsulins ?? []).flatMap((i) => i.name ?? []))}
         </p>
       {/if}
 

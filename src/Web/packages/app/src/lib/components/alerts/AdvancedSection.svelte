@@ -6,6 +6,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { formatList } from "#lib/utils/formatting.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { freshnessIssue, type RuleEditorState } from "./types";
@@ -34,14 +35,12 @@
     (editor.hasStoredFreshnessBound && !editor.clearGlucoseFreshness) ||
       editor.glucoseFreshnessMinutes !== undefined,
   );
-  const summary = $derived(
-    [
-      nonDefaultChoice && editor.onUnknown !== undefined ? choiceLabel(editor.onUnknown) : null,
-      editor.glucoseFreshnessMinutes !== undefined ? `${editor.glucoseFreshnessMinutes} min` : null,
-    ]
-      .filter((part) => part !== null)
-      .join(", "),
-  );
+  const summary = $derived.by(() => {
+    const parts: string[] = [];
+    if (nonDefaultChoice && editor.onUnknown !== undefined) parts.push(choiceLabel(editor.onUnknown));
+    if (editor.glucoseFreshnessMinutes !== undefined) parts.push(`${editor.glucoseFreshnessMinutes} min`);
+    return formatList(parts, "unit");
+  });
 
   function choiceLabel(value: string): string {
     switch (value) {

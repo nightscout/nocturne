@@ -27,6 +27,7 @@
     laneNames,
     laneNameWidth,
     legend,
+    legendDescription,
     panelTextures,
     rowMatch,
     tipEntries,
@@ -109,7 +110,7 @@
   );
   const xField = $derived(xFields[0]);
   /** The words for the chart as one image: its layers, each with its unit. */
-  const description = $derived(entries.map((e) => `${e.title}${e.unit ? ` (${e.unit})` : ""}${e.group ? `, ${e.group}` : ""}`).join("; "));
+  const description = $derived(legendDescription(entries, format));
 
   let plot = $state<{ step: (along: number, across?: number) => void; clear: () => void }>();
   let focus = $state<PlotFocus | null>(null);

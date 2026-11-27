@@ -648,7 +648,7 @@ describe("members page listing the teams with access", () => {
 
     await expect.element(browserPage.getByRole("heading", { name: "Teams" })).toBeVisible();
     await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
-    await expect.element(browserPage.getByText("Roles: Viewer, Caretaker")).toBeVisible();
+    await expect.element(browserPage.getByText("Roles: Viewer and Caretaker")).toBeVisible();
     await expect.element(browserPage.getByText("Only the last 24 hours", { exact: false })).toBeVisible();
     await expect.element(browserPage.getByText("Access ends", { exact: false })).toBeVisible();
     await expect.element(browserPage.getByText("Approved by Sam", { exact: false })).toBeVisible();

@@ -52,7 +52,7 @@ describe("AlertBanner", () => {
 		render(AlertBanner);
 
 		await expect
-			.element(page.getByText("Seen by Public link, Grandma (guest link)"))
+			.element(page.getByText("Seen by Public link and Grandma (guest link)"))
 			.toBeVisible();
 		await expect.element(page.getByRole("button", { name: "Acknowledge" })).toBeVisible();
 	});

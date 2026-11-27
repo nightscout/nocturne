@@ -6,6 +6,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { formatList } from "#lib/utils/formatting.js";
   import {
     dismissRawMmolIsf,
     getRawMmolSchedules,
@@ -43,13 +44,14 @@
   }
 
   function storedValues(item: RawMmolSchedule): string {
-    return (item.entries ?? [])
-      .map((e) =>
+    return formatList(
+      (item.entries ?? []).map((e) =>
         item.kind === RawMmolScheduleKind.TargetRange
           ? `${e.time ?? "?"} ${e.low ?? "?"}-${e.high ?? "?"}`
           : `${e.time ?? "?"} ${e.value ?? "?"}`
-      )
-      .join(", ");
+      ),
+      "unit"
+    );
   }
 </script>
 

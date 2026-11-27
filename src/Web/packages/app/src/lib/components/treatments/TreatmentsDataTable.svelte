@@ -40,7 +40,7 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { formatDateTimeCompact, bg, bgLabel } from "#lib/utils/formatting.js";
+  import { formatDateTimeCompact, formatList, bg, bgLabel } from "#lib/utils/formatting.js";
   import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
@@ -470,11 +470,11 @@
   }
 
   const printFilters = $derived([
-    ...(globalFilter.trim() ? [`search "${globalFilter.trim()}"`] : []),
+    ...(globalFilter.trim() ? [`Filtered by search "${globalFilter.trim()}".`] : []),
     ...(selectedTypes.length > 0
-      ? [`type: ${selectedTypes.map((t) => (typeFilterOptions.find((o) => o.value === t)?.label ?? t)).join(", ")}`]
+      ? [`Filtered by type: ${formatList(selectedTypes.map((t) => (typeFilterOptions.find((o) => o.value === t)?.label ?? t)))}.`]
       : []),
-    ...(selectedSources.length > 0 ? [`source: ${selectedSources.join(", ")}`] : []),
+    ...(selectedSources.length > 0 ? [`Filtered by source: ${formatList(selectedSources)}.`] : []),
   ]);
 
   const typeFilterOptions: FilterOption[] = Object.values(ENTRY_CATEGORIES).map((cat) => ({
@@ -599,9 +599,11 @@
     />
   </div>
   {#if printFilters.length > 0}
-    <p class="hidden text-xs text-muted-foreground print:block">
-      Filtered by {printFilters.join("; ")}
-    </p>
+    <div class="hidden flex-col text-xs text-muted-foreground print:flex">
+      {#each printFilters as filter (filter)}
+        <p>{filter}</p>
+      {/each}
+    </div>
   {/if}
 
   <!-- Table -->

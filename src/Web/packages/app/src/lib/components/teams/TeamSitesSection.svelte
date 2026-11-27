@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Card from "#lib/components/ui/card/index.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
-  import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
   import { plural } from "#lib/utils/plural.js";
   import { RULE_OWNER_APPROVES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
   import type { TeamSiteAccess } from "@nocturne/api-client";
@@ -30,7 +30,7 @@
         {#each sites as site (site.tenantId)}
           <li class="space-y-1 py-3">
             <p class="font-medium">{site.displayName}</p>
-            <p class="text-sm text-muted-foreground">Roles: {(site.roleNames ?? []).join(", ")}</p>
+            <p class="text-sm text-muted-foreground">Roles: {formatList(site.roleNames ?? [])}</p>
             <p class="text-sm text-muted-foreground">
               {site.limitTo24Hours ? "Only the last 24 hours" : "All history"}
               ·

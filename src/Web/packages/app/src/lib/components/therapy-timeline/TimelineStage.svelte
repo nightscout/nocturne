@@ -20,6 +20,7 @@
     bg,
     bgLabel,
     formatDateTimeCompact,
+    formatList,
     formatMediumDateTime,
     formatShortDate,
     hourLabel,
@@ -227,7 +228,7 @@
     if (basal || rate) {
       const scheduled = basal ? `${attributeValue(ProfileAttribute.Basal, basal.value)} U/h` : null;
       const given = rate ? `${(rate.rate ?? 0).toFixed(2)} U/h delivered` : null;
-      items.push({ label: "Basal", value: [scheduled, given].filter(Boolean).join(", ") });
+      items.push({ label: "Basal", value: formatList([scheduled, given].filter((part) => part !== null), "unit") });
     }
 
     const sensitivity = stepAt(lanes?.sensitivity, at);

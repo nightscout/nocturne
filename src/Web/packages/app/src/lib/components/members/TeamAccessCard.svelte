@@ -14,7 +14,7 @@
   import TeamStaffRule from "#lib/components/members/TeamStaffRule.svelte";
   import TeamAccessEditForm from "#lib/components/members/TeamAccessEditForm.svelte";
   import { RULE_OWNER_APPROVES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
-  import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     teamAccessEditProblemMessages,
     teamStaffBlockProblemMessages,
@@ -192,7 +192,7 @@
         <div class="min-w-0 space-y-1">
           <p class="truncate font-medium">{team.teamName}</p>
           <p class="text-sm text-muted-foreground">
-            Roles: {(team.roles ?? []).map((r) => r.name).join(", ")}
+            Roles: {formatList((team.roles ?? []).flatMap((r) => r.name ?? []))}
           </p>
           <p class="text-sm text-muted-foreground">
             {team.limitTo24Hours ? "Only the last 24 hours" : "All history"}

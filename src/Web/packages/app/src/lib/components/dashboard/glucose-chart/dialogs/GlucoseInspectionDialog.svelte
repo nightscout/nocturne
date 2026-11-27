@@ -2,7 +2,7 @@
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { BasalDeliveryOrigin } from "@nocturne/charts/core";
-  import { bg, bgDelta, bgLabel, formatLocale, time } from "#lib/utils/formatting.js";
+  import { bg, bgDelta, bgLabel, formatList, formatLocale, time } from "#lib/utils/formatting.js";
   import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import InspectionChart from "./InspectionChart.svelte";
@@ -166,7 +166,7 @@
 
       {#if activityStates && activityStates.length > 0}
         <span class="text-muted-foreground">Activities</span>
-        <span class="font-medium">{activityStates.join(", ")}</span>
+        <span class="font-medium">{formatList(activityStates)}</span>
       {/if}
 
       {#if sourceDisplayName}

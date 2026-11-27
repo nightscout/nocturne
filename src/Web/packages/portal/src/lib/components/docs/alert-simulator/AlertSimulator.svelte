@@ -9,6 +9,7 @@
     import * as Select from "@nocturne/ui/ui/select";
     import * as ToggleGroup from "@nocturne/ui/ui/toggle-group";
     import { glucoseUnits } from "@nocturne/app/stores/appearance-store.svelte";
+    import { formatList } from "@nocturne/app/utils/formatting";
     import ReplayView from "@nocturne/app/components/alerts/ReplayView.svelte";
     import { createStaticChartView, type TransformedChartData } from "@nocturne/charts";
     import type { AlertReplayResult } from "@nocturne/api-client";
@@ -183,7 +184,7 @@
                     {#if issues[index]?.length}
                         <p class="text-sm text-destructive">
                             A save would be refused: this rule needs
-                            {issues[index].map(describeIssue).join(", ")}.
+                            {formatList(issues[index].map(describeIssue))}.
                         </p>
                     {/if}
                 </div>

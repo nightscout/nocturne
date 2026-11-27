@@ -56,7 +56,7 @@ function seed(context: string, source: string, translation?: Compiled) {
 /** Waits for the translation plugin to write the manifest with the messages of the module under test, which it does as it transforms it. */
 async function waitForContexts(contexts: string[]) {
   const fresh = () =>
-    import(/* @vite-ignore */ `${new URL("../../../../../../../../locales/.wuchale/main.0.manifest.js", import.meta.url).href}?t=${Date.now()}`);
+    import(/* @vite-ignore */ `${new URL("../../../../../../../../locales/.wuchale/main.0.manifest.js", import.meta.url).href}?read=${Date.now()}`);
   const deadline = Date.now() + 100_000;
   while (Date.now() < deadline) {
     const keys: Manifest = await fresh().then((module) => module.keys, () => []);
@@ -69,10 +69,12 @@ async function waitForContexts(contexts: string[]) {
 beforeAll(async () => {
   ({ Workspace } = await import("./workspace.svelte.js"));
   ({ liveCatalogue } = await import("./catalogue.fixtures.js"));
-  await waitForContexts(["moment-in-sentence", "moment-heading", "when-caption"]);
+  await waitForContexts(["moment-in-sentence", "moment-heading", "when-caption", "caption-clause", "caption-clause-without-signals"]);
   manifest = (await import("../../../../../../../../locales/.wuchale/main.0.manifest.js")).keys as Manifest;
   english = (await import("../../../../../../../../locales/.wuchale/main.0.en.compiled.js")).c as Compiled[];
   german = (await import("../../../../../../../../locales/.wuchale/main.0.de.compiled.js")).c as Compiled[];
+  seed("caption-clause", "{0} {1} {2}");
+  seed("caption-clause-without-signals", "{0} {1}");
   await loadLocales(main.key, main.loadCount, main.loadCatalog, ["en", "de"]);
 }, 120_000);
 
@@ -155,5 +157,38 @@ describe("an event caption under the production translation transform", () => {
     expect(german).toMatch(/^nach Uhrzeit: Wenn Mahlzeiten und .+ auftreten$/);
     expect(german).not.toContain(" and ");
     expect(await renderInLanguage("en", { read: whenCaption })).toMatch(/^When meals and .+ happen, by hour of day$/);
+  });
+});
+
+describe("the clause of a caption under the production translation transform", () => {
+  const layout = (withSignals: boolean) => () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.setLens("timeline");
+    if (withSignals) ws.toggleSignal("glucose");
+    return ws
+      .caption()
+      .map((p) => `${p.kind}[${p.before}]`)
+      .join("|");
+  };
+
+  beforeAll(() => {
+    seed("caption-clause", "{0} {1} {2}", [1, ", ", 0, " - ", 2]);
+    seed("caption-clause-without-signals", "{0} {1}", [1, " / ", 0]);
+  });
+
+  it("places the signals, lens and range, and the text between them, as the message of the language does", async () => {
+    expect(await renderInLanguage("de", { read: layout(true) })).toBe("lens[]|signals[, ]|range[ - ]");
+    expect(await renderInLanguage("de", { read: layout(false) })).toBe("range[]|lens[ / ]");
+  });
+
+  it("keeps the English order and spaces", async () => {
+    expect(await renderInLanguage("en", { read: layout(true) })).toBe("signals[]|lens[ ]|range[ ]");
+    expect(await renderInLanguage("en", { read: layout(false) })).toBe("lens[]|range[ ]");
+  });
+
+  it("keeps every part, in the English order, when a translation drops one", async () => {
+    seed("caption-clause", "{0} {1} {2}", [1, " ", 0]);
+
+    expect(await renderInLanguage("de", { read: layout(true) })).toBe("signals[]|lens[ ]|range[ ]");
   });
 });

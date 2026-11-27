@@ -32,7 +32,7 @@
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Users from "@lucide/svelte/icons/users";
-  import { formatMediumDateTime, formatShortDate } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDateTime, formatShortDate } from "#lib/utils/formatting.js";
   import AccessEndField from "#lib/components/members/AccessEndField.svelte";
   import {
     accessEndDate,
@@ -283,7 +283,7 @@
                   <span>Direct access</span>
                 {/if}
                 {#if reason.roles?.length}
-                  <span>({reason.roles.map((r) => r.name ?? r.slug).join(", ")})</span>
+                  <span>({formatList(reason.roles.flatMap((r) => r.name ?? r.slug ?? []))})</span>
                 {/if}
                 {#if reason.limitTo24Hours}
                   <span>Last 24 hours only</span>

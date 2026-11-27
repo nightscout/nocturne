@@ -198,7 +198,7 @@ export function prefersHour12(): boolean {
 
 /** The viewer's time-format and regional-format preferences, as the chart package takes them. */
 export function chartFormat(): ChartFormat {
-  return { locale: formatLocale(), hour12: prefersHour12() };
+  return { locale: formatLocale(), language: preferredLanguage.current, hour12: prefersHour12() };
 }
 
 /**
