@@ -1,10 +1,15 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Moq;
 using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Infrastructure.Data.Services;
+using Npgsql;
 using Nocturne.Tests.Shared.Logging;
 using Xunit;
 using StoredRule = Nocturne.API.Services.Alerts.ConditionSchemaMigration.StoredRule;
@@ -183,5 +188,54 @@ public class ConditionSchemaMigrationTests
         migrated.AutoResolveParams.Should().Be("null");
         migrated.ClientConfiguration.Should().Be("""{"snooze":{"smartSnooze":false}}""");
         migrated.Failed.Should().Be(0);
+    }
+
+    [NativeFact]
+    public void A_rule_already_in_schema_2_does_not_reach_the_engine()
+    {
+        var current = Rule(
+            conditionParams: """{"schema_version":2,"operator":"<","value":70}""",
+            autoResolve: """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":80}}""",
+            clientConfiguration: """{"snooze":{"conditions":[{"schema_version":2,"type":"trend","trend":{"bucket":"rising"}}]}}""",
+            preRepair: """{"condition_type":"threshold","condition_params":{"schema_version":2,"operator":"<","value":70}}""");
+
+        var migrated = ConditionSchemaMigration.Migrate(
+            current, _ => throw new InvalidOperationException("the engine was asked"), _logger);
+
+        migrated.Changed.Should().BeFalse();
+        migrated.Failed.Should().Be(0);
+    }
+
+    [NativeFact]
+    public void An_auto_resolve_age_rounds_so_the_alert_closes_no_earlier()
+    {
+        var migrated = Migrate(Rule(
+            autoResolve: """{"type":"site_age","site_age":{"operator":">=","value":1.001}}"""));
+
+        Json(migrated.AutoResolveParams!)["site_age"]!["minutes"]!.GetValue<int>().Should().Be(61);
+        migrated.ReviewReason.Should().Be(AlertRuleReviewReasons.ConditionDurationRounded);
+    }
+
+    [Fact]
+    public async Task A_tenant_whose_database_fails_is_counted_and_the_rest_still_run()
+    {
+        var retried = Guid.NewGuid();
+        var refused = Guid.NewGuid();
+        var tenants = new Mock<ITenantRepository>();
+        tenants.Setup(t => t.ListIdsAsync(false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([retried, refused]);
+        var contexts = new Mock<INocturneDbContextFactory>();
+        contexts.Setup(c => c.CreateForTenantAsync(retried, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RetryLimitExceededException("retries exhausted"));
+        contexts.Setup(c => c.CreateForTenantAsync(refused, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("connection refused"));
+
+        var summary = await ConditionSchemaMigration.RunAsync(
+            tenants.Object, contexts.Object, _ => throw new InvalidOperationException("no rule was read"),
+            _logger, CancellationToken.None);
+
+        summary.TenantsChecked.Should().Be(2);
+        summary.TenantsFailed.Should().Be(2);
+        summary.Rules.Should().Be(0);
     }
 }

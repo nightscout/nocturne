@@ -81,6 +81,14 @@ fn a_rate_of_change_becomes_a_signed_inclusive_comparison() {
         body("rate_of_change", json!({"direction": "falling", "rate": 0})).tree["value"],
         json!(0)
     );
+    assert_eq!(
+        body(
+            "rate_of_change",
+            json!({"direction": "falling", "rate": -2})
+        )
+        .tree,
+        json!({"schema_version": 2, "operator": "<=", "value": 2})
+    );
 }
 
 #[test]
@@ -121,26 +129,58 @@ fn an_age_between_minutes_rounds_to_the_side_that_holds_no_later() {
     assert!(below.rounded);
 }
 
+fn site_age(operator: &str) -> Value {
+    json!({"type": "site_age", "site_age": {"operator": operator, "value": 1.001}})
+}
+
+fn in_body(child: Value) -> Migrated {
+    body(
+        "composite",
+        json!({"operator": "and", "conditions": [child]}),
+    )
+}
+
 #[test]
 fn under_a_not_an_age_rounds_the_other_way() {
-    let leaf = |operator: &str| json!({"type": "site_age", "site_age": {"operator": operator, "value": 1.001}});
-    let negated = node(json!({"type": "not", "not": {"child": leaf(">=")}}));
+    let negated = in_body(json!({"type": "not", "not": {"child": site_age(">=")}}));
     assert_eq!(
-        negated.tree["not"]["child"]["site_age"]["minutes"],
+        negated.tree["conditions"][0]["not"]["child"]["site_age"]["minutes"],
         json!(61)
     );
-    let twice = node(json!({"type": "not", "not": {"child":
-        {"type": "not", "not": {"child": leaf(">=")}}}}));
+    let twice = in_body(json!({"type": "not", "not": {"child":
+        {"type": "not", "not": {"child": site_age(">=")}}}}));
     assert_eq!(
-        twice.tree["not"]["child"]["not"]["child"]["site_age"]["minutes"],
+        twice.tree["conditions"][0]["not"]["child"]["not"]["child"]["site_age"]["minutes"],
         json!(60)
     );
-    let sustained = node(json!({"type": "not", "not": {"child":
-        {"type": "sustained", "sustained": {"minutes": 5, "child": leaf("<")}}}}));
+    let sustained = in_body(json!({"type": "not", "not": {"child":
+        {"type": "sustained", "sustained": {"minutes": 5, "child": site_age("<")}}}}));
     assert_eq!(
-        sustained.tree["not"]["child"]["sustained"]["child"]["site_age"]["minutes"],
+        sustained.tree["conditions"][0]["not"]["child"]["sustained"]["child"]["site_age"]["minutes"],
         json!(60)
     );
+}
+
+/// An auto-resolve or snooze tree being true closes or holds back the alert,
+/// so its ages round to the side that is true no earlier.
+#[test]
+fn a_node_root_rounds_as_a_body_under_a_not() {
+    for root in ["auto_resolve", "snooze"] {
+        let m = migrated(&site_age(">="), TreeRoot::Node(root));
+        assert_eq!(m.tree["site_age"]["minutes"], json!(61), "{root}");
+        assert!(m.rounded);
+        let below = migrated(&site_age("<"), TreeRoot::Node(root));
+        assert_eq!(below.tree["site_age"]["minutes"], json!(60), "{root}");
+        let negated = migrated(
+            &json!({"type": "not", "not": {"child": site_age(">=")}}),
+            TreeRoot::Node(root),
+        );
+        assert_eq!(
+            negated.tree["not"]["child"]["site_age"]["minutes"],
+            json!(60),
+            "{root}"
+        );
+    }
 }
 
 #[test]
@@ -252,6 +292,16 @@ fn what_schema_1_could_not_read_stays_as_it_is() {
             json!({"direction": "falling", "rate": "2"}),
             "rate_of_change",
             Reason::InvalidField("rate"),
+        ),
+        (
+            json!({"direction": "falling", "rate": -2, "clear_margin": 1}),
+            "rate_of_change",
+            Reason::MarginPastZero,
+        ),
+        (
+            json!({"direction": "rising", "rate": -2, "clear_margin": 0}),
+            "rate_of_change",
+            Reason::MarginPastZero,
         ),
         (
             json!({"operator": ">", "value": 1, "minutes": 1}),

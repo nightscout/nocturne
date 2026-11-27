@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "next-change-staleness",
-  "description": "staleness '>' changes a tick after the elapsed time reaches the bound",
+  "description": "staleness '>' changes just past the bound, so the next change is reported on the tick at the bound (a lower bound, engine-semantics.md §5.3)",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

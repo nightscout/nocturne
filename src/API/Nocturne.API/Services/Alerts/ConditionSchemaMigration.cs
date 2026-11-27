@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -119,9 +120,12 @@ internal static class ConditionSchemaMigration
             catch (DbException ex)
             {
                 tenantsFailed++;
-                logger.LogError(ex,
-                    "Could not migrate the alert condition trees of tenant {TenantId} to schema 2; they are migrated on the next startup",
-                    tenant);
+                LogTenantFailed(logger, ex, tenant);
+            }
+            catch (RetryLimitExceededException ex)
+            {
+                tenantsFailed++;
+                LogTenantFailed(logger, ex, tenant);
             }
         }
 
@@ -132,6 +136,11 @@ internal static class ConditionSchemaMigration
             summary.TreesLeft, summary.Raced, summary.TenantsFailed);
         return summary;
     }
+
+    private static void LogTenantFailed(ILogger logger, Exception ex, Guid tenant) =>
+        logger.LogError(ex,
+            "Could not migrate the alert condition trees of tenant {TenantId} to schema 2; they are migrated on the next startup",
+            tenant);
 
     private const string ReadSql = """
         SELECT id AS "Id",
@@ -265,6 +274,8 @@ internal static class ConditionSchemaMigration
         {
             return new TreeOutcome(null, false, new RustMigrateIssue("", "not_json", null));
         }
+        if (ConditionSchema.Names(tree))
+            return new TreeOutcome(null, false, null);
 
         var response = migrate(request(tree));
         return response.Outcome switch

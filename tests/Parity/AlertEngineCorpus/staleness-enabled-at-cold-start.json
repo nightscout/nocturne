@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "staleness-enabled-at-cold-start",
-  "description": "with no reading history staleness compares the minutes since the rule's enabled_at with its operator and value, at the bound exactly and either side; without enabled_at it stays unknown; with a reading it measures from the reading whatever enabled_at says",
+  "description": "with no reading history staleness compares the minutes since the rule's enabled_at with its operator and minutes, at the bound exactly and either side; without enabled_at it stays unknown; with a reading it measures from the reading whatever enabled_at says",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

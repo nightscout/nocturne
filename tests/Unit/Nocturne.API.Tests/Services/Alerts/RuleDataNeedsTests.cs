@@ -232,18 +232,15 @@ public class RuleDataNeedsTests
     }
 
     [NativeFact]
-    public void LoopEnactionStale_rule_sets_LastApsEnacted_and_LastApsCycle()
+    public void LoopEnactionStale_rule_sets_LastApsEnacted_only()
     {
-        // Co-fetch invariant: LoopEnactionStale's evaluator reads HasEverApsCycled (the
-        // shared cold-start guard, since there is no separate HasEverApsEnacted flag), so
-        // RuleDataNeeds must request both timestamps. Without LastApsCycle, a tenant whose
-        // only enabled looping rule is LoopEnactionStale would never fire on a healthy loop.
+        // The engine reads only the enacted timestamp for it (engine-semantics.md §10, anomaly 7).
         var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"schema_version":2,"operator":">","minutes":15}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
         result.NeedsLastApsEnacted.Should().BeTrue();
-        result.NeedsLastApsCycle.Should().BeTrue();
+        result.NeedsLastApsCycle.Should().BeFalse();
     }
 
     [NativeFact]

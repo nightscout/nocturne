@@ -186,7 +186,8 @@ Every other operand is copied as it is, `_uid` included, and `schema_version: 2`
 root. A tree that already names schema 2 is left alone, so the migration can run again. An age
 that is not a whole number of minutes is rounded so the leaf, read through the `not`s above it, is
 true at least wherever it was: down for `>`, `>=` and `==`, up for `<` and `<=`, the other way round
-under an odd number of `not`s. One past the 32-bit range is held at its end. Either is reported as
+under an odd number of `not`s. An auto-resolve tree or a snooze condition being true closes or holds
+back an alert, so there the leaf is true at most wherever it was: its root counts as one `not`. One past the 32-bit range is held at its end. Either is reported as
 rounded, and the host asks for the rule to be reviewed. A negative age is copied as negative minutes,
 which schema 2 refuses (`minutes_negative`).
 
@@ -194,7 +195,8 @@ The migration fails, and the tree stays as it is (so `unsupported_schema`), wher
 what it has to rewrite or descend into: a node that is not an object, or has no `type` naming a
 kind or no payload object; a composite without its `conditions` array or with a `null` slot; a
 `not` or `sustained` without its `child`; a rewritten operand of the wrong JSON kind or naming no
-member; a `rate` without a `direction`; an age between minutes without an `operator`; a payload
+member; a `rate` without a `direction`; a negative `rate` with a `clear_margin`, which schema 1 read
+as `margin_past_zero`; an age between minutes without an `operator`; a payload
 that already has an operand's schema 2 name; or a root naming any schema but `2`. None of those
 trees could be evaluated as schema 1 either. An operand the migration rewrites that is absent stays
 absent, so the tree reports it as schema 1 did.

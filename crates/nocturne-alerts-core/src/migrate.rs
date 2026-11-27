@@ -40,7 +40,8 @@ pub enum TreeRoot<'a> {
     /// kind's wire name, which also roots its paths.
     Body(&'a str),
     /// A full node (`auto_resolve_params`, a snooze condition), its paths
-    /// rooted at the given string.
+    /// rooted at the given string. Such a tree being true closes or holds
+    /// back an alert, so its ages round as a body's do under a `not`.
     Node(&'a str),
 }
 
@@ -96,7 +97,7 @@ pub fn migrate_v1_to_v2(tree: &Value, root: TreeRoot<'_>) -> Result<Migration, P
                 .ok_or_else(|| ParseError::new(root_path, Reason::UnknownKind))?;
             m.payload(kind, obj, root_path, false)?
         }
-        TreeRoot::Node(_) => m.node_object(obj, root_path, false)?,
+        TreeRoot::Node(_) => m.node_object(obj, root_path, true)?,
     };
     let mut named = Map::with_capacity(body.len().saturating_add(1));
     named.insert(SCHEMA_VERSION.to_owned(), Value::from(CURRENT_SCHEMA));
@@ -199,6 +200,15 @@ impl Migrator {
                             RateDirection::Rising => CmpOp::Ge.name(),
                         }),
                     );
+                }
+                // Schema 1 capped a margin at `rate`, so a negative rate took
+                // none and its rule was not evaluated; schema 2 caps a margin
+                // at the size of `value`, which would start evaluating it.
+                if let Some(rate) = &rate
+                    && number(rate, "rate", path)? < Decimal::ZERO
+                    && p.get("clear_margin").is_some_and(|m| !m.is_null())
+                {
+                    return fail(Reason::MarginPastZero);
                 }
                 match (direction, rate) {
                     (_, None) => {}
