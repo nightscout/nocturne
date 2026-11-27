@@ -14,7 +14,6 @@ using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.DeviceStatuses;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -167,7 +166,6 @@ internal static class MigrationJobHarness
             .AddSingleton(activities.Object)
             .AddFoodServices()
             .AddSingleton(Mock.Of<IDocumentProcessingService>())
-            .AddSingleton(Mock.Of<IWriteSideEffects>())
             .AddLogging()
             .BuildServiceProvider();
     }

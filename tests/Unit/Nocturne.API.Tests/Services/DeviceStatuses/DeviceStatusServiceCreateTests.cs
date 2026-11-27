@@ -3,13 +3,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.DeviceStatuses;
@@ -27,7 +27,7 @@ public class DeviceStatusServiceCreateTests
 
     private readonly Mock<IDeviceStatusDecomposer> _decomposer = new();
     private readonly Mock<IUploaderSnapshotRepository> _uploaders = new();
-    private readonly Mock<IWriteSideEffects> _sideEffects = new();
+    private readonly RecordingDocumentChanges<DeviceStatus> _changes = new();
     private readonly Mock<IDataEventSink<DeviceStatus>> _events = new();
     private readonly DeviceStatusService _service;
 
@@ -52,7 +52,7 @@ public class DeviceStatusServiceCreateTests
                 TimeProvider.System,
                 NullLogger<DeviceStatusProjectionService>.Instance),
             _decomposer.Object,
-            _sideEffects.Object,
+            _changes,
             _events.Object,
             NullLogger<DeviceStatusService>.Instance);
     }
@@ -92,7 +92,7 @@ public class DeviceStatusServiceCreateTests
         var created = await _service.CreateDeviceStatusesAsync([Posted(Id)]);
 
         created.Should().ContainSingle().Which.Uploader!.Battery.Should().Be(64);
-        _sideEffects.VerifyNoOtherCalls();
+        _changes.Batches.Should().BeEmpty();
         _events.VerifyNoOtherCalls();
     }
 
@@ -113,11 +113,7 @@ public class DeviceStatusServiceCreateTests
         var create = () => _service.CreateDeviceStatusesAsync([Posted(Id), Posted(OtherId)], cancellationToken: request.Token);
 
         await create.Should().ThrowAsync<OperationCanceledException>();
-        _sideEffects.Verify(s => s.OnCreatedAsync(
-            "devicestatus",
-            It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single().Id == Id && l.Single().Uploader!.Battery == 64),
-            It.IsAny<WriteEffectOptions>(),
-            It.Is<CancellationToken>(t => !t.IsCancellationRequested)), Times.Once);
+        _changes.Created.Should().ContainSingle().Which.Should().Match<DeviceStatus>(s => s.Id == Id && s.Uploader!.Battery == 64);
         _events.Verify(e => e.OnCreatedAsync(
             It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single().Id == Id),
             It.Is<CancellationToken>(t => !t.IsCancellationRequested)), Times.Once);
@@ -134,7 +130,7 @@ public class DeviceStatusServiceCreateTests
         var create = () => _service.CreateDeviceStatusesAsync([Posted(Id)]);
 
         await create.Should().ThrowAsync<TimeoutException>();
-        _sideEffects.VerifyNoOtherCalls();
+        _changes.Batches.Should().BeEmpty();
         _events.VerifyNoOtherCalls();
     }
 
@@ -168,7 +164,7 @@ public class DeviceStatusServiceCreateTests
         var created = await _service.CreateDeviceStatusesAsync([Posted(Id), Posted(OtherId)], DataSources.NightscoutConnector);
 
         created.SkippedDeleted.Should().Be(2);
-        _sideEffects.VerifyNoOtherCalls();
+        _changes.Batches.Should().BeEmpty();
         _events.VerifyNoOtherCalls();
     }
 
@@ -182,18 +178,14 @@ public class DeviceStatusServiceCreateTests
 
     private void VerifyAnnounced(DeviceStatus served)
     {
-        _sideEffects.Verify(s => s.OnCreatedAsync(
-            "devicestatus",
-            It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single() == served),
-            It.IsAny<WriteEffectOptions?>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        _changes.Created.Should().ContainSingle().Which.Should().BeSameAs(served);
         _events.Verify(e => e.OnCreatedAsync(
             It.Is<IReadOnlyList<DeviceStatus>>(l => l.Single() == served), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private void VerifyNothingAnnounced()
     {
-        _sideEffects.VerifyNoOtherCalls();
+        _changes.Batches.Should().BeEmpty();
         _events.VerifyNoOtherCalls();
         _uploaders.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }

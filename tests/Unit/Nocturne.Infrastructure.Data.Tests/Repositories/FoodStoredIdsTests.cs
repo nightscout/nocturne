@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -39,7 +40,7 @@ public class FoodStoredIdsTests : IDisposable
     {
         var live = Guid.CreateVersion7().ToString();
         const string deleted = "5f8d0c1e8a7b4c3d9e5f0001";
-        await _foods.CreateFoodAsync([new Food { Id = live, Name = "apple", Carbs = 10 }]);
+        await _foods.CreateFoodAsync([new Food { Id = live, Name = "apple", Carbs = 10 }], WriteOrigin.Live);
         await _foods.StoreDeletedAsync([new Food { Id = deleted, Name = "bread", Carbs = 20 }]);
 
         var stored = await _foods.GetStoredIdsAsync([live, live.ToUpperInvariant(), deleted, "5f8d0c1e8a7b4c3d9e5f0002"]);

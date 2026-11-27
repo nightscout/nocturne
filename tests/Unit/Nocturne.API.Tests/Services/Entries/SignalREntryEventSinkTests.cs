@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Caching;
-using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.V4;
@@ -15,11 +14,8 @@ public class SignalREntryEventSinkTests
 
     public SignalREntryEventSinkTests()
     {
-        var sideEffects = new WriteSideEffectsService(
-            _cache.Object,
-            Mock.Of<ISignalRBroadcastService>(),
-            NullLogger<WriteSideEffectsService>.Instance);
-        _sut = new SignalREntryEventSink(sideEffects, NullLogger<SignalREntryEventSink>.Instance);
+        _sut = new SignalREntryEventSink(
+            _cache.Object, Mock.Of<ISignalRBroadcastService>(), NullLogger<SignalREntryEventSink>.Instance);
     }
 
     private static Entry Reading(string type, DateTime utc) => new()

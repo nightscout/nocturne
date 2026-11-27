@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Realtime;
 
@@ -32,7 +33,7 @@ internal sealed class SignalRRecordChangeSubscriber(ISignalRBroadcastService bro
             foreach (var record in change.Updated)
                 await broadcast.BroadcastStorageUpdateAsync(category, new { colName = category, recordType, doc = (object)record });
 
-            foreach (var record in change.Deleted)
+            foreach (var record in change.Deleted.Cast<IV4Record>())
                 await broadcast.BroadcastStorageDeleteAsync(category, new { colName = category, recordType, id = record.Id });
         }
     }

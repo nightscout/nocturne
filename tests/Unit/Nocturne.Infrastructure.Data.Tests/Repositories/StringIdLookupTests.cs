@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -82,13 +83,13 @@ public class StringIdLookupTests : IDisposable
     public async Task AFood_IsFetchedUpdatedAndDeletedByItsId(string id)
     {
         var repository = Foods();
-        await repository.CreateFoodAsync([new Food { Id = id, Name = "apple", Carbs = 10 }]);
-        await repository.CreateFoodAsync([new Food { Id = "other", Name = "bread", Carbs = 20 }]);
+        await repository.CreateFoodAsync([new Food { Id = id, Name = "apple", Carbs = 10 }], WriteOrigin.Live);
+        await repository.CreateFoodAsync([new Food { Id = "other", Name = "bread", Carbs = 20 }], WriteOrigin.Live);
 
         (await repository.GetFoodByIdAsync(id))!.Name.Should().Be("apple");
         (await repository.UpdateFoodAsync(id, new Food { Name = "apple", Carbs = 25 }))!
             .Carbs.Should().Be(25);
-        (await repository.DeleteFoodAsync(id)).Should().BeTrue();
+        (await repository.DeleteFoodAsync(id, WriteOrigin.Live)).Should().BeTrue();
         (await repository.GetFoodByIdAsync(id)).Should().BeNull();
         (await repository.GetFoodByIdAsync("other")).Should().NotBeNull();
     }
@@ -139,7 +140,7 @@ public class StringIdLookupTests : IDisposable
         (await repository.GetFoodByIdAsync(ObjectId))!.Name.Should().Be("apple");
         (await repository.UpdateFoodAsync(ObjectId, new Food { Name = "apple", Carbs = 25 }))!
             .Carbs.Should().Be(25);
-        (await repository.DeleteFoodAsync(ObjectId)).Should().BeTrue();
+        (await repository.DeleteFoodAsync(ObjectId, WriteOrigin.Live)).Should().BeTrue();
         (await repository.GetFoodByIdAsync(ObjectId)).Should().BeNull();
     }
 

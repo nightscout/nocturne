@@ -2,20 +2,22 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
 /// <summary>
-/// A legacy treatment is served with the name of the food it was eaten as, so every write to a food
-/// has to tell <see cref="ILegacyReadCacheInvalidation"/>, once the write has committed.
+/// Every food write publishes the foods it created, updated or deleted once it has committed: the legacy
+/// <c>food</c> socket announces them, and a legacy treatment is served with the name of the food it was
+/// eaten as.
 /// </summary>
 [Trait("Category", "Unit")]
 public class FoodRepositoryReportingTests : IDisposable
@@ -24,8 +26,7 @@ public class FoodRepositoryReportingTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<ILegacyReadCacheInvalidation> _legacyReads = new();
-    private readonly List<Type> _written = [];
+    private readonly RecordingDocumentChanges<Food> _changes = new();
     private readonly FoodRepository _foods;
     private readonly FailingSaveInterceptor _failingSave = new();
 
@@ -34,11 +35,7 @@ public class FoodRepositoryReportingTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(
             TenantId, "test", new MutationAuditInterceptor(), _failingSave);
         _context = _db.CreateContext();
-        _legacyReads
-            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
-            .Callback((IReadOnlyCollection<Type> models) => _written.AddRange(models))
-            .Returns(Task.CompletedTask);
-        _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance, _legacyReads.Object);
+        _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance, _changes);
     }
 
     public void Dispose()
@@ -57,18 +54,18 @@ public class FoodRepositoryReportingTests : IDisposable
     }
 
     [Fact]
-    public async Task ARename_ReportsFoods()
+    public async Task ARename_PublishesTheFoodAsUpdated()
     {
         var id = await SeedAsync("apple");
 
-        var renamed = await _foods.UpdateFoodAsync(id.ToString(), new Food { Name = "pear", Carbs = 10 });
+        await _foods.UpdateFoodAsync(id.ToString(), new Food { Name = "pear", Carbs = 10 });
 
-        renamed!.Name.Should().Be("pear");
-        _written.Should().Equal(typeof(Food));
+        _changes.Updated.Should().ContainSingle().Which.Name.Should().Be("pear");
+        _changes.Changes.Should().ContainSingle();
     }
 
     [Fact]
-    public async Task AWriteWhoseSaveThrows_ReportsNothing()
+    public async Task AWriteWhoseSaveThrows_PublishesNothing()
     {
         var id = await SeedAsync("apple");
         _failingSave.Armed = true;
@@ -76,45 +73,82 @@ public class FoodRepositoryReportingTests : IDisposable
         var rename = () => _foods.UpdateFoodAsync(id.ToString(), new Food { Name = "pear", Carbs = 10 });
 
         await rename.Should().ThrowAsync<InvalidOperationException>();
-        _written.Should().BeEmpty();
+        _changes.Batches.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task AnUpdateOfAFoodThatIsNotThere_ReportsNothing()
+    public async Task AnUpdateOfAFoodThatIsNotThere_PublishesNothing()
     {
         await _foods.UpdateFoodAsync(Guid.CreateVersion7().ToString(), new Food { Name = "pear" });
 
-        _written.Should().BeEmpty();
+        _changes.Batches.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ACreate_ReportsFoods()
+    public async Task ACreate_PublishesTheFoodAsCreated()
     {
-        await _foods.CreateFoodAsync([new Food { Name = "apple", Carbs = 10 }]);
+        await _foods.CreateFoodAsync([new Food { Name = "apple", Carbs = 10 }], WriteOrigin.Live);
 
-        _written.Should().Equal(typeof(Food));
+        _changes.Created.Should().ContainSingle().Which.Name.Should().Be("apple");
+        _changes.Updated.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ADelete_ReportsFoods()
+    public async Task ACreateThatReplacesALiveFood_PublishesItAsUpdated()
     {
         var id = await SeedAsync("apple");
 
-        (await _foods.DeleteFoodAsync(id.ToString())).Should().BeTrue();
+        await _foods.CreateFoodAsync([new Food { Id = id.ToString(), Name = "pear", Carbs = 10 }], WriteOrigin.Live);
 
-        _written.Should().Equal(typeof(Food));
+        _changes.Updated.Should().ContainSingle().Which.Name.Should().Be("pear");
+        _changes.Created.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task ABulkDelete_ReportsFoodsOnlyWhenItDeletedOne()
+    public async Task ABackfill_IsPublishedWithItsOrigin()
+    {
+        await _foods.CreateFoodAsync([new Food { Name = "apple", Carbs = 10 }], WriteOrigin.Backfill);
+
+        var change = _changes.Changes.Should().ContainSingle().Subject;
+        change.Origin.Should().Be(WriteOrigin.Backfill);
+        change.Created.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ADelete_PublishesTheDeletedFood()
+    {
+        var id = await SeedAsync("apple");
+
+        (await _foods.DeleteFoodAsync(id.ToString(), WriteOrigin.Live)).Should().BeTrue();
+
+        _changes.Deleted.Should().ContainSingle().Which.Name.Should().Be("apple");
+    }
+
+    [Fact]
+    public async Task ABulkDelete_PublishesTheDeletedFoods_OnlyWhenItDeletedOne()
     {
         await SeedAsync("apple");
 
         (await _foods.BulkDeleteFoodAsync("find[name]=nothing")).Should().Be(0);
-        _written.Should().BeEmpty();
+        _changes.Batches.Should().BeEmpty();
 
         (await _foods.BulkDeleteFoodAsync("find[name]=apple")).Should().Be(1);
-        _written.Should().Equal(typeof(Food));
+        _changes.Deleted.Should().ContainSingle().Which.Name.Should().Be("apple");
+    }
+
+    [Fact]
+    public async Task ABulkDeleteOverTheCap_PublishesOnlyThatFoodsWereWritten()
+    {
+        var over = AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 1;
+        _context.Foods.AddRange(Enumerable.Range(0, over).Select(_ =>
+            new FoodEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "apple", Carbs = 10 }));
+        await _context.SaveChangesAsync();
+
+        (await _foods.BulkDeleteFoodAsync("find[name]=apple")).Should().Be(over);
+
+        var change = _changes.Changes.Should().ContainSingle().Subject;
+        change.RecordType.Should().Be(typeof(Food));
+        change.HasRecords.Should().BeFalse();
     }
 
     private sealed class FailingSaveInterceptor : SaveChangesInterceptor

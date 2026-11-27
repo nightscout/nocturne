@@ -55,8 +55,8 @@ public class V3CreateResponseTests
     {
         var repository = new Mock<IFoodRepository>();
         repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Food> f, CancellationToken _) =>
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Food> f, WriteOrigin _, CancellationToken _) =>
                 f.Select(x => { x.Id = StoredId; return x; }).ToList());
         var controller = WithContext(new FoodController(
             repository.Object,

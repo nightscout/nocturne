@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -16,19 +18,37 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// Only <see cref="GetConnectorSettingAsync"/> and <see cref="SetConnectorSettingAsync"/> read or write the
 /// <see cref="SettingsKeys.ConnectorsPrefix"/> rows.
 /// </summary>
+/// <remarks>
+/// Each committed write of the collection is published (<see cref="IRecordChangePublisher"/>) with the
+/// documents as a read serves them, which is how a client hears of it: AAPS acts on a client-control
+/// command only through its event. A connector setting is not in the collection and publishes nothing.
+/// </remarks>
 public class SettingsRepository : ISettingsRepository
 {
     private const string ConnectorSettingsApp = "nocturne-api";
 
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IRecordChangePublisher? _changes;
 
     /// <summary>
     /// Initializes a new instance of the SettingsRepository class
     /// </summary>
-    public SettingsRepository(INocturneDbContextFactory contexts)
+    /// <param name="contexts">Opens the context each operation runs on</param>
+    /// <param name="changes">Told of each committed write of the collection, when registered</param>
+    public SettingsRepository(INocturneDbContextFactory contexts, IRecordChangePublisher? changes = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _changes = changes;
     }
+
+    /// <summary>Publishes the documents a committed write of the collection created, updated or deleted.</summary>
+    /// <remarks>Uncancellable: the write has committed, so its subscribers must still hear of it.</remarks>
+    private Task PublishAsync(
+        IReadOnlyList<Settings>? created = null,
+        IReadOnlyList<Settings>? updated = null,
+        IReadOnlyList<Settings>? deleted = null) =>
+        _changes?.PublishAsync(RecordsChanged.Of(WriteOrigin.Live, created, updated, deleted), CancellationToken.None)
+        ?? Task.CompletedTask;
 
     /// <summary>
     /// Get all settings
@@ -135,6 +155,7 @@ public class SettingsRepository : ISettingsRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var resultEntities = new List<SettingsEntity>();
+        var replaced = new HashSet<SettingsEntity>(ReferenceEqualityComparer.Instance);
 
         foreach (var setting in settings)
         {
@@ -168,6 +189,7 @@ public class SettingsRepository : ISettingsRepository
                 // Through the mapper rather than CurrentValues.SetValues: the stored row keeps its
                 // own primary key, which the derived one need not match.
                 SettingsMapper.UpdateEntity(existingEntity, setting);
+                replaced.Add(existingEntity);
                 resultEntities.Add(existingEntity);
             }
             else
@@ -179,7 +201,12 @@ public class SettingsRepository : ISettingsRepository
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return resultEntities.Select(SettingsMapper.ToDomainModel);
+        var written = resultEntities.Select(SettingsMapper.ToDomainModel).ToList();
+        await PublishAsync(
+            created: [.. written.Where((_, i) => !replaced.Contains(resultEntities[i]))],
+            updated: [.. written.Where((_, i) => replaced.Contains(resultEntities[i]))]);
+
+        return written;
     }
 
     /// <inheritdoc />
@@ -204,8 +231,10 @@ public class SettingsRepository : ISettingsRepository
         try
         {
             await using var db = await _contexts.CreateAsync(cancellationToken);
-            db.Settings.Add(SettingsMapper.ToEntity(settings));
+            var entity = SettingsMapper.ToEntity(settings);
+            db.Settings.Add(entity);
             await db.SaveChangesAsync(cancellationToken);
+            await PublishAsync(created: [SettingsMapper.ToDomainModel(entity)]);
             return true;
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
@@ -233,6 +262,7 @@ public class SettingsRepository : ISettingsRepository
         settings.SrvCreated = entity.SrvCreated?.ToUnixTimeMilliseconds() ?? settings.SrvModified;
         SettingsMapper.UpdateEntity(entity, settings);
         await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(updated: [SettingsMapper.ToDomainModel(entity)]);
         return true;
     }
 
@@ -263,7 +293,10 @@ public class SettingsRepository : ISettingsRepository
         SettingsMapper.UpdateEntity(entity, settings);
         await db.SaveChangesAsync(cancellationToken);
 
-        return SettingsMapper.ToDomainModel(entity);
+        var updated = SettingsMapper.ToDomainModel(entity);
+        await PublishAsync(updated: [updated]);
+
+        return updated;
     }
 
     /// <summary>
@@ -287,6 +320,7 @@ public class SettingsRepository : ISettingsRepository
 
         db.Settings.Remove(entity);
         await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(deleted: [SettingsMapper.ToDomainModel(entity)]);
 
         return true;
     }

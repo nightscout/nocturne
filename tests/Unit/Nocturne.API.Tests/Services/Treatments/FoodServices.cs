@@ -3,7 +3,6 @@ using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Repositories;
@@ -16,13 +15,11 @@ internal static class FoodServices
 {
     public static IFoodService Over(
         IFoodRepository repository,
-        IWriteSideEffects? sideEffects = null,
         IDataEventSink<Food>? events = null
     ) =>
         new FoodService(
             repository,
             new DocumentProcessingService(TimeProvider.System, NullLogger<DocumentProcessingService>.Instance),
-            sideEffects ?? Mock.Of<IWriteSideEffects>(),
             events ?? Mock.Of<IDataEventSink<Food>>(),
             Mock.Of<IAuditContext>(),
             NullLogger<FoodService>.Instance

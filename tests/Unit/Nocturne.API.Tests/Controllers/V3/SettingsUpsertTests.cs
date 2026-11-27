@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts.Legacy;
@@ -41,7 +40,6 @@ public class SettingsUpsertTests : IDisposable
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         _controller = new SettingsController(
             new SettingsRepository(_context.AsFactory()),
-            Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<SettingsController>.Instance)
         {

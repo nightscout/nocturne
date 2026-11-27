@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -18,27 +19,47 @@ public class FoodRepository : IFoodRepository
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<FoodRepository> _logger;
-    private readonly ILegacyReadCacheInvalidation? _legacyReads;
+    private readonly IRecordChangePublisher? _changes;
 
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
     /// <param name="contexts">Opens the context each operation runs on</param>
     /// <param name="logger">The logger</param>
-    /// <param name="legacyReads">Told of each committed food write, when registered</param>
+    /// <param name="changes">Told of each committed food write, when registered</param>
     public FoodRepository(
         INocturneDbContextFactory contexts,
         ILogger<FoodRepository> logger,
-        ILegacyReadCacheInvalidation? legacyReads = null)
+        IRecordChangePublisher? changes = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
-        _legacyReads = legacyReads;
+        _changes = changes;
     }
 
-    /// <summary>Tells <see cref="ILegacyReadCacheInvalidation"/> foods were written, after every committed write.</summary>
+    /// <summary>Publishes a committed food write that names no food.</summary>
+    /// <remarks>Uncancellable: the write has committed, so what it made stale must still be cleared.</remarks>
     private Task ReportWrittenAsync() =>
-        _legacyReads?.WrittenAsync([typeof(Food)]) ?? Task.CompletedTask;
+        _changes?.PublishAsync(RecordsChanged.Written([typeof(Food)]), CancellationToken.None) ?? Task.CompletedTask;
+
+    /// <summary>Publishes the foods a committed write created, updated or deleted.</summary>
+    /// <remarks>Uncancellable, as <see cref="ReportWrittenAsync"/>.</remarks>
+    private Task PublishAsync(
+        WriteOrigin origin,
+        IReadOnlyList<Food>? created = null,
+        IReadOnlyList<Food>? updated = null,
+        IReadOnlyList<Food>? deleted = null) =>
+        _changes?.PublishAsync(RecordsChanged.Of(origin, created, updated, deleted), CancellationToken.None)
+        ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Publishes the foods a committed delete removed, or only that foods were written when there are
+    /// more than <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> of them.
+    /// </summary>
+    private Task PublishDeletedAsync(WriteOrigin origin, IReadOnlyList<FoodEntity> deleted) =>
+        deleted.Count > AuditedBulkDeleteExtensions.BroadcastMaterializationCap
+            ? ReportWrittenAsync()
+            : PublishAsync(origin, deleted: [.. deleted.Select(FoodMapper.ToDomainModel)]);
 
     /// <summary>
     /// Get all food entries
@@ -237,15 +258,19 @@ public class FoodRepository : IFoodRepository
     /// Create multiple food entries
     /// </summary>
     /// <param name="foods">The collection of food entries to create.</param>
+    /// <param name="origin">Whether clients are told of the write.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of created food entries.</returns>
+    /// <remarks>A food that replaces a live one is published as updated; one that restores a deleted food, as created.</remarks>
     public async Task<IEnumerable<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
+        WriteOrigin origin,
         CancellationToken cancellationToken = default
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var resultEntities = new List<FoodEntity>();
+        var replaced = new HashSet<FoodEntity>(ReferenceEqualityComparer.Instance);
 
         foreach (var food in foods)
         {
@@ -264,6 +289,8 @@ public class FoodRepository : IFoodRepository
             {
                 // Through the mapper rather than CurrentValues.SetValues: a row matched on its
                 // OriginalId has its own primary key, and copying the derived one onto it throws.
+                if (existingEntity.DeletedAt == null)
+                    replaced.Add(existingEntity);
                 FoodMapper.UpdateEntity(existingEntity, food);
                 existingEntity.DeletedAt = null;
                 resultEntities.Add(existingEntity);
@@ -276,9 +303,14 @@ public class FoodRepository : IFoodRepository
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await ReportWrittenAsync();
 
-        return resultEntities.Select(FoodMapper.ToDomainModel);
+        var written = resultEntities.Select(FoodMapper.ToDomainModel).ToList();
+        await PublishAsync(
+            origin,
+            created: [.. written.Where((_, i) => !replaced.Contains(resultEntities[i]))],
+            updated: [.. written.Where((_, i) => replaced.Contains(resultEntities[i]))]);
+
+        return written;
     }
 
     /// <inheritdoc />
@@ -358,19 +390,23 @@ public class FoodRepository : IFoodRepository
 
         FoodMapper.UpdateEntity(entity, food);
         await db.SaveChangesAsync(cancellationToken);
-        await ReportWrittenAsync();
 
-        return FoodMapper.ToDomainModel(entity);
+        var updated = FoodMapper.ToDomainModel(entity);
+        await PublishAsync(WriteOrigin.Live, updated: [updated]);
+
+        return updated;
     }
 
     /// <summary>
     /// Delete a food entry by ID
     /// </summary>
     /// <param name="id">The unique identifier of the food to delete.</param>
+    /// <param name="origin">Whether clients are told of the delete.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>True if the food was deleted, otherwise false.</returns>
     public async Task<bool> DeleteFoodAsync(
         string id,
+        WriteOrigin origin,
         CancellationToken cancellationToken = default
     )
     {
@@ -383,7 +419,7 @@ public class FoodRepository : IFoodRepository
         }
 
         await SoftDeleteAsync(db, [entity], cancellationToken);
-        await ReportWrittenAsync();
+        await PublishDeletedAsync(origin, [entity]);
 
         return true;
     }
@@ -406,7 +442,7 @@ public class FoodRepository : IFoodRepository
         if (entities.Count > 0)
         {
             await SoftDeleteAsync(db, entities, cancellationToken);
-            await ReportWrittenAsync();
+            await PublishDeletedAsync(WriteOrigin.Live, entities);
         }
 
         return entities.Count;

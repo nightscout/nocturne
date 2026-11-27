@@ -3,7 +3,6 @@ global using Microsoft.AspNetCore.Mvc.Testing;
 global using Moq;
 global using Nocturne.Core.Contracts.AidDetection;
 global using Nocturne.Core.Contracts.Auth;
-global using Nocturne.Core.Contracts.Effects;
 global using Nocturne.Core.Contracts.Infrastructure;
 global using Nocturne.Core.Models;
 global using Nocturne.Tests.Shared.Attributes;

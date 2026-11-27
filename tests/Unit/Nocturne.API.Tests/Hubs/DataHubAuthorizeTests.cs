@@ -172,6 +172,24 @@ public class DataHubAuthorizeTests
     }
 
     [Theory]
+    [InlineData(Scope.FoodRead, true)]
+    [InlineData(Scope.TreatmentsRead, false)]
+    public async Task Subscribe_joins_food_only_with_the_food_read_scope(string scope, bool joins)
+    {
+        var (hub, groups, authorizer) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<string>()))
+            .ReturnsAsync(Authorized(Scope.GlucoseRead, scope));
+        await hub.Authorize(new AuthorizeRequest { Token = "tok" });
+
+        await hub.Subscribe(new StorageSubscribeRequest { Collections = ["food"] });
+
+        groups.Verify(
+            g => g.AddToGroupAsync(ConnectionId, $"{Tenant}:food", It.IsAny<CancellationToken>()),
+            joins ? Times.Once() : Times.Never());
+    }
+
+    [Theory]
     [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task Authorize_answers_a_failed_credential_check_as_unsuccessful(Exception failure)
     {

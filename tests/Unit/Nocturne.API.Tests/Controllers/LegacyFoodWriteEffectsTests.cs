@@ -1,10 +1,9 @@
-using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.Core.Contracts.Effects;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Repositories;
@@ -20,7 +19,6 @@ namespace Nocturne.API.Tests.Controllers;
 public class LegacyFoodWriteEffectsTests
 {
     private readonly Mock<IFoodRepository> _repository = new();
-    private readonly Mock<IWriteSideEffects> _sideEffects = new();
     private readonly Mock<IDataEventSink<Food>> _events = new();
     private Food[] _written = [];
     private readonly Food _stored = new() { Id = "stored", Name = "Apple" };
@@ -28,9 +26,9 @@ public class LegacyFoodWriteEffectsTests
     public LegacyFoodWriteEffectsTests()
     {
         _repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<Food>, CancellationToken>((foods, _) => _written = foods.ToArray())
-            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) =>
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Food>, WriteOrigin, CancellationToken>((foods, _, _) => _written = foods.ToArray())
+            .ReturnsAsync((IEnumerable<Food> foods, WriteOrigin _, CancellationToken _) =>
                 foods.Select(f => { f.Id = "stored"; return f; }).ToList());
         _repository
             .Setup(r => r.UpdateFoodAsync("stored", It.IsAny<Food>(), It.IsAny<CancellationToken>()))
@@ -39,7 +37,7 @@ public class LegacyFoodWriteEffectsTests
             .Setup(r => r.GetFoodByIdAsync("stored", It.IsAny<CancellationToken>()))
             .ReturnsAsync(_stored);
         _repository
-            .Setup(r => r.DeleteFoodAsync("stored", It.IsAny<CancellationToken>()))
+            .Setup(r => r.DeleteFoodAsync("stored", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _repository
             .Setup(r => r.BulkDeleteFoodAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -50,7 +48,7 @@ public class LegacyFoodWriteEffectsTests
         WithContext(
             new LegacyV1.FoodController(
                 _repository.Object,
-                FoodServices.Over(_repository.Object, _sideEffects.Object, _events.Object),
+                FoodServices.Over(_repository.Object, events: _events.Object),
                 NullLogger<LegacyV1.FoodController>.Instance),
             queryString);
 
@@ -58,7 +56,7 @@ public class LegacyFoodWriteEffectsTests
         WithContext(
             new LegacyV3.FoodController(
                 _repository.Object,
-                FoodServices.Over(_repository.Object, _sideEffects.Object, _events.Object),
+                FoodServices.Over(_repository.Object, events: _events.Object),
                 Mock.Of<IDocumentProcessingService>(),
                 NullLogger<LegacyV3.FoodController>.Instance),
             "");
@@ -73,31 +71,27 @@ public class LegacyFoodWriteEffectsTests
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
-    private void VerifyBoth(
-        Expression<Func<IWriteSideEffects, Task>> effect,
-        Expression<Func<IDataEventSink<Food>, Task>> sink)
+    private void VerifyCreated()
     {
-        _sideEffects.Verify(effect, Times.Once);
-        _events.Verify(sink, Times.Once);
+        _repository.Verify(
+            r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Food>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private void VerifyCreated() =>
-        VerifyBoth(
-            s => s.OnCreatedAsync("food", It.IsAny<IReadOnlyList<Food>>(), It.IsAny<WriteEffectOptions?>(), It.IsAny<CancellationToken>()),
-            e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Food>>(), It.IsAny<CancellationToken>()));
+    private void VerifyUpdated()
+    {
+        _repository.Verify(r => r.UpdateFoodAsync("stored", It.IsAny<Food>(), It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.OnUpdatedAsync(It.IsAny<Food>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
 
-    private void VerifyUpdated() =>
-        VerifyBoth(
-            s => s.OnUpdatedAsync("food", It.IsAny<Food>(), It.IsAny<WriteEffectOptions?>(), It.IsAny<CancellationToken>()),
-            e => e.OnUpdatedAsync(It.IsAny<Food>(), It.IsAny<CancellationToken>()));
-
-    private void VerifyDeleted() =>
-        VerifyBoth(
-            s => s.OnDeletedAsync<Food>("food", _stored, It.IsAny<WriteEffectOptions?>(), It.IsAny<CancellationToken>()),
-            e => e.OnDeletedAsync(_stored, It.IsAny<CancellationToken>()));
+    private void VerifyDeleted()
+    {
+        _repository.Verify(r => r.DeleteFoodAsync("stored", WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.OnDeletedAsync(_stored, It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
-    public async Task A_v1_create_fires_the_side_effects_and_the_event()
+    public async Task A_v1_create_writes_live_and_fires_the_event()
     {
         await V1Controller().CreateFood(Json("""{"name":"Apple"}"""));
 
@@ -105,7 +99,7 @@ public class LegacyFoodWriteEffectsTests
     }
 
     [Fact]
-    public async Task A_v3_create_fires_the_side_effects_and_the_event()
+    public async Task A_v3_create_writes_live_and_fires_the_event()
     {
         await V3Controller().CreateFood(Json("""{"name":"Apple","date":1727654400000}"""));
 
@@ -113,7 +107,7 @@ public class LegacyFoodWriteEffectsTests
     }
 
     [Fact]
-    public async Task A_v1_update_fires_the_side_effects_and_the_event()
+    public async Task A_v1_update_writes_live_and_fires_the_event()
     {
         await V1Controller().UpdateFood("stored", new Food { Name = "Apple", Type = "food" });
 
@@ -121,7 +115,7 @@ public class LegacyFoodWriteEffectsTests
     }
 
     [Fact]
-    public async Task A_v3_update_fires_the_side_effects_and_the_event()
+    public async Task A_v3_update_writes_live_and_fires_the_event()
     {
         await V3Controller().UpdateFood("stored", Json("""{"name":"Apple","date":1727654400000}"""));
 
@@ -129,7 +123,7 @@ public class LegacyFoodWriteEffectsTests
     }
 
     [Fact]
-    public async Task A_v1_delete_fires_the_side_effects_and_the_event()
+    public async Task A_v1_delete_writes_live_and_fires_the_event()
     {
         await V1Controller().DeleteFood("stored");
 
@@ -137,7 +131,7 @@ public class LegacyFoodWriteEffectsTests
     }
 
     [Fact]
-    public async Task A_v3_delete_fires_the_side_effects_and_the_event()
+    public async Task A_v3_delete_writes_live_and_fires_the_event()
     {
         await V3Controller().DeleteFood("stored");
 
@@ -145,16 +139,12 @@ public class LegacyFoodWriteEffectsTests
     }
 
     [Fact]
-    public async Task A_v1_bulk_delete_fires_the_side_effects_and_the_event()
+    public async Task A_v1_bulk_delete_writes_live_and_fires_the_event()
     {
         await V1Controller("?find[name]=Apple").DeleteFoodByFilter();
 
-        VerifyBoth(
-            s => s.OnBulkDeletedAsync("food", 2, It.IsAny<WriteEffectOptions?>(), It.IsAny<CancellationToken>()),
-            e => e.OnBulkDeletedAsync(2, It.IsAny<CancellationToken>()));
-        _sideEffects.Verify(
-            s => s.OnDeletedAsync(It.IsAny<string>(), It.IsAny<Food?>(), It.IsAny<WriteEffectOptions?>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        _repository.Verify(r => r.BulkDeleteFoodAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _events.Verify(e => e.OnBulkDeletedAsync(2, It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.OnDeletedAsync(It.IsAny<Food?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -162,12 +152,11 @@ public class LegacyFoodWriteEffectsTests
     public async Task A_v1_delete_of_a_missing_food_fires_nothing()
     {
         _repository
-            .Setup(r => r.DeleteFoodAsync("missing", It.IsAny<CancellationToken>()))
+            .Setup(r => r.DeleteFoodAsync("missing", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         await V1Controller().DeleteFood("missing");
 
-        _sideEffects.VerifyNoOtherCalls();
         _events.VerifyNoOtherCalls();
     }
 

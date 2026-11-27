@@ -17,11 +17,11 @@ internal sealed class RecordedWrites
     public RecordingReadingBroadcaster Readings { get; } = new();
 
     /// <summary>Every record a published change created, across all record types.</summary>
-    public IReadOnlyList<IV4Record> Created => [.. Changes.Batches.SelectMany(b => b.Changes).SelectMany(c => c.Created)];
+    public IReadOnlyList<IV4Record> Created => [.. Changes.Batches.SelectMany(b => b.Changes).SelectMany(c => c.Created).OfType<IV4Record>()];
 
-    public IReadOnlyList<IV4Record> Updated => [.. Changes.Batches.SelectMany(b => b.Changes).SelectMany(c => c.Updated)];
+    public IReadOnlyList<IV4Record> Updated => [.. Changes.Batches.SelectMany(b => b.Changes).SelectMany(c => c.Updated).OfType<IV4Record>()];
 
-    public IReadOnlyList<IV4Record> Deleted => [.. Changes.Batches.SelectMany(b => b.Changes).SelectMany(c => c.Deleted)];
+    public IReadOnlyList<IV4Record> Deleted => [.. Changes.Batches.SelectMany(b => b.Changes).SelectMany(c => c.Deleted).OfType<IV4Record>()];
 
     internal sealed class RecordingPublisher : IRecordChangePublisher
     {

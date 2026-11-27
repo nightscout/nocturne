@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Contracts.V4;
 using Moq;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -15,8 +16,8 @@ public class FoodSanitizeTests
     private async Task<Food> CreateAsync(Food food, FoodWriteMode mode)
     {
         _repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) => _stored = foods.ToList());
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Food> foods, WriteOrigin _, CancellationToken _) => _stored = foods.ToList());
 
         var created = await Controllers.FoodServices.Over(_repository.Object).CreateFoodAsync([food], mode);
         created.Should().ContainSingle();
@@ -149,8 +150,8 @@ public class FoodSanitizeTests
     public async Task Native_Batch_SkipsAFoodWhoseNameIsMarkupOnlyAndCreatesTheRest()
     {
         _repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) => _stored = foods.ToList());
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Food> foods, WriteOrigin _, CancellationToken _) => _stored = foods.ToList());
 
         var created = await Controllers.FoodServices.Over(_repository.Object).CreateFoodAsync(
             [new Food { Name = "Apple" }, new Food { Name = "<script>alert(3)</script>" }, new Food { Name = "Pear" }],
@@ -166,8 +167,8 @@ public class FoodSanitizeTests
     public async Task Native_Batch_OfOnlyRefusedFoods_CreatesNothingAndDoesNotThrow()
     {
         _repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) => _stored = foods.ToList());
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Food> foods, WriteOrigin _, CancellationToken _) => _stored = foods.ToList());
 
         var created = await Controllers.FoodServices.Over(_repository.Object).CreateFoodAsync(
             [new Food { Name = "<script>alert(3)</script>" }],
@@ -186,7 +187,7 @@ public class FoodSanitizeTests
         var create = () => service.CreateNativeFoodAsync(new Food { Name = "<script>alert(3)</script>" });
 
         await create.Should().ThrowAsync<FoodNameRequiredException>();
-        _repository.Verify(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -194,8 +195,8 @@ public class FoodSanitizeTests
     public async Task CreateNative_StoresTheSanitisedFood()
     {
         _repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) => _stored = foods.ToList());
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Food> foods, WriteOrigin _, CancellationToken _) => _stored = foods.ToList());
 
         var created = await Controllers.FoodServices.Over(_repository.Object)
             .CreateNativeFoodAsync(new Food { Name = " Apple <script>alert(1)</script> " });

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.V4;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health;
@@ -110,8 +111,8 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     [MemberData(nameof(SharedIds))]
     public async Task Both_tenants_keep_a_food_with_the_same_id(string id)
     {
-        await Foods(tenantA).CreateFoodAsync([new Food { Id = id, Name = "toast", Carbs = 15 }]);
-        await Foods(tenantB).CreateFoodAsync([new Food { Id = id, Name = "rice", Carbs = 45 }]);
+        await Foods(tenantA).CreateFoodAsync([new Food { Id = id, Name = "toast", Carbs = 15 }], WriteOrigin.Live);
+        await Foods(tenantB).CreateFoodAsync([new Food { Id = id, Name = "rice", Carbs = 45 }], WriteOrigin.Live);
 
         Assert.Equal("toast", (await Tenant(tenantA).Foods.SingleAsync()).Name);
         Assert.Equal("rice", (await Tenant(tenantB).Foods.SingleAsync()).Name);

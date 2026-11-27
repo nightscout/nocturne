@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.API.Controllers.V3;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Alerts;
@@ -122,7 +121,6 @@ public class V3SearchLimitTests
             .ReturnsAsync(Array.Empty<Settings>());
         var controller = new SettingsController(
             settings.Object,
-            Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<SettingsController>.Instance)
         {

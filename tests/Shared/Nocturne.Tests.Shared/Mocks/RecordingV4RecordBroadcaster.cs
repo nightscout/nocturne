@@ -17,7 +17,7 @@ public sealed class RecordingV4RecordBroadcaster<TModel> : RecordingRecordChange
 
     public IReadOnlyList<Guid> Deleted => [.. Live(change => change.Deleted).Select(record => record.Id)];
 
-    private IReadOnlyList<TModel> Live(Func<RecordTypeChange, IReadOnlyList<IV4Record>> records) =>
+    private IReadOnlyList<TModel> Live(Func<RecordTypeChange, IReadOnlyList<object>> records) =>
     [
         .. Changes
             .Where(change => change.Origin == WriteOrigin.Live && change.RecordType == typeof(TModel))

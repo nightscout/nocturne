@@ -164,8 +164,6 @@ type BridgeSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap,
  * The collection names the Nightscout v3 `/storage` namespace lets a client
  * subscribe to. Upstream spells the food collection `food`; AndroidAPS sends
  * `foods`, so both are accepted and each socket is answered in its own spelling.
- * Not all of them are broadcast by the API today (`settings` has no realtime
- * path) but the client is allowed to ask for any of them.
  */
 const KNOWN_STORAGE_COLLECTIONS = [
   'devicestatus',

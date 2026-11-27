@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Contracts.V4;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -20,7 +21,6 @@ public class FoodServiceTests
 {
     private readonly Mock<IFoodRepository> _mockFoodRepository;
     private readonly Mock<IDocumentProcessingService> _mockDocumentProcessingService;
-    private readonly Mock<IWriteSideEffects> _mockSideEffects;
     private readonly Mock<ILogger<FoodService>> _mockLogger;
     private readonly FoodService _foodService;
 
@@ -31,13 +31,11 @@ public class FoodServiceTests
         _mockDocumentProcessingService
             .Setup(d => d.SanitizeHtml(It.IsAny<string?>()))
             .Returns((string? value) => value ?? string.Empty);
-        _mockSideEffects = new Mock<IWriteSideEffects>();
         _mockLogger = new Mock<ILogger<FoodService>>();
 
         _foodService = new FoodService(
             _mockFoodRepository.Object,
             _mockDocumentProcessingService.Object,
-            _mockSideEffects.Object,
             Mock.Of<IDataEventSink<Food>>(),
             Mock.Of<IAuditContext>(),
             _mockLogger.Object
@@ -55,7 +53,6 @@ public class FoodServiceTests
         var service = new FoodService(
             _mockFoodRepository.Object,
             _mockDocumentProcessingService.Object,
-            _mockSideEffects.Object,
             Mock.Of<IDataEventSink<Food>>(),
             Mock.Of<IAuditContext>(),
             _mockLogger.Object
@@ -75,8 +72,7 @@ public class FoodServiceTests
             new FoodService(
                 null!,
                 _mockDocumentProcessingService.Object,
-                _mockSideEffects.Object,
-                Mock.Of<IDataEventSink<Food>>(),
+                    Mock.Of<IDataEventSink<Food>>(),
                 Mock.Of<IAuditContext>(),
                 _mockLogger.Object
             )
@@ -93,26 +89,7 @@ public class FoodServiceTests
             new FoodService(
                 _mockFoodRepository.Object,
                 null!,
-                _mockSideEffects.Object,
-                Mock.Of<IDataEventSink<Food>>(),
-                Mock.Of<IAuditContext>(),
-                _mockLogger.Object
-            )
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public void Constructor_WithNullSignalRBroadcastService_ShouldThrowArgumentNullException()
-    {
-        // Arrange & Act & Assert
-        Assert.Throws<ArgumentNullException>(() =>
-            new FoodService(
-                _mockFoodRepository.Object,
-                _mockDocumentProcessingService.Object,
-                null!,
-                Mock.Of<IDataEventSink<Food>>(),
+                    Mock.Of<IDataEventSink<Food>>(),
                 Mock.Of<IAuditContext>(),
                 _mockLogger.Object
             )
@@ -129,8 +106,7 @@ public class FoodServiceTests
             new FoodService(
                 _mockFoodRepository.Object,
                 _mockDocumentProcessingService.Object,
-                _mockSideEffects.Object,
-                Mock.Of<IDataEventSink<Food>>(),
+                    Mock.Of<IDataEventSink<Food>>(),
                 Mock.Of<IAuditContext>(),
                 null!
             )
@@ -335,9 +311,9 @@ public class FoodServiceTests
     {
         IEnumerable<Food>? written = null;
         _mockFoodRepository
-            .Setup(x => x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<Food>, CancellationToken>((foods, _) => written = foods)
-            .ReturnsAsync((IEnumerable<Food> foods, CancellationToken _) => foods);
+            .Setup(x => x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Food>, WriteOrigin, CancellationToken>((foods, _, _) => written = foods)
+            .ReturnsAsync((IEnumerable<Food> foods, WriteOrigin _, CancellationToken _) => foods);
 
         await _foodService.CreateFoodAsync(
             [new Food { Name = "Apple", Carbs = 12 }, new Food { Name = "Apple", Carbs = 12 }],
@@ -403,7 +379,7 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(createdFoods);
 
@@ -416,17 +392,7 @@ public class FoodServiceTests
         result.Count().Should().Be(2);
 
         _mockFoodRepository.Verify(
-            x => x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-
-        _mockSideEffects.Verify(
-            x => x.OnCreatedAsync(
-                "food",
-                It.IsAny<IReadOnlyList<Food>>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
+            x => x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -442,7 +408,7 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(createdFoods);
 
@@ -452,16 +418,6 @@ public class FoodServiceTests
         // Assert
         result.Should().NotBeNull();
         result.Should().BeEmpty();
-
-        _mockSideEffects.Verify(
-            x => x.OnCreatedAsync(
-                "food",
-                It.IsAny<IReadOnlyList<Food>>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Once
-        );
     }
 
     [Fact]
@@ -515,7 +471,7 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(createdFoods);
 
@@ -540,43 +496,8 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
-            .ThrowsAsync(expectedException);
-
-        // Act & Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.CreateFoodAsync(inputFoods, FoodWriteMode.Native, CancellationToken.None)
-        );
-        exception.Should().Be(expectedException);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task CreateFoodAsync_WhenSignalRBroadcastThrows_ShouldPropagateException()
-    {
-        // Arrange
-        var inputFoods = new List<Food> { new Food { Name = "Test Food" } };
-        var createdFoods = new List<Food>
-        {
-            new Food { Id = "1", Name = "Test Food" },
-        };
-        var expectedException = new InvalidOperationException("SignalR error");
-
-        _mockFoodRepository
-            .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
-            )
-            .ReturnsAsync(createdFoods);
-
-        _mockSideEffects
-            .Setup(x => x.OnCreatedAsync(
-                It.IsAny<string>(),
-                It.IsAny<IReadOnlyList<Food>>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ))
             .ThrowsAsync(expectedException);
 
         // Act & Assert
@@ -640,16 +561,6 @@ public class FoodServiceTests
             x => x.UpdateFoodAsync(foodId, updateFood, It.IsAny<CancellationToken>()),
             Times.Once
         );
-
-        _mockSideEffects.Verify(
-            x => x.OnUpdatedAsync(
-                "food",
-                It.IsAny<Food>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Once
-        );
     }
 
     [Fact]
@@ -675,16 +586,6 @@ public class FoodServiceTests
             x => x.UpdateFoodAsync(foodId, updateFood, It.IsAny<CancellationToken>()),
             Times.Once
         );
-
-        _mockSideEffects.Verify(
-            x => x.OnUpdatedAsync(
-                It.IsAny<string>(),
-                It.IsAny<Food>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Never
-        );
     }
 
     [Fact]
@@ -699,37 +600,6 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x => x.UpdateFoodAsync(foodId, updateFood, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(expectedException);
-
-        // Act & Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.UpdateFoodAsync(foodId, updateFood, FoodWriteMode.Native, CancellationToken.None)
-        );
-        exception.Should().Be(expectedException);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task UpdateFoodAsync_WhenSignalRBroadcastThrows_ShouldPropagateException()
-    {
-        // Arrange
-        var foodId = "507f1f77bcf86cd799439011";
-        var updateFood = new Food { Name = "Test Food" };
-        var updatedFood = new Food { Id = foodId, Name = "Test Food" };
-        var expectedException = new InvalidOperationException("SignalR error");
-
-        _mockFoodRepository
-            .Setup(x => x.UpdateFoodAsync(foodId, updateFood, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(updatedFood);
-
-        _mockSideEffects
-            .Setup(x => x.OnUpdatedAsync(
-                It.IsAny<string>(),
-                It.IsAny<Food>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ))
             .ThrowsAsync(expectedException);
 
         // Act & Assert
@@ -756,7 +626,7 @@ public class FoodServiceTests
             .Setup(x => x.GetFoodByIdAsync(foodId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored);
         _mockFoodRepository
-            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         // Act
@@ -766,17 +636,7 @@ public class FoodServiceTests
         result.Should().BeTrue();
 
         _mockFoodRepository.Verify(
-            x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-
-        _mockSideEffects.Verify(
-            x => x.OnDeletedAsync<Food>(
-                "food",
-                stored,
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
+            x => x.DeleteFoodAsync(foodId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -790,7 +650,7 @@ public class FoodServiceTests
         var foodId = "507f1f77bcf86cd799439011";
 
         _mockFoodRepository
-            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         // Act
@@ -800,18 +660,8 @@ public class FoodServiceTests
         result.Should().BeFalse();
 
         _mockFoodRepository.Verify(
-            x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()),
+            x => x.DeleteFoodAsync(foodId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
-        );
-
-        _mockSideEffects.Verify(
-            x => x.OnDeletedAsync<Food>(
-                It.IsAny<string>(),
-                It.IsAny<Food?>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Never
         );
     }
 
@@ -825,36 +675,7 @@ public class FoodServiceTests
         var expectedException = new InvalidOperationException("Database error");
 
         _mockFoodRepository
-            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(expectedException);
-
-        // Act & Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _foodService.DeleteFoodAsync(foodId, CancellationToken.None)
-        );
-        exception.Should().Be(expectedException);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task DeleteFoodAsync_WhenSignalRBroadcastThrows_ShouldPropagateException()
-    {
-        // Arrange
-        var foodId = "507f1f77bcf86cd799439011";
-        var expectedException = new InvalidOperationException("SignalR error");
-
-        _mockFoodRepository
-            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        _mockSideEffects
-            .Setup(x => x.OnDeletedAsync<Food>(
-                It.IsAny<string>(),
-                It.IsAny<Food?>(),
-                It.IsAny<WriteEffectOptions>(),
-                It.IsAny<CancellationToken>()
-            ))
+            .Setup(x => x.DeleteFoodAsync(foodId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(expectedException);
 
         // Act & Assert
@@ -911,7 +732,7 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(createdFoods);
 
@@ -985,7 +806,7 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(createdFoods);
 
@@ -1050,7 +871,7 @@ public class FoodServiceTests
 
         _mockFoodRepository
             .Setup(x =>
-                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>())
+                x.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(createdFoods);
 
