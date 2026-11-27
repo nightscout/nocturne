@@ -307,6 +307,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         // Ends are decided once every span is mapped, so a superseder the fold moves is judged where it now starts.
         var leftOpen = new List<StateSpanEntity>();
+        var endingNothing = new List<Guid>();
         foreach (var (entity, sent, supersededEnd) in mapped)
         {
             var by = entity.SupersededById;
@@ -315,9 +316,11 @@ public class StateSpanRepository : IStateSpanRepository
                 by is { } named ? tracked.GetValueOrDefault(named) ?? superseders.GetValueOrDefault(named) : null);
             if (supersededEnd is not null && entity.EndTimestamp is null)
                 leftOpen.Add(entity);
+            if (StateSpanSuccession.EndsNothing(entity))
+                endingNothing.Add(entity.Id);
         }
 
-        await db.SaveUploadAsync([], leftOpen, db.SaveChangesAsync, cancellationToken);
+        await db.SaveUploadAsync(endingNothing, leftOpen, db.SaveChangesAsync, cancellationToken);
         IReadOnlyList<StateSpan?> committed = [.. updated.Select(e => e is null ? null : StateSpanMapper.ToDomainModel(e))];
         await ReportCommittedAsync(committed);
         return committed;
@@ -464,10 +467,13 @@ public class StateSpanRepository : IStateSpanRepository
                 var by = governing.SupersededById;
                 var storedSuperseder = by is { } named ? superseders.GetValueOrDefault(named) : null;
                 var supersededEnd = StateSpanSupersessionExtensions.SupersededEnd(governing, storedSuperseder);
+                var endedNothing = StateSpanSuccession.EndsNothing(governing);
                 StateSpanMapper.UpdateEntity(governing, stateSpan);
                 (governing.EndTimestamp, governing.SupersededById) = StateSpanSupersessionExtensions.UploadedEnd(
                     governing, stateSpan, supersededEnd,
                     by is { } pointer ? tracked.GetValueOrDefault(pointer) ?? storedSuperseder : null);
+                if (tracked.ContainsKey(governing.Id) && !endedNothing && StateSpanSuccession.EndsNothing(governing))
+                    moved.Add(governing.Id);
 
                 var entry = db.Entry(governing);
                 entry.DetectChanges();

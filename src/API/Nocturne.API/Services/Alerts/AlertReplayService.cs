@@ -212,7 +212,7 @@ internal sealed class AlertReplayService(
     {
         public bool Live(SensorGlucose reading) =>
             !Imported.Contains(reading.Id)
-            && reading.CreatedAt >= reading.Timestamp - RustAlertEngine.ClockTolerance();
+            && !AlertReadings.AheadOfArrival(reading.Timestamp, reading.CreatedAt);
 
         public DateTime EvaluatedAt(SensorGlucose reading) =>
             Live(reading) && reading.CreatedAt > reading.Timestamp ? reading.CreatedAt : reading.Timestamp;

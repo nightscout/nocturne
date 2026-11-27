@@ -1438,13 +1438,20 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             var carbs = await UpsertTableAsync(_carbIntakeRepository, models.CarbIntakes, result, TreatmentOf, origin, ct);
             await UpsertTableAsync(_bgCheckRepository, models.BGChecks, result, TreatmentOf, origin, ct);
             await UpsertTableAsync(_noteRepository, models.Notes, result, TreatmentOf, origin, ct);
-            await UpsertTableAsync(_deviceEventRepository, models.DeviceEvents, result, TreatmentOf, origin, ct);
+            var deviceEvents = await UpsertTableAsync(_deviceEventRepository, models.DeviceEvents, result, TreatmentOf, origin, ct);
             await UpsertTableAsync(_tempBasalRepository, models.TempBasals, result, TreatmentOf, origin, ct);
             await WriteFoodLinesAsync(carbs, models.FoodLines, result, TreatmentOf, ct);
             ReportReclassifiedAsUpdated(result, reclassified);
 
             var sources = new Dictionary<StateSpan, BatchTreatment>(ReferenceEqualityComparer.Instance);
-            FoldPumpSuspensions([.. models.Suspensions.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index))], spans, sources);
+            var arrivals = new Dictionary<int, DateTime>();
+            foreach (var deviceEvent in deviceEvents)
+            {
+                if (TreatmentOf(deviceEvent) is { } index)
+                    arrivals[index] = deviceEvent.CreatedAt;
+            }
+            FoldPumpSuspensions(
+                [.. models.Suspensions.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index))], arrivals, spans, sources);
             foreach (var (treatment, span) in models.Spans.Where(s => !result.Rejected.ContainsKey(s.Treatment.Index)))
             {
                 spans.Open(span);
@@ -2210,31 +2217,71 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// <remarks>
     /// A suspend opens a span keyed to it, which the store ends at the next suspension after it and
     /// which ends every open suspension before it; a suspend whose span a resume has already ended does
-    /// not open it again. A resume ends the newest open suspension that started at or before it; one
-    /// a suspension already ends at was folded before, and a suspension that starts after it is not its
-    /// to end.
+    /// not open it again. A resume ends the newest open suspension that started at or before it, at the end
+    /// <see cref="PumpModeSpanClock.EndAt"/> gives; one where a suspension already ends was folded before.
+    /// Either ends an open suspension that starts after it only as that rule says. The store ends no span at
+    /// one ended at its own start, so a suspension the store ended there, or would end there on this batch's
+    /// insert, ends at the next suspension that ends something, or stays open to the resume.
     /// </remarks>
+    /// <param name="events">The batch's suspend and resume events.</param>
+    /// <param name="arrivals">When the server stored each event's device event, by treatment index.</param>
+    /// <param name="spans">The batch's spans.</param>
+    /// <param name="sources">The treatment each span opened or changed belongs to.</param>
     private void FoldPumpSuspensions(
-        List<(BatchTreatment Treatment, DeviceEventType Type)> events, SpanState spans, Dictionary<StateSpan, BatchTreatment> sources)
+        List<(BatchTreatment Treatment, DeviceEventType Type)> events,
+        IReadOnlyDictionary<int, DateTime> arrivals,
+        SpanState spans,
+        Dictionary<StateSpan, BatchTreatment> sources)
     {
         var suspended = PumpModeState.Suspended.ToString();
         var pumpModes = spans[StateSpanCategory.PumpMode];
 
-        // The ends the store gives a suspension it inserts, which the folds after it read but this one
-        // must not write: the store records which span ended each one only when it sets the end itself.
+        // The ends the store gives the open suspensions when it inserts this batch's, which the folds after
+        // it read but this one must not write: the store records which span ended each one only when it
+        // sets the end itself. It ends an open suspension at the first later one that ends something.
         var storeEnds = new Dictionary<StateSpan, DateTime?>(ReferenceEqualityComparer.Instance);
         DateTime? EndOf(StateSpan span) => storeEnds.TryGetValue(span, out var end) ? end : span.EndTimestamp;
+        DateTime? StoreEnd(StateSpan open) => pumpModes
+            .Where(s => s.State == suspended && s.StartTimestamp > open.StartTimestamp && EndOf(s) != s.StartTimestamp)
+            .MinBy(s => s.StartTimestamp)?.StartTimestamp;
+
+        void End(StateSpan span, DateTime end, BatchTreatment batched)
+        {
+            span.EndTimestamp = end;
+            storeEnds.Remove(span);
+            spans.Change(span);
+            sources.TryAdd(span, batched);
+            if (end != span.StartTimestamp)
+                return;
+            PumpModeSpanClock.Release(pumpModes, suspended, end);
+            foreach (var cut in storeEnds.Where(e => e.Value == end).Select(e => e.Key).ToList())
+                storeEnds[cut] = StoreEnd(cut);
+        }
+
+        void EndOvertaken(PumpModeSpanClock.Transition transition, BatchTreatment batched)
+        {
+            DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition);
+            foreach (var open in PumpModeSpanClock.OpenAfterRelease(pumpModes, suspended, Overtaken, EndOf))
+            {
+                if (Overtaken(open) is { } end)
+                    End(open, end, batched);
+            }
+        }
 
         foreach (var (batched, type) in events.OrderBy(e => e.Treatment.Treatment.Mills).ThenBy(e => e.Treatment.Index))
         {
             var treatment = batched.Treatment;
-            var at = batched.Start;
+            var arrivedAt = arrivals.TryGetValue(batched.Index, out var arrival) ? arrival : (DateTime?)null;
+            var transition = new PumpModeSpanClock.Transition(batched.Start, arrivedAt);
+            var at = transition.At;
             if (type == DeviceEventType.PumpSuspend)
             {
                 var key = $"pump-suspended-tx:{treatment.Id}";
                 var keyed = pumpModes.FirstOrDefault(s => s.OriginalId == key);
                 if (keyed is not null && EndOf(keyed) is not null)
                     continue;
+
+                EndOvertaken(transition, batched);
 
                 var span = new StateSpan
                 {
@@ -2244,15 +2291,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                     EndTimestamp = null,
                     Source = SpanSource(treatment),
                     OriginalId = key,
+                    CreatedAt = arrivedAt,
                 };
 
                 if (keyed is null)
                 {
-                    foreach (var open in pumpModes.Where(s => s.State == suspended && EndOf(s) == null && s.StartTimestamp < at))
+                    foreach (var open in pumpModes.Where(s => s.State == suspended && EndOf(s) == null && s.StartTimestamp < at).ToList())
                         storeEnds[open] = at;
-                    storeEnds[span] = pumpModes
-                        .Where(s => s.State == suspended && s.StartTimestamp > at)
-                        .MinBy(s => s.StartTimestamp)?.StartTimestamp;
+                    storeEnds[span] = StoreEnd(span);
                 }
 
                 spans.Open(span);
@@ -2260,12 +2306,15 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                 continue;
             }
 
-            if (pumpModes.Any(s => s.State == suspended && s.EndTimestamp == at))
+            if (pumpModes.Any(s => s.State == suspended && transition.Ended(s)))
                 continue;
 
-            var closable = pumpModes
-                .Where(s => s.State == suspended && EndOf(s) == null && s.StartTimestamp <= at)
+            EndOvertaken(transition, batched);
+            StateSpan? Closable() => pumpModes
+                .Where(s => s.State == suspended && EndOf(s) == null && s.StartTimestamp <= at
+                    && PumpModeSpanClock.EndAt(s, transition) is not null)
                 .MaxBy(s => s.StartTimestamp);
+            var closable = Closable();
             if (closable is null)
             {
                 Logger.LogWarning(
@@ -2274,10 +2323,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                 continue;
             }
 
-            closable.EndTimestamp = at;
-            storeEnds.Remove(closable);
-            spans.Change(closable);
-            sources.TryAdd(closable, batched);
+            while (closable is not null)
+            {
+                var end = PumpModeSpanClock.EndAt(closable, transition)!.Value;
+                End(closable, end, batched);
+
+                // One that ends where it starts ends nothing, so a suspension the store ended at it is open again.
+                closable = closable.StartTimestamp == end ? Closable() : null;
+            }
         }
     }
 

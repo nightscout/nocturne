@@ -52,7 +52,17 @@ internal static class StateSpanSuccession
         && string.Equals(later.Category, open.Category, StringComparison.Ordinal)
         && later.StartTimestamp > open.StartTimestamp
         && (!SameStateOnly(open.Category) || string.Equals(later.State, open.State, StringComparison.Ordinal))
+        && !EndsNothing(later)
         && Supersedes(open, metadata, later);
+
+    /// <summary>
+    /// Whether <paramref name="span"/> is a PumpMode span that ends at its own start, which
+    /// <see cref="Follows"/> lets end no other span. The pump-mode folds end a span dated ahead of the
+    /// clock that way, and it must not cut short the real span that took its place. A write that makes a
+    /// span so releases the spans it ended (<see cref="Extensions.StateSpanSupersessionExtensions.SaveUploadAsync"/>).
+    /// </summary>
+    internal static bool EndsNothing(StateSpanEntity span) =>
+        SameStateOnly(span.Category) && span.EndTimestamp == span.StartTimestamp;
 
     /// <summary>
     /// Whether <paramref name="entity"/> ends <paramref name="other"/> in an exclusive category.
