@@ -2429,19 +2429,14 @@ msgstr "<0/> Deaktiviert"
 msgid "<0/> Offline"
 msgstr "<0/> Offline"
 
-#. 0: selectedConnectorCapabilities.maxHistoricalDays
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Recent data only (last {0} days)."
-msgstr "Nur aktuelle Daten (letzte {0} Tage)."
+#~ msgid "Recent data only (last {0} days)."
+#~ msgstr "Nur aktuelle Daten (letzte {0} Tage)."
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Historical sync is not supported for this connector. <0/>"
-msgstr "Historische Synchronisierung wird für diesen Connector nicht unterstützt. <0/>"
+#~ msgid "Historical sync is not supported for this connector. <0/>"
+#~ msgstr "Historische Synchronisierung wird für diesen Connector nicht unterstützt. <0/>"
 
-#. 0: selectedConnectorCapabilities.maxHistoricalDays
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Historical sync limited to the last {0} days."
-msgstr "Historische Synchronisierung ist auf die letzten {0} Tage beschränkt."
+#~ msgid "Historical sync limited to the last {0} days."
+#~ msgstr "Historische Synchronisierung ist auf die letzten {0} Tage beschränkt."
 
 #~ msgid "Connector Disabled"
 #~ msgstr "Connector deaktiviert"
@@ -2759,9 +2754,8 @@ msgstr "Unterstützt"
 msgid "Not supported"
 msgstr "Nicht unterstützt"
 
-#: src/lib/components/connectors/ConnectorSetup.svelte
-msgid "Max historical days"
-msgstr "Max. historische Tage"
+#~ msgid "Max historical days"
+#~ msgstr "Max. historische Tage"
 
 #: src/lib/components/command-palette/command-palette-items.svelte.ts
 #: src/lib/components/connectors/ConnectorSetup.svelte
@@ -52168,4 +52162,30 @@ msgstr ""
 #. 0: hours
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "the last {0} hours"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+msgid "Historical sync is not supported for this connector."
+msgstr ""
+
+#: src/lib/components/connectors/HistoryReach.svelte
+msgid "A date range with no start date gets the last # hour of data."
+msgid_plural "A date range with no start date gets the last # hours of data."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/connectors/HistoryReach.svelte
+msgid "A date range with no start date gets the last # day of data."
+msgid_plural "A date range with no start date gets the last # days of data."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/connectors/HistoryReach.svelte
+msgid "A date range with no start date gets the last # month of data."
+msgid_plural "A date range with no start date gets the last # months of data."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/connectors/HistoryReach.svelte
+msgid "A date range with no start date gets all of the history."
 msgstr ""
