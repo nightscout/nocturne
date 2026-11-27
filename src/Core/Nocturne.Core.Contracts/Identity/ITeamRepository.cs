@@ -40,6 +40,13 @@ public interface ITeamRepository
     /// </summary>
     Task<IReadOnlySet<Guid>?> GetPeopleOfStaffGroupAsync(Guid groupId, Guid subjectId, DateTime now, CancellationToken ct);
 
+    /// <summary>
+    /// Each site that <see cref="GetPeopleOfStaffGroupAsync"/> lists for one of the groups
+    /// <see cref="GetGroupsOfStaffAsync"/> returns, keyed to the first of those groups, in that order, that holds
+    /// it. Reads on a context pinned to the subject.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, Guid>> GetFirstGroupOfPeopleAsync(Guid subjectId, DateTime now, CancellationToken ct);
+
     /// <summary>Renames the team and returns the name it had; null when the caller is not a manager of it.</summary>
     Task<string?> RenameAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
 

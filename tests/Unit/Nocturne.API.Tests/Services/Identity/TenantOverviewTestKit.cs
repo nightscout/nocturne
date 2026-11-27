@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Moq;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -15,6 +17,15 @@ namespace Nocturne.API.Tests.Services.Identity;
 /// </summary>
 internal static class TenantOverviewTestKit
 {
+    /// <summary>A caller in no group as staff.</summary>
+    public static Mock<ITeamRepository> InNoGroup()
+    {
+        var teams = new Mock<ITeamRepository>();
+        teams.Setup(t => t.GetFirstGroupOfPeopleAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, Guid>());
+        return teams;
+    }
+
     public static DbContextOptions<NocturneDbContext> NewOptions() =>
         new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())

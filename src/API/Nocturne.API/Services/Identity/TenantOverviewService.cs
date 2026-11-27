@@ -66,9 +66,16 @@ public class TenantOverviewService : ITenantOverviewService
     public async Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         bool credentialLimitTo24Hours = false,
-        CancellationToken ct = default) =>
-        new(await BuildItemsAsync(
-            await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), credentialLimitTo24Hours, ct), null);
+        CancellationToken ct = default)
+    {
+        var items = await BuildItemsAsync(
+            await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), credentialLimitTo24Hours, ct);
+        var firstGroups = await _teams.GetFirstGroupOfPeopleAsync(subjectId, _time.GetUtcNow().UtcDateTime, ct);
+        var headed = items
+            .Select(item => firstGroups.TryGetValue(item.TenantId, out var group) ? item with { FirstGroupId = group } : item)
+            .ToList();
+        return new(headed, null);
+    }
 
     public Task<IReadOnlyList<StaffGroup>> GetGroupsAsync(Guid subjectId, CancellationToken ct) =>
         _teams.GetGroupsOfStaffAsync(subjectId, _time.GetUtcNow().UtcDateTime, ct);
@@ -138,7 +145,8 @@ public class TenantOverviewService : ITenantOverviewService
                         Attention: BuildAttention(
                             fallbackStatus, latest: null, fallbackLastReadingAt,
                             activeAlertCount: null, highestSeverity: null, trackers: null,
-                            nowUtc));
+                            nowUtc),
+                        FirstGroupId: null);
                 }));
         }
 
@@ -431,7 +439,8 @@ public class TenantOverviewService : ITenantOverviewService
             activeAlertCount, highestSeverity,
             ThinToBuckets(recent),
             therapy, devices, trackers,
-            BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc));
+            BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc),
+            FirstGroupId: null);
     }
 
     /// <summary>Oldest first, the newest reading of each 5-minute bucket.</summary>

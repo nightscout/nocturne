@@ -201,7 +201,7 @@ public class MyTenantsControllerTests
         var detail = new TenantPersonDetail(
             new TenantOverviewItem(
                 tenantId, "family", "Family", null, null, GlucoseStatus.Unknown,
-                new TenantOverviewThresholds(55, 80, 180, 260), null, null, [], null, null, null, []),
+                new TenantOverviewThresholds(55, 80, 180, 260), null, null, [], null, null, null, [], null),
             [], null, default, default);
         _overviewService
             .Setup(s => s.GetPersonAsync(

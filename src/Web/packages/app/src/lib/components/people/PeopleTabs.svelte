@@ -2,6 +2,7 @@
   import type { Snippet } from "svelte";
   import type { StaffGroup } from "@nocturne/api-client";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import GroupName from "./GroupName.svelte";
   import { tabOfValue, tabValue, type PeopleTab } from "./people-tab.js";
 
   interface Props {
@@ -26,9 +27,7 @@
             value={tabValue({ kind: "group", id: group.id })}
             aria-label="{group.name}, {group.teamName}"
           >
-            <span>{group.name}</span>
-            <span class="text-muted-foreground" aria-hidden="true">·</span>
-            <span class="text-muted-foreground">{group.teamName}</span>
+            <GroupName {group} />
           </Tabs.Trigger>
         {:else}
           <Tabs.Trigger value={tabValue({ kind: "group", id: group.id })}>{group.name}</Tabs.Trigger>

@@ -113,17 +113,63 @@ export function wallColumnCapacity(
   };
 }
 
+/** People the columns list together, under a heading when it has one. */
+export interface WallSection<T, H> {
+  heading: H | null;
+  people: T[];
+}
+
 /**
- * The people split into columns that fill top to bottom, then left to right. When they do not fill
- * the screen they are spread over every column, so a name stays close to its reading.
+ * One row of a column: a heading or a person. A heading is `repeated` when it stands at the top of a
+ * column its people run on into, after the column that first named it.
  */
-export function intoColumns<T>(people: T[], rows: number, columns: number): T[][] {
-  if (rows <= 0) return [];
-  const listed = people.slice(0, rows * columns);
-  if (listed.length === 0) return [];
-  const perColumn = Math.min(rows, Math.ceil(listed.length / columns));
-  const used = Math.ceil(listed.length / perColumn);
-  return Array.from({ length: used }, (_, column) =>
-    listed.slice(column * perColumn, (column + 1) * perColumn)
-  );
+export type WallSlot<T, H> =
+  | { kind: "heading"; heading: H; repeated: boolean }
+  | { kind: "person"; person: T };
+
+/**
+ * The sections laid into columns of `rows` slots that fill top to bottom, then left to right. A heading
+ * takes a slot, has at least one of its people under it in the same column, and is repeated at the top
+ * of a column its people run on into. When they do not fill the screen they are spread over every
+ * column, as short as the columns can be, so a name stays close to its reading. The people past the
+ * last slot are left out. A column of one row has no room for a heading and a person, so with fewer
+ * than two rows no heading is drawn.
+ */
+export function intoColumns<T, H>(
+  sections: WallSection<T, H>[],
+  rows: number,
+  columns: number
+): WallSlot<T, H>[][] {
+  const total = sections.reduce((count, section) => count + section.people.length, 0);
+  if (rows <= 0 || total === 0) return [];
+  const laid = rows < 2 ? sections.map((section) => ({ ...section, heading: null })) : sections;
+  for (let height = Math.min(rows, Math.ceil(total / columns)); height < rows; height++) {
+    const tried = fill(laid, height, columns);
+    if (tried.placed === total) return tried.columns;
+  }
+  return fill(laid, rows, columns).columns;
+}
+
+function fill<T, H>(sections: WallSection<T, H>[], height: number, columns: number) {
+  const laid: WallSlot<T, H>[][] = [[]];
+  let placed = 0;
+  const done = () => ({ columns: laid.filter((column) => column.length > 0), placed });
+  for (const section of sections) {
+    for (const [index, person] of section.people.entries()) {
+      let column = laid[laid.length - 1];
+      const heading = () => (index === 0 || column.length === 0 ? section.heading : null);
+      const slots = () => (heading() === null ? 1 : 2);
+      if (column.length + slots() > height) {
+        if (laid.length === columns) return done();
+        column = [];
+        laid.push(column);
+        if (slots() > height) return done();
+      }
+      const over = heading();
+      if (over !== null) column.push({ kind: "heading", heading: over, repeated: index > 0 });
+      column.push({ kind: "person", person });
+      placed++;
+    }
+  }
+  return done();
 }

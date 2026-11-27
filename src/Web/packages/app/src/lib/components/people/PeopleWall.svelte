@@ -1,7 +1,11 @@
 <script lang="ts">
-  import { afterNavigate, goto } from "$app/navigation";
+  import { afterNavigate, goto, replaceState } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import type { TenantOverviewItem } from "@nocturne/api-client";
+  import { page } from "$app/state";
+  import { untrack } from "svelte";
+  import { isHttpError } from "@sveltejs/kit";
+  import { getGroups } from "#lib/api/generated/myTenants.generated.remote.js";
+  import type { TenantOverviewResponse } from "@nocturne/api-client";
   import RevealableOverlay from "#lib/components/shared/RevealableOverlay.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -11,10 +15,25 @@
   import { createOverlayReveal } from "#lib/utils/overlay-reveal.svelte.js";
   import { Key } from "@nocturne/ui/keys";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import GroupName from "./GroupName.svelte";
+  import HiddenInGroup from "./HiddenInGroup.svelte";
+  import TabFallback from "./TabFallback.svelte";
   import { followPeople } from "./people-overview.svelte.js";
+  import {
+    EVERYONE,
+    fallbackOf,
+    groupOf,
+    parseTab,
+    tabValue,
+    withTab,
+    type PeopleTab,
+    type FallbackReason,
+  } from "./people-tab.js";
   import { isFlagged } from "./person.js";
   import { setReadState } from "./read-state.js";
   import WallFlagged from "./WallFlagged.svelte";
+  import WallGroupHeading from "./WallGroupHeading.svelte";
+  import { wallSections } from "./wall-groups.js";
   import WallLegend from "./WallLegend.svelte";
   import WallLine from "./WallLine.svelte";
   import {
@@ -25,32 +44,55 @@
     wallStep,
   } from "./wall-layout.js";
 
+  let tab = $state<PeopleTab>(parseTab((page.shallow?.url ?? page.url).searchParams.get("group")));
+  let fellBack = $state<FallbackReason | null>(null);
+  const group = $derived(groupOf(tab));
+  const groupsQuery = getGroups();
   const overview = followPeople(
-    () => undefined,
-    () => {}
+    () => group,
+    () => void groupsQuery.refresh().catch(() => {})
   );
-  const query = overview.query;
+  const query = $derived(overview.query);
+  const groupNotFound = $derived(isHttpError(query.error) && query.error.status === 404);
+  const loadError = $derived(groupNotFound ? undefined : query.error);
+  const openGroup = $derived(
+    group ? groupsQuery.current?.find((listed) => listed.id === group) : undefined
+  );
   const reveal = createOverlayReveal({ revealOnPointerMove: true });
   const clock = new Now(1000);
 
+  $effect(() => {
+    if (tab.kind !== "group") return;
+    const reason = fallbackOf(tab.id, groupsQuery.current, !!groupsQuery.error, groupNotFound);
+    if (!reason) return;
+    untrack(() => {
+      tab = EVERYONE;
+      fellBack = reason;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its query changed, already resolved
+      replaceState(withTab(new URL(page.url.href), EVERYONE), {});
+    });
+  });
+
   setReadState({
     get disconnected() {
-      return !!query.error;
+      return !!loadError;
     },
     get now() {
       return clock.current;
     },
   });
 
-  // The query may drop its value when a refresh fails; the wall keeps the last read that worked.
-  let lastRead = $state<{ people: TenantOverviewItem[]; at: Date } | null>(null);
+  // The query may drop its value when a refresh fails; the wall keeps the last read of its tab that worked.
+  let lastRead = $state<{ tab: string; response: TenantOverviewResponse; at: Date } | null>(null);
   $effect.pre(() => {
     const current = query.current;
-    if (current) lastRead = { people: current.tenants ?? [], at: new Date() };
+    if (current) lastRead = { tab: tabValue(tab), response: current, at: new Date() };
   });
+  const kept = $derived(lastRead?.tab === tabValue(tab) ? lastRead : null);
 
-  const people = $derived(lastRead?.people ?? []);
-  const pending = $derived(!lastRead && !query.error);
+  const people = $derived(kept?.response.tenants ?? []);
+  const hiddenCount = $derived(kept?.response.hiddenCount ?? 0);
+  const pending = $derived(!kept && !loadError);
 
   let rootHeight = $state<number>();
   let columnsWidth = $state<number>();
@@ -97,11 +139,19 @@
     return () => observer.disconnect();
   });
   const rest = $derived(people.filter((person) => !band.includes(person)));
+  const sections = $derived(
+    group ? [{ heading: null, people: rest }] : wallSections(rest, groupsQuery.current)
+  );
   const capacity = $derived(wallColumnCapacity(columnsWidth, columnsHeight));
   const columns = $derived(
-    capacity ? intoColumns(rest, capacity.rows, capacity.columns) : [rest]
+    capacity
+      ? intoColumns(sections, capacity.rows, capacity.columns)
+      : intoColumns(sections, Number.POSITIVE_INFINITY, 1)
   );
-  const hidden = $derived(capacity ? rest.slice(columns.flat().length) : []);
+  const shown = $derived(
+    new Set(columns.flat().flatMap((slot) => (slot.kind === "person" ? [slot.person] : [])))
+  );
+  const hidden = $derived(rest.filter((person) => !shown.has(person)));
   const hiddenFlagged = $derived(hidden.filter(isFlagged).length);
 
   let fromPeople = false;
@@ -110,8 +160,13 @@
   });
 
   function leave() {
-    if (fromPeople) history.back();
-    else void goto(resolve("/(authenticated)/people"), { replaceState: true });
+    if (fromPeople) {
+      history.back();
+      return;
+    }
+    const url = withTab(new URL(resolve("/(authenticated)/people"), page.url.href), tab);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the People page's resolved path with the tab's query
+    void goto(url.pathname + url.search, { replaceState: true });
   }
 
   function onkeydown(event: KeyboardEvent) {
@@ -165,15 +220,27 @@
       <div class="flex h-full gap-x-4" data-testid="wall-columns">
         {#each columns as column, index (index)}
           <ul class="flex min-w-0 flex-1 flex-col">
-            {#each column as person (person.tenantId)}
-              <WallLine {person} {step} />
+            {#each column as slot (slot.kind === "person" ? slot.person.tenantId : `heading:${slot.heading.group?.id ?? ""}`)}
+              {#if slot.kind === "heading"}
+                <WallGroupHeading heading={slot.heading} {step} repeated={slot.repeated} />
+              {:else}
+                <WallLine person={slot.person} {step} />
+              {/if}
             {/each}
           </ul>
         {/each}
       </div>
     </div>
-  {:else if lastRead}
-    <p class="m-auto text-2xl text-muted-foreground">You do not follow anyone.</p>
+  {:else if kept}
+    <p class="m-auto text-2xl text-muted-foreground">
+      {#if group && hiddenCount > 0}
+        You cannot see anyone in this group.
+      {:else if group}
+        You can see no people in this group.
+      {:else}
+        You do not follow anyone.
+      {/if}
+    </p>
   {:else}
     <div class="min-h-0 flex-1" bind:clientWidth={columnsWidth}></div>
   {/if}
@@ -183,21 +250,39 @@
       <WallLegend {people} />
     {/if}
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-      <div class="flex flex-wrap items-center gap-3" data-testid="wall-connection">
-        {#if query.error && lastRead}
-          <Badge variant="overlay">
-            Connection lost. Showing readings from {time(lastRead.at)}.
-          </Badge>
-        {:else if query.error}
-          <span class="text-muted-foreground">The list of people did not load.</span>
-          <Button variant="overlay" size="sm" onclick={() => query.refresh()}>Try again</Button>
-        {:else if pending}
-          <span class="text-muted-foreground">Loading the list of people.</span>
-        {:else if overview.live}
-          <span class="text-muted-foreground">Readings update as they arrive.</span>
-        {:else}
-          <span class="text-muted-foreground">Readings refresh every minute.</span>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {#if openGroup}
+          <span class="font-semibold" data-testid="wall-group"><GroupName group={openGroup} /></span>
         {/if}
+        {#if group && hiddenCount > 0}
+          <span class="font-medium" data-testid="wall-hidden-in-group">
+            <HiddenInGroup count={hiddenCount} />
+          </span>
+        {/if}
+        {#if fellBack}
+          <span class="text-muted-foreground" data-testid="wall-fallback">
+            <TabFallback reason={fellBack} />
+          </span>
+        {/if}
+        <span class="text-muted-foreground" data-testid="wall-rules">
+          Flagged by Nocturne's fixed rules.
+        </span>
+        <div class="flex flex-wrap items-center gap-3" data-testid="wall-connection">
+          {#if loadError && kept}
+            <Badge variant="overlay">
+              Connection lost. Showing readings from {time(kept.at)}.
+            </Badge>
+          {:else if loadError}
+            <span class="text-muted-foreground">The list of people did not load.</span>
+            <Button variant="overlay" size="sm" onclick={() => query.refresh()}>Try again</Button>
+          {:else if pending}
+            <span class="text-muted-foreground">Loading the list of people.</span>
+          {:else if overview.live}
+            <span class="text-muted-foreground">Readings update as they arrive.</span>
+          {:else}
+            <span class="text-muted-foreground">Readings refresh every minute.</span>
+          {/if}
+        </div>
       </div>
       <div class="flex flex-wrap items-center gap-x-4">
         {#if hidden.length > 0}

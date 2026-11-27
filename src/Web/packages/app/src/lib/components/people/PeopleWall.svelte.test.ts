@@ -1,12 +1,17 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { error } from "@sveltejs/kit";
+import { page as pageState } from "$app/state";
 import {
   GlucoseStatus,
   NotificationUrgency,
   TenantOverviewAttentionKind,
+  type StaffGroup,
   type TenantOverviewItem,
+  type TenantOverviewResponse,
 } from "@nocturne/api-client";
+import { TenantOverviewResponseSchema } from "@nocturne/api-client/schemas";
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { wallStep } from "./wall-layout.js";
 import { OVERLAY_REVEAL_MS } from "#lib/utils/overlay-reveal.svelte.js";
@@ -14,36 +19,59 @@ import { OVERVIEW_PING_DEBOUNCE_MS } from "./live-overview.svelte.js";
 import { makePerson } from "./people-fixtures.js";
 import { overviewFeed as feed, overviewSockets as clients } from "./people-socket-fixture.svelte.js";
 
+/** What the API answers: `data` and `error` for everyone, `groupReads` and `groupErrors` for each group. */
 const overview = $state<{
-  data: { tenants: TenantOverviewItem[] } | undefined;
+  data: TenantOverviewResponse | undefined;
   error: unknown;
-}>({ data: undefined, error: undefined });
-const refreshes = vi.hoisted(() => ({ count: 0, run: async () => {} }));
+  groups: StaffGroup[] | undefined;
+  groupsError: unknown;
+  groupReads: Record<string, TenantOverviewResponse | undefined>;
+  groupErrors: Record<string, unknown>;
+}>({ data: undefined, error: undefined, groups: [], groupsError: undefined, groupReads: {}, groupErrors: {} });
+const refreshes = vi.hoisted(() => ({ count: 0, run: async () => {}, reads: [] as unknown[] }));
 const navigation = vi.hoisted(() => ({
   goto: vi.fn(async () => {}),
   afterNavigate: (callback: (navigation: unknown) => void) => {
     navigation.arrived = callback;
   },
   arrived: (_navigation: unknown) => {},
+  replaceState: (url: string | URL) => {
+    navigation.address = new URL(url, navigation.address.href);
+  },
+  address: new URL("http://localhost/people/wall"),
 }));
 
 vi.mock("$app/navigation", () => navigation);
 vi.mock("#lib/utils/poll-while-visible.svelte.js", () => ({ pollWhileVisible: () => {} }));
 vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
-  getOverview: () => ({
+  getGroups: () => ({
     get current() {
-      return overview.data;
+      return overview.groups;
     },
     get error() {
-      return overview.error;
+      return overview.groupsError;
     },
     loading: false,
-    refresh: async () => {
-      refreshes.count++;
-      await refreshes.run();
-    },
+    refresh: async () => {},
   }),
+  getOverview: (args?: { group?: string }) => {
+    refreshes.reads.push(args);
+    const group = args?.group;
+    return {
+      get current() {
+        return group ? overview.groupReads[group] : overview.data;
+      },
+      get error() {
+        return group ? overview.groupErrors[group] : overview.error;
+      },
+      loading: false,
+      refresh: async () => {
+        refreshes.count++;
+        await refreshes.run();
+      },
+    };
+  },
 }));
 
 import PeopleWall from "./PeopleWall.svelte";
@@ -100,16 +128,29 @@ function clippedCards() {
 
 const wall = () => page.getByTestId("people-wall");
 
+/** Puts the wall's address at `/people/wall` with `search`; the wall reads it when it is drawn. */
+function openAt(search: string) {
+  pageState.url = new URL(`http://localhost/people/wall${search}`);
+  navigation.address = new URL(pageState.url.href);
+}
+
 beforeEach(async () => {
   await page.viewport(1280, 720);
   overview.data = undefined;
   overview.error = undefined;
+  overview.groups = [];
+  overview.groupsError = undefined;
+  overview.groupReads = {};
+  overview.groupErrors = {};
   feed.connected = false;
   refreshes.count = 0;
   refreshes.run = async () => {};
+  refreshes.reads.length = 0;
   clients.length = 0;
   navigation.goto.mockClear();
   navigation.arrived = () => {};
+  pageState.shallow = null;
+  openAt("");
 });
 
 afterEach(() => {
@@ -739,5 +780,328 @@ describe("People wall display", () => {
         Array.from({ length: shown.length }, (_, i) => `Person ${String(i).padStart(3, "0")}`)
       );
     });
+  });
+});
+
+const birch: StaffGroup = { id: "0193b6a0-0000-7000-8000-000000000001", name: "Birch cabin", teamName: "Camp Wren", sharesName: false };
+const oak: StaffGroup = { id: "0193b6a0-0000-7000-8000-000000000002", name: "Oak cabin", teamName: "Camp Wren", sharesName: false };
+const pine: StaffGroup = { id: "0193b6a0-0000-7000-8000-000000000003", name: "Pine cabin", teamName: "Camp Wren", sharesName: false };
+
+function notFound() {
+  try {
+    error(404, "Not found");
+  } catch (thrown) {
+    return thrown;
+  }
+}
+
+/** Each column's rows, top to bottom: a heading's text in brackets, or a person's name. */
+function columnRows() {
+  return [...page.getByTestId("wall-columns").element().querySelectorAll(":scope > ul")].map((list) =>
+    [...list.children].map((row) =>
+      row.getAttribute("data-testid") === "wall-heading"
+        ? `[${row.textContent?.replace(/\s+/g, " ").trim()}]`
+        : row.querySelector("p[title]")?.textContent?.trim()
+    )
+  );
+}
+
+function notShownCount() {
+  const text = page.getByTestId("wall-not-shown").elements()[0]?.textContent ?? "";
+  return Number(text.match(/(\d+) more (?:people are|person is) not shown\./)?.[1] ?? 0);
+}
+
+describe("a group's wall", () => {
+  it("opens on the group its address names, with the group's name, its people and how many it cannot see", async () => {
+    openAt(`?group=${birch.id}`);
+    overview.groups = [birch, oak];
+    overview.data = { tenants: [named(9)] };
+    overview.groupReads[birch.id!] = { tenants: [flagged(1), named(2), named(3)], hiddenCount: 2 };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 003")).toBeVisible();
+
+    expect(refreshes.reads).toContainEqual({ group: birch.id });
+    expect(refreshes.reads.filter((read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id }))).toEqual([]);
+    expect(namesIn("wall-band")).toEqual(["Person 001"]);
+    expect(columnRows()).toEqual([["Person 002"], ["Person 003"]]);
+    expect(page.getByText("Person 009").elements()).toHaveLength(0);
+    await expect.element(page.getByTestId("wall-group")).toHaveTextContent("Birch cabin");
+    await expect
+      .element(page.getByTestId("wall-hidden-in-group"))
+      .toHaveTextContent("You cannot see 2 people in this group.");
+    await expect.element(page.getByTestId("wall-rules")).toHaveTextContent("Flagged by Nocturne's fixed rules.");
+    expect(navigation.address.searchParams.get("group")).toBe(birch.id);
+  });
+
+  it("lists the same people whatever else the address holds", async () => {
+    openAt(`?group=${birch.id}&lens=review&days=30&person=p003`);
+    overview.groups = [birch];
+    overview.groupReads[birch.id!] = { tenants: [named(2), named(3)], hiddenCount: 0 };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 003")).toBeVisible();
+
+    expect(refreshes.reads).toContainEqual({ group: birch.id });
+    expect(refreshes.reads.filter((read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id }))).toEqual([]);
+    expect(columnRows().flat()).toEqual(["Person 002", "Person 003"]);
+    expect(page.getByTestId("wall-hidden-in-group").elements()).toHaveLength(0);
+  });
+
+  it("says so when the viewer can see nobody in the group", async () => {
+    openAt(`?group=${birch.id}`);
+    overview.groups = [birch];
+    overview.groupReads[birch.id!] = { tenants: [], hiddenCount: 1 };
+    render(PeopleWall);
+
+    await expect.element(page.getByText("You cannot see anyone in this group.")).toBeVisible();
+    await expect
+      .element(page.getByTestId("wall-hidden-in-group"))
+      .toHaveTextContent("You cannot see 1 person in this group.");
+  });
+
+  it("shows everyone, says why, and drops the group from the address for a group the viewer is not in", async () => {
+    openAt("?group=0193b6a0-0000-7000-8000-0000000000ff&other=1");
+    overview.groups = [birch];
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+    await expect
+      .element(page.getByTestId("wall-fallback"))
+      .toHaveTextContent("You are not in that group. The list shows everyone you follow.");
+    expect(navigation.address.search).toBe("?other=1");
+    expect(page.getByTestId("wall-group").elements()).toHaveLength(0);
+  });
+
+  it("shows everyone when the group's own read answers that the viewer is not in it", async () => {
+    openAt(`?group=${birch.id}`);
+    overview.groups = [birch];
+    overview.groupErrors[birch.id!] = notFound();
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+    await expect.element(page.getByTestId("wall-fallback")).toHaveTextContent(/^You are not in that group\./);
+    expect(page.getByText("The list of people did not load.").elements()).toHaveLength(0);
+    expect(navigation.address.searchParams.has("group")).toBe(false);
+  });
+
+  it("shows everyone when the viewer's groups did not load", async () => {
+    openAt(`?group=${birch.id}`);
+    overview.groups = undefined;
+    overview.groupsError = new Error("The read failed.");
+    overview.groupReads[birch.id!] = { tenants: [named(2)], hiddenCount: 0 };
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+    await expect
+      .element(page.getByTestId("wall-fallback"))
+      .toHaveTextContent("Your groups did not load. The list shows everyone you follow.");
+    expect(navigation.address.searchParams.has("group")).toBe(false);
+  });
+
+  it("reads its tab from the address a shallow rewrite shows, as the People page does", async () => {
+    openAt("");
+    Object.assign(pageState, {
+      shallow: { url: new URL(`http://localhost/people/wall?group=${birch.id}`) },
+    });
+    overview.groups = [birch];
+    overview.groupReads[birch.id!] = { tenants: [named(2)], hiddenCount: 0 };
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+
+    await expect.element(page.getByText("Person 002")).toBeVisible();
+    expect(page.getByText("Person 001").elements()).toHaveLength(0);
+    await expect.element(page.getByTestId("wall-group")).toHaveTextContent("Birch cabin");
+  });
+
+  it("goes back to the group's tab on Escape", async () => {
+    openAt(`?group=${birch.id}`);
+    overview.groups = [birch];
+    overview.groupReads[birch.id!] = { tenants: [named(2)], hiddenCount: 0 };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 002")).toBeVisible();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(navigation.goto).toHaveBeenCalledWith(`/people?group=${birch.id}`, { replaceState: true });
+  });
+});
+
+describe("headings on the wall of everyone", () => {
+  it("puts the unflagged people under the group the API names, in the groups' order, then the people in none", async () => {
+    overview.groups = [birch, oak, pine];
+    overview.data = {
+      tenants: [
+        flagged(1, { firstGroupId: oak.id }),
+        named(2, { firstGroupId: oak.id }),
+        named(3, { firstGroupId: birch.id }),
+        named(4),
+        named(5, { firstGroupId: birch.id }),
+        named(6, { firstGroupId: oak.id }),
+      ],
+    };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 006")).toBeVisible();
+
+    expect(namesIn("wall-band")).toEqual(["Person 001"]);
+    expect(columnRows().flat()).toEqual([
+      "[Birch cabin]",
+      "Person 003",
+      "Person 005",
+      "[Oak cabin]",
+      "Person 002",
+      "Person 006",
+      "[Not in your groups]",
+      "Person 004",
+    ]);
+    await expect.element(page.getByTestId("wall-rules")).toHaveTextContent("Flagged by Nocturne's fixed rules.");
+  });
+
+  it("shows no headings when only one heading would have people under it", async () => {
+    overview.groups = [birch, oak];
+    for (const firstGroupId of [birch.id, undefined]) {
+      overview.data = {
+        tenants: [flagged(1, { firstGroupId: oak.id }), named(2, { firstGroupId }), named(3, { firstGroupId })],
+      };
+      const view = render(PeopleWall);
+      await expect.element(page.getByText("Person 003")).toBeVisible();
+
+      expect(page.getByTestId("wall-heading").elements()).toHaveLength(0);
+      expect(columnRows().flat()).toEqual(["Person 002", "Person 003"]);
+      view.unmount();
+    }
+  });
+
+  it("keeps the flagged people past the band at the top of the columns, under no heading", async () => {
+    overview.groups = [birch];
+    overview.data = {
+      tenants: [
+        ...Array.from({ length: 8 }, (_, i) => flagged(i, { firstGroupId: birch.id })),
+        named(8, { firstGroupId: birch.id }),
+        named(9),
+      ],
+    };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 009")).toBeVisible();
+    await expect.poll(() => page.getByTestId("wall-flagged").elements().length).toBe(6);
+
+    expect(columnRows().flat()).toEqual([
+      "Person 006",
+      "Person 007",
+      "[Birch cabin]",
+      "Person 008",
+      "[Not in your groups]",
+      "Person 009",
+    ]);
+  });
+
+  it("repeats a heading at the top of a column its people run on into", async () => {
+    overview.groups = [birch, oak];
+    overview.data = {
+      tenants: [
+        ...Array.from({ length: 30 }, (_, i) => named(i, { firstGroupId: birch.id })),
+        ...Array.from({ length: 10 }, (_, i) => named(30 + i, { firstGroupId: oak.id })),
+      ],
+    };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 000")).toBeVisible();
+
+    const columns = columnRows();
+    expect(columns.length).toBeGreaterThan(1);
+    for (const column of columns) expect(column[0]).toMatch(/^\[/);
+    expect(new Set(columns.flat().filter((row) => !row?.startsWith("["))).size).toBe(40);
+  });
+
+  it("hides a repeated heading from assistive technology, so each group is announced once", async () => {
+    overview.groups = [birch, oak];
+    overview.data = {
+      tenants: [
+        ...Array.from({ length: 30 }, (_, i) => named(i, { firstGroupId: birch.id })),
+        ...Array.from({ length: 10 }, (_, i) => named(30 + i, { firstGroupId: oak.id })),
+      ],
+    };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 000")).toBeVisible();
+
+    const headings = page.getByTestId("wall-heading").elements();
+    const announced = headings.filter((heading) => heading.getAttribute("aria-hidden") !== "true");
+    const hidden = headings.filter((heading) => heading.getAttribute("aria-hidden") === "true");
+    expect(announced.map((heading) => heading.textContent?.trim())).toEqual(["Birch cabin", "Oak cabin"]);
+    expect(hidden.length).toBeGreaterThan(0);
+    expect(new Set(hidden.map((heading) => heading.textContent?.trim()))).toEqual(new Set(["Birch cabin"]));
+    expect(announced[0]).toBe(headings[0]);
+  });
+
+  it("draws no headings and lists the people flat when the columns hold fewer than two rows", async () => {
+    await page.viewport(1280, 150);
+    overview.groups = [birch, oak];
+    overview.data = {
+      tenants: Array.from({ length: 12 }, (_, i) => named(i, { firstGroupId: [birch.id, oak.id, undefined][i % 3] })),
+    };
+    render(PeopleWall);
+    await expect.element(page.getByTestId("wall-columns")).toBeVisible();
+
+    const columnsBox = page.getByTestId("wall-columns").element().getBoundingClientRect();
+    expect(columnsBox.height).toBeLessThan(2 * wallStep(1280).rowPx);
+    expect(columnsBox.height).toBeGreaterThanOrEqual(wallStep(1280).rowPx);
+    expect(page.getByTestId("wall-heading").elements()).toHaveLength(0);
+    const shownNames = allNameElements().length;
+    expect(shownNames).toBeGreaterThan(0);
+    expect(columnRows().every((column) => column.length === 1)).toBe(true);
+    expect(shownNames + notShownCount()).toBe(12);
+  });
+
+  for (const [width, height] of [
+    [1280, 720],
+    [390, 844],
+  ]) {
+    it(`counts the people under every heading among those not shown, with no heading alone, at ${width} by ${height}`, async () => {
+      await page.viewport(width, height);
+      overview.groups = [birch, oak];
+      const homes = [birch.id, oak.id, undefined];
+      overview.data = {
+        tenants: Array.from({ length: 120 }, (_, i) =>
+          i < 6 ? flagged(i) : named(i, { firstGroupId: homes[i % 3] })
+        ),
+      };
+      render(PeopleWall);
+      await expect.element(page.getByTestId("wall-not-shown")).toBeVisible();
+
+      const columns = columnRows();
+      expect(page.getByTestId("wall-heading").elements().length).toBeGreaterThan(0);
+      for (const column of columns) {
+        expect(column.at(-1)).not.toMatch(/^\[/);
+        column.forEach((row, index) => {
+          if (row?.startsWith("[")) expect(column[index + 1]).not.toMatch(/^\[/);
+        });
+      }
+      const names = allNameElements().map((name) => name.textContent?.trim());
+      expect(new Set(names).size).toBe(names.length);
+      expect(names.length + notShownCount()).toBe(120);
+      const root = wall().element();
+      expect(root.scrollHeight).toBeLessThanOrEqual(root.clientHeight);
+    });
+  }
+});
+
+describe("the overview through its generated schema", () => {
+  it("reads a person in none of the viewer's groups as under the last heading", async () => {
+    const response = TenantOverviewResponseSchema.parse({
+      tenants: [
+        named(1, { tenantId: "0193b6a0-0000-7000-8000-0000000000a1", firstGroupId: null as unknown as undefined }),
+        named(2, { tenantId: "0193b6a0-0000-7000-8000-0000000000a2", firstGroupId: birch.id }),
+      ],
+      hiddenCount: null,
+    });
+    expect(response.tenants?.[0].firstGroupId).toBeUndefined();
+    expect(response.tenants?.[1].firstGroupId).toBe(birch.id);
+
+    overview.groups = [birch];
+    overview.data = response;
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 002")).toBeVisible();
+
+    expect(columnRows().flat()).toEqual(["[Birch cabin]", "Person 002", "[Not in your groups]", "Person 001"]);
   });
 });

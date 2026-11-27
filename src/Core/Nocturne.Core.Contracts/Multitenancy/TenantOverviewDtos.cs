@@ -28,6 +28,11 @@ public record TenantOverviewResponse(List<TenantOverviewItem> Tenants, int? Hidd
 /// <param name="Trackers">Null when the caller's effective permissions on the tenant do not satisfy
 /// alerts read.</param>
 /// <param name="Attention">Why the person needs attention, most severe first. Empty when they do not.</param>
+/// <param name="FirstGroupId">
+/// On the overview of everyone the caller follows, the first of the caller's own groups that holds the person, in
+/// the order the groups read lists them; null when none does, and on every other read. One id rather than the
+/// person's groups, so the caller learns only the heading the person is listed under.
+/// </param>
 public record TenantOverviewItem(
     Guid TenantId,
     string Slug,
@@ -42,7 +47,8 @@ public record TenantOverviewItem(
     TenantOverviewTherapy? Therapy,
     TenantOverviewDevices? Devices,
     List<V4TrackerStatus>? Trackers,
-    List<TenantOverviewAttention> Attention);
+    List<TenantOverviewAttention> Attention,
+    Guid? FirstGroupId);
 
 /// <summary>A glucose reading on the overview trace.</summary>
 public record TenantOverviewPoint(DateTime Timestamp, double Mgdl);

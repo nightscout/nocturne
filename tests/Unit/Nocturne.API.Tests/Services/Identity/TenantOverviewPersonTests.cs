@@ -499,7 +499,7 @@ public class TenantOverviewPersonTests
 
             Service = new TenantOverviewService(
                 new TenantMembershipRepository(new InMemoryContextFactory(options).AsNocturneFactory(), AccountLinkRoutes.Off),
-                Mock.Of<ITeamRepository>(),
+                TenantOverviewTestKit.InNoGroup().Object,
                 provider.CreateScope().ServiceProvider,
                 new GlucoseStatusClassifier(
                     new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
