@@ -5,7 +5,6 @@ import {
 	alertStateLabel,
 	glucoseBucketLabel,
 	pumpModeLabel,
-	rateDirectionLabel,
 	stateSpanCategoryLabel,
 	tempBasalMetricLabel,
 	transmitterBatteryMetricLabel,
@@ -55,10 +54,6 @@ describe("alert labels", () => {
 		]);
 	});
 
-	it("labels every rate direction", () => {
-		expectStandaloneLabels(["falling", "rising"], rateDirectionLabel);
-	});
-
 	it("labels every temp basal metric", () => {
 		expectStandaloneLabels(Object.values(TempBasalMetric), tempBasalMetricLabel);
 		expect(tempBasalMetricLabel(TempBasalMetric.PercentOfScheduled)).toBe("Percent of scheduled");
@@ -75,7 +70,6 @@ describe("alert labels", () => {
 		expect(pumpModeLabel("odd" as never)).toBe("odd");
 		expect(stateSpanCategoryLabel("odd" as never)).toBe("odd");
 		expect(trendBucketLabel("odd" as never)).toBe("odd");
-		expect(rateDirectionLabel("odd" as never)).toBe("odd");
 		expect(tempBasalMetricLabel("odd" as never)).toBe("odd");
 	});
 });

@@ -25,7 +25,7 @@ function rule(channels: AlertRuleChannelResponse[]): AlertRuleResponse {
     isEnabled: true,
     severity: AlertRuleSeverity.Warning,
     conditionType: "threshold",
-    conditionParams: { direction: "below", value: 70 },
+    conditionParams: { operator: "<", value: 70 },
     channels,
   } as AlertRuleResponse;
 }

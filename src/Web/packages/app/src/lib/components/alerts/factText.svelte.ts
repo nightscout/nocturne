@@ -112,9 +112,9 @@ export function factDescription(kind: LeafKind): string {
     case "reservoir":
       return "The units of insulin left in the pump";
     case "site_age":
-      return "The hours since the last infusion site change";
+      return "The time since the last infusion site change";
     case "sensor_age":
-      return "The days since the sensor started";
+      return "The time since the sensor started";
     case "tracker_age":
       return "Time since a tracker's start (Duration) or scheduled time (Event), negative before the event. A tracker with no active instance never matches";
     case "pump_battery":

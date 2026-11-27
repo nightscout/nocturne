@@ -22,7 +22,10 @@
   import {
     ageDays,
     daysToMinutes,
+    isFallRate,
     lifespanText,
+    rateMagnitude,
+    signedRate,
     minutesText,
     trackerLeaf,
     type AlertDraft,
@@ -76,7 +79,7 @@
       {@const payload = leaf.threshold}
       <NumberField
         id="alert-level"
-        label={payload.direction === "above"
+        label={payload.operator === ">" || payload.operator === ">="
           ? "Alert when glucose is above"
           : "Alert when glucose is below"}
         suffix={bgLabel()}
@@ -90,15 +93,15 @@
       {@const payload = leaf.rate_of_change}
       <NumberField
         id="alert-level"
-        label={payload.direction === "rising"
-          ? "Alert when glucose increases this fast, or faster"
-          : "Alert when glucose decreases this fast, or faster"}
+        label={isFallRate(payload)
+          ? "Alert when glucose decreases this fast, or faster"
+          : "Alert when glucose increases this fast, or faster"}
         suffix={`${bgLabel()} per minute`}
         step={valueStep("rate_of_change")}
-        value={payload.rate ?? 0}
-        toDisplay={(v) => String(convertRateToDisplayUnits(v, glucoseUnits.current))}
-        fromDisplay={fromRate}
-        onChange={(v) => (payload.rate = v)}
+        value={payload.value ?? 0}
+        toDisplay={() => String(convertRateToDisplayUnits(rateMagnitude(payload), glucoseUnits.current))}
+        fromDisplay={(shown) => signedRate(payload, fromRate(shown))}
+        onChange={(v) => (payload.value = v)}
       />
     {:else if leaf.signal_loss}
       {@const payload = leaf.signal_loss}
@@ -200,27 +203,17 @@
           {/if}
         </p>
       {/if}
-    {:else if leaf.site_age}
-      {@const payload = leaf.site_age}
+    {:else if leaf.site_age || leaf.sensor_age}
+      {@const payload = (leaf.site_age ?? leaf.sensor_age)!}
       <NumberField
         id="alert-level"
         label={ageLabel}
         suffix="days"
         step={0.5}
-        value={payload.value ?? 0}
-        toDisplay={(hours) => String(hours / 24)}
-        fromDisplay={(days) => days * 24}
-        onChange={(v) => (payload.value = v)}
-      />
-    {:else if leaf.sensor_age}
-      {@const payload = leaf.sensor_age}
-      <NumberField
-        id="alert-level"
-        label={ageLabel}
-        suffix="days"
-        step={0.5}
-        value={payload.value ?? 0}
-        onChange={(v) => (payload.value = v)}
+        value={payload.minutes ?? 0}
+        toDisplay={() => String(ageDays(leaf))}
+        fromDisplay={daysToMinutes}
+        onChange={(v) => (payload.minutes = v)}
       />
     {:else if leaf.loop_stale}
       {@const payload = leaf.loop_stale}

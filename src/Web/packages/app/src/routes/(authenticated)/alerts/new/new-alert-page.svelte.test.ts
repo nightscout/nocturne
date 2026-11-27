@@ -28,7 +28,7 @@ vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   suggestAutoResolve: remoteCommand((request: unknown) => {
     calls.opposites.push(Reflect.get(Object(request), "condition"));
     return Promise.resolve({
-      condition: { type: "threshold", threshold: { direction: "above", value: 70 } },
+      condition: { type: "threshold", threshold: { operator: ">", value: 70 } },
     });
   }),
   createRule: remoteCommand((body: unknown) => {
@@ -148,6 +148,7 @@ describe("new alert wizard", () => {
         name: "Dexcom G7 change due: 9 days",
         conditionType: "tracker_age",
         conditionParams: JSON.stringify({
+          schema_version: 2,
           tracker_definition_id: "11111111-1111-1111-1111-111111111111",
           operator: ">=",
           minutes: 9 * 24 * 60,
@@ -230,7 +231,7 @@ describe("new alert wizard", () => {
       rule: {
         name: "Low: below 70 mg/dL",
         conditionType: "threshold",
-        conditionParams: JSON.stringify({ direction: "below", value: 70 }),
+        conditionParams: JSON.stringify({ schema_version: 2, operator: "<", value: 70 }),
       },
     });
   });
@@ -338,13 +339,14 @@ describe("new alert wizard", () => {
       name: "Low: below 70 mg/dL",
       severity: "warning",
       conditionType: "threshold",
+      conditionParams: { schema_version: 2, operator: "<", value: 70 },
       isEnabled: true,
       autoResolveEnabled: true,
-      autoResolveParams: { type: "threshold", threshold: { direction: "above", value: 70 } },
+      autoResolveParams: { schema_version: 2, type: "threshold", threshold: { operator: ">", value: 70 } },
     });
     expect(calls.opposites.at(-1)).toMatchObject({
       type: "composite",
-      composite: { conditions: [{ type: "threshold", threshold: { direction: "below", value: 70 } }] },
+      composite: { conditions: [{ type: "threshold", threshold: { operator: "<", value: 70 } }] },
     });
   });
 

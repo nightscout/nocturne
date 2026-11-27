@@ -134,19 +134,7 @@
 
                     {#if row.leaf.type === "threshold"}
                         {@const leaf = row.leaf}
-                        <Select.Root
-                            type="single"
-                            value={leaf.threshold.direction}
-                            onValueChange={(v: string) => {
-                                if (v === "above" || v === "below") leaf.threshold.direction = v;
-                            }}
-                        >
-                            <Select.Trigger size="xs">{leaf.threshold.direction}</Select.Trigger>
-                            <Select.Content>
-                                <Select.Item value="below" label="below" />
-                                <Select.Item value="above" label="above" />
-                            </Select.Content>
-                        </Select.Root>
+                        {@render operator(leaf.threshold.operator, (o) => (leaf.threshold.operator = o))}
                         <Input
                             type="number"
                             size="xs"
@@ -164,38 +152,25 @@
                         <span class="text-xs text-muted-foreground">{getUnitLabel(units)}</span>
                     {:else if row.leaf.type === "rate_of_change"}
                         {@const leaf = row.leaf}
-                        <Select.Root
-                            type="single"
-                            value={leaf.rate_of_change.direction}
-                            onValueChange={(v: string) => {
-                                if (v === "falling" || v === "rising") leaf.rate_of_change.direction = v;
-                            }}
-                        >
-                            <Select.Trigger size="xs">{leaf.rate_of_change.direction}</Select.Trigger>
-                            <Select.Content>
-                                <Select.Item value="falling" label="falling" />
-                                <Select.Item value="rising" label="rising" />
-                            </Select.Content>
-                        </Select.Root>
-                        <span class="text-xs text-muted-foreground">at least</span>
+                        {@render operator(leaf.rate_of_change.operator, (o) => (leaf.rate_of_change.operator = o))}
                         <Input
                             type="number"
                             size="xs"
-                            min="0"
                             step={units === "mmol" ? "0.01" : "0.1"}
                             class="w-20 text-right"
                             aria-label="Rate"
                             value={units === "mmol"
-                                ? Math.round((leaf.rate_of_change.rate / MGDL_PER_MMOL) * 100) / 100
-                                : leaf.rate_of_change.rate}
+                                ? Math.round((leaf.rate_of_change.value / MGDL_PER_MMOL) * 100) / 100
+                                : leaf.rate_of_change.value}
                             oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                                 const n = numberFrom(e, NaN);
                                 if (!Number.isFinite(n)) return;
-                                leaf.rate_of_change.rate =
+                                leaf.rate_of_change.value =
                                     units === "mmol" ? Math.round(n * MGDL_PER_MMOL * 10) / 10 : n;
                             }}
                         />
                         <span class="text-xs text-muted-foreground">{rateUnit}</span>
+                        <span class="w-full text-xs text-muted-foreground">A fall is a negative number.</span>
                     {:else if row.leaf.type === "signal_loss"}
                         {@const leaf = row.leaf}
                         <span class="text-xs text-muted-foreground">no reading for</span>

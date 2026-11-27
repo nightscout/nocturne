@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { legendForRules } from "./replaySeries";
 import type { ConditionNode } from "./types";
 
-const below70: ConditionNode = { type: "threshold", threshold: { direction: "below", value: 70 } };
+const below70: ConditionNode = { type: "threshold", threshold: { operator: "<", value: 70 } };
 const cob: ConditionNode = { type: "cob", cob: { operator: ">=", value: 5 } };
 const iob: ConditionNode = { type: "iob", iob: { operator: "<", value: 0.5 } };
 

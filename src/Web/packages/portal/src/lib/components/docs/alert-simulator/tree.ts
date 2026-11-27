@@ -24,9 +24,9 @@ export const LEAF_KINDS: { kind: LeafKind; label: string }[] = [
 export function defaultLeaf(kind: LeafKind): LeafNode {
 	switch (kind) {
 		case "threshold":
-			return { type: "threshold", threshold: { direction: "below", value: 70 } };
+			return { type: "threshold", threshold: { operator: "<", value: 70 } };
 		case "rate_of_change":
-			return { type: "rate_of_change", rate_of_change: { direction: "falling", rate: 3 } };
+			return { type: "rate_of_change", rate_of_change: { operator: "<=", value: -3 } };
 		case "signal_loss":
 			return { type: "signal_loss", signal_loss: { timeout_minutes: 30 } };
 		case "time_of_day":

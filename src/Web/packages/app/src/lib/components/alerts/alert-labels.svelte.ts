@@ -1,9 +1,6 @@
 import { AlertLimitFact, AlertWindowExtreme, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "@nocturne/api-client";
 import { isTrendBucket } from "./types";
 
-const RATE_DIRECTIONS = ["falling", "rising"] as const;
-export type RateDirection = (typeof RATE_DIRECTIONS)[number];
-
 export const ALERT_STATES = ["firing", "unacknowledged", "acknowledged"] as const;
 export type AlertState = (typeof ALERT_STATES)[number];
 
@@ -167,10 +164,6 @@ function isAlertState(value: string): value is AlertState {
 	return ALERT_STATES.some((state) => state === value);
 }
 
-function isRateDirection(value: string): value is RateDirection {
-	return RATE_DIRECTIONS.some((direction) => direction === value);
-}
-
 export function alertStateLabel(state: string): string {
 	if (!isAlertState(state)) return state;
 	switch (state) {
@@ -200,18 +193,6 @@ export function trendBucketLabel(bucket: string): string {
 			return "Rising fast";
 		default:
 			return unknownValue(bucket);
-	}
-}
-
-export function rateDirectionLabel(direction: string): string {
-	if (!isRateDirection(direction)) return direction;
-	switch (direction) {
-		case "falling":
-			return "Falling";
-		case "rising":
-			return "Rising";
-		default:
-			return unknownValue(direction);
 	}
 }
 

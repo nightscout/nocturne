@@ -23,7 +23,6 @@
     glucoseBucketLabel,
     limitSourceLabel,
     pumpModeLabel,
-    rateDirectionLabel,
     sensorStateLabel,
     stateSpanCategoryLabel,
     tempBasalMetricLabel,
@@ -33,6 +32,7 @@
   } from "./alert-labels.svelte";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { untrack } from "svelte";
+  import DurationInput from "./DurationInput.svelte";
   import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import type { TrackerDefinitionDto } from "#lib/api/index.js";
   import {
@@ -240,10 +240,6 @@
       case "cob":
       case "carbs_required":
         return "g";
-      case "site_age":
-        return "h";
-      case "sensor_age":
-        return "d";
       case "pump_battery":
       case "uploader_battery":
         return "%";
@@ -381,21 +377,7 @@
 
 <div class="flex flex-wrap items-center gap-1.5">
   {#if node.type === "threshold" && node.threshold}
-    <Select.Root
-      type="single"
-      value={node.threshold.direction ?? "below"}
-      onValueChange={(v) => {
-        if (node.threshold) node.threshold.direction = v;
-      }}
-    >
-      <Select.Trigger size="sm" class="w-24" aria-label="Direction">
-        {node.threshold.direction === "above" ? "above" : "below"}
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item value="below" label="below" />
-        <Select.Item value="above" label="above" />
-      </Select.Content>
-    </Select.Root>
+    {@render comparison(node.threshold, "Comparison")}
     {@render glucoseLimit(node.threshold, THRESHOLD_LIMIT_FACTS)}
     <span class="text-xs text-muted-foreground">{bgLabel()}</span>
     {@render targetNote(node.threshold)}
@@ -520,42 +502,27 @@
     <span class="text-xs text-muted-foreground">{bgLabel()}</span>
     {@render targetNote(eventual)}
   {:else if node.type === "rate_of_change" && node.rate_of_change}
-    <Select.Root
-      type="single"
-      value={node.rate_of_change.direction ?? "falling"}
-      onValueChange={(v) => {
-        if (node.rate_of_change)
-          node.rate_of_change.direction = v;
-      }}
-    >
-      <Select.Trigger size="sm" class="w-24" aria-label="Direction">
-        {rateDirectionLabel(node.rate_of_change.direction ?? "falling")}
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item value="falling" label={rateDirectionLabel("falling")} />
-        <Select.Item value="rising" label={rateDirectionLabel("rising")} />
-      </Select.Content>
-    </Select.Root>
-    <span class="text-xs text-muted-foreground">at least</span>
+    {@const rate = node.rate_of_change}
+    {@render comparison(rate, "Comparison")}
     <Input
       type="number"
       aria-label="Value"
       step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
-      value={convertRateToDisplayUnits(node.rate_of_change.rate ?? 0, glucoseUnits.current)}
+      value={convertRateToDisplayUnits(rate.value ?? 0, glucoseUnits.current)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-        if (node.rate_of_change)
-          node.rate_of_change.rate = convertRateFromDisplayUnits(
-            parseNumber(
-              e.currentTarget.value,
-              convertRateToDisplayUnits(node.rate_of_change.rate ?? 0, glucoseUnits.current),
-            ),
-            glucoseUnits.current,
-          );
+        rate.value = convertRateFromDisplayUnits(
+          parseNumber(
+            e.currentTarget.value,
+            convertRateToDisplayUnits(rate.value ?? 0, glucoseUnits.current),
+          ),
+          glucoseUnits.current,
+        );
       }}
     />
-    <span class="text-xs text-muted-foreground">{bgLabel()}/min</span>
+    <span class="text-xs text-muted-foreground">{bgLabel()} per minute</span>
+    <span class="w-full text-xs text-muted-foreground">A fall is a negative number.</span>
   {:else if node.type === "glucose_change" && node.glucose_change}
     {@const change = node.glucose_change}
     {@render comparison(change, "Comparison")}
@@ -653,39 +620,16 @@
         {/each}
       </Select.Content>
     </Select.Root>
-  {:else if node.type === "staleness" && node.staleness}
-    <Select.Root
-      type="single"
-      value={node.staleness.operator ?? ">="}
-      onValueChange={(v) => {
-        if (node.staleness) node.staleness.operator = v;
-      }}
-    >
-      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
-        {operatorLabel(node.staleness.operator ?? ">=")}
-      </Select.Trigger>
-      <Select.Content>
-        {#each OPERATORS as op (op)}
-          <Select.Item value={op} label={operatorLabel(op)} />
-        {/each}
-      </Select.Content>
-    </Select.Root>
-    <Input
-      type="number"
-      aria-label="Value"
-      min="1"
-      size="sm"
-      class="w-16 text-right tabular-nums"
-      value={node.staleness.value ?? 0}
-      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-        if (node.staleness)
-          node.staleness.value = parseNumber(
-            e.currentTarget.value,
-            node.staleness.value ?? 0,
-          );
+  {:else if (node.type === "staleness" || node.type === "site_age" || node.type === "sensor_age") && node[node.type]}
+    {@const payload = node[node.type]!}
+    {@render comparison(payload, "Comparison")}
+    <DurationInput
+      label="Duration"
+      minutes={payload.minutes}
+      onChange={(minutes) => {
+        payload.minutes = minutes;
       }}
     />
-    <span class="text-xs text-muted-foreground">min</span>
   {:else if node.type === "time_of_day" && node.time_of_day}
     <Input
       type="time"
@@ -729,7 +673,7 @@
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
-  {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio" || node.type === "carbs_required") && node[node.type]}
+  {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio" || node.type === "carbs_required") && node[node.type]}
     {@const payload = node[node.type]!}
     {@const suffix = leafSuffix(node.type)}
     <Select.Root
@@ -1285,7 +1229,7 @@
     />
     <span class="text-xs text-muted-foreground">
       {node.type === "rate_of_change"
-        ? `${bgLabel()}/min`
+        ? `${bgLabel()} per minute`
         : node.type === "threshold" ||
             node.type === "predicted" ||
             node.type === "eventual_glucose" ||

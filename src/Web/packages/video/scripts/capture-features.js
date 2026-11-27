@@ -91,7 +91,7 @@ const arrange = {
         severity: "warning",
         isEnabled: false,
         conditionType: "threshold",
-        conditionParams: { direction: "below", value: 70 },
+        conditionParams: { schema_version: 2, operator: "<", value: 70 },
         channels: [{ channelType: "in_app" }],
         autoResolveEnabled: false,
         clientConfiguration: { snooze: { defaultMinutes: 15, options: [5, 15, 30, 60], maxCount: 3, smartSnooze: false } },

@@ -47,7 +47,7 @@ describe("alerts", () => {
     rule = await tenant.api.ok<AlertRule>("POST", "/api/v4/alert-rules", {
       name: ruleName,
       conditionType: "threshold",
-      conditionParams: { value: 70, direction: "below" },
+      conditionParams: { schema_version: 2, operator: "<", value: 70 },
       severity: "critical",
       channels: [{ channelType: "in_app", destination: tenant.subjectId }],
     });

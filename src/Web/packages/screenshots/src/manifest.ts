@@ -243,10 +243,18 @@ interface WireCondition {
 	[payload: string]: unknown;
 }
 
-const glucose = (direction: 'below' | 'above', value: number): WireCondition => ({
+const glucose = (operator: '<' | '>', value: number): WireCondition => ({
 	type: 'threshold',
-	threshold: { direction, value },
+	threshold: { operator, value },
 });
+
+/** The condition schema a stored tree names at its root (docs/alerts/engine-semantics.md §1.2). */
+const SCHEMA_VERSION = 2;
+
+/** `tree` as a stored root: naming its schema. */
+function rooted(tree: unknown): unknown {
+	return typeof tree === 'object' && tree !== null ? { schema_version: SCHEMA_VERSION, ...tree } : tree;
+}
 
 const inApp = { channelType: 'in_app' };
 
@@ -274,10 +282,10 @@ async function createAlertRule(
 			severity: rule.severity,
 			isEnabled: false,
 			conditionType: type,
-			conditionParams,
+			conditionParams: rooted(conditionParams),
 			channels: rule.channels ?? [inApp],
 			autoResolveEnabled: rule.autoResolve !== undefined,
-			autoResolveParams: rule.autoResolve,
+			autoResolveParams: rooted(rule.autoResolve),
 			clientConfiguration: rule.clientConfiguration,
 		},
 	});
@@ -297,7 +305,7 @@ const lowOvernight = (context: ArrangeContext) =>
 			composite: {
 				operator: 'and',
 				conditions: [
-					{ type: 'sustained', sustained: { minutes: 20, child: glucose('below', 70) } },
+					{ type: 'sustained', sustained: { minutes: 20, child: glucose('<', 70) } },
 					{ type: 'time_of_day', time_of_day: { from: '22:00', to: '07:00' } },
 				],
 			},
@@ -321,14 +329,14 @@ const fallingTowardLow = (context: ArrangeContext) =>
 			composite: {
 				operator: 'or',
 				conditions: [
-					glucose('below', 70),
+					glucose('<', 70),
 					{
 						type: 'composite',
 						composite: {
 							operator: 'and',
 							conditions: [
-								glucose('below', 100),
-								{ type: 'rate_of_change', rate_of_change: { direction: 'falling', rate: 2 } },
+								glucose('<', 100),
+								{ type: 'rate_of_change', rate_of_change: { operator: '<=', value: -2 } },
 							],
 						},
 					},
@@ -343,10 +351,10 @@ const highThatClearsItself = (context: ArrangeContext) =>
 	createAlertRule(context, {
 		name: 'High, until it is coming down',
 		severity: 'warning',
-		condition: glucose('above', 250),
+		condition: glucose('>', 250),
 		autoResolve: {
 			type: 'sustained',
-			sustained: { minutes: 15, child: { type: 'rate_of_change', rate_of_change: { direction: 'falling', rate: 1 } } },
+			sustained: { minutes: 15, child: { type: 'rate_of_change', rate_of_change: { operator: '<=', value: -1 } } },
 		},
 	});
 
@@ -354,7 +362,7 @@ const lowWithSmartSnooze = (context: ArrangeContext) =>
 	createAlertRule(context, {
 		name: 'Low',
 		severity: 'warning',
-		condition: glucose('below', 70),
+		condition: glucose('<', 70),
 		clientConfiguration: {
 			snooze: {
 				defaultMinutes: 15,
@@ -362,7 +370,7 @@ const lowWithSmartSnooze = (context: ArrangeContext) =>
 				maxCount: 3,
 				smartSnooze: true,
 				smartSnoozeExtendMinutes: 15,
-				conditions: [{ type: 'trend', trend: { bucket: 'rising' } }],
+				conditions: [{ schema_version: SCHEMA_VERSION, type: 'trend', trend: { bucket: 'rising' } }],
 			},
 		},
 	});

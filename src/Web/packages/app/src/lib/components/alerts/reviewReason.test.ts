@@ -29,6 +29,12 @@ describe("reviewReasonMessage", () => {
 		);
 	});
 
+	it("asks for a site or sensor age rounded to a whole minute to be checked", () => {
+		expect(reviewReasonMessage("condition_duration_rounded")).toBe(
+			"An update rounded the site age or sensor age of this rule to a whole minute. Check the age and save the rule."
+		);
+	});
+
 	it("still asks for a review for a reason it has no sentence for", () => {
 		expect(reviewReasonMessage("constructor")).toBe(
 			"This rule was changed by an update. Check it and save it."

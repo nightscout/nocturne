@@ -425,7 +425,7 @@ describe("composeRuleTruth", () => {
 			conditionParams: {
 				operator: "and",
 				conditions: [
-					{ type: "threshold", threshold: { direction: "below", value: 70 } },
+					{ type: "threshold", threshold: { operator: "<", value: 70 } },
 					{ type: "trend", trend: { bucket: "falling" } },
 				],
 			},

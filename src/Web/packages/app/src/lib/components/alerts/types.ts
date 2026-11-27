@@ -117,6 +117,27 @@ export type ConditionKind = `${AlertConditionType}`;
 
 export type ComparisonOperator = ">=" | ">" | "<=" | "<";
 
+/**
+ * The condition schema the app writes. Every tree it sends or stores names it at the
+ * tree's root and nowhere below (docs/alerts/engine-semantics.md §1.2).
+ */
+export const CONDITION_SCHEMA_VERSION = 2;
+
+/** A tree's root as it is stored: the generated shape, naming its schema. */
+export type SchemaRooted<T extends object> = T & { schema_version: typeof CONDITION_SCHEMA_VERSION };
+
+/** `tree` as a root that names {@link CONDITION_SCHEMA_VERSION}. */
+export function withSchemaVersion<T extends object>(tree: T): SchemaRooted<T> {
+	return { schema_version: CONDITION_SCHEMA_VERSION, ...tree };
+}
+
+/** `root` without the schema it names, which the editor does not show or edit. */
+function withoutSchemaVersion(root: unknown): unknown {
+	if (!isRecord(root) || !("schema_version" in root)) return root;
+	const { schema_version: _, ...rest } = root;
+	return rest;
+}
+
 /** What a rule builder's conditions do when they are true: start the alert, close it, or extend its snooze. */
 export type RulePurpose = "notify" | "resolve" | "snooze";
 
@@ -480,17 +501,17 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 		case "threshold":
 			return {
 				type: "threshold",
-				threshold: { direction: "below", value: 70 },
+				threshold: { operator: "<", value: 70 },
 			};
 		case "rate_of_change":
 			return {
 				type: "rate_of_change",
-				rate_of_change: { direction: "falling", rate: 3 },
+				rate_of_change: { operator: "<=", value: -3 },
 			};
 		case "staleness":
 			return {
 				type: "staleness",
-				staleness: { operator: ">=", value: 15 },
+				staleness: { operator: ">=", minutes: 15 },
 			};
 		case "predicted":
 			return {
@@ -519,12 +540,12 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 		case "site_age":
 			return {
 				type: "site_age",
-				site_age: { operator: ">=", value: 72 },
+				site_age: { operator: ">=", minutes: 72 * 60 },
 			};
 		case "sensor_age":
 			return {
 				type: "sensor_age",
-				sensor_age: { operator: ">=", value: 10 },
+				sensor_age: { operator: ">=", minutes: 10 * 24 * 60 },
 			};
 		case "alert_state":
 			return {
@@ -698,6 +719,7 @@ export function browserTimeZone(): string | undefined {
 }
 
 const comparisonShown = { operator: ">=", value: 0 };
+const durationShown = { operator: ">=", minutes: 0 };
 /** The window a windowed leaf shows when a stored rule leaves it out. */
 export const WINDOW_MINUTES_SHOWN = 15;
 const inactiveShown = { is_active: false };
@@ -709,17 +731,17 @@ const inactiveShown = { is_active: false };
  * is created with it set.
  */
 const SHOWN_DEFAULTS: Partial<Record<ConditionKind, Record<string, unknown>>> = {
-	threshold: { direction: "below", value: 0 },
+	threshold: { operator: "<", value: 0 },
 	predicted: { operator: "<=", value: 0, within_minutes: 0 },
-	rate_of_change: { direction: "falling", rate: 0 },
+	rate_of_change: { operator: "<=", value: 0 },
 	trend: { bucket: "falling" },
-	staleness: comparisonShown,
+	staleness: durationShown,
 	time_of_day: { from: "00:00", to: "23:59" },
 	iob: comparisonShown,
 	cob: comparisonShown,
 	reservoir: comparisonShown,
-	site_age: comparisonShown,
-	sensor_age: comparisonShown,
+	site_age: durationShown,
+	sensor_age: durationShown,
 	pump_battery: comparisonShown,
 	uploader_battery: comparisonShown,
 	sensitivity_ratio: comparisonShown,
@@ -785,6 +807,7 @@ function withoutNulls(comparison: WindowComparison | undefined): WindowCompariso
  * into a polymorphic <see cref="ConditionNode"/>.
  */
 export function nodeFromApiEnvelope(envelope: unknown): ConditionNode | null {
+	// The root's schema, when it names one, is on the envelope and so is left behind here.
 	if (!isRecord(envelope)) return null;
 	const kind = envelope.type;
 	if (typeof kind !== "string") return null;
@@ -814,8 +837,8 @@ function adoptWireNode(raw: { type: string; [key: string]: unknown }): Condition
 
 /**
  * Wrap a kind + opaque API payload into a `ConditionNode`. The API stores only
- * the kind-specific payload (e.g. `{direction, value}`); the FE keeps the kind
- * alongside it so a single recursive editor can dispatch on `node.type`.
+ * the kind-specific payload (e.g. `{operator, value}`) as a rule body's root, so
+ * it names the schema, which the editor drops and {@link buildBody} adds back.
  */
 export function nodeFromApi(
 	kind: string | undefined,
@@ -823,7 +846,7 @@ export function nodeFromApi(
 ): ConditionNode | null {
 	if (!kind) return null;
 	if (params === null || params === undefined) return null;
-	const node = adoptWireNode({ type: kind, _uid: newUid(), [kind]: params });
+	const node = adoptWireNode({ type: kind, _uid: newUid(), [kind]: withoutSchemaVersion(params) });
 	// Defensive: a malformed loop-staleness rule with a `<`/`<=` operator would
 	// render an unselectable value in the editor (the dropdown only offers `>`
 	// and `>=`). Coerce on inbound and warn so we notice if it ever happens.
@@ -971,18 +994,19 @@ export function nodeToApi(
  */
 export function buildBody(state: RuleEditorState) {
 	const api = nodeToApi(stripEditorFields(serialisableRoot(state.condition!)));
+	const params = api?.conditionParams;
 	return {
 		name: state.name,
 		description: state.description || undefined,
 		conditionType: api ? toAlertConditionType(api.conditionType) : undefined,
-		conditionParams: api?.conditionParams,
+		conditionParams: isRecord(params) ? withSchemaVersion(params) : params,
 		isEnabled: state.isEnabled,
 		sortOrder: state.sortOrder,
 		severity: state.severity,
 		allowThroughDnd: state.allowThroughDnd,
 		autoResolveEnabled: state.autoResolveEnabled,
 		autoResolveParams: state.autoResolveCondition
-			? stripEditorFields(serialisableRoot(state.autoResolveCondition))
+			? withSchemaVersion(stripEditorFields(serialisableRoot(state.autoResolveCondition)))
 			: undefined,
 		clientConfiguration: {
 			...state.clientConfig,
@@ -991,7 +1015,7 @@ export function buildBody(state: RuleEditorState) {
 				conditions: state.clientConfig.snooze.conditions
 					.map(withoutEmptyGroups)
 					.filter((c): c is ConditionNode => c !== null)
-					.map((c) => stripEditorFields(flattenSingleChildRoot(c))),
+					.map((c) => withSchemaVersion(stripEditorFields(flattenSingleChildRoot(c)))),
 			},
 		},
 		onUnknown: state.onUnknown,
@@ -1317,9 +1341,8 @@ function parseSnoozeConditions(snooze: unknown): ConditionNode[] {
 			// at the group level, and pre-existing snooze entries (which were
 			// stored as flat leaves under the legacy SnoozeTab) need wrapping
 			// before they can be mounted.
-			const node = ensureCompositeRoot(
-				adoptWireNode({ ...entry, type: entry.type }),
-			);
+			const { schema_version: _, ...rest } = entry;
+			const node = ensureCompositeRoot(adoptWireNode({ ...rest, type: entry.type }));
 			adoptTree(node);
 			out.push(node);
 		}

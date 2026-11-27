@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
 	browserTimeZone,
+	CONDITION_SCHEMA_VERSION,
 	defaultClientConfig,
 	defaultPayload,
 	nodeFromApi,
@@ -71,7 +72,14 @@ describe("defaultPayload", () => {
 	it("returns a threshold node by default", () => {
 		const node = defaultPayload("threshold");
 		expect(node.type).toBe("threshold");
-		expect(node.threshold).toEqual({ direction: "below", value: 70 });
+		expect(node.threshold).toEqual({ operator: "<", value: 70 });
+	});
+
+	it("starts the schema 2 kinds with an operator, a signed rate and whole minutes", () => {
+		expect(defaultPayload("rate_of_change").rate_of_change).toEqual({ operator: "<=", value: -3 });
+		expect(defaultPayload("staleness").staleness).toEqual({ operator: ">=", minutes: 15 });
+		expect(defaultPayload("site_age").site_age).toEqual({ operator: ">=", minutes: 72 * 60 });
+		expect(defaultPayload("sensor_age").sensor_age).toEqual({ operator: ">=", minutes: 10 * 24 * 60 });
 	});
 
 	it("composite default has a single threshold child", () => {
@@ -105,11 +113,11 @@ describe("defaultPayload", () => {
 
 describe("nodeFromApi / nodeToApi", () => {
 	it("wraps API kind + payload into a ConditionNode", () => {
-		const node = nodeFromApi("threshold", { direction: "below", value: 70 });
+		const node = nodeFromApi("threshold", { operator: "<", value: 70 });
 		// nodeFromApi stamps _uid for editor-side React-keying; assert ignoring it.
 		expect(node).toMatchObject({
 			type: "threshold",
-			threshold: { direction: "below", value: 70 },
+			threshold: { operator: "<", value: 70 },
 		});
 		expect(node?._uid).toBeDefined();
 	});
@@ -122,11 +130,11 @@ describe("nodeFromApi / nodeToApi", () => {
 	it("nodeToApi extracts the kind-specific payload", () => {
 		const result = nodeToApi({
 			type: "threshold",
-			threshold: { direction: "above", value: 180 },
+			threshold: { operator: ">", value: 180 },
 		});
 		expect(result).toEqual({
 			conditionType: "threshold",
-			conditionParams: { direction: "above", value: 180 },
+			conditionParams: { operator: ">", value: 180 },
 		});
 	});
 });
@@ -136,20 +144,21 @@ describe("a limit from a fact", () => {
 		const state = parseRule({
 			name: "Below target",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value_from: { fact: "target_low", offset: -10 } },
+			conditionParams: { operator: "<", value_from: { fact: "target_low", offset: -10 } },
 		});
 
 		expect(buildBody(state).conditionParams).toEqual({
-			direction: "below",
+			schema_version: 2,
+			operator: "<",
 			value_from: { fact: "target_low", offset: -10 },
 		});
 	});
 
 	it("takes a number or a fact, never both", () => {
-		const p: ThresholdCondition = { direction: "below", value: 65 };
+		const p: ThresholdCondition = { operator: "<", value: 65 };
 
 		setLimitSource(p, AlertLimitFact.TargetHigh, 70);
-		expect(p).toEqual({ direction: "below", value: undefined, value_from: { fact: "target_high", offset: undefined } });
+		expect(p).toEqual({ operator: "<", value: undefined, value_from: { fact: "target_high", offset: undefined } });
 		expect(limitSource(p)).toBe(AlertLimitFact.TargetHigh);
 
 		setLimitSource(p, "value", 70);
@@ -182,7 +191,7 @@ describe("parseRule", () => {
 			severity: AlertRuleSeverity.Warning,
 			conditionType: AlertConditionType.Threshold,
 			conditionParams: {
-				direction: "below",
+				operator: "<",
 				value: 70,
 			},
 			isEnabled: true,
@@ -193,7 +202,7 @@ describe("parseRule", () => {
 		expect(state.condition?.type).toBe("composite");
 		const inner = state.condition?.composite?.conditions[0];
 		expect(inner?.type).toBe("threshold");
-		expect(inner?.threshold?.direction).toBe("below");
+		expect(inner?.threshold?.operator).toBe("<");
 		expect(inner?.threshold?.value).toBe(70);
 	});
 
@@ -204,7 +213,7 @@ describe("parseRule", () => {
 			conditionParams: {
 				operator: "or",
 				conditions: [
-					{ type: "threshold", threshold: { direction: "below", value: 70 } },
+					{ type: "threshold", threshold: { operator: "<", value: 70 } },
 					{ type: "trend", trend: { bucket: "falling_fast" } },
 				],
 			},
@@ -219,7 +228,7 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Low Alert",
 			conditionType: "threshold",
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			clientConfiguration: { snooze: { smartSnooze: true } },
 		} as never);
 
@@ -232,7 +241,7 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Snooze",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			clientConfiguration: {
 				snooze: {
 					conditions: [
@@ -243,7 +252,7 @@ describe("parseRule", () => {
 								conditions: [
 									{
 										type: "threshold",
-										threshold: { direction: "below", value: 70 },
+										threshold: { operator: "<", value: 70 },
 									},
 									{ type: "trend", trend: { bucket: "falling" } },
 								],
@@ -277,14 +286,14 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			autoResolveEnabled: true,
 			autoResolveParams: {
 				type: "composite",
 				composite: {
 					operator: "and",
 					conditions: [
-						{ type: "threshold", threshold: { direction: "above", value: 80 } },
+						{ type: "threshold", threshold: { operator: ">", value: 80 } },
 					],
 				},
 			},
@@ -298,11 +307,11 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			autoResolveEnabled: true,
 			autoResolveParams: {
 				type: "threshold",
-				threshold: { direction: "above", value: 80 },
+				threshold: { operator: ">", value: 80 },
 			},
 		});
 
@@ -316,7 +325,7 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Low Alert",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			allowThroughDnd: true,
 			channels: [
 				{
@@ -348,7 +357,7 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 		});
 
 		expect(state.channels).toHaveLength(1);
@@ -360,7 +369,7 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			clientConfiguration: undefined,
 		});
 
@@ -463,12 +472,12 @@ describe("buildBody", () => {
 		const state1 = parseRule({
 			name: "Low Alert",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 		});
 		const state2 = parseRule({
 			name: "Low Alert",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 		});
 		expect(JSON.stringify(buildBody(state1))).toBe(JSON.stringify(buildBody(state2)));
 	});
@@ -479,11 +488,11 @@ describe("buildBody", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "above", value: 180 },
+			conditionParams: { operator: ">", value: 180 },
 		});
 		const body = buildBody(state);
 		expect(body.conditionType).toBe("threshold");
-		expect(body.conditionParams).toEqual({ direction: "above", value: 180 });
+		expect(body.conditionParams).toEqual({ schema_version: 2, operator: ">", value: 180 });
 	});
 
 	it("converts empty description to undefined", () => {
@@ -503,7 +512,7 @@ describe("buildBody", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			channels: [
 				{ channelType: ChannelType.InApp, destination: "", sortOrder: 0 },
 			],
@@ -517,7 +526,7 @@ describe("buildBody", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			channels: [
 				{
 					channelType: ChannelType.DeviceAction,
@@ -554,7 +563,7 @@ describe("buildBody", () => {
 		};
 		const body = buildBody(state);
 		expect(body.conditionType).toBe("threshold");
-		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+		expect(body.conditionParams).toEqual({ schema_version: 2, operator: "<", value: 70 });
 	});
 
 	it("keeps an empty root group so saving reports it", () => {
@@ -562,7 +571,7 @@ describe("buildBody", () => {
 		state.condition = { type: "composite", composite: { operator: "and", conditions: [] } };
 		const body = buildBody(state);
 		expect(body.conditionType).toBe("composite");
-		expect(body.conditionParams).toEqual({ operator: "and", conditions: [] });
+		expect(body.conditionParams).toEqual({ schema_version: 2, operator: "and", conditions: [] });
 	});
 
 	it("drops empty groups from auto-resolve and snooze conditions", () => {
@@ -574,9 +583,9 @@ describe("buildBody", () => {
 		};
 		state.clientConfig.snooze.conditions = [empty, defaultPayload("trend")];
 		const body = buildBody(state);
-		expect(body.autoResolveParams).toEqual({ type: "iob", iob: { operator: ">=", value: 1 } });
+		expect(body.autoResolveParams).toEqual({ schema_version: 2, type: "iob", iob: { operator: ">=", value: 1 } });
 		expect(body.clientConfiguration.snooze.conditions).toEqual([
-			{ type: "trend", trend: { bucket: "falling" } },
+			{ schema_version: 2, type: "trend", trend: { bucket: "falling" } },
 		]);
 	});
 
@@ -584,7 +593,7 @@ describe("buildBody", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			channels: [{ channelType: ChannelType.InApp, destination: "", sortOrder: 0 }],
 		});
 		const body = buildBody(state);
@@ -625,7 +634,7 @@ describe("parseChannelMetadata", () => {
 		const state = parseRule({
 			name: "Test",
 			conditionType: AlertConditionType.Threshold,
-			conditionParams: { direction: "below", value: 70 },
+			conditionParams: { operator: "<", value: 70 },
 			channels: [
 				{
 					channelType: ChannelType.DeviceAction,
@@ -716,7 +725,7 @@ describe("reading a stored rule", () => {
 	const stored = (overrides: Partial<AlertRuleResponse>): AlertRuleResponse => ({
 		name: "Stored",
 		conditionType: AlertConditionType.Threshold,
-		conditionParams: { direction: "below", value: 70 },
+		conditionParams: { operator: "<", value: 70 },
 		...overrides,
 	});
 
@@ -736,10 +745,11 @@ describe("reading a stored rule", () => {
 		);
 
 		expect(buildBody(state).conditionParams).toEqual({
+			schema_version: 2,
 			operator: "and",
 			conditions: [
 				{ type: "iob", iob: { operator: ">=", value: 2 } },
-				{ type: "not", not: { child: { type: "threshold", threshold: { direction: "below", value: 70 } } } },
+				{ type: "not", not: { child: { type: "threshold", threshold: { operator: "<", value: 70 } } } },
 				{ type: "time_of_day", time_of_day: { from: "00:00", to: "23:59", timezone: "Europe/London" } },
 			],
 		});
@@ -749,7 +759,7 @@ describe("reading a stored rule", () => {
 		const state = parseRule(
 			stored({
 				autoResolveEnabled: true,
-				autoResolveParams: { type: "staleness", staleness: { value: 20 } },
+				autoResolveParams: { type: "staleness", staleness: { minutes: 20 } },
 				clientConfiguration: {
 					snooze: { smartSnooze: true, conditions: [{ type: "pump_suspended", pump_suspended: {} }] },
 				},
@@ -757,9 +767,13 @@ describe("reading a stored rule", () => {
 		);
 		const body = buildBody(state);
 
-		expect(body.autoResolveParams).toEqual({ type: "staleness", staleness: { operator: ">=", value: 20 } });
+		expect(body.autoResolveParams).toEqual({
+			schema_version: 2,
+			type: "staleness",
+			staleness: { operator: ">=", minutes: 20 },
+		});
 		expect(body.clientConfiguration.snooze.conditions).toEqual([
-			{ type: "pump_suspended", pump_suspended: { is_active: false } },
+			{ schema_version: 2, type: "pump_suspended", pump_suspended: { is_active: false } },
 		]);
 	});
 
@@ -770,7 +784,7 @@ describe("reading a stored rule", () => {
 				conditionParams: {
 					operator: "and",
 					conditions: [
-						{ type: "threshold", threshold: { direction: "below", value: 70 } },
+						{ type: "threshold", threshold: { operator: "<", value: 70 } },
 						{ type: "composite", composite: { operator: "or" } },
 						{ type: "not", not: {} },
 						null,
@@ -782,8 +796,86 @@ describe("reading a stored rule", () => {
 		);
 		const body = buildBody(state);
 
-		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
-		expect(body.autoResolveParams).toEqual({ type: "composite", composite: { operator: "and" } });
+		expect(body.conditionParams).toEqual({ schema_version: 2, operator: "<", value: 70 });
+		expect(body.autoResolveParams).toEqual({ schema_version: 2, type: "composite", composite: { operator: "and" } });
+	});
+});
+
+describe("the condition schema", () => {
+	const markers = (value: unknown): number =>
+		JSON.stringify(value).split('"schema_version"').length - 1;
+
+	it("names schema 2 at the root of the body, the auto-resolve tree and each snooze condition, and nowhere below", () => {
+		const state = parseRule(null);
+		state.condition = {
+			type: "composite",
+			composite: { operator: "or", conditions: [defaultPayload("threshold"), defaultPayload("rate_of_change")] },
+		};
+		state.autoResolveCondition = {
+			type: "composite",
+			composite: { operator: "and", conditions: [defaultPayload("iob"), defaultPayload("staleness")] },
+		};
+		state.clientConfig.snooze.conditions = [defaultPayload("trend"), defaultPayload("composite")];
+		const body = buildBody(state);
+
+		expect(body.conditionParams).toMatchObject({ schema_version: CONDITION_SCHEMA_VERSION, operator: "or" });
+		expect(markers(body.conditionParams)).toBe(1);
+		expect(body.autoResolveParams).toMatchObject({ schema_version: 2, type: "composite" });
+		expect(markers(body.autoResolveParams)).toBe(1);
+		expect(body.clientConfiguration.snooze.conditions).toHaveLength(2);
+		for (const condition of body.clientConfiguration.snooze.conditions) {
+			expect(condition).toMatchObject({ schema_version: 2 });
+			expect(markers(condition)).toBe(1);
+		}
+	});
+
+	it("drops a stored root's schema on load, so the editor neither shows nor doubles it", () => {
+		const state = parseRule({
+			name: "Stored",
+			conditionType: AlertConditionType.Threshold,
+			conditionParams: { schema_version: 2, operator: "<", value: 70 },
+			autoResolveEnabled: true,
+			autoResolveParams: { schema_version: 2, type: "threshold", threshold: { operator: ">", value: 80 } },
+			clientConfiguration: {
+				snooze: { conditions: [{ schema_version: 2, type: "trend", trend: { bucket: "rising" } }] },
+			} as never,
+		});
+
+		expect(state.condition?.composite?.conditions[0].threshold).toEqual({ operator: "<", value: 70 });
+		expect(markers(state.condition)).toBe(0);
+		expect(markers(state.autoResolveCondition)).toBe(0);
+		expect(markers(state.clientConfig.snooze.conditions)).toBe(0);
+
+		const body = buildBody(state);
+		expect(body.conditionParams).toEqual({ schema_version: 2, operator: "<", value: 70 });
+		expect(body.autoResolveParams).toEqual({
+			schema_version: 2,
+			type: "threshold",
+			threshold: { operator: ">", value: 80 },
+		});
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ schema_version: 2, type: "trend", trend: { bucket: "rising" } },
+		]);
+	});
+
+	it("names the schema in the trees a replay judges", () => {
+		const state = parseRule(null);
+		state.autoResolveCondition = defaultPayload("threshold");
+		const replay = toReplayRule(state, "id", undefined);
+
+		expect(JSON.parse(replay.conditionParams ?? "null")).toEqual({ schema_version: 2, operator: "<", value: 70 });
+		expect(JSON.parse(replay.autoResolveParams ?? "null")).toMatchObject({ schema_version: 2, type: "threshold" });
+	});
+
+	it("shows a stored schema 2 leaf's missing operands as the editor reads them", () => {
+		expect(nodeFromApi("rate_of_change", { schema_version: 2, value: -2 })?.rate_of_change).toEqual({
+			operator: "<=",
+			value: -2,
+		});
+		expect(nodeFromApi("threshold", { value: 70 })?.threshold).toEqual({ operator: "<", value: 70 });
+		for (const kind of ["staleness", "site_age", "sensor_age"] as const) {
+			expect(nodeFromApi(kind, {})?.[kind], kind).toEqual({ operator: ">=", minutes: 0 });
+		}
 	});
 });
 

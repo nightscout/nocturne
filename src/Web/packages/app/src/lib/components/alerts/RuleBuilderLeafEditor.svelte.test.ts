@@ -49,13 +49,13 @@ describe("saving is_active", () => {
 			conditionType: AlertConditionType.StateSpanActive,
 			conditionParams: { category: "Override" },
 		});
-		expect(buildBody(state).conditionParams).toEqual({ category: "Override", is_active: false });
+		expect(buildBody(state).conditionParams).toEqual({ schema_version: 2, category: "Override", is_active: false });
 	});
 
 	it("saves true for a new leaf", () => {
 		const state = parseRule(null);
 		state.condition!.composite!.conditions = [defaultPayload("sleep_session_active")];
-		expect(buildBody(state).conditionParams).toEqual({ is_active: true });
+		expect(buildBody(state).conditionParams).toEqual({ schema_version: 2, is_active: true });
 	});
 });
 
@@ -65,7 +65,7 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 		try {
 			const leaf: ConditionNode = {
 				type: "threshold",
-				threshold: { direction: "below", value: 72, clear_margin: 18 },
+				threshold: { operator: "<", value: 72, clear_margin: 18 },
 			};
 			render(RuleBuilderLeafEditor, { props: { node: leaf } });
 
@@ -121,13 +121,13 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 	it("steps a value and its clear margin alike, in each unit", async () => {
 		const cases: [ConditionNode, string, string, string][] = [
 			[
-				{ type: "threshold", threshold: { direction: "below", value: 70, clear_margin: 5 } },
+				{ type: "threshold", threshold: { operator: "<", value: 70, clear_margin: 5 } },
 				"Value",
 				"1",
 				"0.1",
 			],
 			[
-				{ type: "rate_of_change", rate_of_change: { direction: "falling", rate: 2, clear_margin: 1 } },
+				{ type: "rate_of_change", rate_of_change: { operator: "<=", value: -2, clear_margin: 1 } },
 				"Value",
 				"0.1",
 				"0.01",
@@ -183,16 +183,16 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 		glucoseUnits.current = "mg/dl";
 		const leaf: ConditionNode = $state({
 			type: "rate_of_change",
-			rate_of_change: { direction: "falling", rate: 2, clear_margin: 1 },
+			rate_of_change: { operator: "<=", value: -2, clear_margin: 1 },
 		});
 		render(RuleBuilderLeafEditor, { props: { node: leaf } });
 
 		await page.getByRole("spinbutton", { name: "Clear margin" }).fill("0.4");
 		expect(leaf.rate_of_change?.clear_margin).toBe(0.4);
 		await expect.element(page.getByRole("spinbutton", { name: "Clear margin" })).toHaveValue(0.4);
-		await page.getByRole("spinbutton", { name: "Value" }).fill("1.5");
-		expect(leaf.rate_of_change?.rate).toBe(1.5);
-		await expect.element(page.getByRole("spinbutton", { name: "Value" })).toHaveValue(1.5);
+		await page.getByRole("spinbutton", { name: "Value" }).fill("-1.5");
+		expect(leaf.rate_of_change?.value).toBe(-1.5);
+		await expect.element(page.getByRole("spinbutton", { name: "Value" })).toHaveValue(-1.5);
 	});
 
 	it("keeps the fraction of a rate margin and rate in mmol/L", async () => {
@@ -200,7 +200,7 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 		try {
 			const leaf: ConditionNode = $state({
 				type: "rate_of_change",
-				rate_of_change: { direction: "rising", rate: 2, clear_margin: 1 },
+				rate_of_change: { operator: ">=", value: 2, clear_margin: 1 },
 			});
 			render(RuleBuilderLeafEditor, { props: { node: leaf } });
 
@@ -208,7 +208,7 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 			expect(leaf.rate_of_change?.clear_margin).toBe(0.9);
 			await expect.element(page.getByRole("spinbutton", { name: "Clear margin" })).toHaveValue(0.05);
 			await page.getByRole("spinbutton", { name: "Value" }).fill("0.01");
-			expect(leaf.rate_of_change?.rate).toBe(0.18);
+			expect(leaf.rate_of_change?.value).toBe(0.18);
 			await expect.element(page.getByRole("spinbutton", { name: "Value" })).toHaveValue(0.01);
 		} finally {
 			glucoseUnits.current = "mg/dl";
@@ -218,7 +218,7 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 	it("says a stored margin inside “for at least” cannot run, and removes it", async () => {
 		const leaf: ConditionNode = $state({
 			type: "threshold",
-			threshold: { direction: "below", value: 70, clear_margin: 5 },
+			threshold: { operator: "<", value: 70, clear_margin: 5 },
 		});
 		render(RuleBuilderLeafEditor, { props: { node: leaf, underSustained: true } });
 
@@ -231,6 +231,102 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 		await expect
 			.element(page.getByText("A condition inside “for at least” cannot have a clear margin."))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe("RuleBuilderLeafEditor threshold and rate", () => {
+	it("compares glucose by any operator the other glucose conditions offer", async () => {
+		const leaf = $state<ConditionNode>(defaultPayload("threshold"));
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByLabelText("Comparison")).toHaveTextContent("less than");
+		await page.getByLabelText("Comparison").click();
+		await page.getByRole("option", { name: "at least" }).click();
+		flushSync();
+
+		expect(leaf.threshold).toEqual({ operator: ">=", value: 70 });
+		await expect.element(page.getByLabelText("Comparison")).toHaveTextContent("at least");
+	});
+
+	it("edits a fall as a negative rate, with its unit and what the sign means", async () => {
+		glucoseUnits.current = "mg/dl";
+		const leaf = $state<ConditionNode>(defaultPayload("rate_of_change"));
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByLabelText("Comparison")).toHaveTextContent("at most");
+		await expect.element(page.getByRole("spinbutton", { name: "Value" })).toHaveValue(-3);
+		await expect.element(page.getByText("mg/dL per minute").first()).toBeVisible();
+		await expect.element(page.getByText("A fall is a negative number.")).toBeVisible();
+
+		await page.getByLabelText("Comparison").click();
+		await page.getByRole("option", { name: "at least" }).click();
+		await page.getByRole("spinbutton", { name: "Value" }).fill("2");
+		flushSync();
+
+		expect(leaf.rate_of_change).toEqual({ operator: ">=", value: 2 });
+	});
+});
+
+describe("RuleBuilderLeafEditor durations", () => {
+	it("shows a stored age in the largest unit that holds it exactly", async () => {
+		for (const [minutes, amount, unit] of [
+			[14400, 10, "days"],
+			[4320, 3, "days"],
+			[120, 2, "hours"],
+			[90, 90, "minutes"],
+		] as const) {
+			const { unmount } = render(RuleBuilderLeafEditor, {
+				props: { node: { type: "site_age", site_age: { operator: ">=", minutes } } },
+			});
+			await expect.element(page.getByRole("spinbutton", { name: "Duration" })).toHaveValue(amount);
+			await expect.element(page.getByLabelText("Unit")).toHaveTextContent(unit);
+			unmount();
+		}
+	});
+
+	it("stores whole minutes for the number and unit typed", async () => {
+		const leaf = $state<ConditionNode>({ type: "sensor_age", sensor_age: { operator: ">=", minutes: 14400 } });
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByRole("spinbutton", { name: "Duration" }).fill("7");
+		expect(leaf.sensor_age?.minutes).toBe(7 * 1440);
+
+		await page.getByLabelText("Unit").click();
+		await page.getByRole("option", { name: "hours" }).click();
+		flushSync();
+		expect(leaf.sensor_age?.minutes).toBe(7 * 60);
+
+		await page.getByRole("spinbutton", { name: "Duration" }).fill("1.5");
+		expect(leaf.sensor_age?.minutes).toBe(90);
+		await expect.element(page.getByRole("spinbutton", { name: "Duration" })).toHaveValue(1.5);
+		await expect.element(page.getByLabelText("Unit")).toHaveTextContent("hours");
+	});
+
+	it("keeps the unit typed in while the number grows past the next unit", async () => {
+		const leaf = $state<ConditionNode>({ type: "staleness", staleness: { operator: ">=", minutes: 60 } });
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByLabelText("Unit")).toHaveTextContent("hours");
+		await page.getByRole("spinbutton", { name: "Duration" }).fill("24");
+
+		expect(leaf.staleness?.minutes).toBe(1440);
+		await expect.element(page.getByRole("spinbutton", { name: "Duration" })).toHaveValue(24);
+		await expect.element(page.getByLabelText("Unit")).toHaveTextContent("hours");
+	});
+
+	it("refuses a value that is not a whole number of minutes, and keeps the stored one", async () => {
+		const leaf = $state<ConditionNode>({ type: "staleness", staleness: { operator: ">=", minutes: 15 } });
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByRole("spinbutton", { name: "Duration" }).fill("2.5");
+
+		expect(leaf.staleness?.minutes).toBe(15);
+		await expect.element(page.getByRole("spinbutton", { name: "Duration" })).toHaveAttribute("aria-invalid", "true");
+		await expect.element(page.getByText("Enter a whole number of minutes, 0 or more.")).toBeVisible();
+
+		await page.getByRole("spinbutton", { name: "Duration" }).fill("25");
+		expect(leaf.staleness?.minutes).toBe(25);
+		await expect.element(page.getByText("Enter a whole number of minutes, 0 or more.")).not.toBeInTheDocument();
 	});
 });
 
@@ -273,7 +369,7 @@ describe("RuleBuilderLeafEditor sensor state minutes", () => {
 
 describe("RuleBuilderLeafEditor limit from a fact", () => {
 	it("compares with a target in place of a number, and stores no number", async () => {
-		const leaf = $state<ConditionNode>({ type: "threshold", threshold: { direction: "below", value: 70 } });
+		const leaf = $state<ConditionNode>({ type: "threshold", threshold: { operator: "<", value: 70 } });
 		render(RuleBuilderLeafEditor, { props: { node: leaf } });
 
 		await page.getByLabelText("Compare with").click();
@@ -304,7 +400,7 @@ describe("RuleBuilderLeafEditor limit from a fact", () => {
 
 	it("offers the latest glucose to a forecast but not to a threshold", async () => {
 		render(RuleBuilderLeafEditor, {
-			props: { node: { type: "threshold", threshold: { direction: "below", value: 70 } } },
+			props: { node: { type: "threshold", threshold: { operator: "<", value: 70 } } },
 		});
 		await page.getByLabelText("Compare with").click();
 

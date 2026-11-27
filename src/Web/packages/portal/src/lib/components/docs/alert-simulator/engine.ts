@@ -1,5 +1,5 @@
 import { syncedAsset } from "#lib/synced-asset.js";
-import { wirePayload, type ReplayResult, type ReplayTick, type SimRule, type ValidationIssue } from "./wire";
+import { wirePayload, withSchemaVersion, type ReplayResult, type ReplayTick, type SimRule, type ValidationIssue } from "./wire";
 
 interface EngineModule {
 	default: () => Promise<unknown>;
@@ -32,14 +32,17 @@ function unwrap<T>(json: string): T {
 	return envelope;
 }
 
-/** The root node's payload is the rule's `condition_params`, as the API stores a rule. */
+/**
+ * The root node's payload is the rule's `condition_params`, as the API stores a rule. Each tree
+ * names its schema at its root: the params, and the auto-resolve node.
+ */
 function wireRule(rule: SimRule) {
 	return {
 		id: rule.id,
 		condition_type: rule.condition.type,
-		condition_params: wirePayload(rule.condition),
+		condition_params: withSchemaVersion(wirePayload(rule.condition)),
 		auto_resolve_enabled: rule.autoResolve !== undefined,
-		auto_resolve_params: rule.autoResolve ?? null,
+		auto_resolve_params: rule.autoResolve ? withSchemaVersion(rule.autoResolve) : null,
 	};
 }
 
