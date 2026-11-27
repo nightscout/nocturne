@@ -3,7 +3,7 @@
   import * as Table from "#lib/components/ui/table/index.js";
   import type { GlucoseCluster } from "#lib/api/index.js";
   import { bgRange, formatDateTimeCompact } from "#lib/utils/formatting.js";
-  import { describeCluster } from "./format";
+  import { describeCluster } from "./format.svelte";
   import ConfidenceBadge from "./ConfidenceBadge.svelte";
   import { formatMinutesDuration } from "#lib/utils/duration.js";
 

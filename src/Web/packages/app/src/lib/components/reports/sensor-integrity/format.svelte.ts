@@ -3,7 +3,8 @@
  * it describes what was detected and why, never whether that is good or bad.
  */
 import { ClusterConfidence, type GlucoseCluster } from "#lib/api/index.js";
-import { bg, bgLabel } from "#lib/utils/formatting.js";
+import { bg, bgLabel, formatList } from "#lib/utils/formatting.js";
+import { plural } from "#lib/utils/plural.js";
 
 export function confidenceLabel(c: ClusterConfidence | undefined): string {
   switch (c) {
@@ -39,16 +40,21 @@ export function describeCluster(cluster: GlucoseCluster): string {
   if (!d) return "";
   const parts: string[] = [];
   if (d.peakReversals != null) {
-    parts.push(`${Math.round(d.peakReversals)} reversals`);
+    parts.push(plural(Math.round(d.peakReversals), ["# reversal", "# reversals"]));
   }
   if (d.peakIncoherenceRatio != null) {
-    parts.push(`${Math.round(d.peakIncoherenceRatio * 100)}% incoherent`);
+    const percent = Math.round(d.peakIncoherenceRatio * 100);
+    // @wc-include
+    parts.push(`${percent}% incoherent`);
   }
   if (d.spikePromoted && d.maxStep != null) {
-    parts.push(`${bg(d.maxStep)} ${bgLabel()} single-step change`);
+    const step = `${bg(d.maxStep)} ${bgLabel()}`;
+    // @wc-include
+    parts.push(`${step} single-step change`);
   }
   if (d.chainPromoted && d.chainSize != null) {
+    // @wc-include
     parts.push(`part of a ${d.chainSize}-window run`);
   }
-  return parts.join(", ");
+  return formatList(parts, "unit");
 }

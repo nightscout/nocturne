@@ -112,7 +112,13 @@
 
   /** A figure's note, with the comparison's value after it when there is one. */
   function noted(note: string | null, compared: string | null): string | undefined {
-    const parts = [note, comparing ? `Compared: ${compared ?? "–"}` : null].filter((p): p is string => p != null);
+    let comparedNote: string | null = null;
+    if (comparing) {
+      const value = compared ?? "–";
+      // @wc-include
+      comparedNote = `Compared: ${value}`;
+    }
+    const parts = [note, comparedNote].filter((p): p is string => p != null);
     return parts.length > 0 ? parts.join(" · ") : undefined;
   }
 

@@ -160,7 +160,7 @@ describe("PredictionAccuracyBody", () => {
 
     await expect.element(slider("UAM")).toBeVisible();
     expect(slider("IOB").elements()).toHaveLength(0);
-    await expect.element(page.getByText(/These curves are hidden:\s+IOB, Zero temp, COB\./)).toBeVisible();
+    await expect.element(page.getByText(/These curves are hidden:\s+IOB, Zero temp, and COB\./)).toBeVisible();
     await expect.element(page.getByText(/your access does not\s+include treatments/)).toBeVisible();
     expect(page.getByText("After a correction").elements()).toHaveLength(0);
     expect(page.getByText("Interrupted", { exact: true }).elements()).toHaveLength(0);

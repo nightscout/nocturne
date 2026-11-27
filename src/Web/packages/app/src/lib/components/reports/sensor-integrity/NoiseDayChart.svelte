@@ -11,7 +11,7 @@
   import { patternClass } from "@nocturne/charts/core";
   import type { DayBucket } from "./buckets";
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
-  import { confidenceKey } from "./format";
+  import { confidenceKey } from "./format.svelte";
   import HypoMarker from "./HypoMarker.svelte";
 
   interface Props {

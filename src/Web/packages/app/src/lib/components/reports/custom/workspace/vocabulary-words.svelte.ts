@@ -1161,9 +1161,9 @@ function scopeWord(scope: string): string {
 /** Why the reader cannot use something that reads `scopes`: its access lacks one of them. */
 export function accessReason(scopes: readonly string[]): string {
   const words = scopes.map(scopeWord);
-  return words.length > 0
-    ? `Your access cannot read ${formatList(words, "disjunction")}, which this needs.`
-    : "Your access cannot read the data this needs.";
+  if (words.length === 0) return "Your access cannot read the data this needs.";
+  const eitherScope = formatList(words, "disjunction");
+  return `Your access cannot read ${eitherScope}, which this needs.`;
 }
 
 /** The verb a "When" chart puts after a kind of event: lows "start", meals "happen". */

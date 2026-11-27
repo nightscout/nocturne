@@ -19,7 +19,7 @@
   import ChartKey, { type ChartKeyItem } from "#lib/components/charts/print/ChartKey.svelte";
   import { aidAlgorithmLabels } from "#lib/components/patient/labels.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-  import { bgDelta, bgLabel, convertToDisplayUnits } from "#lib/utils/formatting.js";
+  import { bgDelta, bgLabel, convertToDisplayUnits, formatList } from "#lib/utils/formatting.js";
   import { plural } from "#lib/utils/plural.js";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Info from "@lucide/svelte/icons/info";
@@ -115,7 +115,7 @@
       },
     ];
     if ((primary?.algorithms?.length ?? 0) > 0)
-      list.push({ label: "From", value: (primary?.algorithms ?? []).map((a) => aidAlgorithmLabels[a]).join(", ") });
+      list.push({ label: "From", value: formatList((primary?.algorithms ?? []).map((a) => aidAlgorithmLabels[a])) });
     return list;
   });
 </script>
@@ -152,7 +152,7 @@
         <p class="flex items-start gap-1.5 px-1 text-sm text-muted-foreground">
           <EyeOff class="mt-0.5 size-4 shrink-0" />
           {plural(hiddenCurves.length, ["This curve is hidden", "These curves are hidden"])}:
-          {hiddenCurves.map(curveLabel).join(", ")}. The report reads each curve only in the contexts
+          {formatList(hiddenCurves.map(curveLabel))}. The report reads each curve only in the contexts
           where the algorithm uses it. These contexts come from treatments, and your access does not
           include treatments.
         </p>

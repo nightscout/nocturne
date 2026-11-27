@@ -6,7 +6,7 @@
   import type { LoopAnalysisMasks } from "#lib/api/index.js";
   import Funnel from "@lucide/svelte/icons/funnel";
   import { MASK_KEYS } from "./loop-analysis-filter";
-  import { weekdayLabel } from "#lib/utils/formatting.js";
+  import { formatList, weekdayLabel } from "#lib/utils/formatting.js";
   import { maskLabels } from "./filter-labels.svelte";
 
   let { applied }: { applied: LoopAnalysisMasks | null | undefined } = $props();
@@ -23,9 +23,9 @@
   <p class="flex items-start gap-2 text-sm text-muted-foreground" data-testid="loop-analysis-applied-filters">
     <Funnel class="mt-0.5 size-4 shrink-0" />
     <span>
-      {#if someDays}Days: {days.map(weekdayLabel).join(", ")}.{/if}
+      {#if someDays}Days: {formatList(days.map(weekdayLabel))}.{/if}
       {#if applied.profileName}Profile: {applied.profileName}.{/if}
-      {#if excluded.length > 0}Time not used: {excluded.join(", ")}.{/if}
+      {#if excluded.length > 0}Time not used: {formatList(excluded)}.{/if}
     </span>
   </p>
 {/if}
