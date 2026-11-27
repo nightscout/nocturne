@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Controllers.V4.PlatformAdmin;
+using Nocturne.API.Services.Telemetry;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Telemetry;
 
@@ -32,6 +33,17 @@ public class PageCountsAdminControllerTests
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(
             new[] { new PageViewCount(Today, "/(authenticated)/calendar", 3) });
         _store.Verify(s => s.ReadAsync(Today.AddDays(-29), Today, It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public void The_route_list_is_every_known_page_in_ordinal_order()
+    {
+        var result = Controller().GetPageRoutes();
+
+        var routes = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<List<string>>().Subject;
+        routes.Should().BeEquivalentTo(PageRouteIds.All).And.BeInAscendingOrder(StringComparer.Ordinal);
+        routes.Should().Contain("/(authenticated)");
+        _store.VerifyNoOtherCalls();
     }
 
     [Fact]

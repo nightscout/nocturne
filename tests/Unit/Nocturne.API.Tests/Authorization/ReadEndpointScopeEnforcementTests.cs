@@ -161,6 +161,7 @@ public class ReadEndpointScopeEnforcementTests
             ["DatabaseCapacityController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["JobLedgerController.List"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["PageCountsAdminController.GetPageCounts"] = V4ScopeGuardExemptions.PlatformAdminRole,
+            ["PageCountsAdminController.GetPageRoutes"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["TenantCreationInviteAdminController.GetOverview"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["PlatformPolicyController.GetPolicy"] = V4ScopeGuardExemptions.PlatformAdminRole,
             ["TenantUsageController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,

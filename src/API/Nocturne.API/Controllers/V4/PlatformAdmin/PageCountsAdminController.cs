@@ -39,4 +39,13 @@ public class PageCountsAdminController(IPageViewCountStore store, TimeProvider t
 
         return Ok(await store.ReadAsync(first, last, ct));
     }
+
+    /// <summary>
+    /// The route id of every page the app counts, in ordinal order. Counts hold only pages that were
+    /// opened, so the ids here that a count lacks are the pages nobody opened.
+    /// </summary>
+    [HttpGet("page-routes")]
+    [ErrorEnvelope]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    public IActionResult GetPageRoutes() => Ok(PageRouteIds.All.Order(StringComparer.Ordinal).ToList());
 }
