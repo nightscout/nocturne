@@ -27,6 +27,19 @@ public interface ITeamRepository
     /// </summary>
     Task<TeamDetail?> GetAsync(Guid teamId, Guid callerSubjectId, DateTime now, CancellationToken ct);
 
+    /// <summary>
+    /// The groups <paramref name="subjectId"/> is in as staff of a team, while their end has not passed at
+    /// <paramref name="now"/>, by name, ignoring case, then id. Reads on a context pinned to the subject.
+    /// </summary>
+    Task<IReadOnlyList<StaffGroup>> GetGroupsOfStaffAsync(Guid subjectId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// The sites in the group whose team's access has not ended at <paramref name="now"/>; null when
+    /// <paramref name="subjectId"/> is not in the group as staff whose end has not passed. Reads on a context
+    /// pinned to the subject.
+    /// </summary>
+    Task<IReadOnlySet<Guid>?> GetPeopleOfStaffGroupAsync(Guid groupId, Guid subjectId, DateTime now, CancellationToken ct);
+
     /// <summary>Renames the team and returns the name it had; null when the caller is not a manager of it.</summary>
     Task<string?> RenameAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
 

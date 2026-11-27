@@ -137,7 +137,10 @@ public partial class TeamRepository
             await db.LockTeamAccessAsync(site, ct);
 
         if (add)
-            db.TeamGroupStaff.Add(new TeamGroupStaffEntity { Id = Guid.CreateVersion7(), TeamGroupId = groupId, TeamMemberId = member.Id });
+            db.TeamGroupStaff.Add(new TeamGroupStaffEntity
+            {
+                Id = Guid.CreateVersion7(), TeamGroupId = groupId, TeamId = teamId, TeamMemberId = member.Id,
+            });
         else
             db.TeamGroupStaff.Remove(place!);
 

@@ -3,7 +3,8 @@
   import { tick, untrack } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { getReview } from "#lib/api/generated/myTenants.generated.remote.js";
+  import { isHttpError } from "@sveltejs/kit";
+  import { getGroups, getReview } from "#lib/api/generated/myTenants.generated.remote.js";
   import type { TenantOverviewItem } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/shared/index.js";
@@ -15,6 +16,8 @@
   import Monitor from "@lucide/svelte/icons/monitor";
   import Users from "@lucide/svelte/icons/users";
   import PeopleRoster from "./PeopleRoster.svelte";
+  import PeopleTabs from "./PeopleTabs.svelte";
+  import { EVERYONE, groupOf, parseTab, tabValue, type PeopleTab } from "./people-tab.js";
   import { followPeople } from "./people-overview.svelte.js";
   import { setReadState } from "./read-state.js";
   import PersonPanel from "./PersonPanel.svelte";
@@ -33,20 +36,45 @@
   /** The content width of Tailwind's @4xl container, from which the panel sits beside the list. */
   const SIDE_BY_SIDE_MIN_PX = 896;
 
-  const overview = followPeople();
-  const overviewQuery = overview.query;
+  let tab = $state<PeopleTab>(parseTab(page.url.searchParams.get("group")));
+  /**
+   * Why the page shows everyone in place of the group the address named: the viewer is not in it,
+   * or their groups did not load.
+   */
+  let fellBack = $state<"unknown" | "unread" | null>(null);
+  /** How many reads of the groups are running after navigations named one they did not list. */
+  let groupRereads = $state(0);
+  const rereadingGroups = $derived(groupRereads > 0);
+  const group = $derived(groupOf(tab));
+
+  const groupsQuery = getGroups();
+  const groups = $derived(groupsQuery.current ?? []);
+  const overview = followPeople(
+    () => group,
+    () => void groupsQuery.refresh().catch(() => {})
+  );
+  const overviewQuery = $derived(overview.query);
   const clock = new Now();
+  /** The group's own read answers that the viewer is not in it. */
+  const groupNotFound = $derived(
+    isHttpError(overviewQuery.error) && overviewQuery.error.status === 404
+  );
+  // While the groups are read again, the group's 404 waits on them: the page then shows the group or
+  // falls back to everyone, and neither is a failed read.
+  const loadError = $derived(
+    groupNotFound && rereadingGroups ? undefined : overviewQuery.error
+  );
   setReadState({
     get disconnected() {
-      return !!overviewQuery.error;
+      return !!loadError;
     },
     get now() {
       return clock.current;
     },
   });
   const data = $derived(overviewQuery.current);
-  const loadError = $derived(overviewQuery.error);
   const people = $derived(data?.tenants ?? []);
+  const hiddenCount = $derived(data?.hiddenCount ?? 0);
 
   const baseDomain = $derived(page.data.baseDomain ?? null);
 
@@ -63,6 +91,18 @@
   // page.shallow.url.
   afterNavigate(() => {
     const { searchParams } = page.shallow?.url ?? page.url;
+    tab = parseTab(searchParams.get("group"));
+    fellBack = null;
+    // A group added since the groups were read is not refused: read them again first.
+    const listed = groupsQuery.current;
+    const named = groupOf(tab);
+    if (named && listed && !listed.some((listedGroup) => listedGroup.id === named)) {
+      groupRereads += 1;
+      void groupsQuery
+        .refresh()
+        .catch(() => {})
+        .finally(() => (groupRereads -= 1));
+    }
     lens = parseLens(searchParams.get("lens"));
     days = parseDays(searchParams.get("days"));
     personSlug = searchParams.get("person");
@@ -71,8 +111,35 @@
   // page.url keeps the address of the last navigation, not of a replaceState, so the address is
   // built from what the page holds.
   function addressOf(view: Partial<PageView> = {}) {
-    return pageUrl(page.url, { lens, days, person: personSlug, ...view });
+    return pageUrl(page.url, { tab, lens, days, person: personSlug, ...view });
   }
+
+  function choose(next: PeopleTab) {
+    tab = next;
+    fellBack = null;
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its query changed, already resolved
+    replaceState(addressOf(), {});
+  }
+
+  // The groups the API lists, or its 404 for the group's own read, say whether the viewer is in it.
+  // Without the groups the page has no tab to show the group under, so it shows everyone.
+  $effect(() => {
+    if (tab.kind !== "group" || rereadingGroups) return;
+    const id = tab.id;
+    const listed = groupsQuery.current;
+    const reason =
+      listed === undefined && groupsQuery.error
+        ? "unread"
+        : (listed !== undefined && !listed.some((listedGroup) => listedGroup.id === id)) ||
+            groupNotFound
+          ? "unknown"
+          : null;
+    if (!reason) return;
+    untrack(() => {
+      choose(EVERYONE);
+      fellBack = reason;
+    });
+  });
 
   function show(nextLens: Lens, nextDays: ReviewDays) {
     lens = nextLens;
@@ -126,10 +193,14 @@
     if (person.slug) open(person.slug);
   }
 
-  const rereads = $state<Partial<Record<ReviewDays, number>>>({});
-  const refreshing = $derived((rereads[days] ?? 0) > 0);
+  /** The review read of one tab for one period. */
+  const reviewKey = $derived(`${tabValue(tab)} ${days}`);
+  const rereads = $state<Record<string, number>>({});
+  const refreshing = $derived((rereads[reviewKey] ?? 0) > 0);
   // The review read is not polled: the API caches it, and a period does not move by the minute.
-  const reviewQuery = $derived(lens === "review" ? getReview({ days }) : null);
+  const reviewQuery = $derived(
+    lens === "review" ? getReview(group ? { group, days } : { days }) : null
+  );
   const reviewData = $derived(reviewQuery?.current);
   const reviewFailed = $derived(!!reviewQuery?.error);
   const review = $derived<ReviewState | undefined>(
@@ -151,21 +222,21 @@
       person.tenantId && !reviewed.has(person.tenantId) ? [person.tenantId] : []
     );
   });
-  const rereadIds: Partial<Record<ReviewDays, Set<string>>> = {};
+  const rereadIds: Record<string, Set<string>> = {};
 
   $effect(() => {
-    const period = days;
+    const key = reviewKey;
     const missing = missingIds;
-    const done = rereadIds[period] ?? new Set<string>();
+    const done = rereadIds[key] ?? new Set<string>();
     if (missing.every((id) => done.has(id))) return;
-    rereadIds[period] = new Set([...done, ...missing]);
+    rereadIds[key] = new Set([...done, ...missing]);
     untrack(() => {
-      rereads[period] = (rereads[period] ?? 0) + 1;
+      rereads[key] = (rereads[key] ?? 0) + 1;
       // A failed read shows through the query's error.
       void reviewQuery
         ?.refresh()
         .catch(() => {})
-        .finally(() => (rereads[period] = (rereads[period] ?? 1) - 1));
+        .finally(() => (rereads[key] = (rereads[key] ?? 1) - 1));
     });
   });
 </script>
@@ -249,88 +320,132 @@
     </div>
   </div>
 
-  {#if loadError}
-    <div class="space-y-2">
-      <p class="text-sm text-muted-foreground">
-        The list of people did not load.
-      </p>
-      <Button
-        variant="outline"
-        size="sm"
-        onclick={() => overviewQuery.refresh()}
-      >
-        Try again
-      </Button>
-    </div>
-  {:else if overviewQuery.loading && !data}
-    <p class="text-sm text-muted-foreground">Loading…</p>
-  {:else if data}
-    {#if people.length === 0}
-      <EmptyState
-        variant="dashed"
-        art="people-group"
-        title="You follow no other people"
-        headingLevel={2}
-        body="When a person gives you access to their data, they show here."
-      />
-    {:else}
-      {#if review?.status === "failed"}
-        <div class="flex flex-wrap items-center gap-3">
-          <p class="text-sm text-muted-foreground">
-            The statistics did not load.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={() => reviewQuery?.refresh()}
-          >
-            Try again
-          </Button>
-        </div>
-      {/if}
-      <div class="flex items-start gap-6" bind:clientWidth={contentWidth}>
-        <div class="min-w-0 flex-1">
-          <PeopleRoster
-            bind:this={roster}
-            {people}
-            {review}
-            selectedSlug={selected?.slug ?? null}
-            onSelect={select}
-            hrefFor={personLocation}
-          />
-        </div>
-        {#if selected && placement === "side"}
-          <aside
-            class="sticky top-[calc(var(--app-sticky-top,0px)+1rem)] max-h-[calc(100dvh-var(--app-sticky-top,0px)-2rem)] w-96 shrink-0 self-start overflow-y-auto border-l"
-            aria-labelledby={PERSON_PANEL_HEADING_ID}
-          >
-            <PersonPanel
-              person={selected}
-              {baseDomain}
-              placement="side"
-              onClose={closePanel}
-            />
-          </aside>
-        {/if}
+  {#if fellBack === "unknown"}
+    <p class="text-sm text-muted-foreground">
+      You are not in that group. The list shows everyone you follow.
+    </p>
+  {:else if fellBack === "unread"}
+    <p class="text-sm text-muted-foreground">
+      Your groups did not load. The list shows everyone you follow.
+    </p>
+  {/if}
+
+  {#snippet list()}
+    {#if loadError}
+      <div class="space-y-2">
+        <p class="text-sm text-muted-foreground">
+          The list of people did not load.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={() => overviewQuery.refresh()}
+        >
+          Try again
+        </Button>
       </div>
-      {#if selected && placement === "sheet"}
-        <Sheet.Root open onOpenChange={(next) => !next && closePanel()}>
-          <Sheet.Content
-            side="right"
-            showClose={false}
-            class="w-full gap-0 overflow-y-auto sm:max-w-sm"
-            aria-describedby={undefined}
-            onCloseAutoFocus={(event) => event.preventDefault()}
-          >
-            <PersonPanel
-              person={selected}
-              {baseDomain}
-              placement="sheet"
-              onClose={closePanel}
+    {:else if (overviewQuery.loading || rereadingGroups) && !data}
+      <p class="text-sm text-muted-foreground">Loading…</p>
+    {:else if data}
+      {#if group && hiddenCount > 0}
+        <p class="text-sm text-muted-foreground">
+          {plural(hiddenCount, [
+            "You cannot see # person in this group.",
+            "You cannot see # people in this group.",
+          ])}
+        </p>
+      {/if}
+      {#if people.length === 0 && group && hiddenCount > 0}
+        <EmptyState
+          variant="dashed"
+          art="people-group"
+          title="You cannot see anyone in this group"
+          headingLevel={2}
+          body="Each person's site decides who on the team can see them."
+        />
+      {:else if people.length === 0 && group}
+        <EmptyState
+          variant="dashed"
+          art="people-group"
+          title="You can see no people in this group"
+          headingLevel={2}
+          body="A manager of the team chooses the people in each group."
+        />
+      {:else if people.length === 0}
+        <EmptyState
+          variant="dashed"
+          art="people-group"
+          title="You follow no other people"
+          headingLevel={2}
+          body="When a person gives you access to their data, they show here."
+        />
+      {:else}
+        {#if review?.status === "failed"}
+          <div class="flex flex-wrap items-center gap-3">
+            <p class="text-sm text-muted-foreground">
+              The statistics did not load.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => reviewQuery?.refresh()}
+            >
+              Try again
+            </Button>
+          </div>
+        {/if}
+        <div class="flex items-start gap-6" bind:clientWidth={contentWidth}>
+          <div class="min-w-0 flex-1">
+            <PeopleRoster
+              bind:this={roster}
+              {people}
+              {review}
+              selectedSlug={selected?.slug ?? null}
+              onSelect={select}
+              hrefFor={personLocation}
             />
-          </Sheet.Content>
-        </Sheet.Root>
+          </div>
+          {#if selected && placement === "side"}
+            <aside
+              class="sticky top-[calc(var(--app-sticky-top,0px)+1rem)] max-h-[calc(100dvh-var(--app-sticky-top,0px)-2rem)] w-96 shrink-0 self-start overflow-y-auto border-l"
+              aria-labelledby={PERSON_PANEL_HEADING_ID}
+            >
+              <PersonPanel
+                person={selected}
+                {baseDomain}
+                placement="side"
+                onClose={closePanel}
+              />
+            </aside>
+          {/if}
+        </div>
+        {#if selected && placement === "sheet"}
+          <Sheet.Root open onOpenChange={(next) => !next && closePanel()}>
+            <Sheet.Content
+              side="right"
+              showClose={false}
+              class="w-full gap-0 overflow-y-auto sm:max-w-sm"
+              aria-describedby={undefined}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+            >
+              <PersonPanel
+                person={selected}
+                {baseDomain}
+                placement="sheet"
+                onClose={closePanel}
+              />
+            </Sheet.Content>
+          </Sheet.Root>
+        {/if}
       {/if}
     {/if}
+  {/snippet}
+
+  {#if groups.length > 0}
+    <PeopleTabs {groups} {tab} onChange={choose}>
+      {@render list()}
+    </PeopleTabs>
+  {:else}
+    {@render list()}
   {/if}
 </div>

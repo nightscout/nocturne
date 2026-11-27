@@ -8,6 +8,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -49,7 +50,7 @@ public class MyTenantsControllerTests
     {
         var controller = CreateController(Subjectless(authType));
 
-        var result = await controller.GetOverview(CancellationToken.None);
+        var result = await controller.GetOverview(null, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TenantOverviewResponse>()
@@ -74,7 +75,7 @@ public class MyTenantsControllerTests
                 false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(review);
 
-        var result = await CreateController(Member()).GetReview(days, CancellationToken.None);
+        var result = await CreateController(Member()).GetReview(null, days, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
     }
@@ -91,7 +92,7 @@ public class MyTenantsControllerTests
     [InlineData(365)]
     public async Task A_review_of_any_other_period_is_refused_and_nothing_is_read(int days)
     {
-        var result = await CreateController(Member()).GetReview(days, CancellationToken.None);
+        var result = await CreateController(Member()).GetReview(null, days, CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -113,9 +114,84 @@ public class MyTenantsControllerTests
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(review);
 
-        var result = await CreateController(Subjectless(authType)).GetReview(14, CancellationToken.None);
+        var result = await CreateController(Subjectless(authType)).GetReview(null, 14, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
+    }
+
+    [Fact]
+    public async Task A_group_asked_for_is_read_as_that_group_and_everyone_is_not_read()
+    {
+        var group = Guid.CreateVersion7();
+        var overview = new TenantOverviewResponse([], 2);
+        _overviewService
+            .Setup(s => s.GetGroupOverviewAsync(
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(overview);
+
+        var result = await CreateController(Member()).GetOverview(group, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(overview);
+        _overviewService.Verify(
+            s => s.GetOverviewAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task A_group_the_caller_is_not_in_is_not_found()
+    {
+        var result = await CreateController(Member()).GetOverview(Guid.CreateVersion7(), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Theory]
+    [MemberData(nameof(SubjectlessCredentials))]
+    public async Task A_subjectless_session_has_no_groups_and_asking_for_one_is_not_found(AuthType authType)
+    {
+        var controller = CreateController(Subjectless(authType));
+
+        (await controller.GetGroups(CancellationToken.None)).Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<IEnumerable<StaffGroup>>().Which.Should().BeEmpty();
+        (await controller.GetOverview(Guid.CreateVersion7(), CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        (await controller.GetReview(Guid.CreateVersion7(), 14, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        _overviewService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_members_groups_are_the_services()
+    {
+        IReadOnlyList<StaffGroup> groups = [new(Guid.CreateVersion7(), "Birch cabin", "Camp", false)];
+        _overviewService.Setup(s => s.GetGroupsAsync(_subjectId, It.IsAny<CancellationToken>())).ReturnsAsync(groups);
+
+        (await CreateController(Member()).GetGroups(CancellationToken.None)).Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().Be(groups);
+    }
+
+    [Fact]
+    public async Task A_review_of_a_group_is_read_for_that_group_and_one_the_caller_is_not_in_is_not_found()
+    {
+        var group = Guid.CreateVersion7();
+        var review = new TenantReviewResponse(default, default, default, default, []);
+        _overviewService
+            .Setup(s => s.GetGroupReviewAsync(
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, 30, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(review);
+
+        (await CreateController(Member()).GetReview(group, 30, CancellationToken.None)).Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().Be(review);
+        (await CreateController(Member()).GetReview(Guid.CreateVersion7(), 30, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        _overviewService.Verify(
+            s => s.GetReviewAsync(
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -196,7 +272,7 @@ public class MyTenantsControllerTests
     [MemberData(nameof(SubjectlessCredentials))]
     public async Task A_subjectless_session_is_refused_an_unsupported_period(AuthType authType)
     {
-        var result = await CreateController(Subjectless(authType)).GetReview(15, CancellationToken.None);
+        var result = await CreateController(Subjectless(authType)).GetReview(null, 15, CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);

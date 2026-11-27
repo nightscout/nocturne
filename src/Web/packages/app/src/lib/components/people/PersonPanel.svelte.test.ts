@@ -38,6 +38,7 @@ vi.mock("$app/navigation", () => ({
 vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
 
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  getGroups: () => ({ current: [], error: undefined, loading: false, refresh: async () => {} }),
   getOverview: () => ({
     get current() {
       return overview.data;

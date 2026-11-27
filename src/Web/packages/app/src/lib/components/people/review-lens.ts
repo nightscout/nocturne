@@ -4,6 +4,7 @@ import {
   type TenantReviewResponse,
   type TenantReviewStatistics,
 } from "@nocturne/api-client";
+import type { PeopleTab } from "./people-tab.js";
 
 export type Lens = "now" | "review";
 
@@ -25,6 +26,7 @@ export function parseDays(value: string | null): ReviewDays {
 
 /** What the page shows, which is everything its address states. */
 export interface PageView {
+  tab: PeopleTab;
   lens: Lens;
   days: ReviewDays;
   person: string | null;
@@ -33,9 +35,11 @@ export interface PageView {
 /** The page's address for a view. The Now lens carries no period. */
 export function pageUrl(current: { href: string }, view: PageView): URL {
   const url = new URL(current.href);
+  url.searchParams.delete("group");
   url.searchParams.delete("lens");
   url.searchParams.delete("days");
   url.searchParams.delete("person");
+  if (view.tab.kind === "group") url.searchParams.set("group", view.tab.id);
   if (view.lens === "review") {
     url.searchParams.set("lens", view.lens);
     url.searchParams.set("days", String(view.days));

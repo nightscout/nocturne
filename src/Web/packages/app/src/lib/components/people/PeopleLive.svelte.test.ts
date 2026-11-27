@@ -12,6 +12,7 @@ const refreshes = vi.hoisted(() => ({ count: 0 }));
 vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
 
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  getGroups: () => ({ current: [], error: undefined, loading: false, refresh: async () => {} }),
   getOverview: () => ({
     current: { tenants: [makePerson({ slug: "amy" })] },
     error: undefined,

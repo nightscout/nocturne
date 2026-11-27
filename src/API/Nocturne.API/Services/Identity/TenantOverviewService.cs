@@ -5,6 +5,7 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -40,6 +41,7 @@ public class TenantOverviewService : ITenantOverviewService
     private const int PersonEntryLimit = 10;
 
     private readonly ITenantMembershipRepository _members;
+    private readonly ITeamRepository _teams;
     private readonly IServiceProvider _scope;
     private readonly IGlucoseStatusClassifier _classifier;
     private readonly TimeProvider _time;
@@ -47,12 +49,14 @@ public class TenantOverviewService : ITenantOverviewService
 
     public TenantOverviewService(
         ITenantMembershipRepository members,
+        ITeamRepository teams,
         IServiceProvider scope,
         IGlucoseStatusClassifier classifier,
         TimeProvider timeProvider,
         ILogger<TenantOverviewService> logger)
     {
         _members = members;
+        _teams = teams;
         _scope = scope;
         _classifier = classifier;
         _time = timeProvider;
@@ -62,10 +66,50 @@ public class TenantOverviewService : ITenantOverviewService
     public async Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         bool credentialLimitTo24Hours = false,
-        CancellationToken ct = default)
-    {
-        var glucoseReadTenants = await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct);
+        CancellationToken ct = default) =>
+        new(await BuildItemsAsync(
+            await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), credentialLimitTo24Hours, ct), null);
 
+    public Task<IReadOnlyList<StaffGroup>> GetGroupsAsync(Guid subjectId, CancellationToken ct) =>
+        _teams.GetGroupsOfStaffAsync(subjectId, _time.GetUtcNow().UtcDateTime, ct);
+
+    public async Task<TenantOverviewResponse?> GetGroupOverviewAsync(
+        Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours, CancellationToken ct)
+    {
+        if (await ReadableInGroupAsync(subjectId, groupId, tokenScopes, authType, ct) is not { } group)
+            return null;
+
+        return new(await BuildItemsAsync(group.Readable, credentialLimitTo24Hours, ct), group.HiddenCount);
+    }
+
+    public async Task<TenantReviewResponse?> GetGroupReviewAsync(
+        Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        bool credentialLimitTo24Hours, CancellationToken ct) =>
+        await ReadableInGroupAsync(subjectId, groupId, tokenScopes, authType, ct) is { } group
+            ? await BuildReviewAsync(group.Readable, days, credentialLimitTo24Hours, ct)
+            : null;
+
+    /// <summary>
+    /// The tenants of the group that <see cref="GetGlucoseReadTenantsAsync"/> returns, and how many others the
+    /// group holds; null when the subject is not in the group as current staff.
+    /// </summary>
+    private async Task<(IReadOnlyList<GlucoseReadTenant> Readable, int HiddenCount)?> ReadableInGroupAsync(
+        Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType, CancellationToken ct)
+    {
+        var people = await _teams.GetPeopleOfStaffGroupAsync(groupId, subjectId, _time.GetUtcNow().UtcDateTime, ct);
+        if (people is null)
+            return null;
+
+        var readable = (await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct))
+            .Where(t => people.Contains(t.Tenant.Id))
+            .ToList();
+        return (readable, people.Count - readable.Count);
+    }
+
+    private async Task<List<TenantOverviewItem>> BuildItemsAsync(
+        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants, bool credentialLimitTo24Hours, CancellationToken ct)
+    {
         var items = new List<TenantOverviewItem>();
         foreach (var readable in glucoseReadTenants)
         {
@@ -99,18 +143,20 @@ public class TenantOverviewService : ITenantOverviewService
         }
 
         items.Sort(CompareForDisplay);
-        return new TenantOverviewResponse(items);
+        return items;
     }
 
     public async Task<TenantReviewResponse> GetReviewAsync(
         Guid? subjectId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
         bool credentialLimitTo24Hours = false,
-        CancellationToken ct = default)
-    {
-        var glucoseReadTenants = subjectId is { } subject
-            ? await GetGlucoseReadTenantsAsync(subject, tokenScopes, authType, ct)
-            : [];
+        CancellationToken ct = default) =>
+        await BuildReviewAsync(
+            subjectId is { } subject ? await GetGlucoseReadTenantsAsync(subject, tokenScopes, authType, ct) : [],
+            days, credentialLimitTo24Hours, ct);
 
+    private async Task<TenantReviewResponse> BuildReviewAsync(
+        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants, int days, bool credentialLimitTo24Hours, CancellationToken ct)
+    {
         var to = _time.GetUtcNow().UtcDateTime;
         var from = to.AddDays(-days);
         var previousFrom = from.AddDays(-days);

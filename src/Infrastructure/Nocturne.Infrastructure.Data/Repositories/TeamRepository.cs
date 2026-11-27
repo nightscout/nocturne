@@ -8,9 +8,10 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// <see cref="ITeamRepository"/>, one context per call. The caller's own list reads pinned to the
-/// caller; everything else reads as the platform, since a team's other members are hidden from a
-/// pinned context, and names the caller's membership in its own query.
+/// <see cref="ITeamRepository"/>, one context per call. The caller's own lists of teams and groups,
+/// and the people of their own groups, read pinned to the caller; everything else reads as the
+/// platform, since a team's other members are hidden from a pinned context, and names the caller's
+/// membership in its own query.
 /// </summary>
 public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamRepository
 {
@@ -26,6 +27,49 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
                 t.Id, t.Name, t.Members.Where(m => m.SubjectId == subjectId).Select(m => m.Kind).First()))
             .ToListAsync(ct);
     }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<StaffGroup>> GetGroupsOfStaffAsync(Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForSubjectAsync(subjectId, ct);
+        var groups = await StaffPlacesOf(db, subjectId, now)
+            .Select(s => s.TeamGroup!)
+            .OrderBy(g => g.NameKey)
+            .ThenBy(g => g.Id)
+            .Select(g => new { g.Id, g.Name, g.NameKey, TeamName = g.Team!.Name })
+            .ToListAsync(ct);
+
+        return groups
+            .Select(g => new StaffGroup(g.Id, g.Name, g.TeamName, groups.Count(other => other.NameKey == g.NameKey) > 1))
+            .ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlySet<Guid>?> GetPeopleOfStaffGroupAsync(
+        Guid groupId, Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForSubjectAsync(subjectId, ct);
+        var group = await StaffPlacesOf(db, subjectId, now)
+            .Where(s => s.TeamGroupId == groupId)
+            .Select(s => new
+            {
+                People = s.TeamGroup!.People
+                    .Where(p => db.TeamTenantAccess.Any(a => a.TeamId == s.TeamGroup!.TeamId
+                        && a.TenantId == p.TenantId
+                        && (a.AccessEndsAt == null || a.AccessEndsAt > now)))
+                    .Select(p => p.TenantId)
+                    .ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
+        return group?.People.ToHashSet();
+    }
+
+    private static IQueryable<TeamGroupStaffEntity> StaffPlacesOf(NocturneDbContext db, Guid subjectId, DateTime now) =>
+        db.TeamGroupStaff.AsNoTracking()
+            .Where(TeamReasons.PlaceAgrees)
+            .Where(s => s.TeamMember!.SubjectId == subjectId
+                && s.TeamMember.Kind == TeamMemberKind.Staff
+                && (s.TeamMember.EndsAt == null || s.TeamMember.EndsAt > now));
 
     /// <inheritdoc/>
     public virtual async Task<TeamSummary> CreateAsync(Guid creatorSubjectId, string name, CancellationToken ct)

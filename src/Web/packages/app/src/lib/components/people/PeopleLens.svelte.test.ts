@@ -58,6 +58,7 @@ vi.mock("#lib/utils/poll-while-visible.svelte.js", () => ({
 vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
 
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
+  getGroups: () => ({ current: [], error: undefined, loading: false, refresh: async () => {} }),
   getPerson: ({ tenantId }: { tenantId: string }) => ({
     get current() {
       const person = overview.data?.tenants?.find((p) => p.tenantId === tenantId);

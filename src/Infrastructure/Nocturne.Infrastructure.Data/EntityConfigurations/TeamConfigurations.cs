@@ -80,6 +80,11 @@ internal sealed class TeamGroupStaffEntityConfiguration : IEntityTypeConfigurati
             .HasForeignKey(e => e.TeamMemberId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        entity.HasOne(e => e.Team)
+            .WithMany()
+            .HasForeignKey(e => e.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         entity.HasIndex(e => new { e.TeamGroupId, e.TeamMemberId }).IsUnique();
 
         entity.HasIndex(e => e.TeamMemberId);
