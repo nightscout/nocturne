@@ -539,6 +539,9 @@ msgstr "Verification code"
 #: src/lib/components/patient/PatientInsulinManager.svelte
 #: src/lib/components/people/FlagRuleForm.svelte
 #: src/lib/components/people/FlagRuleForm.svelte
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleViewsManager.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
@@ -816,6 +819,7 @@ msgstr "Update role details and permissions."
 #: src/lib/components/alerts/wizard/CheckStep.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
@@ -878,6 +882,7 @@ msgstr "Create"
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
+#: src/lib/components/people/PeopleViewsManager.svelte
 #: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -5840,6 +5845,8 @@ msgstr "<0/> Try again"
 #: src/lib/components/members/PublicAccessCard.svelte
 #: src/lib/components/members/TeamAccessCard.svelte
 #: src/lib/components/people/FlagRulesEditor.svelte
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/PeopleFilters.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
@@ -7121,6 +7128,7 @@ msgstr "Cannula"
 
 #: src/lib/components/alerts/factText.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/PersonStatusLine.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -7823,6 +7831,7 @@ msgstr "Auto-detecting..."
 #~ msgid "Avg Response Time"
 #~ msgstr "Avg Response Time"
 
+#: src/lib/components/people/PeopleFilters.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/+layout.svelte
 #: src/routes/(authenticated)/reports/+layout.svelte
@@ -9506,6 +9515,7 @@ msgstr "Failed to load data"
 #~ msgstr "View Day in Review <0/>"
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/people/people-filter-text.svelte.ts
 msgid "No insulin"
 msgstr "No insulin"
 
@@ -10447,12 +10457,10 @@ msgstr "<0>The lighter shaded area</0> (10th-90th percentile) shows where you ar
 msgid "Target: ≥70%"
 msgstr "Target: ≥70%"
 
-#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "GMI"
 msgstr "GMI"
 
-#: src/lib/components/people/PeopleRoster.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "CV"
 msgstr "CV"
@@ -11359,6 +11367,7 @@ msgstr "CGM"
 
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/people-filter-text.svelte.ts
 #: src/lib/components/reports/AidSystemUseCard.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Pump"
@@ -11579,10 +11588,12 @@ msgstr "Search"
 msgid "Report generated from {0} records between {1} and {2}"
 msgstr "Report generated from {0} records between {1} and {2}"
 
+#. 0: view.name
 #. 0: def.name
 #. 0: preset.name
 #. 0: report.name
 #. 0: getRowLabel(rowToDelete)
+#: src/lib/components/people/PeopleViewsManager.svelte
 #: src/lib/components/trackers/TrackerDefinitionsTab.svelte
 #: src/lib/components/trackers/TrackerPresetsTab.svelte
 #: src/routes/(authenticated)/reports/custom/+page.svelte
@@ -14156,6 +14167,8 @@ msgstr "Severity: {0}"
 
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/people/FlagRulesEditor.svelte
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/PeopleFilters.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
@@ -14469,6 +14482,7 @@ msgstr "for at least"
 #~ msgstr "Remove wrapper"
 
 #: src/lib/components/alerts/RuleBuilderAddPicker.svelte
+#: src/lib/components/people/PeopleFilters.svelte
 msgid "Group"
 msgstr "Group"
 
@@ -19879,6 +19893,7 @@ msgstr "standardised summary for your care team"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/PersonRow.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/trackers/TrackerCoversField.svelte
@@ -36693,12 +36708,16 @@ msgstr "Status pills"
 msgid "The owner turned off tracker pills."
 msgstr "The owner turned off tracker pills."
 
+#. 0: view.name
 #. 0: LABELS[id]
+#: src/lib/components/people/PeopleViewsManager.svelte
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 msgid "Move {0} up"
 msgstr "Move {0} up"
 
+#. 0: view.name
 #. 0: LABELS[id]
+#: src/lib/components/people/PeopleViewsManager.svelte
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 msgid "Move {0} down"
 msgstr "Move {0} down"
@@ -47788,6 +47807,7 @@ msgstr "Could not revoke the link. Try again."
 msgid "Could not delete the team. Try again."
 msgstr "Could not delete the team. Try again."
 
+#: src/lib/components/people/PeopleFilters.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Team"
 msgstr "Team"
@@ -51403,9 +51423,8 @@ msgstr "Last number of days"
 msgid "Flag when the value is"
 msgstr "Flag when the value is"
 
-#: src/lib/components/people/FlagRuleForm.svelte
-msgid "<0/> Save rule"
-msgstr "<0/> Save rule"
+#~ msgid "<0/> Save rule"
+#~ msgstr "<0/> Save rule"
 
 #: src/lib/components/people/FlagRulesEditor.svelte
 msgid "You have the maximum number of flag rules. Delete a rule to add a new rule."
@@ -52531,3 +52550,330 @@ msgstr "{0}, {1}"
 msgctxt "around-window-caption"
 msgid "{0}, {1}"
 msgstr "{0}, {1}"
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Suggested filters"
+msgstr "Suggested filters"
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Show people whose value is"
+msgstr "Show people whose value is"
+
+#: src/lib/components/people/FlagRuleForm.svelte
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Add filter"
+msgstr "Add filter"
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Save rule"
+msgstr "Save rule"
+
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Could not save the view. Try again."
+msgstr "Could not save the view. Try again."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Updating the list…"
+msgstr "Updating the list…"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "This view has an \"In a group\" filter for a group you are no longer in. That filter matches no one."
+msgstr "This view has an \"In a group\" filter for a group you are no longer in. That filter matches no one."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "This view has a \"Followed through a team\" filter. You follow no one through that team, so that filter matches no one."
+msgstr "This view has a \"Followed through a team\" filter. You follow no one through that team, so that filter matches no one."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You changed this view. The changes are not saved."
+msgstr "You changed this view. The changes are not saved."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Save view"
+msgstr "Save view"
+
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Save as new view"
+msgstr "Save as new view"
+
+#. 0: viewLimit
+#. 0: limit
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/people-views.svelte.ts
+msgid "You have {0} views, the maximum. Delete a view to save a new view."
+msgstr "You have {0} views, the maximum. Delete a view to save a new view."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Still checking # person. The list may grow."
+msgid_plural "Still checking # people. The list may grow."
+msgstr[0] "Still checking # person. The list may grow."
+msgstr[1] "Still checking # people. The list may grow."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "No people match"
+msgstr "No people match"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Change the search or the filters to see more people."
+msgstr "Change the search or the filters to see more people."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "<0/> Manage views"
+msgstr "<0/> Manage views"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "The view keeps the search, the filters, the sort and the lens. Only you see your views."
+msgstr "The view keeps the search, the filters, the sort and the lens. Only you see your views."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "A view starts from everyone you follow, not only this group. To keep to this group, add the filter \"In a group\"."
+msgstr "A view starts from everyone you follow, not only this group. To keep to this group, add the filter \"In a group\"."
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Columns"
+msgstr "Columns"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "A figure of their data"
+msgstr "A figure of their data"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Age at least"
+msgstr "Age at least"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Age at most"
+msgstr "Age at most"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Therapy type"
+msgstr "Therapy type"
+
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Flagged only"
+msgstr "Flagged only"
+
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Followed directly"
+msgstr "Followed directly"
+
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Followed through a team"
+msgstr "Followed through a team"
+
+#: src/lib/components/people/PeopleFilters.svelte
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "In a group"
+msgstr "In a group"
+
+#. 0: sentence
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Remove the filter: {0}"
+msgstr "Remove the filter: {0}"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "In the group <0/>"
+msgstr "In the group <0/>"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "The list of figures did not load. The data filters show no values."
+msgstr "The list of figures did not load. The data filters show no values."
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Choose a filter"
+msgstr "Choose a filter"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Filter by"
+msgstr "Filter by"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "The list of figures did not load."
+msgstr "The list of figures did not load."
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Age in years"
+msgstr "Age in years"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Therapy type, any of"
+msgstr "Therapy type, any of"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Your teams did not load."
+msgstr "Your teams did not load."
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "You are not in a team."
+msgstr "You are not in a team."
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Choose a team"
+msgstr "Choose a team"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "You are not in a group."
+msgstr "You are not in a group."
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Choose a group"
+msgstr "Choose a group"
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "Filters combine with AND: the list shows a person only if the person matches all the filters."
+msgstr "Filters combine with AND: the list shows a person only if the person matches all the filters."
+
+#. 0: MAX_FILTERS
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "You have {0} filters, the maximum. Remove a filter to add a new filter."
+msgstr "You have {0} filters, the maximum. Remove a filter to add a new filter."
+
+#: src/lib/components/people/PeopleFilters.svelte
+msgid "<0/> Add a filter"
+msgstr "<0/> Add a filter"
+
+#: src/lib/components/people/PeopleSearch.svelte
+#: src/lib/components/people/PeopleSearch.svelte
+msgid "Search by name"
+msgstr "Search by name"
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Could not rename the view. Try again."
+msgstr "Could not rename the view. Try again."
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Could not move the view. Try again."
+msgstr "Could not move the view. Try again."
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Could not delete the view. Try again."
+msgstr "Could not delete the view. Try again."
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Your views"
+msgstr "Your views"
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Only you see your views. The tabs show them in this order."
+msgstr "Only you see your views. The tabs show them in this order."
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "You have no views."
+msgstr "You have no views."
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Name of the view"
+msgstr "Name of the view"
+
+#. 0: view.name
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Rename {0}"
+msgstr "Rename {0}"
+
+#. 0: pendingDelete?.name
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Delete the view {0}?"
+msgstr "Delete the view {0}?"
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "Delete view"
+msgstr "Delete view"
+
+#: src/lib/components/people/PeopleViewsManager.svelte
+msgid "The tab of this view goes away. The people in it and their data do not change."
+msgstr "The tab of this view goes away. The people in it and their data do not change."
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "Group gone, no one through team"
+msgstr "Group gone, no one through team"
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "Group gone"
+msgstr "Group gone"
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "No one through team"
+msgstr "No one through team"
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "No people match."
+msgstr "No people match."
+
+#: src/lib/components/people/TabFallback.svelte
+msgid "You have no view with that link. The list shows everyone you follow."
+msgstr "You have no view with that link. The list shows everyone you follow."
+
+#: src/lib/components/people/TabFallback.svelte
+msgid "Your views did not load. The list shows everyone you follow."
+msgstr "Your views did not load. The list shows everyone you follow."
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Automated delivery"
+msgstr "Automated delivery"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Injections"
+msgstr "Injections"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "A filter by a figure of their data"
+msgstr "A filter by a figure of their data"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Loading the data filter…"
+msgstr "Loading the data filter…"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Age is at least # year"
+msgid_plural "Age is at least # years"
+msgstr[0] "Age is at least # year"
+msgstr[1] "Age is at least # years"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Age is at most # year"
+msgid_plural "Age is at most # years"
+msgstr[0] "Age is at most # year"
+msgstr[1] "Age is at most # years"
+
+#. 0: formatList((filter.therapyTypes ?? []).map(therapyLabel), "disjunction")
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Therapy type: {0}"
+msgstr "Therapy type: {0}"
+
+#. 0: names.teamName
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Followed through {0}"
+msgstr "Followed through {0}"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "Followed through a team that is not one of your teams"
+msgstr "Followed through a team that is not one of your teams"
+
+#. 0: names.group.name; 1: names.group.teamName
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "In the group {0}, {1}"
+msgstr "In the group {0}, {1}"
+
+#. 0: names.group.name
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "In the group {0}"
+msgstr "In the group {0}"
+
+#: src/lib/components/people/people-filter-text.svelte.ts
+msgid "In a group you are no longer in"
+msgstr "In a group you are no longer in"
+
+#: src/lib/components/people/people-views.svelte.ts
+msgid "You have a view with this name. Use a different name."
+msgstr "You have a view with this name. Use a different name."
+
+#: src/lib/components/people/people-views.svelte.ts
+msgid "Your views changed. Try again."
+msgstr "Your views changed. Try again."
